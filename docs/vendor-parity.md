@@ -76,8 +76,8 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | The vendor loads the package | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Skills | Y | Y | Y | Y | – |
 | Agents | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | Y | Y | – |
-| Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | P [L26](#l26-cursor-packages-drop-instructions-rule-bodies-and-commands) | – |
-| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | P [L26](#l26-cursor-packages-drop-instructions-rule-bodies-and-commands) | – |
+| Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | P [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
+| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | P [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
 | Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L34](#l34-a-cursor-plugin-carries-no-instructions) | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | – |
 | MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
@@ -313,15 +313,15 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** trust the hooks with `/hooks`. Approve the server's tools in Codex's `config.toml` with `[plugins."<name>@<marketplace>".mcp_servers.<server>] default_tools_approval_mode = "approve"` (a `-c` override of the same key does not take).
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
-### L26: Cursor packages drop instructions, rule bodies and commands
+### L26: Cursor packages drop rule bodies, and commands need a slash prompt
 
-- **What:** cursor-agent loads a package from `ynd export -v cursor`, and its skills (an included one too), its agent and its session context arrive. Two parts do not reach the model (a third, instructions, is [L34](#l34-a-cursor-plugin-carries-no-instructions)):
+- **What:** cursor-agent loads a package from `ynd export -v cursor`, and its skills (an included one too), its agent and its session context arrive. Instructions are [L34](#l34-a-cursor-plugin-carries-no-instructions). Two other parts have gaps:
   - **Rules:** a rule with `alwaysApply: true` is offered only as a rule the model can request, without its body.
-  - **Commands:** a command (`/name`) is not reached in print mode (`cursor-agent -p`). Interactive use is unverified.
+  - **Commands:** in print mode (`cursor-agent -p`) a command is reached when the prompt is `/name`: `/canary-cmd` returned its codeword, `FIG-CMD-67`, with `--plugin-dir`. A prose request for the command did not use it, and one `/name` run answered an unrelated report, so it is not yet reliable. Interactive use is unverified.
 
   The package's hooks are [L8](#l8-cursor-print-mode-skips-two-hooks), and its MCP servers [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode).
-- **Owner:** not established. Whether a Cursor plugin can carry instructions, always-applied rules and commands is settled from Cursor's plugin docs in [ynh #739](https://github.com/eyelock/ynh/issues/739).
-- **Evidence:** live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), with the package in a folder granted Workspace Trust (an untrusted control folder was refused). Recorded on [ynh #735](https://github.com/eyelock/ynh/issues/735). Until this run no Cursor package had been loaded live.
+- **Owner:** rules: not established. Cursor's [plugin reference](https://cursor.com/docs/reference/plugins) says a plugin carries `rules/*.mdc` and `alwaysApply: true` applies to all files, yet the rule did not reach the model in further runs, via `--plugin-dir` (with and without `rules` and `commands` named in the manifest) and as a local install, so it is not yet clear whether Cursor or ynh owns this. Commands: the vendor carries them, per the same reference. Left to [ynh #739](https://github.com/eyelock/ynh/issues/739), which stays open for the rules investigation and a live load of the corrected package.
+- **Evidence:** live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), with the package in a folder granted Workspace Trust (an untrusted control folder was refused). Recorded on [ynh #735](https://github.com/eyelock/ynh/issues/735). Until this run no Cursor package had been loaded live. The rule and command re-runs are on cursor-agent 2026.11.05, 2026-11-05, in the same trusted folder.
 - **Tracking:** [ynh #739](https://github.com/eyelock/ynh/issues/739), v0.17.0.
 - **Workaround:** run the harness on Cursor with `ynh run`.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).

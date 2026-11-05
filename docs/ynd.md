@@ -356,25 +356,20 @@ dist/my-harness/
 │   ├── skills/<name>/SKILL.md
 │   ├── agents/<name>.md
 │   ├── rules/<name>.md
-│   ├── commands/<name>.md
-│   └── AGENTS.md
+│   └── commands/<name>.md
 ├── cursor/
 │   ├── .cursor-plugin/plugin.json
 │   ├── skills/
 │   ├── agents/
 │   ├── rules/
-│   ├── commands/
-│   ├── .cursorrules
-│   └── AGENTS.md
+│   └── commands/
 ├── codex/
 │   ├── .codex-plugin/plugin.json
-│   ├── skills/<name>/SKILL.md
-│   └── AGENTS.md
+│   └── skills/<name>/SKILL.md
 ├── copilot/
 │   ├── .claude-plugin/plugin.json
 │   ├── skills/<name>/SKILL.md
-│   ├── agents/<name>.md
-│   └── AGENTS.md
+│   └── agents/<name>.md
 └── opencode/
     ├── skills/<name>/SKILL.md
     ├── agents/<name>.md
@@ -388,7 +383,7 @@ dist/my-harness/
 Key differences from runtime layout:
 
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
-- Claude and Copilot exports write no instructions: a plugin cannot carry them (OBSERVED live, ynh #722), so the export warns and the instructions reach those vendors only under `ynh run` or from the installing project's own file
+- Claude, Copilot and Cursor exports write no instructions: a plugin cannot carry them (OBSERVED live, ynh #722 and #739), so the export warns and the instructions reach those vendors only under `ynh run` or from the installing project's own file. Only OpenCode's export carries `AGENTS.md`
 - Codex carries skills, hooks and MCP servers only — agents, rules, commands and delegates are excluded with warnings, and so are the harness's instructions, which a Codex plugin cannot carry
 - Copilot carries skills, agents and commands (which it loads as skills); rules are excluded with a warning
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
@@ -420,8 +415,7 @@ dist/my-harness/
 ├── .claude-plugin/plugin.json   # -v claude: Claude Code has not adopted the format,
 ├── mcp/claude.json              #   so it gets its own manifest, the MCP and hooks files
 ├── hooks/claude.json            #   that manifest names, agents/, rules/, commands/ and
-├── agents/ rules/ commands/     #   CLAUDE.md at the root, which the spec calls a
-├── CLAUDE.md                    #   compatibility package
+├── agents/ rules/ commands/     #   which the spec calls a compatibility package
 └── scripts/                     # the scripts a hook runs, shipped once
 ```
 
