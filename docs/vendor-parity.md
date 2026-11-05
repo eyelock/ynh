@@ -76,7 +76,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | Agents | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | Y | Y | – |
 | Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | Y | – |
 | Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | N [L24](#l24-commands-in-a-copilot-package) | Y | – |
-| Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | Y | – |
+| Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L33](#l33-a-cursor-plugin-carries-no-instructions) | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
 | MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
 | Delegates | P [L12](#l12-delegates-carry-only-part-of-a-harness) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | – |
@@ -373,3 +373,12 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Tracking:** none.
 - **Workaround:** ask for the command by name; ship it as a skill for the same result.
 - **Detail:** [Commands](artifacts.md#commands).
+
+### L33: A Cursor plugin carries no instructions
+
+- **What:** a Cursor plugin loaded with `--plugin-dir` does not deliver an instructions file inside it, so `ynd export -v cursor` writes no `.cursorrules` or `AGENTS.md` and warns.
+- **Owner:** the vendor. Cursor's plugin docs list rules, commands, agents, skills, hooks and MCP servers as the components, and no instructions file ([Plugins](https://cursor.com/docs/plugins), [Plugins reference](https://cursor.com/docs/reference/plugins)); `AGENTS.md` is a project-root file ([Rules](https://cursor.com/docs/context/rules)).
+- **Evidence:** live on cursor-agent 2026.11.05, 2026-11-05: a codeword set only in the package's `.cursorrules` and `AGENTS.md` was not returned in 3 runs, while the skill's, agent's and hook's were.
+- **Tracking:** [ynh #739](https://github.com/eyelock/ynh/issues/739), v0.17.0.
+- **Workaround:** put the instructions in the installing project's `AGENTS.md`. Under `ynh run` they do reach Cursor.
+- **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).

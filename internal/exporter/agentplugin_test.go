@@ -286,17 +286,10 @@ func TestAgentPlugin_CodexOnly(t *testing.T) {
 	}
 }
 
-func TestAgentPlugin_NoInstructionsWarningForOtherVendors(t *testing.T) {
-	src := writePortableSource(t, portableManifest)
-	_, r := exportPortable(t, src, "cursor")
-	if hasWarning(r, "cannot carry instructions") {
-		t.Errorf("warnings = %v", r.Warnings)
-	}
-}
-
-// Claude Code and Copilot plugins cannot carry instructions either (ynh #722).
-func TestAgentPlugin_InstructionsWarningClaudeCopilot(t *testing.T) {
-	for _, v := range []string{"claude", "copilot"} {
+// Claude Code, Copilot and Cursor plugins cannot carry instructions either
+// (ynh #722, #739).
+func TestAgentPlugin_InstructionsWarningClaudeCopilotCursor(t *testing.T) {
+	for _, v := range []string{"claude", "copilot", "cursor"} {
 		src := writePortableSource(t, portableManifest)
 		_, r := exportPortable(t, src, v)
 		if !hasWarning(r, v+": plugins cannot carry instructions") {

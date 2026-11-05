@@ -115,7 +115,7 @@ claude plugin validate /tmp/ynh-tutorial/export-output/claude
 ls -Ra /tmp/ynh-tutorial/export-output/cursor/
 ```
 
-Expected (note: `.cursor-plugin` and `.cursorrules` are hidden — `ls -Ra` shows them):
+Expected (note: `.cursor-plugin` is hidden — `ls -Ra` shows it):
 ```
 .cursor-plugin/
   plugin.json
@@ -126,12 +126,9 @@ agents/
 skills/
   review/SKILL.md
   take-a-moment/SKILL.md
-
-.cursorrules                  # Cursor-native instructions
-AGENTS.md                     # universal instructions
 ```
 
-Cursor gets both `.cursorrules` (Cursor-native) and `AGENTS.md` (universal). Without `-a`, you'd only see `agents/`, `AGENTS.md`, and `skills/`.
+Cursor gets no instructions file: a Cursor plugin cannot carry instructions, so the export writes neither `.cursorrules` nor `AGENTS.md` and prints a warning. Without `-a`, you'd only see `agents/` and `skills/`.
 
 ## Verify Codex export
 
@@ -185,14 +182,11 @@ agents/
 skills/
   review/SKILL.md
   take-a-moment/SKILL.md
-
-.cursorrules
-AGENTS.md
 ```
 
-One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
+One physical directory with both vendor manifests — serves Claude and Cursor from the same files. Neither Claude Code nor Cursor can carry instructions, so no `AGENTS.md` or `.cursorrules` is written and the export warns for each.
 
-Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points at `skills/`, hooks and MCP, and neither Claude Code nor Codex can carry instructions, so no shared `AGENTS.md` is written. The export says so, in the same words as the per-vendor exports above:
+Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points at `skills/`, hooks and MCP, and Codex cannot carry instructions either. The export says so, in the same words as the per-vendor exports above:
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged-codex --merged -v claude,codex
@@ -439,7 +433,7 @@ rm -rf /tmp/ynh-tutorial
 - `ynd export` produces vendor-native distributable plugins
 - Each vendor gets its own layout:
   - Claude: `.claude-plugin/plugin.json` + artifacts at root
-  - Cursor: `.cursor-plugin/plugin.json` + `.cursorrules`
+  - Cursor: `.cursor-plugin/plugin.json` + artifacts (no instructions: a Cursor plugin cannot carry them)
   - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands and instructions excluded)
 - `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
 - `--format agent-plugin` produces one portable Agent Plugins package; `-v` picks which clients' namespaces and compatibility files join the portable core, and whatever cannot travel is warned about

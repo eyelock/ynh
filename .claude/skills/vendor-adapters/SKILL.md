@@ -525,8 +525,8 @@ for the full scaffolding checklist once these are resolved):
 | ynh runtime:      | --append-system-prompt           | Written as AGENTS.md in          | Written as .cursorrules in       |
 |                   | (injected, no file conflict)     |   staging dir                    |   staging dir                    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh export:       | none (a plugin cannot carry      | none (a plugin cannot carry      | .cursorrules + AGENTS.md         |
-|                   |  instructions; export warns)     |  instructions; export warns)     |                                  |
+| ynh export:       | none (a plugin cannot carry      | none (a plugin cannot carry      | none (a plugin cannot carry      |
+|                   |  instructions; export warns)     |  instructions; export warns)     |  instructions; export warns)     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
