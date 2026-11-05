@@ -119,8 +119,8 @@ instead of starting one. What reaches the resumed session:
 |--------|----------------------|
 | Claude | Supported, interactive and one-shot |
 | Codex | One-shot only (`codex exec resume`); refused with `--interactive` |
-| Copilot | Refused: no documented form |
-| Cursor | Refused: no documented form |
+| Copilot | Supported, interactive (`-i`) and one-shot (`-p`); confirmed through `ynh run` on Copilot CLI 1.0.105 |
+| Cursor | Supported, interactive (positional prompt) and one-shot (`-p`); confirmed through `ynh run` on cursor-agent 2026.10.22 |
 | OpenCode | Supported, interactive (`--prompt`) and one-shot (`opencode run -s <id> -- <prompt>`); confirmed by hand on OpenCode 2.2.3 |
 
 Where a vendor refuses, ynh stops before launching with an error naming it
