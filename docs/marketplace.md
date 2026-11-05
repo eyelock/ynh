@@ -336,11 +336,11 @@ ynh includes Codex in marketplace generation. `ynd marketplace build` writes a C
 
 ## GitHub Copilot CLI
 
-Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Its marketplace/index format, however, was only researched from documentation, not hand-verified against a real published marketplace — treat `ynd marketplace build`'s Copilot output as a best-effort starting point, not a confirmed-working artifact.
+Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Copilot CLI 1.0.105 installed a marketplace from `ynd marketplace build` and loaded its plugin live on 2026-11-05. A one-shot run refused the plugin's MCP tool call, and an interactive approval has not been shown ([L28](vendor-parity.md#l28-copilot-marketplace-index)).
 
 ### Current State
 
-- Skills and agents export like Claude Code's; rules and commands are excluded (Copilot has no loading mechanism for them)
+- Skills and agents export like Claude Code's. Rules are excluded, because they ride in the instructions, which a Copilot plugin cannot carry. Commands are excluded too, but that is ynd's own choice: Copilot loads a plugin's `commands/*.md` as skills (see [L24](vendor-parity.md#l24-commands-in-a-copilot-package))
 - Marketplace index is written to `.github/plugin/marketplace.json`
 - **Hooks** are written to `hooks.json` at the plugin root, in Copilot's own format, and fire on Copilot CLI 1.0.105 (in a package that also targets Claude, Copilot loads Claude's `hooks/claude.json` instead); see [Hooks: Copilot](hooks.md#copilot-format-and-trust)
 
@@ -568,22 +568,9 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 **Why auto-init Git?** Claude Code's plugin loader resolves relative `source` paths (e.g., `./plugins/formatter`) within the Git working tree. A marketplace directory that isn't a Git repo causes path resolution failures at install time.
 
-## Cross-Vendor Compatibility Matrix
+## Cross-Vendor Compatibility
 
-This matrix is about what `ynd export` and `ynd marketplace build` write. What each vendor receives under `ynh run` is in [Vendor Support](vendors.md#feature-support).
-
-| Feature | Claude Code | Cursor | Codex | Copilot | OpenCode |
-|---------|------------|--------|-------|---------|----------|
-| Skills | Yes | Yes | Yes | Yes | Yes |
-| Agents | Yes | Yes | No (not exported; Codex gets agents under `ynh run`) | Yes | Yes |
-| Rules | Folded into `CLAUDE.md` at run time (the export ships `rules/`, but Claude Code does not read rules from a plugin directory) | Yes | Folded into the instructions file (`AGENTS.md`) at run time; not exported | Folded into `AGENTS.md` at run time; not exported | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
-| Commands | Yes | Yes | No | No | Yes (not from a one-shot `opencode run` prompt) |
-| Instructions | none (a Claude Code plugin cannot carry them) | .cursorrules + AGENTS.md | none (a Codex plugin cannot carry them) | none (a Copilot plugin cannot carry them; `ynh run` projects them to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
-| Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ | None |
-| Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) | None |
-| Delegates | Instructions and MCP servers only | Instructions only | No (export skips delegates with a warning) | Instructions only | No |
-| Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) | No manifest to merge |
-| Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` | Not supported |
+What an export or a marketplace build carries to each vendor, and whose each gap is, is in the `ynd export` matrix of [Vendor Feature Parity](vendor-parity.md#ynd-export). The file each part becomes is in [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ## References
 
