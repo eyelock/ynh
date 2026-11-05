@@ -2,7 +2,7 @@
 
 What each vendor receives from a harness, on each surface ynh has: `ynh run`, `ynh agent run` and `ynd export`. Every cell that is not **Y** names a limit, and every limit says whose it is.
 
-- **ynh version:** v0.17.0, as on `develop` at [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3) with [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725) and [ynh #727](https://github.com/eyelock/ynh/pull/727) applied.
+- **ynh version:** v0.17.0, as on `develop` at [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3) with [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727) applied.
 - **Vendor CLIs checked:** Claude Code 2.1.318, codex-cli 0.166.0, Copilot CLI 1.0.105, cursor-agent 2026.10.22-27dcf5f, OpenCode 2.2.3.
 - **Checked on:** 2026-11-05, by live runs of each vendor CLI through ynh. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716); each limit below links the pull request that proved it.
 
@@ -19,7 +19,9 @@ This page is the only copy of this table. Other pages link here rather than repe
 | **U** | Unverified. The limit says what blocks verification. |
 | – | Does not apply: the surface does not exist for that vendor. |
 
-A gap is marked **N** until there is evidence that the vendor cannot do it. Limit ids (`L1`, `L2`, ...) are never reused.
+A gap is marked **N** until there is evidence that the vendor cannot do it. Limit ids (`L1`, `L2`, ...) are never reused: a limit that is fixed keeps its id and says what fixed it.
+
+In the [ynd export](#ynd-export) matrix, a cell says what `ynd export` writes into the package, in the form the vendor documents. Whether the vendor then loads the package is its own row, the first: it is Y where a package was loaded into the vendor live. An **X** below it is something a live load showed the vendor ignores, or that the vendor has no place for.
 
 Columns are in the order `ynh vendors` lists the vendors.
 
@@ -32,10 +34,10 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | Instructions | Y | Y | Y | Y | Y |
 | Project instructions (the project's own `AGENTS.md` or `CLAUDE.md`) | Y | Y | Y | U [L1](#l1-project-instructions-on-cursor) | Y |
 | Skills | Y | Y | Y | Y | Y |
-| Agents | Y | Y | Y | Y | Y |
+| Agents | Y | P [L31](#l31-codex-agents-cannot-restrict-tools) | Y | Y | Y |
 | Rules | P [L2](#l2-rules-are-always-on) | P [L2](#l2-rules-are-always-on) | P [L2](#l2-rules-are-always-on) | Y | P [L2](#l2-rules-are-always-on) |
-| Commands | Y | P [L3](#l3-codex-commands-arrive-as-skills) | Y | Y | P [L4](#l4-opencode-commands-in-a-one-shot-prompt) |
-| MCP servers | Y | P [L5](#l5-codex-mcp-servers-do-not-get-env-passthrough) | Y | Y | Y |
+| Commands | Y | P [L3](#l3-codex-commands-arrive-as-skills) | P [L32](#l32-copilot-commands-under-ynh-run) | Y | P [L4](#l4-opencode-commands-in-a-one-shot-prompt) |
+| MCP servers | Y | Y | Y | Y | Y |
 | MCP isolation (`mcp_isolation`, `--isolated-mcp`) | Y | N [L6](#l6-mcp-isolation) | P [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) |
 | Hooks | Y | P [L7](#l7-codex-hooks-need-an-accepted-harness) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | P [L9](#l9-opencode-has-no-session-end-event) |
 | Session context (`on_session_start` output) | Y | P [L7](#l7-codex-hooks-need-an-accepted-harness) | Y | Y | Y |
@@ -43,7 +45,7 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | Focuses, includes, sensors | Y | Y | Y | Y | Y |
 | Workspace folders | Y | P [L10](#l10-codex-workspace-folders-on-resume) | Y | U [L11](#l11-cursor-workspace-folders) | Y |
 | `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | N [L12](#l12-delegates-carry-only-part-of-a-harness) |
-| Resume (`--resume`, with or without a prompt) | Y | Y | Y | Y | Y |
+| Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | Y | Y |
 | Telemetry from `ynh run` | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) |
 
 ## ynh agent run
@@ -73,7 +75,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | Skills | Y | Y | Y | Y | – |
 | Agents | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | Y | Y | – |
 | Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | Y | – |
-| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | U [L24](#l24-commands-in-a-copilot-package) | Y | – |
+| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | N [L24](#l24-commands-in-a-copilot-package) | Y | – |
 | Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | Y | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
 | MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
@@ -104,7 +106,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L3: Codex commands arrive as skills
 
-- **What:** Codex reads no command files from a project, so under `ynh run` each `commands/<name>.md` is written as a skill, `.codex/skills/<name>/SKILL.md`. Codex lists it as `<harness>:<name>` and you invoke it by name, not as a slash command. Frontmatter other than `description` is dropped, and `$ARGUMENTS` is not substituted. A command and a skill with the same name share one directory, so one overwrites the other.
+- **What:** Codex reads no command files from a project, so under `ynh run` each `commands/<name>.md` is written as a skill, `.codex/skills/<name>/SKILL.md`. Codex lists it as `<harness>:<name>` and you invoke it by name, not as a slash command. Frontmatter other than `description` is dropped, and `$ARGUMENTS` is not substituted. When the harness also has a skill with the same name, the skill is kept and the command is not written, with the warning `command "<name>": a skill of the same name exists, so the command is not written as a skill`.
 - **Owner:** the vendor.
 - **Evidence:** live on codex-cli 0.166.0, 2026-11-05, [ynh #721](https://github.com/eyelock/ynh/pull/721).
 - **Tracking:** [ynh #720](https://github.com/eyelock/ynh/issues/720), v0.17.0.
@@ -120,13 +122,13 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** ask for the command in words, or ship it as a skill.
 - **Detail:** [Vendor Notes](vendors.md#vendor-notes).
 
-### L5: Codex MCP servers do not get env_passthrough
+### L5: Codex MCP servers did not get env_passthrough (fixed)
 
-- **What:** under Codex, a harness's MCP server does not receive the variables named in `env_passthrough`. A server configured through one, such as ynm with `YNM_HOME`, falls back to its default (for ynm, the real `~/.ynm`).
+- **What:** under Codex, a harness's MCP server did not receive the variables named in `env_passthrough`, so a server configured through one, such as ynm with `YNM_HOME`, fell back to its default (for ynm, the real `~/.ynm`). Fixed: ynh now names each `env_passthrough` variable to Codex with `-c mcp_servers.<name>.env_vars=[...]` for every stdio server, on one-shot, interactive, resumed and `ynh agent run` launches.
 - **Owner:** ynh.
-- **Evidence:** live on codex-cli 0.166.0, 2026-11-05: `YNM_HOME=<scratch> ynh run <harness> -v codex`, then ynm's `memory_status` reported the default store. OpenCode used the scratch store.
-- **Tracking:** [ynh #723](https://github.com/eyelock/ynh/issues/723), v0.17.0.
-- **Workaround:** none recorded.
+- **Evidence:** live on codex-cli 0.166.0, 2026-11-05: `YNM_HOME=<scratch> ynh run <harness> -v codex`, then ynm's `memory_status`, reported the default store before the fix and the scratch store after it, also with `--resume` and `ynh agent run --backend codex` ([ynh #726](https://github.com/eyelock/ynh/pull/726)). The interactive launch is covered by a launch-arguments test, not a live run.
+- **Tracking:** [ynh #723](https://github.com/eyelock/ynh/issues/723), v0.17.0, fixed by [ynh #726](https://github.com/eyelock/ynh/pull/726).
+- **Workaround:** none needed. A pre-assembled run directory (a `ynh image`) built without the passthrough names file forwards none.
 - **Detail:** [Credentials](mcp.md#credentials-var-and-env-passthrough).
 
 ### L6: MCP isolation
@@ -293,11 +295,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L24: Commands in a Copilot package
 
-- **What:** `ynd export -v copilot` leaves commands out with a warning. Whether a Copilot CLI plugin can carry commands is unverified.
-- **Owner:** unknown until verified.
-- **Evidence:** ynh's Copilot reference (2026-07-29) found no user-definable slash commands in Copilot CLI, with an open request at [github/copilot-cli#618](https://github.com/github/copilot-cli/issues/618). Under `ynh run` the commands cell is Y.
-- **Tracking:** none.
-- **Workaround:** ship the command as a skill.
+- **What:** `ynd export -v copilot` leaves a harness's commands out of the package, with a warning that they are not supported. A Copilot CLI plugin can carry them: a package with `commands/` copied in by hand reached its command, as a skill, the same way as under `ynh run` ([L32](#l32-copilot-commands-under-ynh-run)).
+- **Owner:** ynh.
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the hand-made package's command was reached through the skill tool; a control package without `commands/` was not.
+- **Tracking:** no issue yet.
+- **Workaround:** copy the harness's `commands/` into the exported package, or ship the command as a skill.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ### L25: Codex package hooks and MCP tools need approval
@@ -344,3 +346,30 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Tracking:** none.
 - **Workaround:** for Claude Code, use the compatibility layer, or `ynd export -v claude`.
 - **Detail:** [Agent Plugins Export](vendors.md#agent-plugins-export).
+
+### L30: Codex resumes a prompt one-shot only
+
+- **What:** `ynh run --resume` with a prompt runs on Codex as a one-shot `codex exec resume`. With `--interactive` it is refused before launch: `codex cannot resume a session interactively with a prompt; drop --resume or the prompt`. A resume without a prompt, and a one-shot resume with one, work.
+- **Owner:** the vendor: Codex's interactive resume documents no prompt argument.
+- **Evidence:** [Resuming a Session](focus.md#resuming-a-session).
+- **Tracking:** none.
+- **Workaround:** resume one-shot with the prompt, or resume interactively and type the prompt into the session.
+- **Detail:** [Resuming a Session](focus.md#resuming-a-session).
+
+### L31: Codex agents cannot restrict tools
+
+- **What:** a harness's agent becomes a Codex custom agent (`.codex/agents/<name>.toml`), which has no tool allowlist, so its `tools` and `disallowedTools` are dropped and the agent can use every tool the session has. ynh prints a warning naming the agent for each list. When `tools` leaves out `Bash`, the agent file sets `features.shell_tool = false`; whether a custom agent honours that has not been checked live. An agent's Claude Code `model` does not carry over either.
+- **Owner:** the vendor: Codex custom agents have no field that restricts tools ([Codex's subagent docs](https://learn.chatgpt.com/docs/agent-configuration/subagents)).
+- **Evidence:** [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
+- **Tracking:** none.
+- **Workaround:** do not rely on an agent's tool list for containment on Codex; restrict the session itself (Codex's sandbox and approval settings).
+- **Detail:** [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
+
+### L32: Copilot commands under ynh run
+
+- **What:** under `ynh run`, a harness's command is reached on Copilot CLI as a skill, by name: the model calls the skill tool, which loads `.copilot/commands/<name>.md`. Copilot does not expand a one-shot `/name` itself. The interactive slash command was not checked.
+- **Owner:** the vendor: Copilot CLI has no user-definable slash commands ([github/copilot-cli#618](https://github.com/github/copilot-cli/issues/618)).
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: a harness's command was reached both by naming it and as a one-shot `/name` prompt, through the skill tool; a control harness with no `commands/` failed both ways. The interactive path was blocked by Copilot's folder trust prompt.
+- **Tracking:** none.
+- **Workaround:** ask for the command by name; ship it as a skill for the same result.
+- **Detail:** [Commands](artifacts.md#commands).
