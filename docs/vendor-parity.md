@@ -3,8 +3,10 @@
 What each vendor receives from a harness, on each surface ynh has: `ynh run`, `ynh agent run` and `ynd export`. Every cell that is not **Y** names a limit, and every limit says whose it is.
 
 - **ynh version:** v0.17.0, as on `develop` at [f2822a1](https://github.com/eyelock/ynh/commit/f2822a1), which includes [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727).
-- **Vendor CLIs checked:** Claude Code 2.1.318, codex-cli 0.166.0, Copilot CLI 1.0.105, cursor-agent 2026.10.22-27dcf5f, OpenCode 2.2.3.
-- **Checked on:** 2026-11-05, by live runs of each vendor CLI through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716); each limit below links the pull request that proved it.
+- **Checked on:** 2026-11-05. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716) and [ynh #735](https://github.com/eyelock/ynh/issues/735); each limit below links the pull request or run that proved it. Each column was checked by its own run:
+  - **Claude Code** 2.1.318, **Codex** (codex-cli 0.166.0), **Copilot CLI** 1.0.105 and **OpenCode** 2.2.3: live runs through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed.
+  - **Cursor**, `ynd export` column: a package loaded live into cursor-agent 2026.11.05-86047df, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), whose export code is the same as at f2822a1. The record is on [ynh #735](https://github.com/eyelock/ynh/issues/735).
+  - **Cursor**, `ynh run` and `ynh agent run` columns: not run live in this verification. cursor-agent stops at its Workspace Trust prompt in each harness's run directory ([Vendor Notes](vendors.md#vendor-notes)). Those cells are U where their limit says so; the others come from the pull requests their limits and feature pages cite, on cursor-agent 2026.10.22-27dcf5f, and were not re-checked.
 
 This page is the only copy of this table. Other pages link here rather than repeat it. How each vendor is launched, and where its files go, is in [Vendor Support](vendors.md).
 
@@ -71,14 +73,14 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
-| The vendor loads the package | Y | Y | Y | U [L26](#l26-cursor-packages-not-loaded-live) | X [L27](#l27-opencode-reads-no-packages) |
+| The vendor loads the package | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Skills | Y | Y | Y | Y | – |
 | Agents | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | Y | Y | – |
-| Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | Y | – |
-| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | N [L24](#l24-commands-in-a-copilot-package) | Y | – |
-| Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L33](#l33-a-cursor-plugin-carries-no-instructions) | – |
-| Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
-| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
+| Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | P [L26](#l26-cursor-packages-drop-instructions-rule-bodies-and-commands) | – |
+| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | P [L26](#l26-cursor-packages-drop-instructions-rule-bodies-and-commands) | – |
+| Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L34](#l34-a-cursor-plugin-carries-no-instructions) | – |
+| Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | – |
+| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
 | Delegates | P [L12](#l12-delegates-carry-only-part-of-a-harness) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | – |
 | Merged export (`--merged`) | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Marketplace index (`ynd marketplace build`) | Y | Y | P [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
@@ -90,8 +92,8 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 - **What:** whether Cursor reads the project's own instructions file under `ynh run` is unverified.
 - **Owner:** unknown until verified.
-- **Evidence:** the 2026-11-05 run stopped at cursor-agent's Workspace Trust prompt for the run directory, so no Cursor run completed. The same run showed Claude Code, Codex, Copilot CLI and OpenCode reading it.
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the verification run.
+- **Evidence:** the 2026-11-05 run stopped at cursor-agent's Workspace Trust prompt for the run directory, so no Cursor run completed. The same run showed Claude Code, Codex, Copilot CLI and OpenCode reading it. The run at `develop` c29ebd6 (cursor-agent 2026.11.05-86047df) was blocked the same way: each harness's run directory needs its own Workspace Trust ([Vendor Notes](vendors.md#vendor-notes)).
+- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the harness's run directory.
 - **Workaround:** none recorded.
 - **Detail:** [Project Instructions](artifacts.md#project-instructions).
 
@@ -151,9 +153,9 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L8: Cursor print mode skips two hooks
 
-- **What:** when Cursor runs non-interactively (`ynh run` with a prompt, and every `ynh agent run --backend cursor` turn), `before_prompt` and `on_stop` do not fire. The other four events do. ynh warns, naming each event.
+- **What:** when Cursor runs non-interactively (`ynh run` with a prompt, and every `ynh agent run --backend cursor` turn), `before_prompt` and `on_stop` do not fire. The other four events do. ynh warns, naming each event. The hooks of a package from `ynd export -v cursor` behave the same in `cursor-agent -p`: four of the six fire.
 - **Owner:** the vendor. `cursor-agent -p` run directly, without ynh, skips them too.
-- **Evidence:** cursor-agent 2026.10.22-27dcf5f, 2026-11-05, [ynh #710](https://github.com/eyelock/ynh/pull/710).
+- **Evidence:** cursor-agent 2026.10.22-27dcf5f, 2026-11-05, [ynh #710](https://github.com/eyelock/ynh/pull/710). For a package: live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` c29ebd6 ([ynh #735](https://github.com/eyelock/ynh/issues/735)).
 - **Tracking:** none.
 - **Workaround:** none verified. The interactive CLI is untested.
 - **Detail:** [Hooks Cursor's CLI does not run](hooks.md#hooks-cursor-s-cli-does-not-run).
@@ -180,8 +182,8 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 - **What:** Cursor receives `--add-dir` for each granted folder, but whether the grant changes what Cursor can reach is unverified.
 - **Owner:** unknown until verified.
-- **Evidence:** in print mode with `--sandbox enabled`, Cursor wrote outside the project with or without the flag, so no folder was found that it cannot reach without it ([ynh #698](https://github.com/eyelock/ynh/pull/698)). The 2026-11-05 run stopped at Cursor's Workspace Trust prompt.
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the verification run.
+- **Evidence:** in print mode with `--sandbox enabled`, Cursor wrote outside the project with or without the flag, so no folder was found that it cannot reach without it ([ynh #698](https://github.com/eyelock/ynh/pull/698)). The 2026-11-05 run stopped at Cursor's Workspace Trust prompt. The run at `develop` c29ebd6 (cursor-agent 2026.11.05-86047df) was blocked the same way: each harness's run directory needs its own Workspace Trust ([Vendor Notes](vendors.md#vendor-notes)).
+- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the harness's run directory.
 - **Workaround:** none needed to launch; the folder is passed either way.
 - **Detail:** [Per vendor](workspace.md#per-vendor).
 
@@ -295,11 +297,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L24: Commands in a Copilot package
 
-- **What:** `ynd export -v copilot` leaves a harness's commands out of the package, with a warning that they are not supported. A Copilot CLI plugin can carry them: a package with `commands/` copied in by hand reached its command, as a skill, the same way as under `ynh run` ([L32](#l32-copilot-commands-under-ynh-run)).
-- **Owner:** ynh.
-- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the hand-made package's command was reached through the skill tool; a control package without `commands/` was not.
-- **Tracking:** [ynh #733](https://github.com/eyelock/ynh/issues/733), v0.17.0.
-- **Workaround:** copy the harness's `commands/` into the exported package, or ship the command as a skill.
+- **What:** `ynd export -v copilot` ships a harness's `commands/`, and Copilot CLI loads them as skills: the model reaches a command by name through the skill tool. Copilot does not expand `/name` itself, as under `ynh run` ([L32](#l32-copilot-commands-under-ynh-run)). Until [ynh #733](https://github.com/eyelock/ynh/issues/733) the export left commands out, with a warning that they were not supported.
+- **Owner:** the vendor: Copilot CLI has no user-definable slash commands ([github/copilot-cli#618](https://github.com/github/copilot-cli/issues/618)).
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: a `ynd export -v copilot` package carrying `commands/` answered `skill(canary-cmd)` with the command's codeword; the same package without `commands/` had no such skill.
+- **Tracking:** [ynh #733](https://github.com/eyelock/ynh/issues/733), v0.17.0, fixed.
+- **Workaround:** ask for the command by name; ship it as a skill for the same result.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ### L25: Codex package hooks and MCP tools need approval
@@ -311,13 +313,17 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** trust the hooks with `/hooks`. Approve the server's tools in Codex's `config.toml` with `[plugins."<name>@<marketplace>".mcp_servers.<server>] default_tools_approval_mode = "approve"` (a `-c` override of the same key does not take).
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
-### L26: Cursor packages not loaded live
+### L26: Cursor packages drop instructions, rule bodies and commands
 
-- **What:** `ynd export -v cursor` writes every row shown, but no Cursor package has been loaded into cursor-agent live.
-- **Owner:** unknown until verified.
-- **Evidence:** the 2026-11-05 verification loaded Claude Code, Codex and Copilot CLI packages, not Cursor's.
-- **Tracking:** [ynh #735](https://github.com/eyelock/ynh/issues/735), v0.17.0. Blocked by the same Cursor Workspace Trust prompt as the verification in [ynh #716](https://github.com/eyelock/ynh/issues/716).
-- **Workaround:** none needed; run the harness on Cursor with `ynh run`.
+- **What:** cursor-agent loads a package from `ynd export -v cursor`, and its skills (an included one too), its agent and its session context arrive. Two parts do not reach the model (a third, instructions, is [L34](#l34-a-cursor-plugin-carries-no-instructions)):
+  - **Rules:** a rule with `alwaysApply: true` is offered only as a rule the model can request, without its body.
+  - **Commands:** a command (`/name`) is not reached in print mode (`cursor-agent -p`). Interactive use is unverified.
+
+  The package's hooks are [L8](#l8-cursor-print-mode-skips-two-hooks), and its MCP servers [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode).
+- **Owner:** not established. Whether a Cursor plugin can carry instructions, always-applied rules and commands is settled from Cursor's plugin docs in [ynh #739](https://github.com/eyelock/ynh/issues/739).
+- **Evidence:** live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), with the package in a folder granted Workspace Trust (an untrusted control folder was refused). Recorded on [ynh #735](https://github.com/eyelock/ynh/issues/735). Until this run no Cursor package had been loaded live.
+- **Tracking:** [ynh #739](https://github.com/eyelock/ynh/issues/739), v0.17.0.
+- **Workaround:** run the harness on Cursor with `ynh run`.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ### L27: OpenCode reads no packages
@@ -374,7 +380,16 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** ask for the command by name; ship it as a skill for the same result.
 - **Detail:** [Commands](artifacts.md#commands).
 
-### L33: A Cursor plugin carries no instructions
+### L33: Cursor package MCP tools need approval in print mode
+
+- **What:** a Cursor package's MCP server loads and lists its tool, but in print mode (`cursor-agent -p`) a call to the tool is refused until it is approved.
+- **Owner:** not established. Whether cursor-agent can approve a plugin's MCP tool for a one-shot run has not been checked.
+- **Evidence:** live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6) ([ynh #735](https://github.com/eyelock/ynh/issues/735)).
+- **Tracking:** none.
+- **Workaround:** none verified.
+- **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
+
+### L34: A Cursor plugin carries no instructions
 
 - **What:** a Cursor plugin loaded with `--plugin-dir` does not deliver an instructions file inside it, so `ynd export -v cursor` writes no `.cursorrules` or `AGENTS.md` and warns.
 - **Owner:** the vendor. Cursor's plugin docs list rules, commands, agents, skills, hooks and MCP servers as the components, and no instructions file ([Plugins](https://cursor.com/docs/plugins), [Plugins reference](https://cursor.com/docs/reference/plugins)); `AGENTS.md` is a project-root file ([Rules](https://cursor.com/docs/context/rules)).
