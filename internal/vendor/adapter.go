@@ -413,3 +413,18 @@ func keepHookCommand(cmd string) string { return cmd }
 func Available() []string {
 	return slices.Sorted(maps.Keys(registry))
 }
+
+// ExportInstructionsCarrier is implemented by an adapter whose exported plugin
+// cannot deliver instructions to a session. Without it, an export is assumed to.
+type ExportInstructionsCarrier interface {
+	ExportCarriesInstructions() bool
+}
+
+// ExportCarriesInstructions reports whether a package exported for the
+// vendor delivers instructions to a session.
+func ExportCarriesInstructions(a Adapter) bool {
+	if c, ok := a.(ExportInstructionsCarrier); ok {
+		return c.ExportCarriesInstructions()
+	}
+	return true
+}

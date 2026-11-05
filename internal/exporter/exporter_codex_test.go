@@ -33,8 +33,18 @@ func TestExportSingleVendorCodex(t *testing.T) {
 	// Check .codex-plugin/plugin.json manifest
 	assertFileExists(t, filepath.Join(codexDir, ".codex-plugin", "plugin.json"))
 
-	// Check AGENTS.md present
-	assertFileExists(t, filepath.Join(codexDir, "AGENTS.md"))
+	// A Codex plugin cannot carry instructions, so none are written and the
+	// export says so (docs/vendors.md).
+	assertFileNotExists(t, filepath.Join(codexDir, "AGENTS.md"))
+	found := false
+	for _, w := range r.Warnings {
+		if strings.Contains(w, "cannot carry instructions") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no warning that instructions are not exported: %v", r.Warnings)
+	}
 
 	// No agents/rules/commands directories at top level
 	assertFileNotExists(t, filepath.Join(codexDir, "agents"))

@@ -152,8 +152,14 @@ func TestMarketplaceAgentPluginNormalisedName(t *testing.T) {
 	// The package export's warnings reach the caller like any harness
 	// entry's, prefixed with the entry (#496).
 	want := `odd-name: name "Odd_Name" is not a valid Agent Plugins name; exported as "odd-name"`
-	if len(warnings) != 1 || warnings[0] != want {
-		t.Errorf("warnings = %q, want [%q]", warnings, want)
+	found := false
+	for _, w := range warnings {
+		if w == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("warnings = %q, want one of [%q]", warnings, want)
 	}
 	assertFileExists(t, filepath.Join(out, "plugins", "odd-name", "plugin.json"))
 	raw, _ := os.ReadFile(filepath.Join(out, ".agents", "plugins", "marketplace.json"))

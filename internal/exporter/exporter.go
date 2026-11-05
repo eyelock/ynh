@@ -323,6 +323,9 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 			result.Warnings = append(result.Warnings, warnings...)
 		}
 		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
+		if len(instructions) > 0 && !vendor.ExportCarriesInstructions(adapter) {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(v))
+		}
 	}
 	result.Warnings = append(result.Warnings, workspaceWarnings(p)...)
 	if wroteHooks {
@@ -416,8 +419,12 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Instructions
 	if len(instructions) > 0 {
-		if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
-			return result, err
+		if vendor.ExportCarriesInstructions(adapter) {
+			if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
+				return result, err
+			}
+		} else {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(vendorName))
 		}
 	}
 
@@ -482,6 +489,12 @@ func workspaceWarnings(p *harness.Harness) []string {
 		return nil
 	}
 	return []string{fmt.Sprintf("workspace is not carried into exports: %d requested folder(s) dropped, because a plugin cannot grant a folder", len(p.Workspace))}
+}
+
+// noInstructionsWarning is the note for a vendor whose plugin cannot carry
+// the harness's instructions, whatever the export mode.
+func noInstructionsWarning(vendorName string) string {
+	return vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)"
 }
 
 // skippedArtifactWarnings notes the artifact types the harness carries that
