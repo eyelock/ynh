@@ -388,7 +388,7 @@ dist/my-harness/
 Key differences from runtime layout:
 
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
-- Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own `CLAUDE.md`)
+- Claude and Copilot exports write no instructions: a plugin cannot carry them (OBSERVED live, ynh #722), so the export warns and the instructions reach those vendors only under `ynh run` or from the installing project's own file
 - Codex carries skills, hooks and MCP servers only — agents, rules, commands and delegates are excluded with warnings, and so are the harness's instructions, which a Codex plugin cannot carry
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)

@@ -555,6 +555,16 @@ func (c *Claude) AgentPluginLayout() AgentPluginLayout {
 
 func (c *Claude) SupportsExportDelegates() bool { return true }
 
+// ExportCarriesInstructions: a Claude Code plugin cannot carry instructions.
+// A plugin's AGENTS.md (and the CLAUDE.md that imports it) is installed with
+// it but never reaches the session: Claude Code reads CLAUDE.md only from the
+// working directory's project and the user's ~/.claude (OBSERVED live on
+// Claude Code 2.1.318, 2026-11-05: `claude -p --plugin-dir` on a
+// `ynd export -v claude` package, whose AGENTS.md held a codeword, returned
+// "unknown" in two runs while the skill's codeword came back, and a codeword in
+// the project's own CLAUDE.md came back too).
+func (c *Claude) ExportCarriesInstructions() bool { return false }
+
 func (c *Claude) PluginManifestDir() string { return ".claude-plugin" }
 
 func (c *Claude) MarketplaceManifestDir() string { return ".claude-plugin" }
