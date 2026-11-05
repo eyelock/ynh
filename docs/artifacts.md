@@ -169,6 +169,8 @@ make format && make lint && make test
 If any step fails, fix the issue and re-run until all checks pass.
 ```
 
+Codex reads no command files from a project, so under `ynh run` ynh writes each command as a skill (`.codex/skills/<name>/SKILL.md`) that Codex lists and invokes by name. Its `description` frontmatter becomes the skill's description; other frontmatter is dropped and `$ARGUMENTS` is not substituted. See [Vendor Support](vendors.md#feature-support).
+
 ## Project Instructions
 
 A harness can include an `AGENTS.md` file with project-level instructions.

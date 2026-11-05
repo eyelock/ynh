@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -26,10 +27,16 @@ func (c *Codex) DelegateAgentFile(name, description, prompt string) (string, []b
 // TransformArtifact writes a harness's own agents (agents/<name>.md) as Codex
 // custom agents. Codex reads only TOML files in .codex/agents/
 // (learn.chatgpt.com/docs/agent-configuration/subagents), so a Markdown agent linked there
-// would never be one. Other artifact types pass through unchanged.
+// would never be one. A command (commands/<name>.md) is written as a skill,
+// <name>/SKILL.md (codexCommandSkill). Other artifact types pass through
+// unchanged.
 // It never fails: every agent can be written as a custom agent, so the error
 // the ArtifactTransformer contract allows for is always nil here.
 func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (string, []byte, error) {
+	if artifactType == "commands" && strings.HasSuffix(name, ".md") {
+		stem := strings.TrimSuffix(name, ".md")
+		return stem + "/SKILL.md", codexCommandSkill(stem, data), nil
+	}
 	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
 		return name, data, nil
 	}
@@ -230,4 +237,34 @@ func tomlEscape(s string, multiline bool) string {
 		}
 	}
 	return b.String()
+}
+
+// codexCommandSkill writes a command as a Codex skill, which Codex lists and
+// the user invokes as $<name>. Codex reads no command files from a project
+// (custom prompts live in the user's home and are deprecated for skills), so
+// a skill is how a command reaches a session. The skill is named for the
+// command's file, whatever name its frontmatter holds, because that is what
+// the command is called on every other vendor. Its description is the
+// command's, else one that names the command; Codex requires one. The body
+// is carried as it is. Other frontmatter (argument-hint, allowed-tools,
+// model) is dropped: a skill has no field for it, and nothing in a skill
+// replaces a command's $ARGUMENTS, which the model reads as plain text.
+func codexCommandSkill(stem string, data []byte) []byte {
+	body := data
+	description := ""
+	if lines, rest, ok := splitFrontmatter(data); ok {
+		body = bytes.TrimLeft(rest, "\r\n")
+		for _, e := range frontmatterEntries(lines) {
+			if e.key == "description" {
+				description = strings.Join(strings.Fields(e.scalar()), " ")
+			}
+		}
+	}
+	if description == "" {
+		description = fmt.Sprintf("Run the %q command.", stem)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "---\nname: %s\ndescription: %s\n---\n", strconv.Quote(stem), strconv.Quote(description))
+	b.Write(body)
+	return []byte(b.String())
 }

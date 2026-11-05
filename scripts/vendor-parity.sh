@@ -116,6 +116,19 @@ while IFS=$'\t' read -r name cfgdir; do
 		-e 's|^\(harness/agents/.*\)\.toml$|\1.md|' \
 		| sort > "$TMP/set-$name.txt"
 
+	# Codex writes a command as a skill (commands/<n>.md -> skills/<n>/SKILL.md)
+	# because it reads no command files; map each of the harness's own commands
+	# back so the sets compare.
+	if [ "$name" = codex ] && [ -d "$HARNESS/commands" ]; then
+		for cmd in "$HARNESS"/commands/*.md; do
+			[ -e "$cmd" ] || continue
+			n=$(basename "$cmd" .md)
+			sed -i.bak "s|^harness/skills/$n/SKILL\.md\$|harness/commands/$n.md|" "$TMP/set-$name.txt"
+			rm -f "$TMP/set-$name.txt.bak"
+		done
+		sort -o "$TMP/set-$name.txt" "$TMP/set-$name.txt"
+	fi
+
 	# One instructions file per vendor; its name is legitimately vendor-specific.
 	instr=$( ( cd "$out" && find . -maxdepth 1 -type f | wc -l ) | tr -d ' ' )
 	grep -v '^harness/\|^plugin/' "$TMP/set-$name.txt" > "$TMP/top-$name.txt" || true
