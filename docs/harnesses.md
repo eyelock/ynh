@@ -393,7 +393,7 @@ Boolean, default `false`. When `true`, `ynh run` launches the harness with only 
 
 ### mcp_manual_approval (optional)
 
-Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`) has no one to approve an MCP tool call, and Codex refuses it. By default `ynh run` approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
+Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or an `ynh agent run --backend codex` worker) has no one to approve an MCP tool call, and Codex refuses it. By default ynh approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
 
 ### workspace (optional)
 

@@ -556,3 +556,25 @@ func TestCodexWorkerLoadsMCPServers(t *testing.T) {
 		t.Errorf("env = %v", env)
 	}
 }
+
+// A worker approves the harness's own MCP servers' tools on every turn, as a
+// one-shot `ynh run` does, and mcp_manual_approval turns it off.
+func TestCodexWorkerApprovesMCPTools(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
+	dir := t.TempDir()
+	doc := `{"mcpServers":{"web":{"type":"http","url":"https://x/mcp"}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const want = `mcp_servers.web.default_tools_approval_mode="approve"`
+	for _, thread := range []string{"", "th_1"} {
+		got := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir}, thread), "\n")
+		if !strings.Contains(got, want) {
+			t.Errorf("thread %q: no approval in:\n%s", thread, got)
+		}
+		off := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir, MCPManualApproval: true}, thread), "\n")
+		if strings.Contains(off, "default_tools_approval_mode") {
+			t.Errorf("thread %q: mcp_manual_approval still approves:\n%s", thread, off)
+		}
+	}
+}
