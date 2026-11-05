@@ -136,7 +136,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** isolation runs with only the harness's MCP servers. Under `ynh run`, Copilot CLI is given `--disable-builtin-mcps`, but servers in `~/.copilot/mcp-config.json` still load. Codex, Cursor and OpenCode get no isolation. Under `ynh agent run` it applies on the Claude Code backend only. ynh prints a `warning:` line and launches normally.
 - **Owner:** not established: the record does not show whether these vendors can do it.
 - **Evidence:** [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
-- **Tracking:** none.
+- **Tracking:** [ynh #731](https://github.com/eyelock/ynh/issues/731), v0.18.0.
 - **Workaround:** none recorded.
 - **Detail:** [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
@@ -190,7 +190,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** a delegate reaches the vendor as an agent carrying its instructions. On Claude Code it also carries its MCP servers. On no vendor does it carry its hooks or workspace folders. On OpenCode a delegate does not run, and `ynd export -v opencode` leaves delegates out with the warning `opencode: skipping N delegates (not supported)`. In an export, delegates are carried the same way: instructions, and on Claude Code MCP servers.
 - **Owner:** ynh.
 - **Evidence:** [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates).
-- **Tracking:** no issue yet.
+- **Tracking:** [ynh #729](https://github.com/eyelock/ynh/issues/729), v0.18.0.
 - **Workaround:** for everything else, include the harness (`includes`) rather than delegating to it.
 - **Detail:** [delegates_to](harnesses.md#delegates-to-optional).
 
@@ -217,7 +217,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh agent run --backend codex` does not pass Codex the trust overrides that `ynh run` passes ([L7](#l7-codex-hooks-need-an-accepted-harness)), so a harness's hooks, and its `on_session_start` context, do not fire.
 - **Owner:** ynh.
 - **Evidence:** [Codex hook trust](hooks.md#codex-hook-trust).
-- **Tracking:** no issue yet.
+- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0.
 - **Workaround:** none.
 - **Detail:** [Codex hook trust](hooks.md#codex-hook-trust).
 
@@ -244,7 +244,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `--sandbox srt` is honoured by the `claude` backend only. On `codex`, `cursor` and `opencode` it is an error, not a warning.
 - **Owner:** not established.
 - **Evidence:** [Redaction](agent.md#redaction).
-- **Tracking:** none.
+- **Tracking:** [ynh #734](https://github.com/eyelock/ynh/issues/734), no milestone.
 - **Workaround:** run the worker inside containment you configure yourself.
 - **Detail:** [What `--sandbox srt` allows](agent.md#what-sandbox-srt-allows).
 
@@ -253,7 +253,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** the telemetry relay collects the vendor's own telemetry for Claude Code and Codex only.
 - **Owner:** not established: the record names no OTLP export in Cursor or OpenCode.
 - **Evidence:** [Vendor telemetry through the relay](telemetry.md#vendor-telemetry-through-the-relay).
-- **Tracking:** none.
+- **Tracking:** [ynh #732](https://github.com/eyelock/ynh/issues/732), v0.19.0.
 - **Workaround:** none. ynh's own spans and events are still written.
 - **Detail:** [Vendor telemetry through the relay](telemetry.md#vendor-telemetry-through-the-relay).
 
@@ -298,7 +298,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynd export -v copilot` leaves a harness's commands out of the package, with a warning that they are not supported. A Copilot CLI plugin can carry them: a package with `commands/` copied in by hand reached its command, as a skill, the same way as under `ynh run` ([L32](#l32-copilot-commands-under-ynh-run)).
 - **Owner:** ynh.
 - **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the hand-made package's command was reached through the skill tool; a control package without `commands/` was not.
-- **Tracking:** no issue yet.
+- **Tracking:** [ynh #733](https://github.com/eyelock/ynh/issues/733), v0.17.0.
 - **Workaround:** copy the harness's `commands/` into the exported package, or ship the command as a skill.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
@@ -316,7 +316,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynd export -v cursor` writes every row shown, but no Cursor package has been loaded into cursor-agent live.
 - **Owner:** unknown until verified.
 - **Evidence:** the 2026-11-05 verification loaded Claude Code, Codex and Copilot CLI packages, not Cursor's.
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the verification run.
+- **Tracking:** [ynh #735](https://github.com/eyelock/ynh/issues/735), v0.17.0. Blocked by the same Cursor Workspace Trust prompt as the verification in [ynh #716](https://github.com/eyelock/ynh/issues/716).
 - **Workaround:** none needed; run the harness on Cursor with `ynh run`.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
@@ -334,7 +334,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** Copilot CLI installs a marketplace from `ynd marketplace build` (`.github/plugin/marketplace.json`) and loads its plugin. The skills (an included one too), the agent, all six hooks and the command (as a skill, from the merged tree's `commands/`) arrive. The MCP server loads and offers its tool, but a one-shot run refuses the call because there is no one to approve it. Approving it in an interactive session has not been shown.
 - **Owner:** the vendor: a one-shot Copilot run does not approve an installed plugin's MCP tool.
 - **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the MCP server's tool was offered and refused ("no one to approve"), so its codeword did not come back.
-- **Tracking:** none.
+- **Tracking:** [ynh #735](https://github.com/eyelock/ynh/issues/735), v0.17.0.
 - **Workaround:** none verified.
 - **Detail:** [Marketplace & Distribution](marketplace.md).
 
