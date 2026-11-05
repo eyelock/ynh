@@ -314,6 +314,12 @@ func TestOpenCodeApplyRuntimeInstructionsErrors(t *testing.T) {
 func TestOpenCodeGenerateHookConfig(t *testing.T) {
 	o := &OpenCode{}
 
+	// Only a session-start hook: no plugin, just the list ynh runs at launch.
+	if only, err := o.GenerateHookConfig(map[string][]plugin.HookEntry{"on_session_start": {{Command: "s"}}}); err != nil ||
+		len(only) != 1 || only[filepath.Join(".opencode", opencodeSessionStartFile)] == nil {
+		t.Errorf("session-start only = %v, %v", keysOf(only), err)
+	}
+
 	if files, err := o.GenerateHookConfig(nil); files != nil || err != nil {
 		t.Errorf("nil hooks = %v, %v", files, err)
 	}
@@ -361,7 +367,6 @@ func TestOpenCodeGenerateHookConfig(t *testing.T) {
 		`ctx.tool.hook("execute.after"`,
 		`ctx.session.hook("prompt"`,
 		`ctx.event.subscribe`,
-		`"session.created"`,
 		`"session.execution.succeeded"`,
 		`"session.execution.failed"`,
 		`shell: ["Bash"]`,
@@ -369,6 +374,9 @@ func TestOpenCodeGenerateHookConfig(t *testing.T) {
 		if !strings.Contains(src, want) {
 			t.Errorf("plugin lacks %s", want)
 		}
+	}
+	if strings.Contains(src, "session.created") || strings.Contains(src, "on_session_start") {
+		t.Error("the plugin must not carry on_session_start: ynh runs it once before launch")
 	}
 	if strings.Contains(src, "__HOOKS__") {
 		t.Error("placeholder left in plugin")
