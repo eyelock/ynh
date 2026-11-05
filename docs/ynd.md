@@ -389,7 +389,7 @@ Key differences from runtime layout:
 
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own `CLAUDE.md`)
-- Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
+- Codex carries skills, hooks and MCP servers only — agents, rules, commands and delegates are excluded with warnings, and so are the harness's instructions, which a Codex plugin cannot carry
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
 - OpenCode has no plugin manifest and no Agent Plugins support, so its export is the run-directory layout without a manifest: nothing installs it as a plugin. MCP servers go to `.opencode/opencode.json` and hooks to the generated `.opencode/plugins/ynh-hooks.ts`. Rules are written as files, not composed into `AGENTS.md`, which ynh does only at launch

@@ -34,6 +34,7 @@ david -v codex                     # same harness, different vendor
 ynh claims more than each vendor yet gets. In v0.16.0:
 
 - **Codex** does not yet receive commands. Hooks and session context reach it under `ynh run` for an accepted harness only, not under `ynh agent run` ([Codex hook trust](docs/hooks.md#codex-hook-trust)). Instructions (written to `AGENTS.md`), rules (folded into them), MCP servers, skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Codex export** cannot carry a harness's instructions: a Codex plugin ignores its `AGENTS.md`, so `ynd export -v codex` writes none and warns. Its skills, hooks and MCP servers do load (see [Vendor Support](docs/vendors.md#export-output-by-vendor)).
 - **Rules** reach Claude Code, Codex and Copilot only by being folded into their instructions under `ynh run`: always on, with no path scoping.
 - **OpenCode**: delegates cannot run as subagents (a harness's own agents can), `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), and session context is not injected. `ynd export -v opencode` drops delegates silently.
 - **Cursor**: print mode skips `before_prompt` and `on_stop`.

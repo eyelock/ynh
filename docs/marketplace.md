@@ -296,7 +296,7 @@ Cursor and Claude Code share nearly identical plugin and marketplace formats:
 | Marketplace index | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` |
 | Schema | Same | Same |
 
-This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points only at `skills/`, so the shared agents, rules and commands do not reach Codex.
+This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points at `skills/`, the hooks file and `.mcp.json`, so the shared agents, rules and commands do not reach Codex, nor does the shared `AGENTS.md`.
 
 ### Official Resources
 
@@ -322,7 +322,7 @@ Codex's marketplace is curated rather than open. It supports:
 Codex has significant differences from Claude Code and Cursor:
 
 - **No self-hosted marketplaces** — the catalog is centrally managed (as of March 2026)
-- **Skills-only distribution** — Codex plugins carry skills, hooks and MCP servers, not agents, rules, commands or instructions: there is no loading mechanism for those in a plugin. When it runs a harness under Codex, `ynh` writes a harness's agents as TOML custom agents and registers each one with Codex at launch (see [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor))
+- **Skills, hooks and MCP servers only** — Codex plugins carry skills, hooks and MCP servers, not agents, rules, commands or instructions: there is no loading mechanism for those in a plugin. When it runs a harness under Codex, `ynh` writes a harness's agents as TOML custom agents and registers each one with Codex at launch (see [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor))
 - **Limited marketplace.json** — the format exists but the schema is still evolving
 
 ynh includes Codex in marketplace generation. `ynd marketplace build` writes a Codex-specific index at `.agents/plugins/marketplace.json` (source/path pointers and an install policy per plugin) alongside the Claude Code and Cursor indexes. Individual Codex export (`ynd export -v codex`) produces a `.codex-plugin/plugin.json` manifest with a `skills/` directory at the plugin root.
@@ -564,7 +564,7 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 **Why one marketplace.json per vendor?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor `.cursor-plugin/marketplace.json` and Copilot `.github/plugin/marketplace.json`. ynh generates each from the same source config, producing one physical plugin directory that serves every vendor.
 
-**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share the Claude and Cursor index shape. `ynd marketplace build` generates its index at `.agents/plugins/marketplace.json` alongside the other vendors' ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
+**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share the Claude and Cursor index shape. `ynd marketplace build` generates its index at `.agents/plugins/marketplace.json` alongside the other vendors' ones, using Codex's native format. A Codex plugin carries skills, hooks and MCP servers but no agents, rules, commands or instructions, so a plugin in a Codex-consumed marketplace delivers only those regardless of what the harness defines for the other vendors.
 
 **Why auto-init Git?** Claude Code's plugin loader resolves relative `source` paths (e.g., `./plugins/formatter`) within the Git working tree. A marketplace directory that isn't a Git repo causes path resolution failures at install time.
 
@@ -576,7 +576,7 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 | Agents | Yes | Yes | No | Yes | Yes |
 | Rules | Folded into `CLAUDE.md` at run time (the export ships `rules/`, but Claude Code does not read rules from a plugin directory) | Yes | Folded into the instructions file (`AGENTS.md`) at run time; not exported | Folded into `AGENTS.md` at run time; not exported | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
 | Commands | Yes | Yes | No | No | Yes (bundle slash commands unconfirmed under `opencode run`) |
-| Instructions | AGENTS.md | .cursorrules + AGENTS.md | AGENTS.md | AGENTS.md (projected to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
+| Instructions | AGENTS.md | .cursorrules + AGENTS.md | none (a Codex plugin cannot carry them) | AGENTS.md (projected to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
 | Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ | None |
 | Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) | None |
 | Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) | No |

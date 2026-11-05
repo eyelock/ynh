@@ -491,16 +491,18 @@ func workspaceWarnings(p *harness.Harness) []string {
 	return []string{fmt.Sprintf("workspace is not carried into exports: %d requested folder(s) dropped, because a plugin cannot grant a folder", len(p.Workspace))}
 }
 
+// noInstructionsWarning is the note for a vendor whose plugin cannot carry
+// the harness's instructions, whatever the export mode.
+func noInstructionsWarning(vendorName string) string {
+	return vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)"
+}
+
 // skippedArtifactWarnings notes the artifact types and delegates the harness
 // carries that vendorName's plugin does not load, when the vendor restricts
 // its export to a subset (Codex: skills only). A per-vendor export leaves
 // them out of the vendor's directory; a merged package keeps them in the
 // shared tree for the other vendors, but the vendor still does not read
 // them, so both say the same thing.
-func noInstructionsWarning(vendorName string) string {
-	return vendorName + ": plugins cannot carry instructions, so the harness's are not exported for it (use `ynh run`, or put them in the project's AGENTS.md)"
-}
-
 func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
 	exportDirs := adapter.ExportArtifactDirs()
 	if exportDirs == nil {
