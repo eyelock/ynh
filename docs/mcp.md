@@ -185,6 +185,8 @@ Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude. I
 
 **Approval on a one-shot run and on workers.** `codex exec` has no one to ask, and its approval policy is `never`, so an unapproved MCP call fails with `MCP tool call requires approval, but approval policy is never`. So a one-shot `ynh run` (a prompt, not interactive, resumed or not) and every turn of an `ynh agent run --backend codex` worker add `-c mcp_servers.<name>.default_tools_approval_mode="approve"` for each server ynh loads from the run directory's `.mcp.json`: the servers the harness composes, which count as declared by the harness and include those from its included harnesses (they are under the same trust), much as ynh adds `--allow-all-tools` for Copilot. It approves nothing else: your own servers in `config.toml` keep Codex's policy, and an interactive run is untouched. It is merged with your settings, not laid over them: a server whose `default_tools_approval_mode` your `config.toml` or your own `-c` already sets is left alone (ynh says so on stderr), and a per-tool `tools.<tool>.approval_mode` you set still wins over the server default. To turn it off, set `"mcp_manual_approval": true` in the manifest (a profile may set it too); the run then stops at Codex's policy as before until you pass an approval yourself, such as `-- -c 'mcp_servers.<name>.tools.<tool>.approval_mode="approve"'`. Observed live on codex-cli 0.166.0 (2026-11-04): a one-shot run called a harness stdio server's tool and got its result; with `mcp_manual_approval` set it stopped with the approval error; a per-tool `approval_mode="prompt"` passed after `--` still stopped the call. Observed live on codex-cli 0.166.0 (2026-11-05): `ynh agent run --backend codex` on a harness with a stdio server called its tool and got the result; the same run on develop 41ae2bf, and with `mcp_manual_approval` set, stopped with the approval error. A resumed one-shot (`ynh run --resume -v codex -- "<prompt>"`) was observed live the same way on 2026-11-05: it called the harness stdio server's tool and got the result, and with `mcp_manual_approval` set it stopped with the approval error.
 
+**Environment of a stdio server.** Codex gives an MCP server only a small default environment, not the environment of the Codex process. So for each stdio server ynh loads, it adds `-c mcp_servers.<name>.env_vars=[...]` naming every variable in the `env_passthrough` of the harness and of its included harnesses (less any the server's own `env` sets), on every launch: `ynh run` (one-shot, interactive and resumed) and every turn of `ynh agent run --backend codex`. Without it, a ynm server did not see `YNM_HOME` and opened the user's own `~/.ynm` ([ynh #723](https://github.com/eyelock/ynh/issues/723)). A variable that is not set is simply absent. Only the names are recorded, in `.ynh-env-passthrough.json` in the run directory; a streamable HTTP server takes no environment. Observed live on codex-cli, 2026-11-05: `ynh run local/maymem -v codex` (one-shot and resumed) and `ynh agent run --backend codex`, with `YNM_HOME` set to a scratch store, each had `memory_status` report the scratch store; on develop the one-shot reported `~/.ynm`.
+
 The file, as an export carries it:
 
 ```json
@@ -493,10 +495,12 @@ references resolved from the environment at assembly time:
 }
 ```
 
-`env_passthrough` is the allowlist, and it governs two things deliberately:
-which variables a `${VAR}` reference may resolve, and which variables reach an
-agent worker's process under [`ynh agent run`](agent.md). One declaration, one
-place to review.
+`env_passthrough` is the allowlist, and it governs three things deliberately:
+which variables a `${VAR}` reference may resolve, which variables reach an
+agent worker's process under [`ynh agent run`](agent.md), and, on Codex, which
+variables reach a stdio MCP server under `ynh run` and `ynh agent run`
+(see [Environment of a stdio server](#codex-format)). One declaration, one place to
+review.
 
 The same list is all a worker is given, so a server (or any tool) configured
 through its own variable, such as `YNM_HOME`, silently falls back to its default

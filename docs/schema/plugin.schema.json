@@ -92,7 +92,7 @@
       }
     },
     "env_passthrough": {
-      "description": "Environment variables this harness may see. Governs two things deliberately: which ${VAR} references its MCP declarations may resolve, and which variables reach an agent worker's process. Absent or empty means none \u2014 a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
+      "description": "Environment variables this harness may see. Governs three things deliberately: which ${VAR} references its MCP declarations may resolve, which variables reach an agent worker's process, and, on Codex, which variables reach a stdio MCP server under ynh run and ynh agent run (Codex gives a server only a default environment otherwise). Absent or empty means none \u2014 a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
       "type": "array",
       "items": {
         "type": "string",

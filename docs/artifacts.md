@@ -169,22 +169,25 @@ make format && make lint && make test
 If any step fails, fix the issue and re-run until all checks pass.
 ```
 
+Codex reads no command files from a project, so under `ynh run` ynh writes each command as a skill (`.codex/skills/<name>/SKILL.md`) that Codex lists and invokes by name. Its `description` frontmatter becomes the skill's description; other frontmatter is dropped and `$ARGUMENTS` is not substituted. See [Vendor Support](vendors.md#feature-support).
+
 ## Project Instructions
 
 A harness can include an `AGENTS.md` file with project-level instructions.
 
 **The two paths differ, and the difference matters if you go looking for the
 file.** `ynd export` produces a redistributable plugin, so it emits `AGENTS.md`
-alongside a vendor instructions file that imports it. `ynh run` and
+for the vendors whose plugins can carry it (Cursor and OpenCode); Claude Code,
+Codex and Copilot plugins cannot, so those exports write none. `ynh run` and
 `ynd preview` assemble a session, so they copy the instructions straight into
 the vendor's own file — there is no `AGENTS.md` to import, and no import.
 
 | Vendor | Reads `AGENTS.md` natively | `ynh run` / `ynd preview` | `ynd export` |
 |---|---|---|---|
-| Claude | No | instructions inlined into `CLAUDE.md` | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
+| Claude | No | instructions inlined into `CLAUDE.md` | none: a Claude Code plugin cannot carry instructions, so the export writes no `AGENTS.md` or `CLAUDE.md` and warns |
 | Codex | Yes | `AGENTS.md` | none: a Codex plugin cannot carry instructions, so the export writes no `AGENTS.md` and warns |
 | Cursor | Yes | `.cursorrules` | `AGENTS.md` |
-| Copilot | Yes | `AGENTS.md` | `AGENTS.md` |
+| Copilot | Yes | `AGENTS.md` | none: a Copilot plugin cannot carry instructions, so the export writes no `AGENTS.md` and warns |
 | OpenCode | Yes (`AGENTS.md` only; its `instructions` key is ignored) | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context | `AGENTS.md` |
 
 Verified by running both commands per vendor, not read from the adapters.

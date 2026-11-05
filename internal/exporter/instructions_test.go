@@ -99,11 +99,15 @@ func TestWriteMergedSystemPrompt_UnionsVendorFiles(t *testing.T) {
 	got := lsRel(t, out)
 
 	// AGENTS.md is common to all three and must appear once.
-	// CLAUDE.md is Claude's alone, .cursorrules is Cursor's alone.
-	for _, want := range []string{"AGENTS.md", "CLAUDE.md", ".cursorrules"} {
+	// .cursorrules is Cursor's alone. Claude Code and Codex plugins cannot
+	// carry instructions, so they contribute nothing: no CLAUDE.md.
+	for _, want := range []string{"AGENTS.md", ".cursorrules"} {
 		if !containsStr(got, want) {
 			t.Errorf("merged output is missing %s: %v", want, got)
 		}
+	}
+	if containsStr(got, "CLAUDE.md") {
+		t.Errorf("a Claude plugin cannot carry instructions, yet CLAUDE.md was written: %v", got)
 	}
 	n := 0
 	for _, g := range got {
@@ -123,7 +127,7 @@ func TestWriteMergedSystemPrompt_SkipsUnknownVendor(t *testing.T) {
 	src := []byte("x\n")
 	out := t.TempDir()
 
-	if err := WriteMergedSystemPrompt(src, out, []string{"claude", "nosuchvendor"}); err != nil {
+	if err := WriteMergedSystemPrompt(src, out, []string{"cursor", "nosuchvendor"}); err != nil {
 		t.Fatalf("an unknown vendor must not fail the export: %v", err)
 	}
 	if got := lsRel(t, out); len(got) == 0 {

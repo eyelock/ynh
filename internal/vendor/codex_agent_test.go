@@ -196,3 +196,25 @@ func TestCodexArtifactWarnings_NameAndPassthrough(t *testing.T) {
 		}
 	}
 }
+
+// A command is written as a skill, <name>/SKILL.md, which Codex lists and
+// the user invokes as $<name>: it carries the command's description and body,
+// is named for the file, and drops the command's other frontmatter.
+func TestCodexCommandSkill(t *testing.T) {
+	c := &Codex{}
+	src := "---\nname: other\ndescription: Ship it\nargument-hint: [env]\nallowed-tools: Bash\n---\n\nDeploy to $ARGUMENTS.\n"
+	data := c.CommandSkill("deploy", []byte(src))
+	want := "---\nname: \"deploy\"\ndescription: \"Ship it\"\n---\nDeploy to $ARGUMENTS.\n"
+	if string(data) != want {
+		t.Errorf("got\n%s\nwant\n%s", data, want)
+	}
+}
+
+func TestCodexCommandSkill_WithoutFrontmatter(t *testing.T) {
+	c := &Codex{}
+	data := c.CommandSkill("lint", []byte("Run the linter.\n"))
+	want := "---\nname: \"lint\"\ndescription: \"Run the \\\"lint\\\" command.\"\n---\nRun the linter.\n"
+	if string(data) != want {
+		t.Errorf("got\n%s\nwant\n%s", data, want)
+	}
+}

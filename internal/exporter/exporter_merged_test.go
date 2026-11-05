@@ -41,7 +41,7 @@ func TestExportMergedMode(t *testing.T) {
 
 	// Instructions
 	assertFileExists(t, filepath.Join(outputDir, "AGENTS.md"))
-	assertFileExists(t, filepath.Join(outputDir, "CLAUDE.md"))
+	assertFileNotExists(t, filepath.Join(outputDir, "CLAUDE.md")) // a Claude plugin cannot carry instructions
 	assertFileExists(t, filepath.Join(outputDir, ".cursorrules"))
 }
 
@@ -127,9 +127,9 @@ func mergedInstructionsWarning(r ExportResult) bool {
 func TestExportMergedCodexInstructions(t *testing.T) {
 	srcDir := filepath.Join(testdataDir(), "export-harness")
 
-	t.Run("with claude", func(t *testing.T) {
+	t.Run("with cursor", func(t *testing.T) {
 		out := filepath.Join(t.TempDir(), "merged")
-		results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude", "codex"}, Mode: ModeMerged})
+		results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"cursor", "codex"}, Mode: ModeMerged})
 		if err != nil {
 			t.Fatal(err)
 		}

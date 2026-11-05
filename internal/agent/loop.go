@@ -1755,6 +1755,12 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			_ = os.RemoveAll(dir)
 			return "", nil, err
 		}
+		if adapter.Name() == "codex" {
+			if err := vendor.WriteCodexEnvPassthrough(dir, harness.ComposedEnvPassthrough(h, resolver.IncludedHarnesses(resolved))); err != nil {
+				_ = os.RemoveAll(dir)
+				return "", nil, err
+			}
+		}
 	}
 
 	// After hooks and MCP, so the manifest's pointers to them are accurate.
