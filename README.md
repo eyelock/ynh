@@ -33,6 +33,8 @@ david -v codex                     # same harness, different vendor
 
 Not every vendor gets every feature of a harness yet: some gaps are ynh's to fix, and some are things a vendor cannot do. [Vendor Feature Parity](docs/vendor-parity.md) has the matrix for `ynh run`, `ynh agent run` and `ynd export`, and says for each gap whose it is and the evidence, with its tracking issue where one exists.
 
+On Cursor, grant Workspace Trust once for each harness: ynh starts Cursor in that harness's run directory, and a one-shot run stops until it is trusted. [Vendor Support](docs/vendors.md#vendor-notes) says what to run.
+
 ## The 60-second version
 
 ```bash
