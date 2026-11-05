@@ -52,11 +52,14 @@ func (c *Copilot) InstructionsFile() string { return "AGENTS.md" }
 func (c *Copilot) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Copilot) GenerateSystemPrompt(content []byte) map[string][]byte {
-	// AGENTS.md: Copilot natively reads this (confirmed: --no-custom-instructions
-	// flag exists specifically to disable AGENTS.md loading, proving it's read
-	// by default). Whether a properly-installed plugin's bundled AGENTS.md is
-	// read is untested — --plugin-dir loading confirmed it is NOT (see package
-	// doc). Kept for export-path consistency with the other three adapters.
+	// AGENTS.md: Copilot natively reads this from a project (the
+	// --no-custom-instructions flag exists to disable it). A plugin's bundled
+	// AGENTS.md is not read: OBSERVED live on Copilot CLI 1.0.105, 2026-11-05,
+	// with --plugin-dir (docs/vendor-parity.md L20, #722). Whether an
+	// installed plugin reads it has not been run. No export calls this for
+	// Copilot now: ExportCarriesInstructions is false, so the export writes no
+	// AGENTS.md and warns. The method stays because the adapter interface
+	// requires it.
 	return map[string][]byte{
 		"AGENTS.md": content,
 	}
@@ -500,11 +503,11 @@ func (c *Copilot) AgentPluginLayout() AgentPluginLayout {
 
 func (c *Copilot) MarketplaceManifestDir() string { return filepath.Join(".github", "plugin") }
 
-// GenerateMarketplaceIndex is best-effort: Copilot's marketplace.json schema
-// was researched but not hand-verified field-by-field the way the plugin
-// manifest, MCP config, and hook events were. Revisit once a real
-// copilot-plugins or awesome-copilot marketplace.json has been diffed against
-// this output.
+// GenerateMarketplaceIndex: Copilot CLI 1.0.105 installed a marketplace from
+// this index live (2026-11-05, `copilot plugin marketplace add <dir>` then
+// `copilot plugin install`, with no prompt): docs/vendor-parity.md L28. The
+// schema has not been diffed field by field against a published Copilot
+// marketplace.json.
 func (c *Copilot) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
 	type indexPlugin struct {
 		Name        string `json:"name"`
@@ -582,8 +585,12 @@ func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[st
 // The reference lists the manifest's "mcpServers" field as a third source
 // and does not say how the three combine. In a package that also carries
 // Claude, the shared manifest names Claude's mcp/claude.json, whose entries
-// lack the "type" field Copilot's own schema carries; which file an installed
-// Copilot plugin then loads has not been hand-tested (#499).
+// lack the "type" field Copilot's own schema carries. An installed Copilot
+// plugin loads .github/mcp.json and not the manifest-named mcp/claude.json:
+// CONFIRMED live on Copilot CLI 1.0.105, 2026-10-30, a merged package
+// installed from a local marketplace (#621, fixing #499). A tool call is
+// refused one-shot and runs interactively once approved: docs/vendor-parity.md
+// L37.
 func (c *Copilot) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	data, err := copilotMCPDocument(servers)
 	if err != nil || data == nil {

@@ -316,8 +316,7 @@ Run with David's approval, against ynh's assembled and exported output.
 
 ### Still untested
 
-Hooks of a plugin installed with `copilot plugin install` (runs used `--plugin-dir`), and
-the repository `.github/hooks/` route.
+The repository `.github/hooks/` route.
 
 ### The v1.0.75 hand test (history)
 
@@ -386,9 +385,11 @@ secrets where they could be committed (ynw-18ln); never do that.
 An export writes `GeneratePluginMCPConfig`'s `.github/mcp.json` at the plugin
 root instead: the Copilot CLI plugin reference lists `.mcp.json` and
 `.github/mcp.json` as the default MCP paths of a legacy (`.claude-plugin`)
-plugin, and Codex already writes `.mcp.json` into a merged package. Whether an
-installed plugin (rather than one loaded with `--plugin-dir`) reads it has not
-been hand-tested.
+plugin, and Codex already writes `.mcp.json` into a merged package. An
+installed plugin reads it (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30, #621,
+below); a plugin loaded with `--plugin-dir` does not. A tool call from the
+installed plugin's server is refused in a one-shot run ("no one to approve") and
+runs in an interactive session once approved (docs/vendor-parity.md L37, L28).
 
 The reference lists the legacy MCP sources as "`.mcp.json`, `.github/mcp.json`,
 or the `mcpServers` manifest field" (fetched 2026-10-04) and does not say how they

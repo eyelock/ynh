@@ -4,7 +4,7 @@ What each vendor receives from a harness, on each surface ynh has: `ynh run`, `y
 
 - **ynh version:** v0.17.0, as on `develop` at [f2822a1](https://github.com/eyelock/ynh/commit/f2822a1), which includes [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727).
 - **Checked on:** 2026-11-05. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716) and [ynh #735](https://github.com/eyelock/ynh/issues/735); each limit below links the pull request or run that proved it. Each column was checked by its own run:
-  - **Claude Code** 2.1.318, **Codex** (codex-cli 0.166.0), **Copilot CLI** 1.0.105 and **OpenCode** 2.2.3: live runs through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed.
+  - **Claude Code** 2.1.318, **Codex** (codex-cli 0.166.0), **Copilot CLI** 1.0.105 and **OpenCode** 2.2.3: live runs through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed. Copilot CLI's marketplace index ([L28](#l28-copilot-marketplace-index)) was checked live at `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe).
   - **Cursor**, `ynd export` column: a package loaded live into cursor-agent 2026.11.05-86047df, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), whose export code is the same as at f2822a1. The record is on [ynh #735](https://github.com/eyelock/ynh/issues/735). [ynh #742](https://github.com/eyelock/ynh/pull/742), merged at `develop` [fbe9e14](https://github.com/eyelock/ynh/commit/fbe9e14), then stopped the export writing `.cursorrules` and `AGENTS.md`. A live load of the package it writes is deferred to a later release.
   - **Cursor**, `ynh run` and `ynh agent run` columns: not run live in this verification. Their live check is deferred to a later release. Four `ynh run` cells were shown live before it, through `ynh run -v cursor`, and were not re-checked: Hooks ([ynh #621](https://github.com/eyelock/ynh/pull/621), cursor-agent 2026.10.01-e373342, and [L8](#l8-cursor-print-mode-skips-two-hooks)), Session context ([ynh #627](https://github.com/eyelock/ynh/pull/627)), Resume ([ynh #714](https://github.com/eyelock/ynh/pull/714), cursor-agent 2026.10.22) and focuses ([Focus](focus.md), cursor-agent 2026.10.22). Every other Cursor cell on these two surfaces is U ([L35](#l35-cursor-under-ynh-run-not-shown-live), [L36](#l36-the-cursor-backend-not-shown-live)), or N or X with its own limit.
 
@@ -80,10 +80,10 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | P [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
 | Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L34](#l34-a-cursor-plugin-carries-no-instructions) | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | – |
-| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | U [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
+| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | P [L37](#l37-copilot-package-mcp-tools-need-an-installed-plugin-and-approval) | U [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
 | Delegates | P [L12](#l12-delegates-carry-only-part-of-a-harness) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | – |
 | Merged export (`--merged`) | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
-| Marketplace index (`ynd marketplace build`) | Y | Y | P [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
+| Marketplace index (`ynd marketplace build`) | Y | Y | Y [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Agent Plugins package (`--format agent-plugin`) | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | Y | Y | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | X [L27](#l27-opencode-reads-no-packages) |
 
 ## Limits
@@ -339,11 +339,14 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L28: Copilot marketplace index
 
-- **What:** Copilot CLI installs a marketplace from `ynd marketplace build` (`.github/plugin/marketplace.json`) and loads its plugin. The skills (an included one too), the agent, all six hooks and the command (as a skill, from the merged tree's `commands/`) arrive. The MCP server loads and offers its tool, but a one-shot run refuses the call because there is no one to approve it. Approving it in an interactive session has not been shown.
-- **Owner:** the vendor: a one-shot Copilot run does not approve an installed plugin's MCP tool.
-- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the MCP server's tool was offered and refused ("no one to approve"), so its codeword did not come back.
-- **Tracking:** [ynh #735](https://github.com/eyelock/ynh/issues/735), v0.17.0.
-- **Workaround:** none verified.
+- **What:** works. Copilot CLI installs a marketplace from `ynd marketplace build` (`.github/plugin/marketplace.json`) and loads its plugin. The skills (an included one too), the agent, all six hooks and the command (as a skill, from the merged tree's `commands/`) arrive. The MCP server loads and offers its tool; in an interactive session Copilot asks before the first call, and once the call is approved the tool runs. A one-shot run refuses the call, because there is no one to approve it ([L37](#l37-copilot-package-mcp-tools-need-an-installed-plugin-and-approval)).
+- **Owner:** the vendor, for the one-shot refusal: a one-shot Copilot run does not approve an installed plugin's MCP tool.
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05, with `ynd` built from `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe), in a scratch Copilot home:
+  - `copilot plugin marketplace add <dir>`, where `<dir>` is the local directory `ynd marketplace build -v copilot` wrote, then `copilot plugin install <plugin>@<marketplace>`: both succeeded with no prompt, and `copilot plugin list` shows the plugin as loaded from a local marketplace directory, never copied.
+  - In an interactive session, the session's `events.jsonl` records `permission.requested` (`permissionMode` `manual`), then `permission.completed` approved with `decisionSource` `human_response`, then the tool's result, `MCP codeword: PLUM-872`, a codeword set fresh for this run. The canary MCP server's own log has the `tools/call` line.
+  - In a one-shot run on the same day, Copilot offered the tool and refused the call ("no one to approve"), so its codeword did not come back.
+- **Tracking:** [ynh #735](https://github.com/eyelock/ynh/issues/735), v0.17.0: verified, so this closes it.
+- **Workaround:** use an interactive session to call the tool. Whether an approval given there carries over to a later one-shot run was not checked.
 - **Detail:** [Marketplace & Distribution](marketplace.md).
 
 ### L29: Agent Plugins on Claude Code and Cursor
@@ -417,3 +420,16 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none verified.
 - **Detail:** [The Agent Loop](agent.md).
+
+### L37: Copilot package MCP tools need an installed plugin and approval
+
+- **What:** the MCP servers of a `ynd export -v copilot` package (`.github/mcp.json` at the plugin root) work only from an installed plugin, and a tool call needs approval:
+  - Under `--plugin-dir` the servers do not load: Copilot ignores the plugin's `.github/mcp.json`.
+  - Once the plugin is installed from a marketplace, the servers start.
+  - A one-shot run (`copilot -p`) refuses the tool call ("no one to approve").
+  - An interactive session runs the call once it is approved ([L28](#l28-copilot-marketplace-index)).
+- **Owner:** the vendor: Copilot reads a plugin's MCP file only when the plugin is installed, and a one-shot run does not approve an installed plugin's MCP tool.
+- **Evidence:** `--plugin-dir`: [Copilot Format](mcp.md#copilot-format) ("a plugin loaded with `--plugin-dir` ignores it"). Installed: live on Copilot CLI 1.0.105, 2026-10-30, a merged package installed from a local marketplace into a scratch `COPILOT_HOME`, where the servers in `.github/mcp.json` started. The run is written up in [ynh #621](https://github.com/eyelock/ynh/pull/621), which fixed [ynh #499](https://github.com/eyelock/ynh/issues/499) ([Config File Locations](mcp.md#config-file-locations)). One-shot and interactive: live on Copilot CLI 1.0.105, 2026-11-05, with `ynd` from `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe) ([L28](#l28-copilot-marketplace-index)).
+- **Tracking:** none.
+- **Workaround:** install the package from a marketplace (`ynd marketplace build`, then `copilot plugin marketplace add <dir>` and `copilot plugin install <plugin>@<marketplace>`), and call the tool from an interactive session. Whether an approval given there carries over to a later one-shot run was not checked. Under `ynh run`, a harness's MCP servers reach Copilot with `--additional-mcp-config` instead ([Copilot Format](mcp.md#copilot-format)).
+- **Detail:** [Config File Locations](mcp.md#config-file-locations).
