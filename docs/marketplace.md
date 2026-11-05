@@ -336,7 +336,7 @@ ynh includes Codex in marketplace generation. `ynd marketplace build` writes a C
 
 ## GitHub Copilot CLI
 
-Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Copilot CLI 1.0.105 installed a marketplace from `ynd marketplace build` and loaded its plugin live on 2026-11-05. In an interactive session the plugin's MCP tool ran once its call was approved; a one-shot run refuses the call, as no one is there to approve it ([L28](vendor-parity.md#l28-copilot-marketplace-index), [L37](vendor-parity.md#l37-copilot-package-mcp-tools-need-an-installed-plugin-and-approval)).
+Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Copilot CLI 1.0.105 installed a marketplace from `ynd marketplace build` and loaded its plugin live on 2026-11-05. In an interactive session the plugin's MCP tool ran once its call was approved; a one-shot run refuses the call, as no one is there to approve it ([L28](vendor-parity.md#l28-copilot-marketplace-index), [L37](vendor-parity.md#l37-copilot-package-mcp-tools-need-approval)).
 
 ### Current State
 

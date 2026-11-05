@@ -2,9 +2,9 @@
 
 What each vendor receives from a harness, on each surface ynh has: `ynh run`, `ynh agent run` and `ynd export`. Every cell that is not **Y** names a limit, and every limit says whose it is.
 
-- **ynh version:** v0.17.0, as on `develop` at [f2822a1](https://github.com/eyelock/ynh/commit/f2822a1), which includes [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727).
+- **ynh version:** v0.17.0, as on `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5): `develop` at [d71026a](https://github.com/eyelock/ynh/commit/d71026a) with the harness manifests stamped 0.17.0. Since `develop` [f2822a1](https://github.com/eyelock/ynh/commit/f2822a1), which included [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727), it adds [ynh #728](https://github.com/eyelock/ynh/pull/728), [ynh #736](https://github.com/eyelock/ynh/pull/736), [ynh #741](https://github.com/eyelock/ynh/pull/741), [ynh #742](https://github.com/eyelock/ynh/pull/742), [ynh #743](https://github.com/eyelock/ynh/pull/743), [ynh #749](https://github.com/eyelock/ynh/pull/749), [ynh #750](https://github.com/eyelock/ynh/pull/750) and [ynh #752](https://github.com/eyelock/ynh/pull/752).
 - **Checked on:** 2026-11-05. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716) and [ynh #735](https://github.com/eyelock/ynh/issues/735); each limit below links the pull request or run that proved it. Each column was checked by its own run:
-  - **Claude Code** 2.1.318, **Codex** (codex-cli 0.166.0), **Copilot CLI** 1.0.105 and **OpenCode** 2.2.3: live runs through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed. Copilot CLI's marketplace index ([L28](#l28-copilot-marketplace-index)) was checked live at `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe).
+  - **Claude Code** 2.1.318, **Codex** (codex-cli 0.166.0), **Copilot CLI** 1.0.105 and **OpenCode** 2.2.3: live runs through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed. Copilot CLI's marketplace index ([L28](#l28-copilot-marketplace-index)) was checked live at `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe). The release verification re-ran the cells of L6, L9, L12, L29, L31 and L37 live on the same four versions at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5), 2026-11-05 ([ynh #753](https://github.com/eyelock/ynh/pull/753)).
   - **Cursor**, `ynd export` column: a package loaded live into cursor-agent 2026.11.05-86047df, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), whose export code is the same as at f2822a1. The record is on [ynh #735](https://github.com/eyelock/ynh/issues/735). [ynh #742](https://github.com/eyelock/ynh/pull/742), merged at `develop` [fbe9e14](https://github.com/eyelock/ynh/commit/fbe9e14), then stopped the export writing `.cursorrules` and `AGENTS.md`. A live load of the package it writes is deferred to a later release.
   - **Cursor**, `ynh run` and `ynh agent run` columns: not run live in this verification. Their live check is deferred to a later release. Four `ynh run` cells were shown live before it, through `ynh run -v cursor`, and were not re-checked: Hooks ([ynh #621](https://github.com/eyelock/ynh/pull/621), cursor-agent 2026.10.01-e373342, and [L8](#l8-cursor-print-mode-skips-two-hooks)), Session context ([ynh #627](https://github.com/eyelock/ynh/pull/627)), Resume ([ynh #714](https://github.com/eyelock/ynh/pull/714), cursor-agent 2026.10.22) and focuses ([Focus](focus.md), cursor-agent 2026.10.22). Every other Cursor cell on these two surfaces is U ([L35](#l35-cursor-under-ynh-run-not-shown-live), [L36](#l36-the-cursor-backend-not-shown-live)), or N or X with its own limit.
 
@@ -80,11 +80,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | P [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
 | Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L34](#l34-a-cursor-plugin-carries-no-instructions) | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | – |
-| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | P [L37](#l37-copilot-package-mcp-tools-need-an-installed-plugin-and-approval) | U [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
+| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | P [L37](#l37-copilot-package-mcp-tools-need-approval) | U [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
 | Delegates | P [L12](#l12-delegates-carry-only-part-of-a-harness) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | – |
 | Merged export (`--merged`) | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Marketplace index (`ynd marketplace build`) | Y | Y | Y [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
-| Agent Plugins package (`--format agent-plugin`) | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | Y | Y | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | X [L27](#l27-opencode-reads-no-packages) |
+| Agent Plugins package (`--format agent-plugin`) | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | Y | Y | U [L29](#l29-agent-plugins-on-claude-code-and-cursor) | X [L27](#l27-opencode-reads-no-packages) |
 
 ## Limits
 
@@ -137,7 +137,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 - **What:** isolation runs with only the harness's MCP servers. Under `ynh run`, Copilot CLI is given `--disable-builtin-mcps`, but servers in `~/.copilot/mcp-config.json` still load. Codex, Cursor and OpenCode get no isolation. Under `ynh agent run` it applies on the Claude Code backend only. ynh prints a `warning:` line and launches normally.
 - **Owner:** not established: the record does not show whether these vendors can do it.
-- **Evidence:** [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+- **Evidence:** Copilot CLI: live on 1.0.105, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) ([ynh #753](https://github.com/eyelock/ynh/pull/753)): with isolation, ynh printed `warning: MCP isolation is partial on Copilot: built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load`. Without isolation the model listed the built-in `github-mcp-server`, the harness's server and the user's server; with isolation it listed none of them, while the user's server in `~/.copilot/mcp-config.json` still started (its log shows `initialize` and `tools/list`). The other vendors: [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 - **Tracking:** [ynh #731](https://github.com/eyelock/ynh/issues/731), v0.18.0.
 - **Workaround:** none recorded.
 - **Detail:** [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
@@ -164,7 +164,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 - **What:** `on_session_end` never fires on OpenCode. The other five events do.
 - **Owner:** the vendor: OpenCode 2 has no such event.
-- **Evidence:** [Events a vendor cannot express](hooks.md#events-a-vendor-cannot-express).
+- **Evidence:** live on OpenCode 2.2.3, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) ([ynh #753](https://github.com/eyelock/ynh/pull/753)), on both surfaces. `ynh run -v opencode` printed `warning: hook event on_session_end has no equivalent on opencode, so it is not written`, and the hook log shows `on_session_start`, `before_prompt`, `before_tool`, `after_tool` and `on_stop`, with no `on_session_end`. `ynh agent run --backend opencode` printed the same warning and fired `on_session_start`. Background: [Events a vendor cannot express](hooks.md#events-a-vendor-cannot-express).
 - **Tracking:** none.
 - **Workaround:** none.
 - **Detail:** [OpenCode hooks are a generated plugin](hooks.md#opencode-hooks-are-a-generated-plugin).
@@ -189,9 +189,9 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L12: Delegates carry only part of a harness
 
-- **What:** a delegate reaches the vendor as an agent carrying its instructions. On Claude Code it also carries its MCP servers. On no vendor does it carry its hooks or workspace folders. On OpenCode a delegate does not run, and `ynd export -v opencode` leaves delegates out with the warning `opencode: skipping N delegates (not supported)`. In an export, delegates are carried the same way: instructions, and on Claude Code MCP servers.
+- **What:** a delegate reaches the vendor as an agent carrying its instructions. On Claude Code it also carries its MCP servers. On no vendor does it carry its hooks or workspace folders. On OpenCode a delegate does not run, and `ynd export -v opencode` leaves delegates out with the warning `opencode: skipping N delegates (not supported)`. In an export, a delegate carries only its instructions; on Claude Code its MCP servers are written into the agent, but Claude Code ignores them in a plugin agent (ynd warns).
 - **Owner:** ynh.
-- **Evidence:** [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates).
+- **Evidence:** under `ynh run`, live on Claude Code 2.1.318, codex-cli 0.166.0, Copilot CLI 1.0.105 and OpenCode 2.2.3, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) ([ynh #753](https://github.com/eyelock/ynh/pull/753)): a delegate's codeword, set only in its instructions, came back on Claude Code, Codex and Copilot. On Claude Code the delegate's MCP server started (its log shows `initialize` and `tools/list`), and the one-shot run refused the tool call for permission. Codex, Copilot and OpenCode printed `warning: delegate <name> declares MCP servers (<server>) that <vendor> subagents cannot carry; they are not available to it`. The delegate's hooks fired on none of the four. On OpenCode, the delegate was not among the subagents (`explore` and `general` only). In an export, the same verification found that Claude Code ignores the MCP servers written into a plugin agent. Background: [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates).
 - **Tracking:** [ynh #729](https://github.com/eyelock/ynh/issues/729), v0.18.0.
 - **Workaround:** for everything else, include the harness (`includes`) rather than delegating to it.
 - **Detail:** [delegates_to](harnesses.md#delegates-to-optional).
@@ -339,7 +339,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L28: Copilot marketplace index
 
-- **What:** works. Copilot CLI installs a marketplace from `ynd marketplace build` (`.github/plugin/marketplace.json`) and loads its plugin. The skills (an included one too), the agent, all six hooks and the command (as a skill, from the merged tree's `commands/`) arrive. The MCP server loads and offers its tool; in an interactive session Copilot asks before the first call, and once the call is approved the tool runs. A one-shot run refuses the call, because there is no one to approve it ([L37](#l37-copilot-package-mcp-tools-need-an-installed-plugin-and-approval)).
+- **What:** works. Copilot CLI installs a marketplace from `ynd marketplace build` (`.github/plugin/marketplace.json`) and loads its plugin. The skills (an included one too), the agent, all six hooks and the command (as a skill, from the merged tree's `commands/`) arrive. The MCP server loads and offers its tool; in an interactive session Copilot asks before the first call, and once the call is approved the tool runs. A one-shot run refuses the call, because there is no one to approve it ([L37](#l37-copilot-package-mcp-tools-need-approval)).
 - **Owner:** the vendor, for the one-shot refusal: a one-shot Copilot run does not approve an installed plugin's MCP tool.
 - **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05, with `ynd` built from `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe), in a scratch Copilot home:
   - `copilot plugin marketplace add <dir>`, where `<dir>` is the local directory `ynd marketplace build -v copilot` wrote, then `copilot plugin install <plugin>@<marketplace>`: both succeeded with no prompt, and `copilot plugin list` shows the plugin as loaded from a local marketplace directory, never copied.
@@ -351,9 +351,9 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L29: Agent Plugins on Claude Code and Cursor
 
-- **What:** Claude Code does not load the Agent Plugins format, so `--format agent-plugin` adds Claude Code's own plugin files at the package root, as a compatibility layer. Cursor loads only the portable core: it has published no extension namespace, and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}`.
+- **What:** Claude Code loads only the skills of a portable Agent Plugins package; agents, hooks and MCP servers need the compatibility layer that `--format agent-plugin -v claude` adds (Claude Code's own plugin files at the package root). On Cursor it is unverified: by its docs it loads only the portable core, since it has published no extension namespace and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}`. The live check on Cursor is deferred to a later release.
 - **Owner:** the vendor.
-- **Evidence:** [Agent Plugins Export](vendors.md#agent-plugins-export).
+- **Evidence:** Claude Code: live on 2.1.318, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) ([ynh #753](https://github.com/eyelock/ynh/pull/753)); with the compatibility layer all six hooks fired. Cursor: [Agent Plugins Export](vendors.md#agent-plugins-export), from docs; deferred: a live load.
 - **Tracking:** none.
 - **Workaround:** for Claude Code, use the compatibility layer, or `ynd export -v claude`.
 - **Detail:** [Agent Plugins Export](vendors.md#agent-plugins-export).
@@ -371,7 +371,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 - **What:** a harness's agent becomes a Codex custom agent (`.codex/agents/<name>.toml`), which has no tool allowlist, so its `tools` and `disallowedTools` are dropped and the agent can use every tool the session has. ynh prints a warning naming the agent for each list. When `tools` leaves out `Bash`, the agent file sets `features.shell_tool = false`; whether a custom agent honours that has not been checked live. An agent's Claude Code `model` does not carry over either.
 - **Owner:** the vendor: Codex custom agents have no field that restricts tools ([Codex's subagent docs](https://learn.chatgpt.com/docs/agent-configuration/subagents)).
-- **Evidence:** [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
+- **Evidence:** live on codex-cli 0.166.0, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) ([ynh #753](https://github.com/eyelock/ynh/pull/753)): `ynh run -v codex` with an agent whose `tools` leaves out `Bash` printed `warning: agent "canary-agent": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)`. Whether the agent honours `features.shell_tool = false` was not tested. Background: [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
 - **Tracking:** none.
 - **Workaround:** do not rely on an agent's tool list for containment on Codex; restrict the session itself (Codex's sandbox and approval settings).
 - **Detail:** [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
@@ -421,15 +421,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** none verified.
 - **Detail:** [The Agent Loop](agent.md).
 
-### L37: Copilot package MCP tools need an installed plugin and approval
+### L37: Copilot package MCP tools need approval
 
-- **What:** the MCP servers of a `ynd export -v copilot` package (`.github/mcp.json` at the plugin root) work only from an installed plugin, and a tool call needs approval:
-  - Under `--plugin-dir` the servers do not load: Copilot ignores the plugin's `.github/mcp.json`.
-  - Once the plugin is installed from a marketplace, the servers start.
-  - A one-shot run (`copilot -p`) refuses the tool call ("no one to approve").
-  - An interactive session runs the call once it is approved ([L28](#l28-copilot-marketplace-index)).
-- **Owner:** the vendor: Copilot reads a plugin's MCP file only when the plugin is installed, and a one-shot run does not approve an installed plugin's MCP tool.
-- **Evidence:** `--plugin-dir`: [Copilot Format](mcp.md#copilot-format) ("a plugin loaded with `--plugin-dir` ignores it"). Installed: live on Copilot CLI 1.0.105, 2026-10-30, a merged package installed from a local marketplace into a scratch `COPILOT_HOME`, where the servers in `.github/mcp.json` started. The run is written up in [ynh #621](https://github.com/eyelock/ynh/pull/621), which fixed [ynh #499](https://github.com/eyelock/ynh/issues/499) ([Config File Locations](mcp.md#config-file-locations)). One-shot and interactive: live on Copilot CLI 1.0.105, 2026-11-05, with `ynd` from `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe) ([L28](#l28-copilot-marketplace-index)).
+- **What:** the MCP servers of a `ynd export -v copilot` package (`.github/mcp.json` at the plugin root) start both under `--plugin-dir` and from a plugin installed from a marketplace. A one-shot run (`copilot -p`) refuses the tool call ("no one to approve"). An interactive session runs the call once it is approved: shown for an installed plugin ([L28](#l28-copilot-marketplace-index)); an interactive session under `--plugin-dir` is not yet shown.
+- **Owner:** the vendor: a one-shot Copilot run does not approve a plugin's MCP tool.
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) ([ynh #753](https://github.com/eyelock/ynh/pull/753)): one-shot under `--plugin-dir`, the server started (its log shows `initialize` and `tools/list`) and the call was refused: `Permission denied because no interactive user response was available` ("Denied, no one to approve"). One-shot from an installed plugin, the server started (`tools/list`) and no call ran. Interactive, installed: live on Copilot CLI 1.0.105, 2026-11-05, with `ynd` from `develop` [1c68ebe](https://github.com/eyelock/ynh/commit/1c68ebe) ([L28](#l28-copilot-marketplace-index)). Earlier, an installed merged package loaded `.github/mcp.json` and not `mcp/claude.json` (Copilot CLI 1.0.105, 2026-10-30, written up in [ynh #621](https://github.com/eyelock/ynh/pull/621), which fixed [ynh #499](https://github.com/eyelock/ynh/issues/499)).
 - **Tracking:** none.
-- **Workaround:** install the package from a marketplace (`ynd marketplace build`, then `copilot plugin marketplace add <dir>` and `copilot plugin install <plugin>@<marketplace>`), and call the tool from an interactive session. Whether an approval given there carries over to a later one-shot run was not checked. Under `ynh run`, a harness's MCP servers reach Copilot with `--additional-mcp-config` instead ([Copilot Format](mcp.md#copilot-format)).
+- **Workaround:** call the tool from an interactive session. Whether an approval given there carries over to a later one-shot run was not checked. Under `ynh run`, a harness's MCP servers reach Copilot with `--additional-mcp-config` instead ([Copilot Format](mcp.md#copilot-format)).
 - **Detail:** [Config File Locations](mcp.md#config-file-locations).
