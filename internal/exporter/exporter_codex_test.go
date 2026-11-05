@@ -242,3 +242,34 @@ func TestExportMergedCodexNote(t *testing.T) {
 		})
 	}
 }
+
+// A Copilot plugin carries a harness's commands: they load as skills, reached
+// by name through the skill tool (ynh #733, L24). Rules are still left out, and
+// the warning names only them.
+func TestExportCopilotCarriesCommands(t *testing.T) {
+	srcDir := filepath.Join(testdataDir(), "export-harness")
+	outputDir := t.TempDir()
+
+	results, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"copilot"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+	dir := filepath.Join(outputDir, "copilot")
+
+	entries, err := os.ReadDir(filepath.Join(dir, "commands"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("copilot export has no commands/: %v", err)
+	}
+	assertFileNotExists(t, filepath.Join(dir, "rules"))
+
+	for _, w := range results[0].Warnings {
+		if strings.Contains(w, "commands") && strings.Contains(w, "not supported") {
+			t.Errorf("warning still says commands are not supported: %s", w)
+		}
+	}
+}

@@ -462,12 +462,13 @@ func (c *Copilot) GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir
 }
 
 func (c *Copilot) ExportArtifactDirs() map[string]string {
-	// Skills and agents are confirmed supported in Copilot plugins. Rules have
-	// no reliable "always-on" equivalent (Copilot's applyTo-scoped instructions
-	// files aren't on by default) and commands aren't supported at all
-	// (confirmed gap, open feature requests upstream) — excluded, matching the
-	// precedent set by Codex's ExportArtifactDirs for its own unsupported types.
-	return map[string]string{"skills": "skills", "agents": "agents"}
+	// Skills, agents and commands are carried. Rules have no reliable
+	// "always-on" equivalent (Copilot's applyTo-scoped instructions files
+	// aren't on by default), so they are excluded. Copilot CLI has no slash
+	// commands of its own, but a plugin's commands/ load as skills, reached
+	// by name through the skill tool (OBSERVED live on Copilot CLI 1.0.105,
+	// 2026-11-05, ynh #733), the same as under `ynh run`.
+	return map[string]string{"skills": "skills", "agents": "agents", "commands": "commands"}
 }
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }

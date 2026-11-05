@@ -75,7 +75,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | Skills | Y | Y | Y | Y | – |
 | Agents | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | Y | Y | – |
 | Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | Y | – |
-| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | N [L24](#l24-commands-in-a-copilot-package) | Y | – |
+| Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | Y | – |
 | Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | Y | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
 | MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
@@ -295,11 +295,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L24: Commands in a Copilot package
 
-- **What:** `ynd export -v copilot` leaves a harness's commands out of the package, with a warning that they are not supported. A Copilot CLI plugin can carry them: a package with `commands/` copied in by hand reached its command, as a skill, the same way as under `ynh run` ([L32](#l32-copilot-commands-under-ynh-run)).
-- **Owner:** ynh.
-- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the hand-made package's command was reached through the skill tool; a control package without `commands/` was not.
-- **Tracking:** [ynh #733](https://github.com/eyelock/ynh/issues/733), v0.17.0.
-- **Workaround:** copy the harness's `commands/` into the exported package, or ship the command as a skill.
+- **What:** `ynd export -v copilot` ships a harness's `commands/`, and Copilot CLI loads them as skills: the model reaches a command by name through the skill tool. Copilot does not expand `/name` itself, as under `ynh run` ([L32](#l32-copilot-commands-under-ynh-run)). Until [ynh #733](https://github.com/eyelock/ynh/issues/733) the export left commands out, with a warning that they were not supported.
+- **Owner:** the vendor: Copilot CLI has no user-definable slash commands ([github/copilot-cli#618](https://github.com/github/copilot-cli/issues/618)).
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: a `ynd export -v copilot` package carrying `commands/` answered `skill(canary-cmd)` with the command's codeword; the same package without `commands/` had no such skill.
+- **Tracking:** [ynh #733](https://github.com/eyelock/ynh/issues/733), v0.17.0, fixed.
+- **Workaround:** ask for the command by name; ship it as a skill for the same result.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ### L25: Codex package hooks and MCP tools need approval

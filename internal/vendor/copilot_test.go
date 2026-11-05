@@ -456,8 +456,11 @@ func TestCopilotIdentity(t *testing.T) {
 func TestCopilotExportArtifactDirs(t *testing.T) {
 	c := &Copilot{}
 	dirs := c.ExportArtifactDirs()
-	if _, ok := dirs["commands"]; ok {
-		t.Error("commands should be excluded — not supported by Copilot CLI")
+	if _, ok := dirs["commands"]; !ok {
+		t.Error("commands should be included — a Copilot plugin loads them as skills (ynh #733)")
+	}
+	if _, ok := dirs["rules"]; ok {
+		t.Error("rules should be excluded — no always-on equivalent in a Copilot plugin")
 	}
 	if _, ok := dirs["skills"]; !ok {
 		t.Error("skills should be included")

@@ -390,7 +390,7 @@ Key differences from runtime layout:
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
 - Claude and Copilot exports write no instructions: a plugin cannot carry them (OBSERVED live, ynh #722), so the export warns and the instructions reach those vendors only under `ynh run` or from the installing project's own file
 - Codex carries skills, hooks and MCP servers only — agents, rules, commands and delegates are excluded with warnings, and so are the harness's instructions, which a Codex plugin cannot carry
-- Copilot is limited to skills and agents — rules and commands are excluded with warnings
+- Copilot carries skills, agents and commands (which it loads as skills); rules are excluded with a warning
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
 - OpenCode has no plugin manifest and no Agent Plugins support, so its export is the run-directory layout without a manifest: nothing installs it as a plugin. Delegates are excluded with a warning, as for Codex. MCP servers go to `.opencode/opencode.json` and hooks to the generated `.opencode/plugins/ynh-hooks.ts`. Rules are written as files, not composed into `AGENTS.md`, which ynh does only at launch
 - `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex, Copilot and OpenCode warnings above are printed in merged mode too, because those vendors still do not load them
