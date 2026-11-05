@@ -442,7 +442,7 @@ rm -rf /tmp/ynh-tutorial
 - Plugins get every vendor's manifest so one physical directory serves them all
 - Harnesses' remote includes are resolved and flattened during marketplace build
 - Pick filtering carries through from harness metadata to the marketplace output
-- Codex is included: each plugin gets a `.codex-plugin/plugin.json` that points only at its skills
+- Codex is included: each plugin gets a `.codex-plugin/plugin.json` that points at its skills, hooks and MCP servers, not its instructions
 - `--format agent-plugin` builds each harness entry as one portable Agent Plugins package, with every vendor's index still written
 - Copilot CLI registers the built directory as a marketplace and installs a package from it with its skills, which is the end-to-end proof that a real client reads what ynh wrote
 

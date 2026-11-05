@@ -35,7 +35,7 @@ type HarnessJSON struct {
 	// changes how `ynh run` starts the vendor CLI, not what an export ships.
 	MCPIsolation bool `json:"mcp_isolation,omitempty"`
 	// MCPManualApproval stops ynh approving the tools of the harness's own MCP
-	// servers on a one-shot run, where the vendor would otherwise refuse them
+	// servers on a one-shot run or an agent worker, where the vendor would otherwise refuse them
 	// unattended. By default ynh approves them on the vendors that need it
 	// (Codex); true leaves approval to the vendor and the caller. A launch
 	// concern, like MCPIsolation.

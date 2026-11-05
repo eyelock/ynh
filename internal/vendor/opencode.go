@@ -440,6 +440,86 @@ var errOpencodeInlinePermissions = errors.New("opencode cannot enforce this agen
 // opencodeRuntimeFile holds the text ApplyRuntimeInstructions appends.
 const opencodeRuntimeFile = "ynh-runtime.md"
 
+// opencodeSessionStartFile lists the harness's on_session_start commands, and
+// opencodeSessionContextFile holds what they printed at launch. The first is
+// written when the harness is assembled, the second by runOpencodeSessionStart
+// at every launch, and composeOpencodeAgents folds it into AGENTS.md.
+const (
+	opencodeSessionStartFile   = "ynh-session-start.json"
+	opencodeSessionContextFile = "ynh-session-context.md"
+)
+
+// opencodeSessionStartGrace is how long the launch waits, after a hook has
+// finished or timed out, for a child it left running to release the output.
+const opencodeSessionStartGrace = 2 * time.Second
+
+// runOpencodeSessionStart runs the harness's on_session_start commands before
+// OpenCode starts and writes their stdout to .opencode/ynh-session-context.md,
+// which composeOpencodeAgents folds into AGENTS.md. OpenCode's session.created
+// event cannot add model context, so the launch is the only point at which a
+// hook's output can reach the model. Each command gets the SessionStart payload
+// on stdin, the current directory (the user's project, where OpenCode is about
+// to start) and YNH_HOOK_ROOT, as the generated plugin gives its hooks. Only
+// the output of a command that exits 0 is kept; a command that fails or times
+// out is reported on stderr and the launch goes on. The context file is
+// replaced on every launch, so it never carries an earlier session's output.
+func runOpencodeSessionStart(configPath string) {
+	dir := filepath.Join(configPath, ".opencode")
+	ctxFile := filepath.Join(dir, opencodeSessionContextFile)
+	_ = os.Remove(ctxFile)
+
+	data, err := os.ReadFile(filepath.Join(dir, opencodeSessionStartFile))
+	if err != nil {
+		return
+	}
+	var cmds []opencodeHookEntry
+	if err := json.Unmarshal(data, &cmds); err != nil {
+		fmt.Fprintf(os.Stderr, "[ynh hook] reading %s: %v\n", opencodeSessionStartFile, err)
+		return
+	}
+	cwd, _ := os.Getwd()
+	payload, _ := json.Marshal(map[string]string{"hook_event_name": "SessionStart", "cwd": cwd})
+	var parts []string
+	for _, h := range cmds {
+		timeout := time.Duration(h.Timeout) * time.Second
+		if timeout <= 0 {
+			timeout = 60 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		cmd := exec.CommandContext(ctx, "sh", "-c", h.Command)
+		cmd.Dir = cwd
+		cmd.Stdin = bytes.NewReader(payload)
+		cmd.Env = append(os.Environ(), "YNH_HOOK_ROOT="+dir)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		// A hook that backgrounds a child leaves it holding the output pipes
+		// after sh exits; WaitDelay stops the launch waiting on it.
+		cmd.WaitDelay = opencodeSessionStartGrace
+		runErr := cmd.Run()
+		if errors.Is(runErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+			runErr = nil // the hook finished; only a leftover child held the pipes
+		}
+		timedOut := ctx.Err() != nil
+		cancel()
+		switch {
+		case timedOut:
+			fmt.Fprintf(os.Stderr, "[ynh hook] %s: did not run to completion (timed out after %s)\n", h.Command, timeout)
+		case runErr != nil:
+			fmt.Fprintf(os.Stderr, "[ynh hook] %s: %v: %s\n", h.Command, runErr, strings.TrimSpace(stderr.String()))
+		default:
+			if s := strings.TrimSpace(stdout.String()); s != "" {
+				parts = append(parts, s)
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return
+	}
+	if err := os.WriteFile(ctxFile, []byte(strings.Join(parts, "\n\n")+"\n"), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "[ynh hook] writing %s: %v\n", opencodeSessionContextFile, err)
+	}
+}
+
 // composeOpencodeAgents writes <configPath>/.opencode/AGENTS.md as the run
 // dir's AGENTS.md, then each .opencode/rules/*.md (sorted, frontmatter
 // stripped), then .opencode/ynh-runtime.md. OpenCode reads only that one file
@@ -483,6 +563,12 @@ func composeOpencodeAgents(configPath string) error {
 
 	if rt, err := os.ReadFile(filepath.Join(configPath, ".opencode", opencodeRuntimeFile)); err == nil {
 		if s := strings.TrimSpace(string(rt)); s != "" {
+			parts = append(parts, s)
+		}
+	}
+
+	if sc, err := os.ReadFile(filepath.Join(configPath, ".opencode", opencodeSessionContextFile)); err == nil {
+		if s := strings.TrimSpace(string(sc)); s != "" {
 			parts = append(parts, s)
 		}
 	}
@@ -574,7 +660,7 @@ var opencodeHookEventMap = map[string]string{
 	"after_tool":       "execute.after",
 	"before_prompt":    "prompt",
 	"on_stop":          "session.execution.succeeded/failed",
-	"on_session_start": "session.created",
+	"on_session_start": "ynh, before launch (not in the plugin)",
 }
 
 // opencodeUnsupportedHookEvents names the canonical events OpenCode cannot
@@ -597,10 +683,11 @@ var opencodeHookTimeoutUnsupported = ""
 
 var opencodeHookTimeoutCaps = map[string]int{}
 
-// How on_session_start output reaches the model: it cannot. The hook runs
-// from an event-stream subscriber (session.created), which has no way to add
-// context, and the plugin discards its stdout.
-var opencodeSessionStartContext = "unsupported:on_session_start runs from OpenCode's event stream, which cannot add model context, so its output is discarded"
+// How on_session_start output reaches the model: plain stdout, but not through
+// the plugin. The plugin's session.created subscriber cannot add context, so
+// ynh runs the hook itself before launching OpenCode and folds its stdout into
+// the generated AGENTS.md (runOpencodeSessionStart).
+var opencodeSessionStartContext = "plain"
 
 // opencodeHookEntry is one hook as the generated plugin carries it.
 type opencodeHookEntry struct {
@@ -620,9 +707,14 @@ type opencodeHookEntry struct {
 //     stdout) is the tool error the model sees
 //   - after_tool: runs after the call; its output cannot reject the result
 //   - before_prompt: exit 2 throws; see the reference for what that does
-//   - on_session_start, on_stop: event-stream subscribers (session.created,
-//     session.execution.succeeded/failed), so they cannot block. on_stop fires
-//     once per turn, as on Claude Code. A matcher is ignored on both.
+//   - on_stop: an event-stream subscriber (session.execution.succeeded/failed),
+//     so it cannot block. It fires once per turn, as on Claude Code. A matcher
+//     is ignored.
+//   - on_session_start: not in the plugin. ynh runs it once before launching
+//     OpenCode and folds its output into AGENTS.md (runOpencodeSessionStart);
+//     the session.created event never fired it under opencode run and cannot
+//     add context, so subscribing would at best run it twice. A matcher is
+//     ignored.
 //   - a "./" command is a script the harness ships; see SessionHookScriptDir
 //   - only exit 2 blocks, as on Claude Code; the harness is cross-vendor, so a
 //     hook that cannot run (spawn error, killed, timed out after its timeout,
@@ -683,6 +775,21 @@ func (o *OpenCode) GenerateHookConfigForServers(hooks map[string][]plugin.HookEn
 	if len(doc) == 0 {
 		return nil, nil
 	}
+	files := map[string][]byte{}
+	// on_session_start runs once, from ynh before launch (runOpencodeSessionStart),
+	// so the plugin does not carry it: session.created would run it a second
+	// time, with its output discarded.
+	if starts := doc["on_session_start"]; len(starts) > 0 {
+		sd, err := json.MarshalIndent(starts, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("marshalling session-start hooks: %w", err)
+		}
+		files[filepath.Join(".opencode", opencodeSessionStartFile)] = sd
+		delete(doc, "on_session_start")
+	}
+	if len(doc) == 0 {
+		return files, nil
+	}
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling hooks: %w", err)
@@ -702,7 +809,8 @@ func (o *OpenCode) GenerateHookConfigForServers(hooks map[string][]plugin.HookEn
 	}
 	src := strings.Replace(opencodeHooksPlugin, "__HOOKS__", string(data), 1)
 	src = strings.Replace(src, "__SERVERS__", string(serverJSON), 1)
-	return map[string][]byte{filepath.Join(".opencode", "plugins", "ynh-hooks.ts"): []byte(src)}, nil
+	files[filepath.Join(".opencode", "plugins", "ynh-hooks.ts")] = []byte(src)
+	return files, nil
 }
 
 // validateOpencodeMatcher rejects a tool matcher that is not a valid regular
@@ -976,15 +1084,13 @@ export default Plugin.define({
     }
 
     const ac = new AbortController()
-    if (HOOKS.on_session_start?.length || HOOKS.on_stop?.length) {
+    if (HOOKS.on_stop?.length) {
       ;(async () => {
         try {
           for await (const ev of ctx.event.subscribe({ signal: ac.signal })) {
             try {
               const sid = ev.durable?.aggregateID ?? ev.data?.sessionID
-              if (ev.type === "session.created") {
-                fire("on_session_start", undefined, { hook_event_name: "SessionStart", session_id: sid, cwd }, cwd, false)
-              } else if (ev.type === "session.execution.succeeded" || ev.type === "session.execution.failed") {
+              if (ev.type === "session.execution.succeeded" || ev.type === "session.execution.failed") {
                 fire("on_stop", undefined, { hook_event_name: "Stop", session_id: sid, cwd }, cwd, false)
               }
             } catch {}
@@ -1125,8 +1231,9 @@ func checkOpencodeVersion(bin string) error {
 
 // PrepareOpenCode is everything that must hold before OpenCode starts on the
 // harness assembled at configPath: bin is OpenCode 2.x, and
-// <configPath>/.opencode/AGENTS.md is composed from the instructions, rules and
-// runtime text (composeOpencodeAgents). Every way of starting OpenCode, the
+// <configPath>/.opencode/AGENTS.md is composed from the instructions, rules,
+// runtime text and the output of the on_session_start hooks, which run here
+// (runOpencodeSessionStart; composeOpencodeAgents). Every way of starting OpenCode, the
 // adapter's launches and the `ynh agent run` worker, goes through it; a worker
 // that skipped it ran without the harness's instructions and rules and against
 // whatever version was installed. An empty configPath only checks the version.
@@ -1137,6 +1244,7 @@ func PrepareOpenCode(configPath, bin string) error {
 	if configPath == "" {
 		return nil
 	}
+	runOpencodeSessionStart(configPath)
 	return composeOpencodeAgents(configPath)
 }
 

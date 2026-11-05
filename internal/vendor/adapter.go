@@ -48,7 +48,7 @@ var ErrNoResumableSession = errors.New("no resumable session found")
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
 
 // MCPToolApprover is an optional capability for vendors that refuse an MCP
-// tool call on a one-shot run until the tool is approved (Codex: "MCP tool
+// tool call on a one-shot run or an agent worker turn until the tool is approved (Codex: "MCP tool
 // call requires approval, but approval policy is never"). ApproveMCPTools
 // returns the vendor arguments that approve the tools of the MCP servers the
 // run directory declares, leaving alone anything callerArgs or the user's own
@@ -412,4 +412,19 @@ func keepHookCommand(cmd string) string { return cmd }
 // ranging over the map directly would change the order on every call (#520).
 func Available() []string {
 	return slices.Sorted(maps.Keys(registry))
+}
+
+// ExportInstructionsCarrier is implemented by an adapter whose exported plugin
+// cannot deliver instructions to a session. Without it, an export is assumed to.
+type ExportInstructionsCarrier interface {
+	ExportCarriesInstructions() bool
+}
+
+// ExportCarriesInstructions reports whether a package exported for the
+// vendor delivers instructions to a session.
+func ExportCarriesInstructions(a Adapter) bool {
+	if c, ok := a.(ExportInstructionsCarrier); ok {
+		return c.ExportCarriesInstructions()
+	}
+	return true
 }

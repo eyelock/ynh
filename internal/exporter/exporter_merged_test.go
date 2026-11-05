@@ -3,6 +3,7 @@ package exporter
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -110,4 +111,55 @@ func TestExportCleanFlag(t *testing.T) {
 
 	// Claude dir should have fresh content
 	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude-plugin", "plugin.json"))
+}
+
+func mergedInstructionsWarning(r ExportResult) bool {
+	for _, w := range r.Warnings {
+		if strings.Contains(w, "codex: plugins cannot carry instructions") {
+			return true
+		}
+	}
+	return false
+}
+
+// A merged export keeps the shared AGENTS.md for the vendors that read it and
+// says that Codex does not (ynw-uubn).
+func TestExportMergedCodexInstructions(t *testing.T) {
+	srcDir := filepath.Join(testdataDir(), "export-harness")
+
+	t.Run("with claude", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "merged")
+		results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude", "codex"}, Mode: ModeMerged})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertFileExists(t, filepath.Join(out, "AGENTS.md"))
+		if !mergedInstructionsWarning(results[0]) {
+			t.Errorf("no instructions warning: %v", results[0].Warnings)
+		}
+	})
+
+	t.Run("codex alone", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "merged")
+		results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"codex"}, Mode: ModeMerged})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertFileNotExists(t, filepath.Join(out, "AGENTS.md"))
+		if !mergedInstructionsWarning(results[0]) {
+			t.Errorf("no instructions warning: %v", results[0].Warnings)
+		}
+	})
+
+	t.Run("without codex", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "merged")
+		results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude", "cursor"}, Mode: ModeMerged})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertFileExists(t, filepath.Join(out, "AGENTS.md"))
+		if mergedInstructionsWarning(results[0]) {
+			t.Errorf("unexpected warning: %v", results[0].Warnings)
+		}
+	})
 }

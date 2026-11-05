@@ -281,6 +281,18 @@ func TestAgentPlugin_CodexOnly(t *testing.T) {
 	if !hasWarning(r, "1 agents not portable: no selected vendor (codex)") {
 		t.Errorf("warnings = %v", r.Warnings)
 	}
+	// The portable AGENTS.md stays, but a Codex plugin does not load it.
+	if !hasWarning(r, "codex: plugins cannot carry instructions") {
+		t.Errorf("warnings = %v", r.Warnings)
+	}
+}
+
+func TestAgentPlugin_NoInstructionsWarningForOtherVendors(t *testing.T) {
+	src := writePortableSource(t, portableManifest)
+	_, r := exportPortable(t, src, "claude")
+	if hasWarning(r, "cannot carry instructions") {
+		t.Errorf("warnings = %v", r.Warnings)
+	}
 }
 
 func TestAgentPlugin_CopilotNamespace(t *testing.T) {

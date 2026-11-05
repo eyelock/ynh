@@ -185,7 +185,7 @@ type Harness struct {
 	EnvPassthrough []string
 	MCPIsolation   bool // run with only this harness's MCP servers (mcp_isolation)
 	// MCPManualApproval leaves approval of the harness's MCP tools on one-shot
-	// runs to the vendor (mcp_manual_approval).
+	// runs and agent workers to the vendor (mcp_manual_approval).
 	MCPManualApproval bool
 	// Workspace is the manifest's requested workspace folders, as written.
 	Workspace []string
