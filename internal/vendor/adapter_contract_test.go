@@ -392,7 +392,7 @@ func TestVendorDeclarativeContract(t *testing.T) {
 			displayName: "GitHub Copilot CLI", configDir: ".copilot",
 			needsSymlinks: false, exportDelegates: true, initialPrompt: true,
 			supportsResume: true, pluginDir: ".claude-plugin", marketplaceDir: filepath.Join(".github", "plugin"),
-			exportArtifacts: map[string]string{"agents": "agents", "skills": "skills"},
+			exportArtifacts: map[string]string{"agents": "agents", "commands": "commands", "skills": "skills"},
 		},
 	}
 
