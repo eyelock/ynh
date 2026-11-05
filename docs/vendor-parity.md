@@ -5,8 +5,8 @@ What each vendor receives from a harness, on each surface ynh has: `ynh run`, `y
 - **ynh version:** v0.17.0, as on `develop` at [f2822a1](https://github.com/eyelock/ynh/commit/f2822a1), which includes [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727).
 - **Checked on:** 2026-11-05. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716) and [ynh #735](https://github.com/eyelock/ynh/issues/735); each limit below links the pull request or run that proved it. Each column was checked by its own run:
   - **Claude Code** 2.1.318, **Codex** (codex-cli 0.166.0), **Copilot CLI** 1.0.105 and **OpenCode** 2.2.3: live runs through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed.
-  - **Cursor**, `ynd export` column: a package loaded live into cursor-agent 2026.11.05-86047df, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), whose export code is the same as at f2822a1. The record is on [ynh #735](https://github.com/eyelock/ynh/issues/735).
-  - **Cursor**, `ynh run` and `ynh agent run` columns: not run live in this verification. cursor-agent stops at its Workspace Trust prompt in each harness's run directory ([Vendor Notes](vendors.md#vendor-notes)). Those cells are U where their limit says so; the others come from the pull requests their limits and feature pages cite, on cursor-agent 2026.10.22-27dcf5f, and were not re-checked.
+  - **Cursor**, `ynd export` column: a package loaded live into cursor-agent 2026.11.05-86047df, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), whose export code is the same as at f2822a1. The record is on [ynh #735](https://github.com/eyelock/ynh/issues/735). [ynh #742](https://github.com/eyelock/ynh/pull/742), merged at `develop` [fbe9e14](https://github.com/eyelock/ynh/commit/fbe9e14), then stopped the export writing `.cursorrules` and `AGENTS.md`. A live load of the package it writes is deferred to a later release.
+  - **Cursor**, `ynh run` and `ynh agent run` columns: not run live in this verification. Their live check is deferred to a later release. Four `ynh run` cells were shown live before it, through `ynh run -v cursor`, and were not re-checked: Hooks ([ynh #621](https://github.com/eyelock/ynh/pull/621), cursor-agent 2026.10.01-e373342, and [L8](#l8-cursor-print-mode-skips-two-hooks)), Session context ([ynh #627](https://github.com/eyelock/ynh/pull/627)), Resume ([ynh #714](https://github.com/eyelock/ynh/pull/714), cursor-agent 2026.10.22) and focuses ([Focus](focus.md), cursor-agent 2026.10.22). Every other Cursor cell on these two surfaces is U ([L35](#l35-cursor-under-ynh-run-not-shown-live), [L36](#l36-the-cursor-backend-not-shown-live)), or N or X with its own limit.
 
 This page is the only copy of this table. Other pages link here rather than repeat it. How each vendor is launched, and where its files go, is in [Vendor Support](vendors.md).
 
@@ -18,7 +18,7 @@ This page is the only copy of this table. Other pages link here rather than repe
 | **P** | Works, with a limit. The limit says what is missing and whose it is. |
 | **N** | Does not work, and is ynh's to fix. The limit names its issue and milestone, or says there is none yet. |
 | **X** | Does not work because the vendor cannot do it. The limit gives the vendor's evidence. |
-| **U** | Unverified. The limit says what blocks verification. |
+| **U** | Unverified. The limit says what was checked, and that the live check is deferred to a later release. |
 | – | Does not apply: the surface does not exist for that vendor. |
 
 A gap is marked **N** until there is evidence that the vendor cannot do it. Limit ids (`L1`, `L2`, ...) are never reused: a limit that is fixed keeps its id and says what fixed it.
@@ -33,20 +33,20 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
-| Instructions | Y | Y | Y | Y | Y |
+| Instructions | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
 | Project instructions (the project's own `AGENTS.md` or `CLAUDE.md`) | Y | Y | Y | U [L1](#l1-project-instructions-on-cursor) | Y |
-| Skills | Y | Y | Y | Y | Y |
-| Agents | Y | P [L31](#l31-codex-agents-cannot-restrict-tools) | Y | Y | Y |
-| Rules | P [L2](#l2-rules-are-always-on) | P [L2](#l2-rules-are-always-on) | P [L2](#l2-rules-are-always-on) | Y | P [L2](#l2-rules-are-always-on) |
-| Commands | Y | P [L3](#l3-codex-commands-arrive-as-skills) | P [L32](#l32-copilot-commands-under-ynh-run) | Y | P [L4](#l4-opencode-commands-in-a-one-shot-prompt) |
-| MCP servers | Y | Y | Y | Y | Y |
+| Skills | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
+| Agents | Y | P [L31](#l31-codex-agents-cannot-restrict-tools) | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
+| Rules | P [L2](#l2-rules-are-always-on) | P [L2](#l2-rules-are-always-on) | P [L2](#l2-rules-are-always-on) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L2](#l2-rules-are-always-on) |
+| Commands | Y | P [L3](#l3-codex-commands-arrive-as-skills) | P [L32](#l32-copilot-commands-under-ynh-run) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L4](#l4-opencode-commands-in-a-one-shot-prompt) |
+| MCP servers | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
 | MCP isolation (`mcp_isolation`, `--isolated-mcp`) | Y | N [L6](#l6-mcp-isolation) | P [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) |
 | Hooks | Y | P [L7](#l7-codex-hooks-need-an-accepted-harness) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | P [L9](#l9-opencode-has-no-session-end-event) |
 | Session context (`on_session_start` output) | Y | P [L7](#l7-codex-hooks-need-an-accepted-harness) | Y | Y | Y |
-| Profiles | Y | Y | Y | Y | Y |
-| Focuses, includes, sensors | Y | Y | Y | Y | Y |
+| Profiles | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
+| Focuses, includes, sensors | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
 | Workspace folders | Y | P [L10](#l10-codex-workspace-folders-on-resume) | Y | U [L11](#l11-cursor-workspace-folders) | Y |
-| `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | N [L12](#l12-delegates-carry-only-part-of-a-harness) |
+| `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | N [L12](#l12-delegates-carry-only-part-of-a-harness) |
 | Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | Y | Y |
 | Telemetry from `ynh run` | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) |
 
@@ -56,15 +56,15 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
-| Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | Y | Y |
-| Hooks | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | P [L8](#l8-cursor-print-mode-skips-two-hooks) | P [L9](#l9-opencode-has-no-session-end-event) |
-| Session context (`on_session_start` output) | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | Y | Y |
+| Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Hooks | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
+| Session context (`on_session_start` output) | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | MCP isolation (`mcp_isolation`) | Y | N [L6](#l6-mcp-isolation) | – | N [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) |
 | Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
 | `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
-| `--auto-approve all` | Y | Y | – | Y | Y |
+| `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | `--sandbox srt` | Y | N [L18](#l18-sandbox-srt) | – | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) |
-| Telemetry (ynh's own spans and events) | Y | Y | – | Y | Y |
+| Telemetry (ynh's own spans and events) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | – | N [L19](#l19-vendor-telemetry-through-the-relay) | N [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynd export
@@ -76,11 +76,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | The vendor loads the package | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Skills | Y | Y | Y | Y | – |
 | Agents | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | Y | Y | – |
-| Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | P [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
+| Rules | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | X [L23](#l23-rules-in-claude-code-and-copilot-packages) | U [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
 | Commands | Y | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L24](#l24-commands-in-a-copilot-package) | P [L26](#l26-cursor-packages-drop-rule-bodies-and-commands-need-a-slash-prompt) | – |
 | Instructions | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L21](#l21-a-codex-plugin-carries-no-instructions) | X [L20](#l20-claude-code-and-copilot-plugins-carry-no-instructions) | X [L34](#l34-a-cursor-plugin-carries-no-instructions) | – |
 | Hooks | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L8](#l8-cursor-print-mode-skips-two-hooks) | – |
-| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | P [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
+| MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | U [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode) | – |
 | Delegates | P [L12](#l12-delegates-carry-only-part-of-a-harness) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | – |
 | Merged export (`--merged`) | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Marketplace index (`ynd marketplace build`) | Y | Y | P [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
@@ -90,10 +90,10 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L1: Project instructions on Cursor
 
-- **What:** whether Cursor reads the project's own instructions file under `ynh run` is unverified.
+- **What:** whether Cursor reads the project's own instructions file under `ynh run` is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
-- **Evidence:** the 2026-11-05 run stopped at cursor-agent's Workspace Trust prompt for the run directory, so no Cursor run completed. The same run showed Claude Code, Codex, Copilot CLI and OpenCode reading it. The run at `develop` c29ebd6 (cursor-agent 2026.11.05-86047df) was blocked the same way: each harness's run directory needs its own Workspace Trust ([Vendor Notes](vendors.md#vendor-notes)).
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the harness's run directory.
+- **Evidence:** checked: Cursor's docs say `AGENTS.md` is read from a project's root and subdirectories ([Rules](https://cursor.com/docs/context/rules)). Under `ynh run`, Cursor starts in the harness's run directory, not the project ([Vendor Notes](vendors.md#vendor-notes)), so the docs do not settle whether the project's own file is read. The live runs on 2026-11-05 showed Claude Code, Codex, Copilot CLI and OpenCode reading the project's file under `ynh run`. Deferred: a live `ynh run -v cursor` that shows whether Cursor reads it. No Cursor run under `ynh run` completed in this verification.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none recorded.
 - **Detail:** [Project Instructions](artifacts.md#project-instructions).
 
@@ -103,7 +103,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Owner:** the vendor. None of them reads a harness's rules from where ynh loads the harness; OpenCode 2 has no rules at all.
 - **Evidence:** [ynh #695](https://github.com/eyelock/ynh/pull/695).
 - **Tracking:** none.
-- **Workaround:** on Cursor, rules are native `.mdc` files and keep their scoping.
+- **Workaround:** on Cursor, ynh writes rules as native `.mdc` files that keep their scoping ([Rules](artifacts.md#rules)); whether Cursor applies them under `ynh run` is unverified ([L35](#l35-cursor-under-ynh-run-not-shown-live)).
 - **Detail:** [Rules](artifacts.md#rules).
 
 ### L3: Codex commands arrive as skills
@@ -153,9 +153,9 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L8: Cursor print mode skips two hooks
 
-- **What:** when Cursor runs non-interactively (`ynh run` with a prompt, and every `ynh agent run --backend cursor` turn), `before_prompt` and `on_stop` do not fire. The other four events do. ynh warns, naming each event. The hooks of a package from `ynd export -v cursor` behave the same in `cursor-agent -p`: four of the six fire.
+- **What:** when Cursor runs non-interactively (`ynh run` with a prompt), `before_prompt` and `on_stop` do not fire. `ynh agent run --backend cursor` runs Cursor the same way, but that is not shown live ([L36](#l36-the-cursor-backend-not-shown-live)). The other four events do. ynh warns, naming each event. The hooks of a package from `ynd export -v cursor` behave the same in `cursor-agent -p`: four of the six fire.
 - **Owner:** the vendor. `cursor-agent -p` run directly, without ynh, skips them too.
-- **Evidence:** cursor-agent 2026.10.22-27dcf5f, 2026-11-05, [ynh #710](https://github.com/eyelock/ynh/pull/710). For a package: live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` c29ebd6 ([ynh #735](https://github.com/eyelock/ynh/issues/735)).
+- **Evidence:** cursor-agent 2026.10.22-27dcf5f, 2026-11-05, [ynh #710](https://github.com/eyelock/ynh/pull/710). For a package: live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` c29ebd6 ([ynh #735](https://github.com/eyelock/ynh/issues/735)). Under `ynh agent run --backend cursor` it has not been shown live ([L36](#l36-the-cursor-backend-not-shown-live)).
 - **Tracking:** none.
 - **Workaround:** none verified. The interactive CLI is untested.
 - **Detail:** [Hooks Cursor's CLI does not run](hooks.md#hooks-cursor-s-cli-does-not-run).
@@ -180,10 +180,10 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L11: Cursor workspace folders
 
-- **What:** Cursor receives `--add-dir` for each granted folder, but whether the grant changes what Cursor can reach is unverified.
+- **What:** Cursor receives `--add-dir` for each granted folder, but whether the grant changes what Cursor can reach is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
-- **Evidence:** in print mode with `--sandbox enabled`, Cursor wrote outside the project with or without the flag, so no folder was found that it cannot reach without it ([ynh #698](https://github.com/eyelock/ynh/pull/698)). The 2026-11-05 run stopped at Cursor's Workspace Trust prompt. The run at `develop` c29ebd6 (cursor-agent 2026.11.05-86047df) was blocked the same way: each harness's run directory needs its own Workspace Trust ([Vendor Notes](vendors.md#vendor-notes)).
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the harness's run directory.
+- **Evidence:** verified: Cursor's own help documents the flag (`agent --help`, 2026.10.22: "Add an additional workspace root directory", repeatable), and ynh passes it ([Per vendor](workspace.md#per-vendor)). On cursor-agent 2026.10.22-27dcf5f, in print mode with `--sandbox enabled`, Cursor wrote outside the project with or without the flag, so no folder was found that it cannot reach without it ([ynh #698](https://github.com/eyelock/ynh/pull/698)). Deferred: a live `ynh run -v cursor` that shows what the grant changes. No Cursor run under `ynh run` completed in the live runs on 2026-11-05.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none needed to launch; the folder is passed either way.
 - **Detail:** [Per vendor](workspace.md#per-vendor).
 
@@ -316,14 +316,16 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 ### L26: Cursor packages drop rule bodies, and commands need a slash prompt
 
 - **What:** cursor-agent loads a package from `ynd export -v cursor`, and its skills (an included one too), its agent and its session context arrive. Instructions are [L34](#l34-a-cursor-plugin-carries-no-instructions). Two other parts have gaps:
-  - **Rules:** a rule with `alwaysApply: true` is offered only as a rule the model can request, without its body.
+  - **Rules:** unverified. In the live runs a rule with `alwaysApply: true` was offered only as a rule the model can request, without its body. Whether that is Cursor's or ynh's, and a live run of the rule from the package ynh now writes, are deferred to a later release.
   - **Commands:** in print mode (`cursor-agent -p`) a command is reached when the prompt is `/name`: `/canary-cmd` returned its codeword, `FIG-CMD-67`, with `--plugin-dir`. A prose request for the command did not use it, and one `/name` run answered an unrelated report, so it is not yet reliable. Interactive use is unverified.
 
   The package's hooks are [L8](#l8-cursor-print-mode-skips-two-hooks), and its MCP servers [L33](#l33-cursor-package-mcp-tools-need-approval-in-print-mode).
-- **Owner:** rules: not established. Cursor's [plugin reference](https://cursor.com/docs/reference/plugins) says a plugin carries `rules/*.mdc` and `alwaysApply: true` applies to all files, yet the rule did not reach the model in further runs, via `--plugin-dir` (with and without `rules` and `commands` named in the manifest) and as a local install, so it is not yet clear whether Cursor or ynh owns this. Commands: the vendor carries them, per the same reference. Left to [ynh #739](https://github.com/eyelock/ynh/issues/739), which stays open for the rules investigation and a live load of the corrected package.
+
+  What was loaded live is the package written at `develop` c29ebd6. [ynh #742](https://github.com/eyelock/ynh/pull/742) then stopped the export writing `.cursorrules` and `AGENTS.md` ([L34](#l34-a-cursor-plugin-carries-no-instructions)). A live load of the package it writes is deferred to a later release.
+- **Owner:** rules: not established. Cursor's [plugin reference](https://cursor.com/docs/reference/plugins) says a plugin carries `rules/*.mdc` and `alwaysApply: true` applies to all files, yet the rule did not reach the model in further runs, via `--plugin-dir` (with and without `rules` and `commands` named in the manifest) and as a local install, so it is not yet clear whether Cursor or ynh owns this. Commands: the vendor carries them, per the same reference.
 - **Evidence:** live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), with the package in a folder granted Workspace Trust (an untrusted control folder was refused). Recorded on [ynh #735](https://github.com/eyelock/ynh/issues/735). Until this run no Cursor package had been loaded live. The rule and command re-runs are on cursor-agent 2026.11.05, 2026-11-05, in the same trusted folder.
-- **Tracking:** [ynh #739](https://github.com/eyelock/ynh/issues/739), v0.17.0.
-- **Workaround:** run the harness on Cursor with `ynh run`.
+- **Tracking:** [ynh #739](https://github.com/eyelock/ynh/issues/739). Deferred to a later release: the rules investigation, and a live load of the package after [ynh #742](https://github.com/eyelock/ynh/pull/742).
+- **Workaround:** none verified. Under `ynh run` on Cursor, rules and commands are unverified too ([L35](#l35-cursor-under-ynh-run-not-shown-live)).
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ### L27: OpenCode reads no packages
@@ -382,10 +384,10 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L33: Cursor package MCP tools need approval in print mode
 
-- **What:** a Cursor package's MCP server loads and lists its tool, but in print mode (`cursor-agent -p`) a call to the tool is refused until it is approved.
+- **What:** a Cursor package's MCP server loads and lists its tool, but in print mode (`cursor-agent -p`) a call to the tool is refused until it is approved. Whether a call succeeds once the server is approved is unverified: that live call is deferred to a later release.
 - **Owner:** the vendor: approval is the person's, and a package cannot carry it. cursor-agent keeps approvals per project in the user's home (`~/.cursor/projects/<project>/mcp-approvals.json`, one `<server>-<hash>` entry per approved server, written by `agent mcp enable <server>`). Its other switches are also the person's: `--approve-mcps` on the run, and an `Mcp(<server>:<tool>)` entry in `permissions.allow` of `~/.cursor/cli-config.json` or the project's `.cursor/cli.json` ([Cursor CLI permissions](https://cursor.com/docs/cli/reference/permissions)). A Cursor plugin's documented components are rules, skills, agents, commands, MCP servers and hooks ([Cursor plugins](https://cursor.com/docs/plugins)), and its manifest reference lists no field or file that carries approval or permissions ([Plugins reference](https://cursor.com/docs/reference/plugins)), so none of them can write one. That reference says a plugin's MCP servers show as `plugin-<plugin>-<server>` in approval prompts, but it does not say whether `agent mcp enable` or the approvals file takes that name; which identifier it takes is still open.
-- **Evidence:** the refusal: live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6) ([ynh #735](https://github.com/eyelock/ynh/issues/735)). The mechanisms: `agent --help` (`--approve-mcps`: "Automatically approve all MCP servers"; `agent mcp enable`: "Add an MCP server to the local approved list") and a scratch run with `HOME` pointed at a scratch folder, where `agent mcp enable canary` wrote `mcp-approvals.json` as above. No tool call has been run with an approval in place: Cursor's quota is exhausted, so a live call that comes back with the tool's result with `--approve-mcps` is still to show.
-- **Tracking:** [ynh #744](https://github.com/eyelock/ynh/issues/744), v0.17.0. Remaining: the live call.
+- **Evidence:** the refusal: live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6) ([ynh #735](https://github.com/eyelock/ynh/issues/735)). The mechanisms: `agent --help` (`--approve-mcps`: "Automatically approve all MCP servers"; `agent mcp enable`: "Add an MCP server to the local approved list") and a scratch run with `HOME` pointed at a scratch folder, where `agent mcp enable canary` wrote `mcp-approvals.json` as above. Deferred to a later release: a live call, with an approval in place (such as `--approve-mcps`), that comes back with the tool's result.
+- **Tracking:** [ynh #744](https://github.com/eyelock/ynh/issues/744). The live call is deferred to a later release.
 - **Workaround:** approve the server yourself: run `cursor-agent -p --approve-mcps ...`, or run `agent mcp enable <server>` once in the project. Neither is verified against a plugin's server in a live call.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
@@ -395,5 +397,23 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Owner:** the vendor. Cursor's plugin docs list rules, commands, agents, skills, hooks and MCP servers as the components, and no instructions file ([Plugins](https://cursor.com/docs/plugins), [Plugins reference](https://cursor.com/docs/reference/plugins)); `AGENTS.md` is a project-root file ([Rules](https://cursor.com/docs/context/rules)).
 - **Evidence:** live on cursor-agent 2026.11.05, 2026-11-05: a codeword set only in the package's `.cursorrules` and `AGENTS.md` was not returned in 3 runs, while the skill's, agent's and hook's were.
 - **Tracking:** [ynh #739](https://github.com/eyelock/ynh/issues/739), v0.17.0.
-- **Workaround:** put the instructions in the installing project's `AGENTS.md`. Under `ynh run` they do reach Cursor.
+- **Workaround:** put the instructions in the installing project's `AGENTS.md`. Under `ynh run`, ynh writes them to `.cursorrules` in the run directory; whether they reach Cursor that way is unverified ([L35](#l35-cursor-under-ynh-run-not-shown-live)).
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
+
+### L35: Cursor under ynh run, not shown live
+
+- **What:** under `ynh run -v cursor`, ynh writes the harness into the run directory in Cursor's project layout, but whether its instructions, skills, agents, rules, commands, MCP servers, profiles, includes, sensors and delegates then reach the model on Cursor is unverified. The live check is deferred to a later release.
+- **Owner:** unknown until verified.
+- **Evidence:** checked: the files ynh writes, by running `ynh run` and `ynd preview` ([Project Instructions](artifacts.md#project-instructions)): instructions in `.cursorrules`, rules as `.mdc` files ([Rules](artifacts.md#rules)), MCP servers in `.cursor/mcp.json` ([MCP Servers](mcp.md#config-file-locations)), and the other artifacts linked under `.cursor/` ([Symlink Installation](vendors.md#symlink-installation-codex-cursor)). Cursor's docs name `.cursor/mcp.json` as the project file it reads MCP servers from ([MCP](https://cursor.com/docs/context/mcp)) and `.mdc` as its rule format ([Rules](https://cursor.com/docs/context/rules)); that Rules page does not mention `.cursorrules` ([ynh #742](https://github.com/eyelock/ynh/pull/742)). Shown live through `ynh run -v cursor`: hooks, session context, resume and focuses (the runs are named under **Checked on** above). Deferred: a live `ynh run -v cursor` for each of the rest. The record shows none, and the live runs on 2026-11-05 made no Cursor run under `ynh run`.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
+- **Workaround:** none verified.
+- **Detail:** [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
+
+### L36: The Cursor backend, not shown live
+
+- **What:** `ynh agent run --backend cursor` runs the worker with Cursor's CLI, `agent`. Whether it runs turns, and whether hooks, session context, `--auto-approve all` and ynh's own telemetry work on it, is unverified. The live check is deferred to a later release.
+- **Owner:** unknown until verified.
+- **Evidence:** checked, by code and tests rather than a live run: the worker takes its binary, `agent`, from the Cursor adapter ([ynh #536](https://github.com/eyelock/ynh/pull/536)); it reads the model from the init event of Cursor's documented stream-json ([ynh #444](https://github.com/eyelock/ynh/pull/444)); and the `--auto-approve` mapping was checked against Cursor's CLI parameters page ([ynh #426](https://github.com/eyelock/ynh/pull/426)). Deferred: a live `ynh agent run --backend cursor`. The record shows none.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
+- **Workaround:** none verified.
+- **Detail:** [The Agent Loop](agent.md).
