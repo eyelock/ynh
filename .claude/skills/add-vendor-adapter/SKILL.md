@@ -126,7 +126,7 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
 - [ ] `LaunchResume(configPath, sessionID, prompt, interactive, extraArgs)`:
   an empty prompt resumes interactively; a prompt is sent into the resumed
   session, which stays open when `interactive` is true and is a one-shot run
-  when it is false. A combination the CLI has no documented form for returns
+  when it is false. A combination the CLI has no form for (Codex interactive) returns
   `ErrResumePromptNotSupported` before launching anything; never drop the
   prompt (`internal/vendor/adapter.go`).
 - [ ] `SessionBinder` (`adapter.go`) is optional: implement it only if the CLI

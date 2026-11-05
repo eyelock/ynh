@@ -445,15 +445,52 @@ func equalArgs(a, b []string) bool {
 	return true
 }
 
-// Copilot and Cursor document no resume-with-prompt form, so they refuse before
-// reaching the code that execs the CLI.
-func TestResumeWithPromptRefused(t *testing.T) {
-	for name, a := range map[string]Adapter{"copilot": &Copilot{}, "cursor": &Cursor{}} {
-		for _, interactive := range []bool{false, true} {
-			err := a.LaunchResume(t.TempDir(), "abc", "go", interactive, nil)
-			if err != ErrResumePromptNotSupported {
-				t.Errorf("%s interactive=%v: err = %v, want ErrResumePromptNotSupported", name, interactive, err)
+func TestCursorResumeArgs(t *testing.T) {
+	x := []string{"--add-dir", "/w"}
+	tests := []struct {
+		name        string
+		id, prompt  string
+		interactive bool
+		want        []string
+	}{
+		{"id, no prompt", "abc", "", false, []string{"--resume", "abc", "--add-dir", "/w"}},
+		{"last, no prompt", "", "", false, []string{"--continue", "--add-dir", "/w"}},
+		{"id, one-shot", "abc", "go", false, []string{"--resume", "abc", "-p", "go", "--add-dir", "/w"}},
+		{"last, one-shot", "", "go", false, []string{"--continue", "-p", "go", "--add-dir", "/w"}},
+		{"id, interactive", "abc", "go", true, []string{"--resume", "abc", "--add-dir", "/w", "go"}},
+		{"last, interactive", "", "go", true, []string{"--continue", "--add-dir", "/w", "go"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := cursorResumeArgs(tt.id, tt.prompt, tt.interactive, x); !equalArgs(got, tt.want) {
+				t.Errorf("args = %v, want %v", got, tt.want)
 			}
-		}
+		})
+	}
+}
+
+func TestCopilotResumeArgs(t *testing.T) {
+	x := []string{"--add-dir", "/w"}
+	tests := []struct {
+		name        string
+		id, prompt  string
+		interactive bool
+		wantInitial string
+		want        []string
+	}{
+		{"id, no prompt", "abc", "", false, "", []string{"--resume=abc", "--add-dir", "/w"}},
+		{"last, no prompt", "", "", false, "", []string{"--continue", "--add-dir", "/w"}},
+		{"id, one-shot", "abc", "go", false, "", []string{"--resume=abc", "-p", "go", "--allow-all-tools", "--add-dir", "/w"}},
+		{"last, one-shot", "", "go", false, "", []string{"--continue", "-p", "go", "--allow-all-tools", "--add-dir", "/w"}},
+		{"id, interactive", "abc", "go", true, "go", []string{"--resume=abc", "--add-dir", "/w"}},
+		{"last, interactive", "", "go", true, "go", []string{"--continue", "--add-dir", "/w"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial, got := copilotResumeArgs(tt.id, tt.prompt, tt.interactive, x)
+			if initial != tt.wantInitial || !equalArgs(got, tt.want) {
+				t.Errorf("initial=%q args=%v, want %q %v", initial, got, tt.wantInitial, tt.want)
+			}
+		})
 	}
 }
