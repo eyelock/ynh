@@ -2,9 +2,9 @@
 
 What each vendor receives from a harness, on each surface ynh has: `ynh run`, `ynh agent run` and `ynd export`. Every cell that is not **Y** names a limit, and every limit says whose it is.
 
-- **ynh version:** v0.17.0, as on `develop` at [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3) with [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727) applied.
+- **ynh version:** v0.17.0, as on `develop` at [f2822a1](https://github.com/eyelock/ynh/commit/f2822a1), which includes [ynh #721](https://github.com/eyelock/ynh/pull/721), [ynh #725](https://github.com/eyelock/ynh/pull/725), [ynh #726](https://github.com/eyelock/ynh/pull/726) and [ynh #727](https://github.com/eyelock/ynh/pull/727).
 - **Vendor CLIs checked:** Claude Code 2.1.318, codex-cli 0.166.0, Copilot CLI 1.0.105, cursor-agent 2026.10.22-27dcf5f, OpenCode 2.2.3.
-- **Checked on:** 2026-11-05, by live runs of each vendor CLI through ynh. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716); each limit below links the pull request that proved it.
+- **Checked on:** 2026-11-05, by live runs of each vendor CLI through ynh at `develop` [958b7a3](https://github.com/eyelock/ynh/commit/958b7a3), and on the branches of the four pull requests above for the cells they changed. The verification is recorded in [ynh #716](https://github.com/eyelock/ynh/issues/716); each limit below links the pull request that proved it.
 
 This page is the only copy of this table. Other pages link here rather than repeat it. How each vendor is launched, and where its files go, is in [Vendor Support](vendors.md).
 
