@@ -570,16 +570,18 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 ## Cross-Vendor Compatibility Matrix
 
+This matrix is about what `ynd export` and `ynd marketplace build` write. What each vendor receives under `ynh run` is in [Vendor Support](vendors.md#feature-support).
+
 | Feature | Claude Code | Cursor | Codex | Copilot | OpenCode |
 |---------|------------|--------|-------|---------|----------|
 | Skills | Yes | Yes | Yes | Yes | Yes |
-| Agents | Yes | Yes | No | Yes | Yes |
+| Agents | Yes | Yes | No (not exported; Codex gets agents under `ynh run`) | Yes | Yes |
 | Rules | Folded into `CLAUDE.md` at run time (the export ships `rules/`, but Claude Code does not read rules from a plugin directory) | Yes | Folded into the instructions file (`AGENTS.md`) at run time; not exported | Folded into `AGENTS.md` at run time; not exported | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
 | Commands | Yes | Yes | No | No | Yes (not from a one-shot `opencode run` prompt) |
 | Instructions | none (a Claude Code plugin cannot carry them) | .cursorrules + AGENTS.md | none (a Codex plugin cannot carry them) | none (a Copilot plugin cannot carry them; `ynh run` projects them to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
 | Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ | None |
 | Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) | None |
-| Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) | No |
+| Delegates | Instructions and MCP servers only | Instructions only | No (export skips delegates with a warning) | Instructions only | No |
 | Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) | No manifest to merge |
 | Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` | Not supported |
 

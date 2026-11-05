@@ -20,7 +20,7 @@ If `~/.ynh/config.json` declares any [local model backends](#local-model-backend
 
 ## Known gaps
 
-ynh claims more than each vendor yet gets. In v0.16.0:
+ynh claims more than each vendor yet gets. On `develop` after the v0.17.0 parity work:
 
 - **Codex** receives commands as skills, not as commands: under `ynh run` each `commands/<name>.md` is written to `.codex/skills/<name>/SKILL.md` and Codex lists it as `<harness>:<name>` (OBSERVED live on codex-cli 0.166.0, 2026-11-05), so it is invoked by name (`$<name>`) and not as a slash command; a command's frontmatter other than `description` is dropped and `$ARGUMENTS` is not substituted, and a command and a skill of the same name share one directory. Hooks and session context reach it under `ynh run` for an accepted harness only, not under `ynh agent run` ([Codex hook trust](hooks.md#codex-hook-trust)). Instructions (written to `AGENTS.md`), rules (folded into them), MCP servers, skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory, so ynh appends the project's `AGENTS.md` files to the run directory's, after the harness's: the ones Codex itself would read, from the Git root down to the directory you ran from (each directory's `AGENTS.override.md` if it has one, else its `AGENTS.md`). A file the harness's instructions already hold, as when you run from the harness's own directory, is left out. Codex cuts the combined file off at 32 KiB (`project_doc_max_bytes`), the project's part going first, so ynh warns when it is longer.
 - **Codex export** cannot carry a harness's instructions: a Codex plugin ignores its `AGENTS.md`, so `ynd export -v codex` writes none and warns (see [export output](#export-output-by-vendor)).
@@ -31,18 +31,18 @@ ynh claims more than each vendor yet gets. In v0.16.0:
 - **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
 - **Resume**: `ynh run --resume` with a prompt works on Cursor and Copilot, one-shot and `--interactive`, with the last session or `--resume=<id>` (see the notes). On Codex a resume with a prompt passes workspace folders as `writable_roots`, which takes effect only under the `workspace-write` sandbox (ynh warns on stderr otherwise; ynh does not change Codex's sandbox, and `codex exec` defaults to read-only).
 - **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
-- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are composed in: the Git root down to the directory you ran from, cut off at Codex's 32 KiB `project_doc_max_bytes` (OBSERVED live on codex-cli 0.166.0).
+- **Project instructions** (the project's own instruction file under `ynh run`) reach Claude Code (`CLAUDE.md`), Copilot CLI (`AGENTS.md`, then `CLAUDE.md`) and OpenCode: each run loaded a project with its own instruction file and the model read it (live, v0.17.0 at develop 958b7a3, 2026-11-05, on Claude Code 2.1.318, Copilot CLI 1.0.105 and OpenCode 2.2.3). On Codex they are composed in: the Git root down to the directory you ran from, cut off at Codex's 32 KiB `project_doc_max_bytes` (observed live on codex-cli 0.166.0). On Cursor they are still unverified: `cursor-agent` 2026.10.22-27dcf5f stops at its Workspace Trust prompt on the run directory, so no Cursor run completed; the check waits on a trust decision.
 
-These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
+The N cells (`delegates_to`, OpenCode `ynd export` and telemetry from `ynh run`) are ynh's to fix and are not yet fixed; the X cells are what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
 
 ## Feature Support
 
-What each vendor receives from a harness in v0.16.0, from the vendor parity audit (live runs of every vendor CLI against ynh develop, 2026-11). **Y** works, **N** does not yet work (ynh can fix it), **X** the vendor cannot, **U** unverified.
+What each vendor receives from a harness on `develop` after the v0.17.0 parity work, from the vendor parity audit (live runs of every vendor CLI against ynh develop, 2026-11). **Y** works, **N** does not yet work (ynh can fix it), **X** the vendor cannot, **U** unverified.
 
 | Feature | Claude Code | Codex | Cursor | Copilot CLI | OpenCode |
 |---|---|---|---|---|---|
 | Instructions | Y | Y | Y | Y | Y |
-| Project instructions under `ynh run` | U | Y | U | U | U |
+| Project instructions under `ynh run` | Y | Y | U, waits on Cursor Workspace Trust | Y | Y |
 | Skills | Y | Y | Y | Y | Y |
 | Agents | Y | Y | Y | Y | Y |
 | Rules | Y | Y | Y | Y | Y |
