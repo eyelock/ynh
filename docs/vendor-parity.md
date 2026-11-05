@@ -199,7 +199,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh run` writes no OpenTelemetry on any vendor. Only `ynh agent run` does.
 - **Owner:** ynh.
 - **Evidence:** [Telemetry](telemetry.md).
-- **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0.
+- **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0, for Claude Code. For Codex, Copilot CLI, Cursor and OpenCode, no issue yet.
 - **Workaround:** run the harness with `ynh agent run`.
 - **Detail:** [Telemetry](telemetry.md).
 
