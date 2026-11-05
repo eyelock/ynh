@@ -99,12 +99,12 @@ AI coding assistants are converging on a plugin/marketplace model for distributi
 
 | | Claude Code | Cursor | Codex | Copilot | OpenCode |
 |---|---|---|---|---|---|
-| **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) | Unverified — schema not hand-confirmed | Not supported |
-| **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog | Unknown | Not supported |
+| **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) | Installs from a local marketplace directory: verified live on Copilot CLI 1.0.105, 2026-11-05 ([L28](vendor-parity.md#l28-copilot-marketplace-index)). GitHub's release status for marketplaces not checked | Not supported |
+| **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog | A marketplace you host yourself installs: a `ynd marketplace build` index added with `copilot plugin marketplace add <dir>` ([L28](vendor-parity.md#l28-copilot-marketplace-index)). Whether Copilot has an official or curated catalog is not checked | Not supported |
 | **Plugin format** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` (Copilot reads Claude's manifest schema) | None |
-| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort) | None |
-| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory | `--plugin-dir` (direct load, same as Claude) | `opencode --standalone` with `OPENCODE_CONFIG_DIR` (what `ynh run` does); no install step |
-| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) | Unknown | Not supported |
+| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (installed live, [L28](vendor-parity.md#l28-copilot-marketplace-index)) | None |
+| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory | `copilot plugin marketplace add <dir>`, then `copilot plugin install <plugin>@<marketplace>`, with no prompt ([L28](vendor-parity.md#l28-copilot-marketplace-index)). CLI: `--plugin-dir` (direct load, same as Claude) | `opencode --standalone` with `OPENCODE_CONFIG_DIR` (what `ynh run` does); no install step |
+| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) | A local directory works ([L28](vendor-parity.md#l28-copilot-marketplace-index)); a marketplace hosted in a private repository is not checked | Not supported |
 | **Ecosystem size** | Large (40+ marketplaces, 800+ plugins) | Growing (30+ curated plugins) | Growing (official directory coming soon) | Unknown | Not supported |
 
 ## Claude Code
