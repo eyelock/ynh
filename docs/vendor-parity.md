@@ -91,7 +91,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** whether Cursor reads the project's own instructions file under `ynh run` is unverified.
 - **Owner:** unknown until verified.
 - **Evidence:** the 2026-11-05 run stopped at cursor-agent's Workspace Trust prompt for the run directory, so no Cursor run completed. The same run showed Claude Code, Codex, Copilot CLI and OpenCode reading it.
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. May, the verifier, checks it once Cursor's Workspace Trust is granted.
+- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the verification run.
 - **Workaround:** none recorded.
 - **Detail:** [Project Instructions](artifacts.md#project-instructions).
 
@@ -181,7 +181,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** Cursor receives `--add-dir` for each granted folder, but whether the grant changes what Cursor can reach is unverified.
 - **Owner:** unknown until verified.
 - **Evidence:** in print mode with `--sandbox enabled`, Cursor wrote outside the project with or without the flag, so no folder was found that it cannot reach without it ([ynh #698](https://github.com/eyelock/ynh/pull/698)). The 2026-11-05 run stopped at Cursor's Workspace Trust prompt.
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. May, the verifier, checks it once Cursor's Workspace Trust is granted.
+- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the verification run.
 - **Workaround:** none needed to launch; the folder is passed either way.
 - **Detail:** [Per vendor](workspace.md#per-vendor).
 
@@ -316,7 +316,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynd export -v cursor` writes every row shown, but no Cursor package has been loaded into cursor-agent live.
 - **Owner:** unknown until verified.
 - **Evidence:** the 2026-11-05 verification loaded Claude Code, Codex and Copilot CLI packages, not Cursor's.
-- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. May, the verifier, checks it once Cursor's Workspace Trust is granted.
+- **Tracking:** [ynh #716](https://github.com/eyelock/ynh/issues/716), v0.17.0. Verified live once Cursor's Workspace Trust is granted for the verification run.
 - **Workaround:** none needed; run the harness on Cursor with `ynh run`.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
