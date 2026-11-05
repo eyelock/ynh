@@ -369,8 +369,12 @@ func cmdRun(args []string) error {
 		// AGENTS.md: compose it in after the harness's (ynh #690).
 		if adapter.Name() == "codex" {
 			if cwd, cwdErr := os.Getwd(); cwdErr == nil {
-				if _, err := vendor.ComposeProjectInstructions(runDir, cwd); err != nil {
+				pi, err := vendor.ComposeProjectInstructions(runDir, cwd)
+				if err != nil {
 					return err
+				}
+				if pi.Size > vendor.CodexProjectDocMaxBytes {
+					fmt.Fprintf(os.Stderr, "warning: the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off\n", pi.Size, vendor.CodexProjectDocMaxBytes)
 				}
 			}
 		}
