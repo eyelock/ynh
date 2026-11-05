@@ -449,6 +449,10 @@ const (
 	opencodeSessionContextFile = "ynh-session-context.md"
 )
 
+// opencodeSessionStartGrace is how long the launch waits, after a hook has
+// finished or timed out, for a child it left running to release the output.
+const opencodeSessionStartGrace = 2 * time.Second
+
 // runOpencodeSessionStart runs the harness's on_session_start commands before
 // OpenCode starts and writes their stdout to .opencode/ynh-session-context.md,
 // which composeOpencodeAgents folds into AGENTS.md. OpenCode's session.created
@@ -488,7 +492,13 @@ func runOpencodeSessionStart(configPath string) {
 		cmd.Env = append(os.Environ(), "YNH_HOOK_ROOT="+dir)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		// A hook that backgrounds a child leaves it holding the output pipes
+		// after sh exits; WaitDelay stops the launch waiting on it.
+		cmd.WaitDelay = opencodeSessionStartGrace
 		runErr := cmd.Run()
+		if errors.Is(runErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+			runErr = nil // the hook finished; only a leftover child held the pipes
+		}
 		timedOut := ctx.Err() != nil
 		cancel()
 		switch {

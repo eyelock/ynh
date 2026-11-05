@@ -728,6 +728,33 @@ func TestPrepareOpenCodeSessionContext(t *testing.T) {
 	}
 }
 
+// TestPrepareOpenCodeSessionStartBackgroundChild: a hook that leaves a child
+// running does not hold the launch until the child exits, and its output is
+// kept.
+func TestPrepareOpenCodeSessionStartBackgroundChild(t *testing.T) {
+	old := opencodeVersionProbe
+	t.Cleanup(func() { opencodeVersionProbe = old })
+	opencodeVersionProbe = func(string) (string, error) { return "opencode v2.0.27", nil }
+
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, ".opencode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, ".opencode", opencodeSessionStartFile), []byte(`[{"command":"sleep 20 & echo hi"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("launch waited %v for a backgrounded child", d)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cfg, ".opencode", "AGENTS.md")); string(b) != "hi\n" {
+		t.Errorf("AGENTS.md = %q, want the hook's output", b)
+	}
+}
+
 // TestOpenCodeHooksPluginBehaviour runs the generated plugin under Node
 // (which strips TypeScript types) against a stub of the plugin runtime and a
 // fake ctx that records the hooks it installs. Everything lives under
