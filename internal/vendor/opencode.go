@@ -660,7 +660,7 @@ var opencodeHookEventMap = map[string]string{
 	"after_tool":       "execute.after",
 	"before_prompt":    "prompt",
 	"on_stop":          "session.execution.succeeded/failed",
-	"on_session_start": "session.created",
+	"on_session_start": "ynh, before launch (not in the plugin)",
 }
 
 // opencodeUnsupportedHookEvents names the canonical events OpenCode cannot
@@ -707,9 +707,14 @@ type opencodeHookEntry struct {
 //     stdout) is the tool error the model sees
 //   - after_tool: runs after the call; its output cannot reject the result
 //   - before_prompt: exit 2 throws; see the reference for what that does
-//   - on_session_start, on_stop: event-stream subscribers (session.created,
-//     session.execution.succeeded/failed), so they cannot block. on_stop fires
-//     once per turn, as on Claude Code. A matcher is ignored on both.
+//   - on_stop: an event-stream subscriber (session.execution.succeeded/failed),
+//     so it cannot block. It fires once per turn, as on Claude Code. A matcher
+//     is ignored.
+//   - on_session_start: not in the plugin. ynh runs it once before launching
+//     OpenCode and folds its output into AGENTS.md (runOpencodeSessionStart);
+//     the session.created event never fired it under opencode run and cannot
+//     add context, so subscribing would at best run it twice. A matcher is
+//     ignored.
 //   - a "./" command is a script the harness ships; see SessionHookScriptDir
 //   - only exit 2 blocks, as on Claude Code; the harness is cross-vendor, so a
 //     hook that cannot run (spawn error, killed, timed out after its timeout,
@@ -771,12 +776,19 @@ func (o *OpenCode) GenerateHookConfigForServers(hooks map[string][]plugin.HookEn
 		return nil, nil
 	}
 	files := map[string][]byte{}
+	// on_session_start runs once, from ynh before launch (runOpencodeSessionStart),
+	// so the plugin does not carry it: session.created would run it a second
+	// time, with its output discarded.
 	if starts := doc["on_session_start"]; len(starts) > 0 {
 		sd, err := json.MarshalIndent(starts, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("marshalling session-start hooks: %w", err)
 		}
 		files[filepath.Join(".opencode", opencodeSessionStartFile)] = sd
+		delete(doc, "on_session_start")
+	}
+	if len(doc) == 0 {
+		return files, nil
 	}
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -1072,15 +1084,13 @@ export default Plugin.define({
     }
 
     const ac = new AbortController()
-    if (HOOKS.on_session_start?.length || HOOKS.on_stop?.length) {
+    if (HOOKS.on_stop?.length) {
       ;(async () => {
         try {
           for await (const ev of ctx.event.subscribe({ signal: ac.signal })) {
             try {
               const sid = ev.durable?.aggregateID ?? ev.data?.sessionID
-              if (ev.type === "session.created") {
-                fire("on_session_start", undefined, { hook_event_name: "SessionStart", session_id: sid, cwd }, cwd, false)
-              } else if (ev.type === "session.execution.succeeded" || ev.type === "session.execution.failed") {
+              if (ev.type === "session.execution.succeeded" || ev.type === "session.execution.failed") {
                 fire("on_stop", undefined, { hook_event_name: "Stop", session_id: sid, cwd }, cwd, false)
               }
             } catch {}
