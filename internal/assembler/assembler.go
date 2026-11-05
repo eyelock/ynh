@@ -56,6 +56,16 @@ type ArtifactWarner interface {
 	ArtifactWarnings(artifactType, name string, data []byte) []string
 }
 
+// CommandSkiller is an optional capability a LayoutProvider may implement when
+// its CLI reads no commands from a project but does read skills (Codex). After
+// the artifacts are staged, the assembler writes each staged commands/<name>.md
+// as skills/<name>/SKILL.md, with the content CommandSkill returns, and removes
+// the commands directory. A skill of the same name is kept and the command
+// dropped with a warning, so the result does not depend on copy order.
+type CommandSkiller interface {
+	CommandSkill(name string, data []byte) []byte
+}
+
 // warnOut receives assembly's warnings. Tests swap it to read them.
 var warnOut io.Writer = os.Stderr
 
@@ -147,6 +157,12 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 		}
 	}
 
+	if cs, ok := adapter.(CommandSkiller); ok {
+		if err := commandsAsSkills(configDir, artifactDirs, cs); err != nil {
+			return err
+		}
+	}
+
 	// Compose the sources' instructions into the vendor-specific project
 	// instructions file.
 	instructionsFile := adapter.InstructionsFile()
@@ -168,6 +184,50 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 	}
 
 	return nil
+}
+
+// commandsAsSkills turns the staged commands into skills, then removes the
+// commands directory. A command whose name a skill already holds is left out
+// and warned about: the skill is the harness's own, and the command still
+// works on the vendors that read commands.
+func commandsAsSkills(configDir string, artifactDirs map[string]string, cs CommandSkiller) error {
+	cmdDir, ok := artifactDirs["commands"]
+	skillDir, ok2 := artifactDirs["skills"]
+	if !ok || !ok2 {
+		return nil
+	}
+	src := filepath.Join(configDir, cmdDir)
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		stem := strings.TrimSuffix(e.Name(), ".md")
+		dst := filepath.Join(configDir, skillDir, stem)
+		if _, err := os.Lstat(dst); err == nil {
+			_, _ = fmt.Fprintf(warnOut, "  warning: command %q: a skill of the same name exists, so the command is not written as a skill\n", stem)
+			continue
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		data, err := os.ReadFile(filepath.Join(src, e.Name()))
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dst, 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(dst, "SKILL.md"), cs.CommandSkill(stem, data), 0o644); err != nil {
+			return err
+		}
+	}
+	return os.RemoveAll(src)
 }
 
 // Cleanup removes an assembled directory.
