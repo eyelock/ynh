@@ -47,14 +47,7 @@ func (c *Codex) ConfigDir() string {
 
 func (c *Codex) InstructionsFile() string { return "AGENTS.md" }
 
-// ArtifactDirs puts a harness's commands in the skills directory, as skills
-// (see TransformArtifact): Codex has no commands directory it reads from a
-// project, and its custom prompts are deprecated in favour of skills.
-func (c *Codex) ArtifactDirs() map[string]string {
-	dirs := DefaultArtifactDirs()
-	dirs["commands"] = dirs["skills"]
-	return dirs
-}
+func (c *Codex) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Codex) GenerateSystemPrompt(content []byte) map[string][]byte {
 	// AGENTS.md: Codex natively reads this
@@ -71,10 +64,7 @@ func (c *Codex) FoldsRulesIntoInstructions() bool { return true }
 func (c *Codex) NeedsSymlinks() bool { return true }
 
 func (c *Codex) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {
-	// Commands share the skills directory, which is linked once.
-	dirs := c.ArtifactDirs()
-	delete(dirs, "commands")
-	return installSymlinks(stagingDir, projectDir, c.ConfigDir(), dirs)
+	return installSymlinks(stagingDir, projectDir, c.ConfigDir(), c.ArtifactDirs())
 }
 
 func (c *Codex) Clean(entries []SymlinkEntry) error {

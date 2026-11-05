@@ -188,7 +188,7 @@ developers.openai.com/codex/subagents link redirects).
 
 - Agents/subagents — NOT supported in plugin format (runtime custom agents are, and a run writes a harness's agents as them; see above)
 - Rules — NOT supported in plugin format
-- Commands — NOT supported (use skills)
+- Commands — NOT supported in plugin format; under `ynh run` a harness's commands are written as skills in `.codex/skills/<name>/SKILL.md` (OBSERVED live on codex-cli 0.166.0, 2026-11-05: listed as `<harness>:<name>`; `.codex/skills` in the run directory is read)
 - Delegates — NOT exported in a plugin; a run writes them as custom agents (see above)
 - LSP servers — NOT documented
 

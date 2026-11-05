@@ -117,16 +117,21 @@ while IFS=$'\t' read -r name cfgdir; do
 		| sort > "$TMP/set-$name.txt"
 
 	# Codex writes a command as a skill (commands/<n>.md -> skills/<n>/SKILL.md)
-	# because it reads no command files; map each of the harness's own commands
-	# back so the sets compare.
-	if [ "$name" = codex ] && [ -d "$HARNESS/commands" ]; then
-		for cmd in "$HARNESS"/commands/*.md; do
-			[ -e "$cmd" ] || continue
-			n=$(basename "$cmd" .md)
-			sed -i.bak "s|^harness/skills/$n/SKILL\.md\$|harness/commands/$n.md|" "$TMP/set-$name.txt"
-			rm -f "$TMP/set-$name.txt.bak"
-		done
-		sort -o "$TMP/set-$name.txt" "$TMP/set-$name.txt"
+	# because it reads no command files. Map each command back so the sets
+	# compare. The names come from Claude's assembly, which holds every
+	# command of the harness and of the harnesses it includes, and are matched
+	# as exact strings, not patterns.
+	if [ "$name" = codex ]; then
+		ref="$TMP/out-commands-ref"
+		if [ ! -d "$ref" ]; then
+			"$YND" preview "$HARNESS" -v claude -o "$ref" >/dev/null 2>&1 || true
+		fi
+		find "$ref" -path '*/commands/*.md' -type f 2>/dev/null | sed 's|.*/commands/||; s|\.md$||' | sort > "$TMP/command-names.txt"
+		awk -v names="$TMP/command-names.txt" '
+			BEGIN { while ((getline n < names) > 0) cmd["harness/skills/" n "/SKILL.md"] = "harness/commands/" n ".md" }
+			{ print ($0 in cmd) ? cmd[$0] : $0 }
+		' "$TMP/set-$name.txt" | sort > "$TMP/set-$name.tmp"
+		mv "$TMP/set-$name.tmp" "$TMP/set-$name.txt"
 	fi
 
 	# One instructions file per vendor; its name is legitimately vendor-specific.

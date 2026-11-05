@@ -214,8 +214,9 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| commands/         | commands/<name>.md               | NOT SUPPORTED in plugins         | commands/<name>.md               |
-|   <name>.md       | (LEGACY -- use skills instead)   |                                  |                                  |
+| commands/         | commands/<name>.md               | NOT SUPPORTED in plugins; under  | commands/<name>.md               |
+|   <name>.md       | (LEGACY -- use skills instead)   | `ynh run` written as a skill     |                                  |
+|                   |                                  | (skills/<name>/SKILL.md)         |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
@@ -505,8 +506,10 @@ for the full scaffolding checklist once these are resolved):
   match, but `allowed-tools` and other fields haven't been diffed against the
   spec.
 - No commands support means ynh's `commands/` artifact type has nowhere to
-  go for this vendor — same situation as Codex today (see Commands row in
-  the ASCII table above).
+  go for this vendor. Codex has the same gap in a plugin, but under `ynh run`
+  ynh writes each command as a skill there (see Commands row in the ASCII
+  table above); a vendor that reads skills can take the same route
+  (`assembler.CommandSkiller`).
 
 ### Instructions File
 
