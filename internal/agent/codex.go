@@ -43,6 +43,10 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 	// cannot be.
 	if _, warnings := vendor.CodexAgentArgs(opts.ConfigPath); opts.Stderr != nil {
 		warnings = append(warnings, vendor.CodexMCP(opts.ConfigPath).Warnings...)
+		// Say once, not per turn, which servers keep the user's own approval.
+		if !opts.MCPManualApproval {
+			_ = (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, opts.Stderr)
+		}
 		for _, msg := range warnings {
 			_, _ = fmt.Fprintf(opts.Stderr, "warning: %s\n", msg)
 		}
@@ -86,6 +90,12 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	// And its MCP servers, which codex reads from no file in the worktree
 	// either. Their header values reach the process in its environment (Next).
 	args = append(args, vendor.CodexMCP(opts.ConfigPath).Args...)
+	// A worker has no one to approve an MCP tool call, and codex exec's
+	// policy is "never", so approve the harness's own servers' tools as a
+	// one-shot `ynh run` does, unless the harness opts out (mcp_manual_approval).
+	if !opts.MCPManualApproval {
+		args = append(args, (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, nil)...)
+	}
 	args = append(args, "--json")
 	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
 	if opts.Model != "" {
