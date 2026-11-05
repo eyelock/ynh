@@ -61,9 +61,10 @@ func (c *Claude) InstructionsFile() string { return "CLAUDE.md" }
 func (c *Claude) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Claude) GenerateSystemPrompt(content []byte) map[string][]byte {
-	// AGENTS.md: cross-vendor instructions (read by Codex, Cursor, Copilot, etc.)
-	// CLAUDE.md: @-import of AGENTS.md (Claude doesn't read AGENTS.md natively)
-	// See: https://code.claude.com/docs/en/memory
+	// Required by the adapter interface, but no export path reaches it: a
+	// Claude Code plugin cannot carry instructions (ExportCarriesInstructions),
+	// so no AGENTS.md or @AGENTS.md-importing CLAUDE.md is exported. Kept for
+	// the interface and for any caller that asks for the files directly.
 	return map[string][]byte{
 		"AGENTS.md": content,
 		"CLAUDE.md": []byte("@AGENTS.md\n"),
