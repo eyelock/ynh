@@ -11,6 +11,38 @@ import (
 	"github.com/eyelock/ynh/internal/mcpexec"
 )
 
+// CodexEnvPassthroughFile is the run directory file that names the harness's
+// env_passthrough variables, one JSON array of names and no values. The run
+// directory holds no manifest, so this is how CodexMCP learns which variables
+// to forward to the servers it loads.
+const CodexEnvPassthroughFile = ".ynh-env-passthrough.json"
+
+// WriteCodexEnvPassthrough records names in runDir for CodexMCP. With none
+// it writes nothing. Called wherever a run directory's .mcp.json is written.
+func WriteCodexEnvPassthrough(runDir string, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(names)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(runDir, CodexEnvPassthroughFile), data, 0o644)
+}
+
+func readCodexEnvPassthrough(runDir string) []string {
+	data, err := os.ReadFile(filepath.Join(runDir, CodexEnvPassthroughFile))
+	if err != nil {
+		return nil
+	}
+	var names []string
+	if json.Unmarshal(data, &names) != nil {
+		return nil
+	}
+	sort.Strings(names)
+	return names
+}
+
 // CodexMCPLaunch is what loading a run directory's MCP servers on Codex takes:
 // the -c overrides, the environment variables the Codex process needs, and
 // the warnings to print.
@@ -30,8 +62,18 @@ type CodexMCPLaunch struct {
 //
 //	-c mcp_servers.<name>.command="..." -c mcp_servers.<name>.args=[...]
 //	-c mcp_servers.<name>.env={K="${V}"} -c mcp_servers.<name>.cwd="..."
+//	-c mcp_servers.<name>.env_vars=["NAME",...]
 //	-c mcp_servers.<name>.url="..."
 //	-c mcp_servers.<name>.env_http_headers={Name="VAR"}
+//
+// Codex gives a stdio server only a small default environment, so the
+// variables the harness names in env_passthrough (YNM_HOME among them) do not
+// reach it unless env_vars lists them; a ynm server would then open the
+// user's own ~/.ynm. Each stdio server gets env_vars for those names, less any
+// the server's own env sets. This applies on every launch: ynh run (one-shot,
+// interactive, resumed) and ynh agent run --backend codex. Streamable HTTP
+// servers run elsewhere and take no environment. A run directory assembled
+// without the names file (a pre-assembled one) forwards none.
 //
 // The -c layer is always enabled, as for agents (CodexAgentArgs), and nothing
 // is written to the user's Codex config.
@@ -89,6 +131,7 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 	}
 	sort.Strings(names)
 	absDir := mustAbs(runDir)
+	passthrough := readCodexEnvPassthrough(runDir)
 	secrets := map[string]string{}
 	n := 0
 	for _, name := range names {
@@ -130,6 +173,15 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 			}
 			if envTable != nil {
 				add("env", tomlInlineTable(envTable))
+			}
+			var forward []string
+			for _, v := range passthrough {
+				if _, own := s.Env[v]; !own {
+					forward = append(forward, v)
+				}
+			}
+			if len(forward) > 0 {
+				add("env_vars", tomlStringArray(forward))
 			}
 		} else if s.URL != "" {
 			add("url", tomlString(s.URL))
