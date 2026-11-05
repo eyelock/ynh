@@ -41,7 +41,7 @@ ynh claims more than each vendor yet gets. In v0.16.0:
 - **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
 - **Resume**: `ynh run --resume` with a prompt works on Cursor and Copilot, one-shot and `--interactive`, by `--continue` or `--resume=<id>` (live through `ynh run`, 2026-11-05). On Codex a resume with a prompt passes workspace folders as `writable_roots`, which takes effect only under the `workspace-write` sandbox (ynh warns on stderr otherwise; ynh does not change Codex's sandbox, and `codex exec` defaults to read-only).
 - **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
-- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are not read.
+- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are composed in: the Git root down to the directory you ran from, cut off at Codex's 32 KiB `project_doc_max_bytes` (observed live on codex-cli 0.166.0).
 
 These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
 

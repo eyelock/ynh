@@ -41,7 +41,7 @@ What each vendor receives from a harness in v0.16.0, from the vendor parity audi
 | Feature | Claude Code | Codex | Cursor | Copilot CLI | OpenCode |
 |---|---|---|---|---|---|
 | Instructions | Y | Y | Y | Y | Y |
-| Project instructions under `ynh run` | U | N | U | U | U |
+| Project instructions under `ynh run` | U | Y | U | U | U |
 | Skills | Y | Y | Y | Y | Y |
 | Agents | Y | Y | Y | Y | Y |
 | Rules | Y | Y | Y | Y | Y |
