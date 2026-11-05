@@ -117,6 +117,10 @@ type StartOptions struct {
 	// (its own and its included harnesses'), leaving out the operator's.
 	// Only the claude backend honours it.
 	IsolatedMCP bool
+	// MCPManualApproval leaves approval of the harness's MCP tools to the
+	// vendor (mcp_manual_approval). Without it the codex backend approves them,
+	// as a one-shot `ynh run` does. Only the codex backend reads it.
+	MCPManualApproval bool
 	// Env holds additional environment variables to pass to the subprocess.
 	Env []string
 	// TelemetryEndpoint is the run's telemetry relay, or "" when there is
