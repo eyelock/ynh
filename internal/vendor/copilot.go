@@ -472,6 +472,14 @@ func (c *Copilot) ExportArtifactDirs() map[string]string {
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }
 
+// ExportCarriesInstructions: a Copilot plugin cannot carry instructions. A
+// plugin's AGENTS.md is installed with it but never reaches the session
+// (OBSERVED live on Copilot CLI 1.0.105, 2026-11-05: `copilot -p --plugin-dir`
+// on a `ynd export -v copilot` package, whose AGENTS.md held a codeword,
+// returned "unknown" while the skill's codeword came back). Under `ynh run`
+// ynh projects them into the project's .github/instructions instead.
+func (c *Copilot) ExportCarriesInstructions() bool { return false }
+
 // PluginManifestDir is the same as Claude: Copilot reads that manifest schema.
 func (c *Copilot) PluginManifestDir() string { return ".claude-plugin" }
 

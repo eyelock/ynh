@@ -525,18 +525,18 @@ for the full scaffolding checklist once these are resolved):
 | ynh runtime:      | --append-system-prompt           | Written as AGENTS.md in          | Written as .cursorrules in       |
 |                   | (injected, no file conflict)     |   staging dir                    |   staging dir                    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh export:       | AGENTS.md + CLAUDE.md            | AGENTS.md                        | .cursorrules + AGENTS.md         |
-|                   |  (CLAUDE.md contains @AGENTS.md  |                                  |                                  |
-|                   |   import — see workaround below) |                                  |                                  |
+| ynh export:       | none (a plugin cannot carry      | none (a plugin cannot carry      | .cursorrules + AGENTS.md         |
+|                   |  instructions; export warns)     |  instructions; export warns)     |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
-**Claude AGENTS.md workaround:** Claude Code does not read `AGENTS.md` natively
-(see https://code.claude.com/docs/en/memory). ynh exports a `CLAUDE.md` containing
-just `@AGENTS.md` which uses Claude's `@`-import syntax to pull in the cross-vendor
-instructions file. This avoids duplicating content while ensuring Claude reads the
-instructions. The plugin's `CLAUDE.md` lives inside the plugin directory, so it does
-not conflict with the project's own `CLAUDE.md`.
+**Claude and Copilot exports carry no instructions:** a plugin's `AGENTS.md`, and a
+`CLAUDE.md` importing it with `@AGENTS.md`, never reach the session (OBSERVED live,
+2026-11-05: Claude Code 2.1.318 and Copilot CLI 1.0.105, `--plugin-dir`; ynh #722).
+Earlier ynh exported the `@AGENTS.md` bridge; it is gone. `ynd export` for Claude,
+Copilot and Codex writes no instructions and warns. Under `ynh run` they reach every
+vendor. A plugin can reach Claude Code's main thread only through a root
+`settings.json` `{"agent": "<plugin>:<agent>"}`, which ynh does not generate.
 
 ### Launch Strategy
 
@@ -565,8 +565,9 @@ not conflict with the project's own `CLAUDE.md`.
 +------+------------------------------------------+------------+
 | Prio | Gap                                      | Vendor     |
 +------+------------------------------------------+------------+
-| ---  | Claude AGENTS.md: RESOLVED               | Claude     |
-|      |   (CLAUDE.md with @AGENTS.md import)     |            |
+| ---  | Claude AGENTS.md: CANNOT (X)             | Claude     |
+|      |   (plugin cannot carry instructions;     |            |
+|      |    the @AGENTS.md bridge was removed)    |            |
 | ---  | Codex plugin manifest: RESOLVED          | Codex      |
 | ---  | Codex skills export path: RESOLVED       | Codex      |
 | ---  | Codex MCP format: RESOLVED               | Codex      |

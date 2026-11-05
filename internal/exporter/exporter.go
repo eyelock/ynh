@@ -494,7 +494,7 @@ func workspaceWarnings(p *harness.Harness) []string {
 // noInstructionsWarning is the note for a vendor whose plugin cannot carry
 // the harness's instructions, whatever the export mode.
 func noInstructionsWarning(vendorName string) string {
-	return vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)"
+	return vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)"
 }
 
 // skippedArtifactWarnings notes the artifact types the harness carries that
