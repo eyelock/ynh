@@ -52,6 +52,18 @@ func (c *Cursor) ConfigDir() string {
 
 func (c *Cursor) InstructionsFile() string { return ".cursorrules" }
 
+// ExportCarriesInstructions: a Cursor plugin cannot carry instructions.
+// Cursor's plugin docs (cursor.com/docs/plugins, /docs/reference/plugins) list
+// six components - rules, commands, agents, skills, hooks, MCP servers - and no
+// instructions file; AGENTS.md is read from a project's root and
+// subdirectories (cursor.com/docs/context/rules), and .cursorrules is not
+// mentioned. OBSERVED live on cursor-agent 2026.11.05, 2026-11-05: `-p
+// --plugin-dir` on a `ynd export -v cursor` package whose .cursorrules and
+// AGENTS.md held a codeword returned "unknown" in 3 runs while the skill's,
+// agent's and hook's codewords came back. Under `ynh run` ynh writes the
+// instructions into the run directory instead.
+func (c *Cursor) ExportCarriesInstructions() bool { return false }
+
 func (c *Cursor) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Cursor) GenerateSystemPrompt(content []byte) map[string][]byte {

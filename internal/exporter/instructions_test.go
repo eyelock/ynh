@@ -93,21 +93,21 @@ func TestWriteMergedSystemPrompt_UnionsVendorFiles(t *testing.T) {
 	src := []byte("shared\n")
 	out := t.TempDir()
 
-	if err := WriteMergedSystemPrompt(src, out, []string{"claude", "codex", "cursor"}); err != nil {
+	if err := WriteMergedSystemPrompt(src, out, []string{"claude", "codex", "cursor", "opencode"}); err != nil {
 		t.Fatalf("WriteMergedSystemPrompt: %v", err)
 	}
 	got := lsRel(t, out)
 
 	// AGENTS.md is common to all three and must appear once.
-	// .cursorrules is Cursor's alone. Claude Code and Codex plugins cannot
-	// carry instructions, so they contribute nothing: no CLAUDE.md.
-	for _, want := range []string{"AGENTS.md", ".cursorrules"} {
-		if !containsStr(got, want) {
-			t.Errorf("merged output is missing %s: %v", want, got)
-		}
+	// Only OpenCode carries them. Claude Code, Codex and Cursor plugins cannot,
+	// so they contribute nothing: no CLAUDE.md, no .cursorrules.
+	if !containsStr(got, "AGENTS.md") {
+		t.Errorf("merged output is missing AGENTS.md: %v", got)
 	}
-	if containsStr(got, "CLAUDE.md") {
-		t.Errorf("a Claude plugin cannot carry instructions, yet CLAUDE.md was written: %v", got)
+	for _, not := range []string{"CLAUDE.md", ".cursorrules"} {
+		if containsStr(got, not) {
+			t.Errorf("a %s plugin cannot carry instructions, yet %s was written: %v", not, not, got)
+		}
 	}
 	n := 0
 	for _, g := range got {
@@ -127,7 +127,7 @@ func TestWriteMergedSystemPrompt_SkipsUnknownVendor(t *testing.T) {
 	src := []byte("x\n")
 	out := t.TempDir()
 
-	if err := WriteMergedSystemPrompt(src, out, []string{"cursor", "nosuchvendor"}); err != nil {
+	if err := WriteMergedSystemPrompt(src, out, []string{"opencode", "nosuchvendor"}); err != nil {
 		t.Fatalf("an unknown vendor must not fail the export: %v", err)
 	}
 	if got := lsRel(t, out); len(got) == 0 {

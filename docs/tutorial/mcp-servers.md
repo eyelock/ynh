@@ -137,18 +137,12 @@ Exported for codex → /tmp/ynh-tutorial/mcp-export/codex (0 skills, 0 agents)
 Exported for cursor → /tmp/ynh-tutorial/mcp-export/cursor (0 skills, 0 agents)
 Exported for copilot → /tmp/ynh-tutorial/mcp-export/copilot (0 skills, 0 agents)
 ./claude/.claude-plugin/plugin.json
-./claude/AGENTS.md
-./claude/CLAUDE.md
 ./claude/mcp/claude.json
 ./codex/.codex-plugin/plugin.json
 ./codex/.mcp.json
-./codex/AGENTS.md
 ./copilot/.claude-plugin/plugin.json
 ./copilot/.github/mcp.json
-./copilot/AGENTS.md
 ./cursor/.cursor-plugin/plugin.json
-./cursor/.cursorrules
-./cursor/AGENTS.md
 ./cursor/mcp.json
 ```
 
@@ -184,12 +178,10 @@ Exported for merged → /tmp/ynh-tutorial/mcp-merged (0 skills, 0 agents)
 ./.claude-plugin/plugin.json
 ./.codex-plugin/plugin.json
 ./.cursor-plugin/plugin.json
-./.cursorrules
 ./.github/mcp.json
 ./.mcp.json
 ./.opencode/opencode.json
 ./AGENTS.md
-./CLAUDE.md
 ./mcp.json
 ./mcp/claude.json
 ```

@@ -128,8 +128,6 @@ plugins/formatter/skills/auto-format/SKILL.md
 plugins/reviewer/.claude-plugin/plugin.json
 plugins/reviewer/.codex-plugin/plugin.json
 plugins/reviewer/.cursor-plugin/plugin.json
-plugins/reviewer/.cursorrules
-plugins/reviewer/AGENTS.md
 plugins/reviewer/skills/dev-quality/SKILL.md
 plugins/reviewer/skills/dev-review/SKILL.md
 README.md

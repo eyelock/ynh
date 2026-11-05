@@ -296,7 +296,7 @@ Cursor and Claude Code share nearly identical plugin and marketplace formats:
 | Marketplace index | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` |
 | Schema | Same | Same |
 
-This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points at `skills/`, the hooks file and `.mcp.json`, so the shared agents, rules and commands do not reach Codex, nor does the shared `AGENTS.md`.
+This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points at `skills/`, the hooks file and `.mcp.json`, so the shared agents, rules and commands do not reach Codex, nor does the shared `AGENTS.md`, which no vendor but OpenCode carries.
 
 ### Official Resources
 
@@ -437,8 +437,6 @@ dist/
 │   └── reviewer/
 │       ├── .claude-plugin/plugin.json
 │       ├── .cursor-plugin/plugin.json
-│       ├── .cursorrules
-│       ├── AGENTS.md
 │       └── skills/...
 ├── .claude-plugin/marketplace.json    # Claude Code index
 ├── .cursor-plugin/marketplace.json    # Cursor index
@@ -467,7 +465,7 @@ dist/
 │       ├── mcp.json                     # portable, when the harness declares servers
 │       ├── com.github.copilot/{agents,commands}/   # Copilot's namespace; commands/ not loaded live
 │       ├── .claude-plugin/plugin.json   # Claude Code compatibility
-│       ├── agents/  CLAUDE.md  AGENTS.md
+│       ├── agents/  AGENTS.md
 │       └── ...
 ├── .agents/plugins/marketplace.json     # Codex index
 ├── .claude-plugin/marketplace.json      # Claude Code index
