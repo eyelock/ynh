@@ -104,6 +104,8 @@ Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`y
 | `before_prompt` | `beforeSubmitPrompt` | **does not fire** |
 | `on_stop` | `stop` | **does not fire** |
 
+This is Cursor's behaviour, not ynh's. Re-run on 2026-11-05 with cursor-agent 2026.10.22-27dcf5f **directly, without ynh**: a hand-written `.cursor/hooks.json` in an empty directory holding all six events, each appending its name to a log, and `cursor-agent -p --trust "Reply with the single word ok. Do not use any tools."`. The log held `sessionStart` and `sessionEnd` only; `beforeSubmitPrompt` and `stop` never ran. Cursor's [hooks page](https://cursor.com/docs/hooks) says only that `workspaceOpen` "runs in the Cursor desktop app and CLI" and does not list which hooks the CLI runs, and its [CLI parameters page](https://cursor.com/docs/cli/reference/parameters) does not mention hooks, so there is no documented statement either way. A direct tool-calling run (for `preToolUse` and `postToolUse`) was not repeated outside ynh.
+
 Also CONFIRMED there: a `Shell` matcher fires only for shell calls, a `Bash` matcher never fires, and a hook script runs with the run directory as its working directory, so a bare `./scripts/x.sh` works. Interactive CLI and IDE behaviour is untested.
 
 So when ynh launches Cursor non-interactively (`ynh run` with a prompt and no `--interactive`, and the Cursor worker of `ynh agent run`, which uses `--print`) and the assembled hooks include `before_prompt` or `on_stop`, it prints a warning naming each event:
