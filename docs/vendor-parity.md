@@ -93,7 +93,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** whether Cursor reads the project's own instructions file under `ynh run` is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** checked: Cursor's docs say `AGENTS.md` is read from a project's root and subdirectories ([Rules](https://cursor.com/docs/context/rules)). Under `ynh run`, Cursor starts in the harness's run directory, not the project ([Vendor Notes](vendors.md#vendor-notes)), so the docs do not settle whether the project's own file is read. The live runs on 2026-11-05 showed Claude Code, Codex, Copilot CLI and OpenCode reading the project's file under `ynh run`. Deferred: a live `ynh run -v cursor` that shows whether Cursor reads it. No Cursor run under `ynh run` completed in this verification.
-- **Tracking:** the live check is deferred to a later release; no issue or milestone names it yet. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none recorded.
 - **Detail:** [Project Instructions](artifacts.md#project-instructions).
 
@@ -183,7 +183,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** Cursor receives `--add-dir` for each granted folder, but whether the grant changes what Cursor can reach is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** verified: Cursor's own help documents the flag (`agent --help`, 2026.10.22: "Add an additional workspace root directory", repeatable), and ynh passes it ([Per vendor](workspace.md#per-vendor)). On cursor-agent 2026.10.22-27dcf5f, in print mode with `--sandbox enabled`, Cursor wrote outside the project with or without the flag, so no folder was found that it cannot reach without it ([ynh #698](https://github.com/eyelock/ynh/pull/698)). Deferred: a live `ynh run -v cursor` that shows what the grant changes. No Cursor run under `ynh run` completed in the live runs on 2026-11-05.
-- **Tracking:** the live check is deferred to a later release; no issue or milestone names it yet. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none needed to launch; the folder is passed either way.
 - **Detail:** [Per vendor](workspace.md#per-vendor).
 
@@ -405,7 +405,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** under `ynh run -v cursor`, ynh writes the harness into the run directory in Cursor's project layout, but whether its instructions, skills, agents, rules, commands, MCP servers, profiles, includes, sensors and delegates then reach the model on Cursor is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** checked: the files ynh writes, by running `ynh run` and `ynd preview` ([Project Instructions](artifacts.md#project-instructions)): instructions in `.cursorrules`, rules as `.mdc` files ([Rules](artifacts.md#rules)), MCP servers in `.cursor/mcp.json` ([MCP Servers](mcp.md#config-file-locations)), and the other artifacts linked under `.cursor/` ([Symlink Installation](vendors.md#symlink-installation-codex-cursor)). Cursor's docs name `.cursor/mcp.json` as the project file it reads MCP servers from ([MCP](https://cursor.com/docs/context/mcp)) and `.mdc` as its rule format ([Rules](https://cursor.com/docs/context/rules)); that Rules page does not mention `.cursorrules` ([ynh #742](https://github.com/eyelock/ynh/pull/742)). Shown live through `ynh run -v cursor`: hooks, session context, resume and focuses (the runs are named under **Checked on** above). Deferred: a live `ynh run -v cursor` for each of the rest. The record shows none, and the live runs on 2026-11-05 made no Cursor run under `ynh run`.
-- **Tracking:** the live check is deferred to a later release; no issue or milestone names it yet. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none verified.
 - **Detail:** [Symlink Installation](vendors.md#symlink-installation-codex-cursor).
 
@@ -414,6 +414,6 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh agent run --backend cursor` runs the worker with Cursor's CLI, `agent`. Whether it runs turns, and whether hooks, session context, `--auto-approve all` and ynh's own telemetry work on it, is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** checked, by code and tests rather than a live run: the worker takes its binary, `agent`, from the Cursor adapter ([ynh #536](https://github.com/eyelock/ynh/pull/536)); it reads the model from the init event of Cursor's documented stream-json ([ynh #444](https://github.com/eyelock/ynh/pull/444)); and the `--auto-approve` mapping was checked against Cursor's CLI parameters page ([ynh #426](https://github.com/eyelock/ynh/pull/426)). Deferred: a live `ynh agent run --backend cursor`. The record shows none.
-- **Tracking:** the live check is deferred to a later release; no issue or milestone names it yet. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
 - **Workaround:** none verified.
 - **Detail:** [The Agent Loop](agent.md).
