@@ -48,7 +48,7 @@ var ErrNoResumableSession = errors.New("no resumable session found")
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
 
 // MCPToolApprover is an optional capability for vendors that refuse an MCP
-// tool call on a one-shot run until the tool is approved (Codex: "MCP tool
+// tool call on a one-shot run or an agent worker turn until the tool is approved (Codex: "MCP tool
 // call requires approval, but approval policy is never"). ApproveMCPTools
 // returns the vendor arguments that approve the tools of the MCP servers the
 // run directory declares, leaving alone anything callerArgs or the user's own

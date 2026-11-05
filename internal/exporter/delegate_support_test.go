@@ -84,6 +84,27 @@ func TestExport_WarnsWhenVendorCannotCarryDelegates(t *testing.T) {
 	}
 }
 
+// OpenCode has no export restriction (ExportArtifactDirs is nil) yet cannot
+// carry delegates, so its export must warn too, as Codex's does.
+func TestExport_WarnsWhenOpenCodeCannotCarryDelegates(t *testing.T) {
+	results, err := Export(ExportOptions{
+		SourceDir: harnessWithDelegates(t),
+		OutputDir: t.TempDir(),
+		Vendors:   []string{"opencode"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export must succeed and warn, not fail: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected one result, got %d", len(results))
+	}
+	joined := strings.Join(results[0].Warnings, "\n")
+	if !strings.Contains(joined, "opencode: skipping 1 delegates") {
+		t.Errorf("expected an opencode delegates warning, got: %q", joined)
+	}
+}
+
 // The counterpart: a vendor that does support delegates must not warn about
 // them. Otherwise the warning is noise and gets ignored.
 func TestExport_NoDelegateWarningForSupportingVendor(t *testing.T) {

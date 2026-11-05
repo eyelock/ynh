@@ -9,7 +9,7 @@ import (
 
 const codexApprovalKey = "default_tools_approval_mode"
 
-// ApproveMCPTools approves, for one one-shot Codex run, the tools of every MCP
+// ApproveMCPTools approves, for one one-shot Codex run or one agent worker turn, the tools of every MCP
 // server in runDir's .mcp.json (the harness's own declaration, which
 // CodexMCP loads): codex exec has no one to ask, and its approval policy is
 // "never", so an unapproved MCP call fails with "MCP tool call requires

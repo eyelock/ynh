@@ -734,10 +734,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		Model:       opts.Model,
 		Effort:      opts.Effort,
 		IsolatedMCP: isolatedMCP,
-		ResumeToken: resumeToken,
-		UsageBase:   usageBase,
-		Env:         workerEnv,
-		Stderr:      opts.Stderr,
+		// The profile's mcp_manual_approval is already resolved into harnessObj.
+		MCPManualApproval: harnessObj != nil && harnessObj.MCPManualApproval,
+		ResumeToken:       resumeToken,
+		UsageBase:         usageBase,
+		Env:               workerEnv,
+		Stderr:            opts.Stderr,
 
 		TelemetryEndpoint: relayEndpoint,
 	})
