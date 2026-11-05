@@ -46,7 +46,7 @@ What each vendor receives from a harness in v0.16.0, from the vendor parity audi
 | Rules | Y | Y | Y | Y | Y |
 | Commands | Y | N | Y | Y | U |
 | MCP servers | Y | Y | Y | Y | Y |
-| Hooks | Y | Y, accepted harnesses only | X | Y | N |
+| Hooks | Y | Y, accepted harnesses only | X, `before_prompt` and `on_stop` in print mode; the rest Y | Y | N |
 | Session context | Y | Y, accepted harnesses only | Y | Y | N |
 | Profiles | Y | Y | Y | Y | Y |
 | Focuses, includes, sensors | Y | Y | Y | Y | Y |

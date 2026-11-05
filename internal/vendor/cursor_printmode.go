@@ -15,8 +15,9 @@ import (
 // events in .cursor/hooks.json, sessionStart, sessionEnd, preToolUse and
 // postToolUse fired and beforeSubmitPrompt and stop did not. Cursor's docs do
 // not say which hooks the CLI runs. Re-confirmed 2026-11-05 on cursor-agent
-// 2026.10.22 run directly, without ynh, from a hand-written hooks.json: only
-// sessionStart and sessionEnd fired, so this is Cursor's limit, not ynh's; interactive CLI and IDE behaviour is
+// 2026.10.22 run directly, without ynh, from a hand-written hooks.json, with a prompt
+// that called no tool: only sessionStart and sessionEnd fired (preToolUse and
+// postToolUse were not exercised outside ynh), so this is Cursor's limit, not ynh's; interactive CLI and IDE behaviour is
 // UNVERIFIED. configPath is the assembled directory holding .cursor/hooks.json.
 func CursorPrintModeWarnings(configPath string) []string {
 	data, err := os.ReadFile(filepath.Join(configPath, ".cursor", "hooks.json"))
