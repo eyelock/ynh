@@ -208,7 +208,7 @@ These come from Ollama's own docs, not ynh:
 | **Instructions** | *none* (a Claude Code plugin cannot carry them) | `.cursorrules` + `AGENTS.md` | *none* (a Codex plugin cannot carry them) | *none* (a Copilot plugin cannot carry them) | `AGENTS.md` |
 | **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | `hooks.json` (Copilot-only; a merged package with Claude uses `hooks/claude.json`) | `.opencode/plugins/ynh-hooks.ts` |
 | **MCP servers** | `mcp/claude.json` | `mcp.json` | `.mcp.json` | `.github/mcp.json` | `.opencode/opencode.json` |
-| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort, unverified) | *not supported* |
+| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (installed live; see [L28](vendor-parity.md#l28-copilot-marketplace-index)) | *not supported* |
 
 Key differences between runtime and export:
 

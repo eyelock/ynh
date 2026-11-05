@@ -31,7 +31,7 @@ ynh defines six canonical hook events. Each vendor translates these to its nativ
 
 What an `on_session_start` hook prints reaches the model on every vendor (on OpenCode, when ynh launches it: an `ynd export -v opencode` package carries `ynh-session-start.json`, but nothing runs it). **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot, Cursor and OpenCode.
 
-The vendors do not agree on how the output is read. Verified on 2026-10-30 with a hook printing a unique token and a one-shot prompt asking the model to repeat any token in its context:
+The vendors do not agree on how the output is read. Verified live with a token test ([ynh #627](https://github.com/eyelock/ynh/pull/627), 2026-10-30; Codex [ynh #701](https://github.com/eyelock/ynh/pull/701), OpenCode [ynh #706](https://github.com/eyelock/ynh/pull/706)):
 
 | Vendor | Plain stdout reaches the model? | The field that does | ynh |
 |--------|---------------------------------|---------------------|-----|
@@ -95,7 +95,7 @@ Per vendor:
 
 ## Hooks Cursor's CLI does not run
 
-Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`ynh run -v cursor --trust -- "<prompt>"`, cursor-agent 2026.10.01-e373342, 2026-10-30) with all six events in `.cursor/hooks.json`:
+Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`ynh run -v cursor --trust -- "<prompt>"`, cursor-agent 2026.10.01-e373342, 2026-10-30, [ynh #621](https://github.com/eyelock/ynh/pull/621)) with all six events in `.cursor/hooks.json`:
 
 | Canonical event | Cursor event | Print mode |
 |-----------------|--------------|------------|
@@ -106,7 +106,7 @@ Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`y
 | `before_prompt` | `beforeSubmitPrompt` | **does not fire** |
 | `on_stop` | `stop` | **does not fire** |
 
-This is Cursor's behaviour, not ynh's. Re-run on 2026-11-05 with cursor-agent 2026.10.22-27dcf5f **directly, without ynh**: a hand-written `.cursor/hooks.json` in an empty directory holding all six events, each appending its name to a log, and `cursor-agent -p --trust "Reply with the single word ok. Do not use any tools."`. The log held `sessionStart` and `sessionEnd` only; `beforeSubmitPrompt` and `stop` never ran. Cursor's [hooks page](https://cursor.com/docs/hooks) says only that `workspaceOpen` "runs in the Cursor desktop app and CLI" and does not list which hooks the CLI runs, and its [CLI parameters page](https://cursor.com/docs/cli/reference/parameters) does not mention hooks, so there is no documented statement either way. A direct tool-calling run (for `preToolUse` and `postToolUse`) was not repeated outside ynh.
+This is Cursor's behaviour, not ynh's: `cursor-agent -p` run directly, without ynh, skips `beforeSubmitPrompt` and `stop` too (cursor-agent 2026.10.22-27dcf5f, 2026-11-05), and Cursor's [hooks page](https://cursor.com/docs/hooks) and [CLI parameters page](https://cursor.com/docs/cli/reference/parameters) do not say which hooks the CLI runs ([ynh #710](https://github.com/eyelock/ynh/pull/710)).
 
 Also CONFIRMED there: a `Shell` matcher fires only for shell calls, a `Bash` matcher never fires, and a hook script runs with the run directory as its working directory, so a bare `./scripts/x.sh` works. Interactive CLI and IDE behaviour is untested.
 
@@ -323,7 +323,7 @@ The variable is quoted so an install path with spaces stays one word, as Claude 
 
 The hook is still written, anchored to the plugin root, so it will not find the script. To run a script that belongs to the project rather than to the plugin, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) and it is left alone. `ynd marketplace build` copies scripts the same way and prints the same warnings on stderr, each prefixed with the entry's name (`warning: reviewer: hook script ...`).
 
-Copilot's documentation does not say whether a plugin-root variable reaches a hook command, but a live run showed that it does: `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, and `"${PLUGIN_ROOT}"/...` expands (Copilot CLI 1.0.105, 2026-10-30, answering #497). ynd anchors Copilot's `./` scripts to `${PLUGIN_ROOT}`.
+Copilot's documentation does not say whether a plugin-root variable reaches a hook command, but it does: `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, and `"${PLUGIN_ROOT}"/...` expands (live, Copilot CLI 1.0.105, [ynh #621](https://github.com/eyelock/ynh/pull/621)). ynd anchors Copilot's `./` scripts to `${PLUGIN_ROOT}`.
 
 **In a session, a `./` script is part of the run directory.** `ynh run`, `ynd preview` and the agent loop copy each `./` script a hook runs into the run directory, by the same rules as an export (first word only, a regular file inside the harness, mode kept), and warn about any they cannot carry:
 
@@ -461,7 +461,7 @@ Copilot uses a flat structure with `"version": 1`, like Cursor, and PascalCase e
 
 **Where Copilot reads hooks.** Copilot combines hooks from several places: policy files, `.github/hooks/*.json` in the repository, a `hooks` field in `.github/copilot/settings.json` (and `.claude/settings.json`), `~/.copilot/hooks/*.json`, and the `hooks.json` or `hooks/hooks.json` of an installed plugin. ynd generates the **plugin** route only: `.copilot/hooks/hooks.json` for a session (the `--plugin-dir` directory) and `hooks.json` at the root of an export. It does not write into your repository's `.github/hooks/`, because that is the route the docs gate behind trust (below), and a hook written there would run for everyone who clones the repository. Copilot's Agent Plugins export (`ynd export --format agent-plugin`) carries the same file at `com.github.copilot/hooks/hooks.json`, the path the specification and Copilot's reference give.
 
-**Verified live (Copilot CLI 1.0.105, 2026-10-30).** Run with `ynh run -v copilot` in a scratch folder:
+**Verified live (Copilot CLI 1.0.105, 2026-10-30, [ynh #621](https://github.com/eyelock/ynh/pull/621)).** Run with `ynh run -v copilot` in a scratch folder:
 
 - All six events fire from `.copilot/hooks/hooks.json` loaded by `--plugin-dir`, **in an untrusted folder**. Plugin hooks do not need folder trust.
 - `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, so `"${PLUGIN_ROOT}"/...` expands (#497).

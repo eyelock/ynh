@@ -336,11 +336,11 @@ ynh includes Codex in marketplace generation. `ynd marketplace build` writes a C
 
 ## GitHub Copilot CLI
 
-Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Its marketplace/index format, however, was only researched from documentation, not hand-verified against a real published marketplace — treat `ynd marketplace build`'s Copilot output as a best-effort starting point, not a confirmed-working artifact.
+Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Copilot CLI 1.0.105 installed a marketplace from `ynd marketplace build` and loaded its plugin live on 2026-11-05. A one-shot run refused the plugin's MCP tool call, and an interactive approval has not been shown ([L28](vendor-parity.md#l28-copilot-marketplace-index)).
 
 ### Current State
 
-- Skills and agents export like Claude Code's; rules and commands are excluded (Copilot has no loading mechanism for them)
+- Skills and agents export like Claude Code's. Rules are excluded, because they ride in the instructions, which a Copilot plugin cannot carry. Commands are excluded too, but that is ynd's own choice: Copilot loads a plugin's `commands/*.md` as skills (see [L24](vendor-parity.md#l24-commands-in-a-copilot-package))
 - Marketplace index is written to `.github/plugin/marketplace.json`
 - **Hooks** are written to `hooks.json` at the plugin root, in Copilot's own format, and fire on Copilot CLI 1.0.105 (in a package that also targets Claude, Copilot loads Claude's `hooks/claude.json` instead); see [Hooks: Copilot](hooks.md#copilot-format-and-trust)
 

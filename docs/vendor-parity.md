@@ -81,7 +81,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 | MCP servers | Y | P [L25](#l25-codex-package-hooks-and-mcp-tools-need-approval) | Y | Y | – |
 | Delegates | P [L12](#l12-delegates-carry-only-part-of-a-harness) | X [L22](#l22-a-codex-plugin-carries-only-skills-hooks-and-mcp-servers) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | – |
 | Merged export (`--merged`) | Y | Y | Y | Y | X [L27](#l27-opencode-reads-no-packages) |
-| Marketplace index (`ynd marketplace build`) | Y | Y | U [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
+| Marketplace index (`ynd marketplace build`) | Y | Y | P [L28](#l28-copilot-marketplace-index) | Y | X [L27](#l27-opencode-reads-no-packages) |
 | Agent Plugins package (`--format agent-plugin`) | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | Y | Y | P [L29](#l29-agent-plugins-on-claude-code-and-cursor) | X [L27](#l27-opencode-reads-no-packages) |
 
 ## Limits
@@ -331,11 +331,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L28: Copilot marketplace index
 
-- **What:** `ynd marketplace build` writes `.github/plugin/marketplace.json` for Copilot as best effort. Copilot CLI installing from it is unverified.
-- **Owner:** unknown until verified.
-- **Evidence:** [Marketplace & Distribution](marketplace.md).
+- **What:** Copilot CLI installs a marketplace from `ynd marketplace build` (`.github/plugin/marketplace.json`) and loads its plugin. The skills (an included one too), the agent, all six hooks and the command (as a skill, from the merged tree's `commands/`) arrive. The MCP server loads and offers its tool, but a one-shot run refuses the call because there is no one to approve it. Approving it in an interactive session has not been shown.
+- **Owner:** the vendor: a one-shot Copilot run does not approve an installed plugin's MCP tool.
+- **Evidence:** live on Copilot CLI 1.0.105, 2026-11-05: the MCP server's tool was offered and refused ("no one to approve"), so its codeword did not come back.
 - **Tracking:** none.
-- **Workaround:** none recorded.
+- **Workaround:** none verified.
 - **Detail:** [Marketplace & Distribution](marketplace.md).
 
 ### L29: Agent Plugins on Claude Code and Cursor
