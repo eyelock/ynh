@@ -495,10 +495,12 @@ references resolved from the environment at assembly time:
 }
 ```
 
-`env_passthrough` is the allowlist, and it governs two things deliberately:
-which variables a `${VAR}` reference may resolve, and which variables reach an
-agent worker's process under [`ynh agent run`](agent.md). One declaration, one
-place to review.
+`env_passthrough` is the allowlist, and it governs three things deliberately:
+which variables a `${VAR}` reference may resolve, which variables reach an
+agent worker's process under [`ynh agent run`](agent.md), and, on Codex, which
+variables reach a stdio MCP server under `ynh run` and `ynh agent run`
+(see [Environment of a stdio server](#codex-format)). One declaration, one place to
+review.
 
 The same list is all a worker is given, so a server (or any tool) configured
 through its own variable, such as `YNM_HOME`, silently falls back to its default

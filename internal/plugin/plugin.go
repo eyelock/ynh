@@ -44,8 +44,11 @@ type HarnessJSON struct {
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`
 	// EnvPassthrough names the environment variables a harness may see:
-	// which ${VAR} references its MCP declarations may resolve, and which
-	// variables reach an agent worker's process. Empty means none — a worker
+	// which ${VAR} references its MCP declarations may resolve, which
+	// variables reach an agent worker's process, and, on Codex, which reach a
+	// stdio MCP server (vendor.CodexMCP, via the run directory's
+	// vendor.CodexEnvPassthroughFile; `ynh image` would have to write that
+	// file too if it ever bakes MCP config). Empty means none — a worker
 	// inheriting the operator's whole environment holds every credential the
 	// operator holds, which is not a default anyone chose.
 	EnvPassthrough []string `json:"env_passthrough,omitempty"`
