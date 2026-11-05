@@ -189,20 +189,34 @@ func readCopilotWorkspace(path string) (id string, cwd string, err error) {
 // worktree. Prefer an explicit id. A bare --resume is never emitted — Copilot's
 // own help describes it as "using session picker".
 //
-// A prompt is refused: Copilot documents -i and --resume separately and no
-// page confirms the pair together
-// (docs.github.com/en/copilot/reference/cli-command-reference).
+// A prompt is delivered to the resumed session: one-shot as `-p <prompt>`
+// with --allow-all-tools, as a fresh one-shot run is, and interactive as
+// `-i <prompt>`, which opens the session with it as the first message. The
+// one-shot form was observed to answer from the earlier session (Copilot CLI
+// 1.0.105, 2026-11-05): `copilot --resume=<id> -p "<prompt>"`.
 func (c *Copilot) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
-	if prompt != "" {
-		return ErrResumePromptNotSupported
-	}
-	var resumeArgs []string
+	initial, args := copilotResumeArgs(sessionID, prompt, interactive, extraArgs)
+	return launchCopilot(configPath, initial, args)
+}
+
+// copilotResumeArgs is a resume's launch inputs: the interactive prompt, which
+// launchCopilot places as -i, and the arguments after it.
+func copilotResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
+	var args []string
 	if sessionID != "" {
-		resumeArgs = []string{"--resume=" + sessionID}
+		args = []string{"--resume=" + sessionID}
 	} else {
-		resumeArgs = []string{"--continue"}
+		args = []string{"--continue"}
 	}
-	return launchCopilot(configPath, "", append(resumeArgs, extraArgs...))
+	initial := ""
+	if prompt != "" {
+		if interactive {
+			initial = prompt
+		} else {
+			args = append(args, "-p", prompt, "--allow-all-tools")
+		}
+	}
+	return initial, append(args, extraArgs...)
 }
 
 // IsolateMCP is partial on Copilot: --disable-builtin-mcps drops the built-in

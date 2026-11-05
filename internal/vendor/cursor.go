@@ -111,20 +111,38 @@ func (c *Cursor) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 // --continue ("Continue previous session"). A bare --resume is never emitted:
 // Cursor documents it as "Select a session to resume", i.e. a picker.
 //
-// A prompt is refused: Cursor's CLI reference lists --resume, --continue and
-// the positional prompt separately and documents no combination of them
-// (cursor.com/docs/cli/reference/parameters).
+// A prompt is delivered to the resumed session: one-shot as `-p <prompt>`, as
+// a fresh one-shot run is, and interactive as the positional prompt, which
+// opens the session with it as the first message. Both were observed to answer
+// from the earlier session (cursor-agent 2026.10.22, 2026-11-05):
+// `cursor-agent -p --resume <id> "<prompt>"`.
 func (c *Cursor) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
-	if prompt != "" {
-		return ErrResumePromptNotSupported
+	if prompt != "" && !interactive {
+		for _, w := range CursorPrintModeWarnings(configPath) {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+		}
 	}
-	var resumeArgs []string
+	return launchCursor(configPath, cursorResumeArgs(sessionID, prompt, interactive, extraArgs))
+}
+
+// cursorResumeArgs is a resume's arguments: the session selector, then the
+// prompt (after -p for a one-shot run), then the caller's.
+func cursorResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) []string {
+	var args []string
 	if sessionID != "" {
-		resumeArgs = []string{"--resume", sessionID}
+		args = []string{"--resume", sessionID}
 	} else {
-		resumeArgs = []string{"--continue"}
+		args = []string{"--continue"}
 	}
-	return launchCursor(configPath, append(resumeArgs, extraArgs...))
+	switch {
+	case prompt == "":
+	case interactive:
+		args = append(args, extraArgs...)
+		return append(args, prompt)
+	default:
+		args = append(args, "-p", prompt)
+	}
+	return append(args, extraArgs...)
 }
 
 // IsolateMCP cannot isolate on Cursor: ynh knows no way to keep the user's

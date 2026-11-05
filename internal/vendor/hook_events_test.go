@@ -255,14 +255,13 @@ func TestHookWarnings(t *testing.T) {
 		}
 	})
 
-	// OpenCode has no session-end event, and its session-start hook cannot
-	// reach the model: both say so, and nothing else does.
+	// OpenCode has no session-end event: it says so, and nothing else does
+	// (session-start output reaches the model through AGENTS.md).
 	t.Run("opencode names what it cannot carry", func(t *testing.T) {
 		w := HookWarnings("opencode", allCanonicalHooks())
-		if len(w) != 2 ||
-			!strings.Contains(w[0], "on_session_start output does not reach the model on opencode") ||
-			!strings.Contains(w[1], "hook event on_session_end has no equivalent on opencode") ||
-			!strings.Contains(w[1], "no session-end") {
+		if len(w) != 1 ||
+			!strings.Contains(w[0], "hook event on_session_end has no equivalent on opencode") ||
+			!strings.Contains(w[0], "no session-end") {
 			t.Fatalf("warnings = %q", w)
 		}
 	})

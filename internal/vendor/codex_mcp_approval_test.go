@@ -56,3 +56,34 @@ func TestCodexConfigSetsApproval_DottedAndOtherServer(t *testing.T) {
 		t.Error("other server matched")
 	}
 }
+
+// The caller's own approval is kept, and said so, however it spells the flag.
+func TestCodexCallerSetsKey_Spellings(t *testing.T) {
+	const key = "mcp_servers.beta.default_tools_approval_mode"
+	const kv = key + `="writes"`
+	for name, args := range map[string][]string{
+		"-c":              {"-c", kv},
+		"--config":        {"--config", kv},
+		"--config=":       {"--config=" + kv},
+		"--config= space": {"--config=" + key + ` = "writes"`},
+	} {
+		if !codexCallerSetsKey(args, key) {
+			t.Errorf("%s: not matched in %v", name, args)
+		}
+		var warn strings.Builder
+		got := codexApproveMCPTools(approvalRunDir(t), args, "", &warn)
+		if !strings.Contains(warn.String(), `"beta"`) {
+			t.Errorf("%s: no keeping note: %q", name, warn.String())
+		}
+		for _, a := range got {
+			if strings.Contains(a, "beta.default_tools_approval_mode") {
+				t.Errorf("%s: still approves beta: %v", name, got)
+			}
+		}
+	}
+	for _, args := range [][]string{nil, {"--config=mcp_servers.alpha.default_tools_approval_mode=\"x\""}, {"--config="}, {"-c"}} {
+		if codexCallerSetsKey(args, key) {
+			t.Errorf("matched %v", args)
+		}
+	}
+}

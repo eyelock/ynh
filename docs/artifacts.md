@@ -141,7 +141,7 @@ instructions, in file-name order:
 |---|---|
 | Claude | `CLAUDE.md`, which ynh passes as appended system prompt |
 | Copilot | `AGENTS.md`, projected into `.github/instructions/ynh-harness.instructions.md` |
-| Codex | the run directory's instructions file; Codex reads it as `AGENTS.md` once [ynh #689](https://github.com/eyelock/ynh/pull/689) lands |
+| Codex | the run directory's instructions file, written as `AGENTS.md`, which Codex reads ([ynh #689](https://github.com/eyelock/ynh/pull/689)); an exported Codex plugin cannot carry instructions |
 
 Rules folded this way are always on: a rule's frontmatter, including Claude
 Code's `paths` scoping, is dropped. No plugin package carries a rule that these
@@ -182,7 +182,7 @@ the vendor's own file — there is no `AGENTS.md` to import, and no import.
 | Vendor | Reads `AGENTS.md` natively | `ynh run` / `ynd preview` | `ynd export` |
 |---|---|---|---|
 | Claude | No | instructions inlined into `CLAUDE.md` | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
-| Codex | Yes | `AGENTS.md` | `AGENTS.md` |
+| Codex | Yes | `AGENTS.md` | none: a Codex plugin cannot carry instructions, so the export writes no `AGENTS.md` and warns |
 | Cursor | Yes | `.cursorrules` | `AGENTS.md` |
 | Copilot | Yes | `AGENTS.md` | `AGENTS.md` |
 | OpenCode | Yes (`AGENTS.md` only; its `instructions` key is ignored) | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context | `AGENTS.md` |

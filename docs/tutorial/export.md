@@ -72,6 +72,7 @@ Expected output:
 Exported for claude → /tmp/ynh-tutorial/export-output/claude (2 skills, 1 agents)
 Exported for codex → /tmp/ynh-tutorial/export-output/codex (2 skills, 0 agents)
   warning: codex: skipping 1 agents (not supported)
+  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)
 Exported for copilot → /tmp/ynh-tutorial/export-output/copilot (2 skills, 1 agents)
 Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
 Exported for opencode → /tmp/ynh-tutorial/export-output/opencode (2 skills, 1 agents)
@@ -174,14 +175,13 @@ Expected:
 skills/
   review/SKILL.md
   take-a-moment/SKILL.md
-AGENTS.md
 ```
 
 Key points:
-- `.codex-plugin/plugin.json` — plugin manifest with path pointers for skills and MCP
+- `.codex-plugin/plugin.json` — plugin manifest with path pointers for skills, hooks and MCP
 - Skills go to `skills/` at the plugin root (same as Claude and Cursor)
 - Agents, rules, and commands are **excluded** (Codex doesn't support them in plugins)
-- `AGENTS.md` only (Codex natively consumes it)
+- No `AGENTS.md`: a Codex plugin cannot carry instructions (checked live on codex-cli 0.166.0), so the export leaves it out and warns. Under `ynh run` the instructions do reach Codex
 
 ## Export for specific vendors
 
@@ -222,7 +222,7 @@ CLAUDE.md
 
 One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
 
-Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points only at `skills/`. The export says so, in the same words as the per-vendor Codex export above:
+Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points at `skills/`, hooks and MCP, and the shared `AGENTS.md` is not read by Codex. The export says so, in the same words as the per-vendor Codex export above:
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged-codex --merged -v claude,codex
@@ -232,6 +232,7 @@ Expected:
 ```
 Exported for merged → /tmp/ynh-tutorial/export-merged-codex (2 skills, 1 agents)
   warning: codex: skipping 1 agents (not supported)
+  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)
 ```
 
 ## Export as an Agent Plugin
@@ -469,7 +470,7 @@ rm -rf /tmp/ynh-tutorial
 - Each vendor gets its own layout:
   - Claude: `.claude-plugin/plugin.json` + artifacts at root
   - Cursor: `.cursor-plugin/plugin.json` + `.cursorrules`
-  - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
+  - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands and instructions excluded)
 - `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
 - `--format agent-plugin` produces one portable Agent Plugins package; `-v` picks which clients' namespaces and compatibility files join the portable core, and whatever cannot travel is warned about
 - An Agent Plugins package is itself a harness source: `ynh install` derives the harness at load time and never writes into the package, whether ynh wrote the package or someone else did
