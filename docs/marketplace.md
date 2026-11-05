@@ -340,7 +340,7 @@ Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.j
 
 ### Current State
 
-- Skills and agents export like Claude Code's. Rules are excluded, because they ride in the instructions, which a Copilot plugin cannot carry. Commands are excluded too, but that is ynd's own choice: Copilot loads a plugin's `commands/*.md` as skills (see [L24](vendor-parity.md#l24-commands-in-a-copilot-package))
+- Skills, agents and commands export like Claude Code's. Rules are excluded, because they ride in the instructions, which a Copilot plugin cannot carry. Copilot loads a plugin's `commands/*.md` as skills, reached by name, with no `/name` expansion (see [L24](vendor-parity.md#l24-commands-in-a-copilot-package))
 - Marketplace index is written to `.github/plugin/marketplace.json`
 - **Hooks** are written to `hooks.json` at the plugin root, in Copilot's own format, and fire on Copilot CLI 1.0.105 (in a package that also targets Claude, Copilot loads Claude's `hooks/claude.json` instead); see [Hooks: Copilot](hooks.md#copilot-format-and-trust)
 
@@ -465,7 +465,7 @@ dist/
 │       ├── plugin.json                  # portable manifest
 │       ├── skills/...                   # portable
 │       ├── mcp.json                     # portable, when the harness declares servers
-│       ├── com.github.copilot/agents/   # Copilot's namespace
+│       ├── com.github.copilot/{agents,commands}/   # Copilot's namespace; commands/ not loaded live
 │       ├── .claude-plugin/plugin.json   # Claude Code compatibility
 │       ├── agents/  CLAUDE.md  AGENTS.md
 │       └── ...
