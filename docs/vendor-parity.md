@@ -384,8 +384,8 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 ### L33: Cursor package MCP tools need approval in print mode
 
 - **What:** a Cursor package's MCP server loads and lists its tool, but in print mode (`cursor-agent -p`) a call to the tool is refused until it is approved.
-- **Owner:** not established. Whether cursor-agent can approve a plugin's MCP tool for a one-shot run has not been checked.
-- **Evidence:** live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6) ([ynh #735](https://github.com/eyelock/ynh/issues/735)).
-- **Tracking:** none.
-- **Workaround:** none verified.
+- **Owner:** the vendor: approval is the person's, and a package cannot carry it. cursor-agent keeps approvals per project in the user's home (`~/.cursor/projects/<project>/mcp-approvals.json`, one `<server>-<hash>` entry per approved server, written by `agent mcp enable <server>`). Its other switches are also the person's: `--approve-mcps` on the run, and an `Mcp(<server>:<tool>)` entry in `permissions.allow` of `~/.cursor/cli-config.json` or the project's `.cursor/cli.json` ([Cursor CLI permissions](https://cursor.com/docs/cli/reference/permissions)). A Cursor plugin's documented components are rules, skills, agents, commands, MCP servers and hooks ([Cursor plugins](https://cursor.com/docs/plugins)), so none of them can write an approval.
+- **Evidence:** the refusal: live on cursor-agent 2026.11.05-86047df, 2026-11-05, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6) ([ynh #735](https://github.com/eyelock/ynh/issues/735)). The mechanisms: `agent --help` (`--approve-mcps`: "Automatically approve all MCP servers"; `agent mcp enable`: "Add an MCP server to the local approved list") and a scratch run with `HOME` pointed at a scratch folder, where `agent mcp enable canary` wrote `mcp-approvals.json` as above. No tool call has been run with an approval in place: Cursor's quota is exhausted, so a live call that comes back with the tool's result with `--approve-mcps` is still to show.
+- **Tracking:** [ynh #744](https://github.com/eyelock/ynh/issues/744), v0.17.0. Remaining: the live call.
+- **Workaround:** approve the server yourself: run `cursor-agent -p --approve-mcps ...`, or run `agent mcp enable <server>` once in the project. Neither is verified against a plugin's server in a live call.
 - **Detail:** [Export Output by Vendor](vendors.md#export-output-by-vendor).
