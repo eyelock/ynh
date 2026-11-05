@@ -15,7 +15,7 @@ ynh install github.com/myorg/david
 david
 ```
 
-`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`: same harness, but Codex does not yet get everything (see [Known gaps](#known-gaps-in-v0160)).
+`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`: same harness, but Codex does not yet get everything (see [Known gaps](#known-gaps)).
 
 ## What this gives you
 
@@ -29,9 +29,9 @@ david -v codex                     # same harness, different vendor
 
 **Compose from anywhere.** Cherry-pick skills from community repos, your team's private config, open-source libraries — and mix them with your own. Like a package manager for AI capabilities, backed by Git.
 
-## Known gaps in v0.16.0
+## Known gaps
 
-ynh claims more than each vendor yet gets. In v0.16.0:
+ynh claims more than each vendor yet gets. On `develop` after the v0.17.0 parity work:
 
 - **Codex** receives commands as skills, not as commands: under `ynh run` each `commands/<name>.md` is written to `.codex/skills/<name>/SKILL.md` and Codex lists it as `<harness>:<name>` (OBSERVED live on codex-cli 0.166.0, 2026-11-05), so it is invoked by name (`$<name>`) and not as a slash command; a command's frontmatter other than `description` is dropped and `$ARGUMENTS` is not substituted, and a command and a skill of the same name share one directory. Hooks and session context reach it under `ynh run` for an accepted harness only, not under `ynh agent run` ([Codex hook trust](docs/hooks.md#codex-hook-trust)). Instructions (written to `AGENTS.md`), rules (folded into them), MCP servers, skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory, so ynh appends the project's `AGENTS.md` files (Git root down to the directory you ran from) to the run directory's, after the harness's; Codex cuts the combined file off at 32 KiB, and ynh warns when it is longer.
 - **Codex export** cannot carry a harness's instructions: a Codex plugin ignores its `AGENTS.md`, so `ynd export -v codex` writes none and warns. Its skills, hooks and MCP servers do load (see [Vendor Support](docs/vendors.md#export-output-by-vendor)).
@@ -42,9 +42,9 @@ ynh claims more than each vendor yet gets. In v0.16.0:
 - **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
 - **Resume**: `ynh run --resume` with a prompt works on Cursor and Copilot, one-shot and `--interactive`, by `--continue` or `--resume=<id>` (live through `ynh run`, 2026-11-05). On Codex a resume with a prompt passes workspace folders as `writable_roots`, which takes effect only under the `workspace-write` sandbox (ynh warns on stderr otherwise; ynh does not change Codex's sandbox, and `codex exec` defaults to read-only).
 - **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
-- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are composed in: the Git root down to the directory you ran from, cut off at Codex's 32 KiB `project_doc_max_bytes` (observed live on codex-cli 0.166.0).
+- **Project instructions** (the project's own instruction file under `ynh run`) reach Claude Code (`CLAUDE.md`), Copilot CLI (`AGENTS.md`, then `CLAUDE.md`) and OpenCode: each run loaded a project with its own instruction file and the model read it (live, v0.17.0 at develop 958b7a3, 2026-11-05, on Claude Code 2.1.318, Copilot CLI 1.0.105 and OpenCode 2.2.3). On Codex they are composed in: the Git root down to the directory you ran from, cut off at Codex's 32 KiB `project_doc_max_bytes` (observed live on codex-cli 0.166.0). On Cursor they are still unverified: `cursor-agent` 2026.10.22-27dcf5f stops at its Workspace Trust prompt on the run directory, so no Cursor run completed; the check waits on a trust decision.
 
-These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
+The N cells (`delegates_to`, OpenCode `ynd export` and telemetry from `ynh run`) are ynh's to fix and are not yet fixed; the X cells are what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
 
 ## The 60-second version
 

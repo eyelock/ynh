@@ -15,7 +15,7 @@ ynh install github.com/myorg/david
 david
 ```
 
-`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
+`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different vendor; Codex does not yet get everything (see [Vendor Support](vendors.md#known-gaps)).
 
 ## What this gives you
 
@@ -41,7 +41,7 @@ david -v codex                     # same harness, different vendor
 }
 ```
 
-**Delegation is native.** Your personal harness can delegate to a team harness. Ask `david` to do a team task, and it hands off to `team-dev` using the vendor's native subagent system. No middleware, no proxy.
+**Delegation is partial.** Your personal harness can delegate to a team harness. A delegate carries its instructions to the vendor (Claude Code also its MCP servers), not yet a full harness, and does not run on OpenCode (see [Vendor Support](vendors.md#known-gaps)). No middleware, no proxy.
 
 ```bash
 david                              # personal context
@@ -95,7 +95,7 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
 - **[Harness Reference](harnesses.md)** - Harness manifest, includes, delegates, profiles
-- **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
+- **[Vendor Support](vendors.md)** - Claude Code, Codex, Cursor, Copilot CLI, OpenCode - capabilities and launch strategies
 - **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, inspecting, exporting, and marketplace building
 - **[Marketplace & Distribution](marketplace.md)** - Cross-vendor marketplace systems, distribution formats, and ynh's marketplace builder
 - **[Docker](docker.md)** - Run harnesses in containers, build harness appliance images for CI/CD
