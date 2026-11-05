@@ -52,11 +52,19 @@ func codexApproveMCPTools(runDir string, callerArgs []string, userConfig string,
 	return out
 }
 
-// codexCallerSetsKey reports whether the caller's args carry a -c override of key.
+// codexCallerSetsKey reports whether the caller's args carry a -c, --config or --config= override of key.
 func codexCallerSetsKey(args []string, key string) bool {
-	for i := 0; i+1 < len(args); i++ {
-		if args[i] == "-c" || args[i] == "--config" {
-			if strings.HasPrefix(strings.ReplaceAll(args[i+1], " ", ""), key+"=") {
+	sets := func(v string) bool {
+		return strings.HasPrefix(strings.ReplaceAll(v, " ", ""), key+"=")
+	}
+	for i, a := range args {
+		switch {
+		case (a == "-c" || a == "--config") && i+1 < len(args):
+			if sets(args[i+1]) {
+				return true
+			}
+		case strings.HasPrefix(a, "--config="):
+			if sets(strings.TrimPrefix(a, "--config=")) {
 				return true
 			}
 		}
