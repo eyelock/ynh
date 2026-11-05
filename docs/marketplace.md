@@ -465,7 +465,7 @@ dist/
 │       ├── plugin.json                  # portable manifest
 │       ├── skills/...                   # portable
 │       ├── mcp.json                     # portable, when the harness declares servers
-│       ├── com.github.copilot/agents/   # Copilot's namespace
+│       ├── com.github.copilot/{agents,commands}/   # Copilot's namespace; commands/ not loaded live
 │       ├── .claude-plugin/plugin.json   # Claude Code compatibility
 │       ├── agents/  CLAUDE.md  AGENTS.md
 │       └── ...

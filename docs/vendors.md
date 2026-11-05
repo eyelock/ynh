@@ -237,7 +237,7 @@ join it, each where that client documents reading them:
 | | Loads the format | What `-v` adds to the package |
 |---|---|---|
 | Codex | yes | `com.openai/hooks/hooks.json`, named under `extensions.com.openai` |
-| Copilot / VS Code | yes | `com.github.copilot/agents/` (same subset as the vendor export) and `com.github.copilot/hooks/hooks.json` |
+| Copilot / VS Code | yes | `com.github.copilot/agents/` and `com.github.copilot/commands/` (same subset as the vendor export; no live load of `commands/` in this namespace has been shown, only of a vendor-export package) and `com.github.copilot/hooks/hooks.json` |
 | Cursor | yes, core only | nothing: Cursor has published no extension namespace, and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}` |
 | OpenCode | no | nothing: OpenCode does not read Agent Plugins packages |
 | Claude Code | no | `.claude-plugin/plugin.json`, `mcp/claude.json` and `hooks/claude.json` (named by that manifest, as in its own plugin export), `agents/`, `rules/` and `commands/` at the root: a compatibility package, as the spec's migration guide describes |

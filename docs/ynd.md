@@ -415,7 +415,7 @@ dist/my-harness/
 ├── skills/<name>/SKILL.md       # portable
 ├── mcp.json                     # portable, every server carries its transport type
 ├── AGENTS.md                    # ynh's instructions; not a portable component
-├── com.github.copilot/          # -v copilot: agents/ (and delegates)
+├── com.github.copilot/          # -v copilot: agents/, commands/ (and delegates); commands/ here not loaded live
 ├── com.openai/hooks/hooks.json  # -v codex: hooks, pointed to from extensions.com.openai
 ├── .claude-plugin/plugin.json   # -v claude: Claude Code has not adopted the format,
 ├── mcp/claude.json              #   so it gets its own manifest, the MCP and hooks files
