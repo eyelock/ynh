@@ -332,7 +332,8 @@ func TestOpenCodeGenerateHookConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := keysOf(files); len(got) != 1 || got[0] != filepath.Join(".opencode", "plugins", "ynh-hooks.ts") {
+	if got := keysOf(files); len(got) != 2 || got[0] != filepath.Join(".opencode", "plugins", "ynh-hooks.ts") ||
+		got[1] != filepath.Join(".opencode", opencodeSessionStartFile) {
 		t.Fatalf("files = %v", got)
 	}
 	src := string(files[".opencode/plugins/ynh-hooks.ts"])
@@ -674,6 +675,86 @@ func TestPrepareOpenCode(t *testing.T) {
 	}
 }
 
+// TestPrepareOpenCodeSessionContext: the on_session_start hook runs before
+// launch and its stdout lands in the composed AGENTS.md, once per launch.
+func TestPrepareOpenCodeSessionContext(t *testing.T) {
+	old := opencodeVersionProbe
+	t.Cleanup(func() { opencodeVersionProbe = old })
+	opencodeVersionProbe = func(string) (string, error) { return "opencode v2.0.27", nil }
+
+	cfg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("base"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, err := (&OpenCode{}).GenerateHookConfig(map[string][]plugin.HookEntry{
+		"on_session_start": {
+			{Command: "echo ctx-one; cat >/dev/null"},
+			{Command: "echo broken; exit 1"},
+			{Command: "echo ctx-two"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, data := range files {
+		p := filepath.Join(cfg, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	agents := filepath.Join(cfg, ".opencode", "AGENTS.md")
+	for i := 0; i < 2; i++ {
+		if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(agents)
+		if got, want := string(b), "base\n\nctx-one\n\nctx-two\n"; got != want {
+			t.Fatalf("launch %d: AGENTS.md = %q, want %q (a failing hook's output must not be kept)", i+1, got, want)
+		}
+	}
+
+	// A later launch whose hooks print nothing carries no stale context.
+	if err := os.WriteFile(filepath.Join(cfg, ".opencode", opencodeSessionStartFile), []byte(`[{"command":"true"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(agents); string(b) != "base\n" {
+		t.Errorf("stale context kept: %q", b)
+	}
+}
+
+// TestPrepareOpenCodeSessionStartBackgroundChild: a hook that leaves a child
+// running does not hold the launch until the child exits, and its output is
+// kept.
+func TestPrepareOpenCodeSessionStartBackgroundChild(t *testing.T) {
+	old := opencodeVersionProbe
+	t.Cleanup(func() { opencodeVersionProbe = old })
+	opencodeVersionProbe = func(string) (string, error) { return "opencode v2.0.27", nil }
+
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, ".opencode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, ".opencode", opencodeSessionStartFile), []byte(`[{"command":"sleep 20 & echo hi"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("launch waited %v for a backgrounded child", d)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cfg, ".opencode", "AGENTS.md")); string(b) != "hi\n" {
+		t.Errorf("AGENTS.md = %q, want the hook's output", b)
+	}
+}
+
 // TestOpenCodeHooksPluginBehaviour runs the generated plugin under Node
 // (which strips TypeScript types) against a stub of the plugin runtime and a
 // fake ctx that records the hooks it installs. Everything lives under
@@ -867,11 +948,11 @@ func TestOpenCodeHookDeclarations(t *testing.T) {
 	if _, ok := opencodeUnsupportedHookEvents["on_session_end"]; !ok {
 		t.Error("on_session_end must be declared unsupported, with a reason")
 	}
-	if !strings.HasPrefix(sessionStartContext["opencode"], sessionStartNoPrefix) {
-		t.Errorf("session-start context = %q, want unsupported:<why>", sessionStartContext["opencode"])
+	if sessionStartContext["opencode"] != sessionStartPlain {
+		t.Errorf("session-start context = %q, want plain", sessionStartContext["opencode"])
 	}
 	if sessionContextMode("opencode") != "" {
-		t.Error("an unsupported vendor gets no wrapper")
+		t.Error("a plain vendor gets no wrapper")
 	}
 	field, reason, _, ok := hookTimeoutSupport("opencode")
 	if !ok || field != "timeout" || reason != "" {
