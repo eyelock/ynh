@@ -130,7 +130,6 @@ plugins/reviewer/.codex-plugin/plugin.json
 plugins/reviewer/.cursor-plugin/plugin.json
 plugins/reviewer/.cursorrules
 plugins/reviewer/AGENTS.md
-plugins/reviewer/CLAUDE.md
 plugins/reviewer/skills/dev-quality/SKILL.md
 plugins/reviewer/skills/dev-review/SKILL.md
 README.md
@@ -355,14 +354,13 @@ Expected (`.git/` excluded; `LC_ALL=C` pins the order):
 /tmp/ynh-tutorial/marketplace-portable/plugins/formatter/skills/auto-format/SKILL.md
 /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/.claude-plugin/plugin.json
 /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/AGENTS.md
-/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/CLAUDE.md
 /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/plugin.json
 /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/skills/dev-quality/SKILL.md
 /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/skills/dev-review/SKILL.md
 ```
 
 The `reviewer` harness became a package: `plugin.json` and `skills/` are the
-portable core, `.claude-plugin/plugin.json` and `CLAUDE.md` are Claude Code's
+portable core, `.claude-plugin/plugin.json` is Claude Code's
 compatibility layer. The `formatter` entry is a Claude Code plugin, not an
 Agent Plugin, so it is copied as-is with vendor manifests generated, exactly
 as in the vendor-format build.

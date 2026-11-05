@@ -125,14 +125,14 @@ redistributable plugin directory.
 
 | Vendor | `ynh run` / `ynd preview` | `ynd export` |
 |--------|---------------------------|--------------|
-| Claude | `CLAUDE.md`, instructions **inlined** — no `AGENTS.md` emitted | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
-| Codex  | `AGENTS.md` | `AGENTS.md` |
+| Claude | `CLAUDE.md`, instructions **inlined** — no `AGENTS.md` emitted | none: a Claude Code plugin cannot carry instructions, so the export writes none and warns |
+| Codex  | `AGENTS.md` | none: a Codex plugin cannot carry instructions, so the export writes none and warns |
 | Cursor | `.cursorrules` | `.cursorrules` + `AGENTS.md` |
-| Copilot | `AGENTS.md` in the staging dir, which `ynh run` projects into the project as `.github/instructions/ynh-harness.instructions.md` (a plugin's bundled `AGENTS.md` is not read) | `AGENTS.md` |
+| Copilot | `AGENTS.md` in the staging dir, which `ynh run` projects into the project as `.github/instructions/ynh-harness.instructions.md` (a plugin's bundled `AGENTS.md` is not read) | none: a Copilot plugin cannot carry instructions, so the export writes none and warns |
 | OpenCode | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context (OpenCode 2 reads `AGENTS.md` only) | `AGENTS.md` |
 
-The `@AGENTS.md` import is an export-path artifact only. If you preview a Claude
-harness and look for it, you will not find it — the instructions are already in
-`CLAUDE.md`.
+There is no `@AGENTS.md` import: Claude Code, Codex and Copilot plugins cannot
+carry instructions, so those exports write none. Under `ynh run` the instructions
+are already in `CLAUDE.md` (Claude).
 
 Last source wins. Harness's own `AGENTS.md` takes priority over included repos.

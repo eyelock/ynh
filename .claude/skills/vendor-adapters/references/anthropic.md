@@ -185,5 +185,5 @@ PATH-style commands are untouched everywhere.
 
 - `--plugin-dir` activates skills, commands, hooks and MCP servers (verified on Claude Code 2.1.292); no `/plugin install` or `/reload-plugins` step. MCP servers appear as `plugin:<plugin>:<server>` alongside the user's own
 - Plugin `settings.json` only supports `agent` key (not hooks)
-- Claude doesn't read AGENTS.md natively — export writes CLAUDE.md with `@AGENTS.md` import to bridge this
+- A Claude Code plugin cannot carry instructions: a plugin's `AGENTS.md`, or a `CLAUDE.md` with `@AGENTS.md`, never reaches the session (OBSERVED live on 2.1.318, 2026-11-05, ynh #722), so export writes neither and warns. The `settings.json` `agent` key is the only plugin route, and ynh does not generate it
 - Environment vars available: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`

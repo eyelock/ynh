@@ -328,6 +328,11 @@ func cmdRun(args []string) error {
 			if err := vendor.WriteSecretFiles(runDir, mcpFiles); err != nil {
 				return fmt.Errorf("writing MCP config: %w", err)
 			}
+			if adapter.Name() == "codex" {
+				if err := vendor.WriteCodexEnvPassthrough(runDir, harness.ComposedEnvPassthrough(p, resolver.IncludedHarnesses(resolved))); err != nil {
+					return fmt.Errorf("writing env_passthrough names: %w", err)
+				}
+			}
 		}
 
 		// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)

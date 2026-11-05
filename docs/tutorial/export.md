@@ -70,10 +70,12 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-output
 Expected output:
 ```
 Exported for claude → /tmp/ynh-tutorial/export-output/claude (2 skills, 1 agents)
+  warning: claude: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
 Exported for codex → /tmp/ynh-tutorial/export-output/codex (2 skills, 0 agents)
   warning: codex: skipping 1 agents (not supported)
-  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)
+  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
 Exported for copilot → /tmp/ynh-tutorial/export-output/copilot (2 skills, 1 agents)
+  warning: copilot: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
 Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
 Exported for opencode → /tmp/ynh-tutorial/export-output/opencode (2 skills, 1 agents)
 ```
@@ -93,49 +95,18 @@ agents/
 skills/
   review/SKILL.md             # local skill
   take-a-moment/SKILL.md      # picked from remote include
-AGENTS.md                     # instructions (cross-vendor format)
-CLAUDE.md                     # @AGENTS.md import (Claude reads this)
 ```
 
 Key points:
-- `AGENTS.md` contains the actual instructions (read by Codex, Cursor, Copilot, etc.)
-- `CLAUDE.md` contains just `@AGENTS.md` — Claude Code reads this and imports the instructions. No duplication, no conflict with the project's own `CLAUDE.md` (the plugin lives in its own directory).
+- No `AGENTS.md` or `CLAUDE.md`: a Claude Code plugin cannot carry instructions (checked live on Claude Code 2.1.318), so the export leaves them out and warns. Under `ynh run` the instructions do reach Claude Code, and a `CLAUDE.md` in the project you install the plugin into is read as usual
 - No `.claude/` wrapper — artifacts are at the plugin root
 - Remote includes are resolved and flattened
-
-### Verify Claude reads the instructions
-
-```bash
-cat /tmp/ynh-tutorial/export-output/claude/CLAUDE.md
-# Expected: @AGENTS.md
-
-cat /tmp/ynh-tutorial/export-output/claude/AGENTS.md
-# Expected: You are a code quality harness. Focus on correctness and security.
-```
 
 ### Validate the Claude export
 
 ```bash
 claude plugin validate /tmp/ynh-tutorial/export-output/claude
 # Expected: validation passes
-```
-
-### Verify the @-import works
-
-The exported `CLAUDE.md` contains `@AGENTS.md` — Claude's import syntax. Verify Claude reads the instructions by launching from the export directory:
-
-```bash
-cd /tmp/ynh-tutorial/export-output/claude
-git init && git add -A && git commit -m "init"
-claude -p "What should you focus on? Answer in one sentence."
-```
-
-Expected: Claude should respond mentioning **code quality**, **correctness**, and **security** — the instructions from `AGENTS.md` imported via `CLAUDE.md`'s `@AGENTS.md` reference.
-
-Return to your previous directory before continuing:
-
-```bash
-cd -
 ```
 
 ## Verify Cursor export
@@ -217,12 +188,11 @@ skills/
 
 .cursorrules
 AGENTS.md
-CLAUDE.md
 ```
 
 One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
 
-Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points at `skills/`, hooks and MCP, and the shared `AGENTS.md` is not read by Codex. The export says so, in the same words as the per-vendor Codex export above:
+Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points at `skills/`, hooks and MCP, and neither Claude Code nor Codex can carry instructions, so no shared `AGENTS.md` is written. The export says so, in the same words as the per-vendor exports above:
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged-codex --merged -v claude,codex
@@ -232,7 +202,8 @@ Expected:
 ```
 Exported for merged → /tmp/ynh-tutorial/export-merged-codex (2 skills, 1 agents)
   warning: codex: skipping 1 agents (not supported)
-  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's AGENTS.md)
+  warning: claude: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
+  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
 ```
 
 ## Export as an Agent Plugin
@@ -256,7 +227,6 @@ Expected (`LC_ALL=C` pins the order, which otherwise depends on the locale):
 ```
 /tmp/ynh-tutorial/agent-plugin/.claude-plugin/plugin.json
 /tmp/ynh-tutorial/agent-plugin/AGENTS.md
-/tmp/ynh-tutorial/agent-plugin/CLAUDE.md
 /tmp/ynh-tutorial/agent-plugin/agents/checker.md
 /tmp/ynh-tutorial/agent-plugin/com.github.copilot/agents/checker.md
 /tmp/ynh-tutorial/agent-plugin/plugin.json
@@ -264,7 +234,7 @@ Expected (`LC_ALL=C` pins the order, which otherwise depends on the locale):
 /tmp/ynh-tutorial/agent-plugin/skills/take-a-moment/SKILL.md
 ```
 
-Three layers in one directory. `plugin.json` and `skills/` are the portable core every client reads. `com.github.copilot/agents/` is Copilot's namespace, which other clients ignore. `.claude-plugin/plugin.json`, `agents/` and `CLAUDE.md` are there because Claude Code has not adopted the format and still reads its own layout; the spec calls this a compatibility package.
+Three layers in one directory. `plugin.json` and `skills/` are the portable core every client reads. `com.github.copilot/agents/` is Copilot's namespace, which other clients ignore. `.claude-plugin/plugin.json` and `agents/` are there because Claude Code has not adopted the format and still reads its own layout; the spec calls this a compatibility package.
 
 ```bash
 cat /tmp/ynh-tutorial/agent-plugin/plugin.json
@@ -477,8 +447,8 @@ rm -rf /tmp/ynh-tutorial
 - Copilot CLI mounts an exported package with `--plugin-dir`, which confirms a real client reads it
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
-- `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)
-- `CLAUDE.md` is generated with `@AGENTS.md` import — Claude reads this, no duplication
+- `AGENTS.md` is the universal instruction format (read by Cursor and OpenCode from a plugin)
+- Claude Code and Copilot plugins cannot carry instructions, so a Claude or Copilot export writes no `AGENTS.md` and warns; the portable package's `AGENTS.md` serves the clients that read it
 
 ## Next
 
