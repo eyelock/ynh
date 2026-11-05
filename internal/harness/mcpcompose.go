@@ -212,3 +212,24 @@ func provenanceList(sources map[string]string) []MCPProvenance {
 	}
 	return out
 }
+
+// ComposedEnvPassthrough is the env_passthrough names of the root harness and
+// of every included harness, sorted and without repeats: the variables any of
+// the composed MCP servers may see.
+func ComposedEnvPassthrough(root *Harness, includes []IncludedHarness) []string {
+	set := map[string]bool{}
+	if root != nil {
+		for _, n := range root.EnvPassthrough {
+			set[n] = true
+		}
+	}
+	for _, inc := range includes {
+		if inc.Harness == nil {
+			continue
+		}
+		for _, n := range inc.Harness.EnvPassthrough {
+			set[n] = true
+		}
+	}
+	return slices.Sorted(maps.Keys(set))
+}
