@@ -42,7 +42,7 @@ func TestClaudeGrantReachesEveryLaunchPath(t *testing.T) {
 	cfg := t.TempDir()
 	resumeInitial, resumeArgs := claudeResumeArgs("sid", "go", false, grant)
 	paths := map[string][]string{
-		"one-shot":     buildClaudeArgs(cfg, "", append(append([]string{}, grant...), "-p", "go")),
+		"one-shot":     buildClaudeArgs(cfg, "", append([]string{"-p", "go"}, grant...)),
 		"interactive":  buildClaudeArgs(cfg, "", grant),
 		"first-prompt": buildClaudeArgs(cfg, "go", grant),
 		"resume":       buildClaudeArgs(cfg, resumeInitial, resumeArgs),
