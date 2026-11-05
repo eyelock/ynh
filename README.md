@@ -31,7 +31,7 @@ david -v codex                     # same harness, different vendor
 
 ## Known gaps
 
-Not every vendor gets every feature of a harness yet: some gaps are ynh's to fix, and some are things a vendor cannot do. [Vendor Feature Parity](docs/vendor-parity.md) has the matrix for `ynh run`, `ynh agent run` and `ynd export`, and says for each gap whose it is, the evidence and the issue that tracks it.
+Not every vendor gets every feature of a harness yet: some gaps are ynh's to fix, and some are things a vendor cannot do. [Vendor Feature Parity](docs/vendor-parity.md) has the matrix for `ynh run`, `ynh agent run` and `ynd export`, and says for each gap whose it is and the evidence, with its tracking issue where one exists.
 
 ## The 60-second version
 
