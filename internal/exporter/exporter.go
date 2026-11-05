@@ -484,9 +484,10 @@ func workspaceWarnings(p *harness.Harness) []string {
 	return []string{fmt.Sprintf("workspace is not carried into exports: %d requested folder(s) dropped, because a plugin cannot grant a folder", len(p.Workspace))}
 }
 
-// skippedArtifactWarnings notes the artifact types and delegates the harness
-// carries that vendorName's plugin does not load, when the vendor restricts
-// its export to a subset (Codex: skills only). A per-vendor export leaves
+// skippedArtifactWarnings notes the artifact types the harness carries that
+// vendorName's plugin does not load, when the vendor restricts its export to
+// a subset (Codex: skills only), and its delegates, for any vendor without
+// export-delegate support (Codex, OpenCode). A per-vendor export leaves
 // them out of the vendor's directory; a merged package keeps them in the
 // shared tree for the other vendors, but the vendor still does not read
 // them, so both say the same thing.
