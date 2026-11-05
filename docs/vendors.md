@@ -27,7 +27,7 @@ ynh claims more than each vendor yet gets. In v0.16.0:
 - **OpenCode commands** work when invoked as commands: OpenCode 2.2.3 discovers a harness's `.opencode/commands/` files and expands them through its command API (`GET /api/command` lists them; `POST /api/session/{id}/command` runs the template; live, 2026-11-05). The limit is `opencode run`, which ynh uses for a one-shot prompt: it has no command flag and sends `/name` to the model as plain text. Ask for the command in words there, or ship it as a skill. The interactive TUI was not driven.
 - **Rules** reach Claude Code, Codex and Copilot only by being folded into their instructions under `ynh run`: always on, with no path scoping.
 - **OpenCode**: delegates cannot run as subagents (a harness's own agents can), `on_session_end` cannot fire (OpenCode has no such event, a vendor limit). Under `ynh run` and `ynh agent run`, ynh runs `on_session_start` once before launch and adds its output to the generated `AGENTS.md`, so session context reaches the model; an exported package carries the hook list but nothing runs it. `ynd export -v opencode` leaves delegates out and warns (`opencode: skipping N delegates (not supported)`).
-- **Cursor**: print mode skips `before_prompt` and `on_stop`.
+- **Cursor**: print mode skips `before_prompt` and `on_stop`. A vendor limit: `cursor-agent` run directly, without ynh, skips them too ([evidence](hooks.md#hooks-cursor-s-cli-does-not-run)).
 - **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
 - **Resume**: `ynh run --resume` with a prompt works on Cursor and Copilot, one-shot and `--interactive`, with the last session or `--resume=<id>` (see the notes). On Codex a resume with a prompt passes workspace folders as `writable_roots`, which takes effect only under the `workspace-write` sandbox (ynh warns on stderr otherwise; ynh does not change Codex's sandbox, and `codex exec` defaults to read-only).
 - **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
@@ -42,13 +42,13 @@ What each vendor receives from a harness in v0.16.0, from the vendor parity audi
 | Feature | Claude Code | Codex | Cursor | Copilot CLI | OpenCode |
 |---|---|---|---|---|---|
 | Instructions | Y | Y | Y | Y | Y |
-| Project instructions under `ynh run` | U | N | U | U | U |
+| Project instructions under `ynh run` | U | Y | U | U | U |
 | Skills | Y | Y | Y | Y | Y |
 | Agents | Y | Y | Y | Y | Y |
 | Rules | Y | Y | Y | Y | Y |
 | Commands | Y | N | Y | Y | Y (not in a one-shot `opencode run` prompt) |
 | MCP servers | Y | Y | Y | Y | Y |
-| Hooks | Y | Y, accepted harnesses only | X | Y | X, `on_session_end` only; the rest Y |
+| Hooks | Y | Y, accepted harnesses only | X, `before_prompt` and `on_stop` in print mode; the rest Y | Y | X, `on_session_end` only; the rest Y |
 | Session context | Y | Y, accepted harnesses only | Y | Y | Y, under `ynh run` and `ynh agent run` only |
 | Profiles | Y | Y | Y | Y | Y |
 | Focuses, includes, sensors | Y | Y | Y | Y | Y |
