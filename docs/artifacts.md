@@ -141,7 +141,7 @@ instructions, in file-name order:
 |---|---|
 | Claude | `CLAUDE.md`, which ynh passes as appended system prompt |
 | Copilot | `AGENTS.md`, projected into `.github/instructions/ynh-harness.instructions.md` |
-| Codex | the run directory's instructions file; Codex reads it as `AGENTS.md` once [ynh #689](https://github.com/eyelock/ynh/pull/689) lands |
+| Codex | the run directory's instructions file, written as `AGENTS.md`, which Codex reads ([ynh #689](https://github.com/eyelock/ynh/pull/689)); an exported Codex plugin cannot carry instructions |
 
 Rules folded this way are always on: a rule's frontmatter, including Claude
 Code's `paths` scoping, is dropped. No plugin package carries a rule that these

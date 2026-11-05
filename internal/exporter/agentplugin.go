@@ -173,7 +173,7 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 			if err := writeGeneratedFiles(out, manifest); err != nil {
 				return nil, err
 			}
-			if len(instructions) > 0 {
+			if len(instructions) > 0 && vendor.ExportCarriesInstructions(a) {
 				if err := writeGeneratedFiles(out, a.GenerateSystemPrompt(instructions)); err != nil {
 					return nil, err
 				}

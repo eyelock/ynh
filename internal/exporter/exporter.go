@@ -323,6 +323,9 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 			result.Warnings = append(result.Warnings, warnings...)
 		}
 		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
+		if len(instructions) > 0 && !vendor.ExportCarriesInstructions(adapter) {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(v))
+		}
 	}
 	result.Warnings = append(result.Warnings, workspaceWarnings(p)...)
 	if wroteHooks {
@@ -416,8 +419,12 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Instructions
 	if len(instructions) > 0 {
-		if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
-			return result, err
+		if vendor.ExportCarriesInstructions(adapter) {
+			if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
+				return result, err
+			}
+		} else {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(vendorName))
 		}
 	}
 
@@ -490,6 +497,10 @@ func workspaceWarnings(p *harness.Harness) []string {
 // them out of the vendor's directory; a merged package keeps them in the
 // shared tree for the other vendors, but the vendor still does not read
 // them, so both say the same thing.
+func noInstructionsWarning(vendorName string) string {
+	return vendorName + ": plugins cannot carry instructions, so the harness's are not exported for it (use `ynh run`, or put them in the project's AGENTS.md)"
+}
+
 func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
 	exportDirs := adapter.ExportArtifactDirs()
 	if exportDirs == nil {

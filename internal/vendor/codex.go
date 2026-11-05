@@ -404,6 +404,14 @@ func (c *Codex) ExportArtifactDirs() map[string]string {
 
 func (c *Codex) SupportsExportDelegates() bool { return false }
 
+// ExportCarriesInstructions: a Codex plugin cannot carry instructions. A
+// plugin's AGENTS.md is installed with it but never reaches the session: Codex
+// reads AGENTS.md only from the working directory's project and the user's
+// ~/.codex (OBSERVED live on codex-cli 0.166.0, 2026-11-05: a plugin installed
+// from a `ynd export -v codex` package, whose AGENTS.md held a codeword, never
+// returned it, while its skill and MCP server loaded).
+func (c *Codex) ExportCarriesInstructions() bool { return false }
+
 func (c *Codex) PluginManifestDir() string { return ".codex-plugin" }
 
 // AgentPluginLayout: Codex loads the format natively and keeps its own

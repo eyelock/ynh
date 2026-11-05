@@ -146,8 +146,8 @@ func TestExportWithInstructions(t *testing.T) {
 	assertFileExists(t, filepath.Join(outputDir, "cursor", ".cursorrules"))
 	assertFileExists(t, filepath.Join(outputDir, "cursor", "AGENTS.md"))
 
-	// Codex: AGENTS.md only
-	assertFileExists(t, filepath.Join(outputDir, "codex", "AGENTS.md"))
+	// Codex: none, a Codex plugin cannot carry instructions
+	assertFileNotExists(t, filepath.Join(outputDir, "codex", "AGENTS.md"))
 
 	// Content should match instructions.md
 	data, err := os.ReadFile(claudeAgents)
@@ -472,10 +472,10 @@ func TestExportComposesIncludedInstructions(t *testing.T) {
 				"includes":       []any{map[string]any{"local": "./inc-one"}, second},
 			})
 			out := t.TempDir()
-			if _, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"codex"}}); err != nil {
+			if _, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"claude"}}); err != nil {
 				t.Fatalf("Export: %v", err)
 			}
-			data, err := os.ReadFile(filepath.Join(out, "codex", "AGENTS.md"))
+			data, err := os.ReadFile(filepath.Join(out, "claude", "AGENTS.md"))
 			if err != nil {
 				t.Fatal(err)
 			}
