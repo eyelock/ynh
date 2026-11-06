@@ -167,10 +167,7 @@ type mcpExec struct {
 	Name    string `json:"name"`
 	// Source names the included harness that supplied the server. Empty for
 	// the harness's own.
-	Source string `json:"source,omitempty"`
-	// Delegate names the delegate harness that carries the server, which is
-	// connected only while that delegate runs. Empty for the session's own.
-	Delegate  string     `json:"delegate,omitempty"`
+	Source    string     `json:"source,omitempty"`
 	Transport string     `json:"transport"`
 	Command   string     `json:"command,omitempty"`
 	Args      []string   `json:"args,omitempty"`
@@ -278,9 +275,9 @@ type runView struct {
 	// MCPSources maps each MCP server of H to the harness that supplied it
 	// (harness.MCPSourceRoot, or the include's display name).
 	MCPSources map[string]string
-	// Delegates holds the MCP servers each delegate harness carries on its
-	// own, which are not the session's: they are connected only while that
-	// delegate runs.
+	// Delegates holds what the delegates_to entries select. A delegate's own
+	// commands are not here: it runs as its own session under its own trust
+	// grant (see resolveDelegate).
 	Delegates []delegateView
 	// HookSources maps each event of H.Hooks to the include chain that
 	// supplied each entry, "" for the harness's own.
@@ -299,11 +296,11 @@ type runView struct {
 //
 // Anything that cannot be resolved is returned as a problem rather than
 // skipped, so the caller can refuse to call a partial set complete.
-// delegateView is one delegate's own MCP servers, with their sources.
+// delegateView is one delegates_to entry as the parent's trust sees it: the
+// delegate's name and the focus the entry selects. Its commands are not
+// covered here, because the delegate has its own trust grant.
 type delegateView struct {
-	Name    string
-	Servers map[string]plugin.MCPServer
-	Sources map[string]string
+	Name string
 	// Focus is the focus the delegates_to entry selects, nil for none. Its
 	// prompt is the delegate's standing instructions.
 	Focus *harness.DelegateFocus
@@ -417,11 +414,11 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 	return views, problems
 }
 
-// delegateViews reads the MCP servers each delegate of h carries on its own,
-// the way a run composes them: the delegate's includes (resolved against its
-// own directory, from the cache), then its own servers. A delegate's own
-// delegates are among them, as a run flattens them. Anything unreadable is
-// an error, so the set is never reported complete without it.
+// delegateViews reads the focus each delegates_to entry of h selects, which
+// is the delegate's standing instructions. A delegate's own MCP servers,
+// hooks and sensors are not read: it runs as its own ynh session under its
+// own trust grant, so the parent's digest does not cover them. The delegate
+// must still be readable, so a focus is never reported complete without it.
 func delegateViews(h *harness.Harness) ([]delegateView, error) {
 	flat, err := resolver.FlattenDelegates(h.DelegatesTo, h.Dir, h.Name, resolver.ResolveDelegateLocal)
 	if err != nil {
@@ -429,24 +426,7 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 	}
 	var out []delegateView
 	for _, fd := range flat {
-		dh, focus := fd.Harness, fd.Focus
-		var included []harness.IncludedHarness
-		if len(dh.Includes) > 0 {
-			resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})
-			if err != nil {
-				return nil, fmt.Errorf("delegate %s: includes: %w", dh.Name, err)
-			}
-			included = resolver.IncludedHarnesses(resolved)
-		}
-		servers, provenance, err := harness.ComposeMCPServersRaw(dh, included)
-		if err != nil {
-			return nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
-		}
-		dv := delegateView{Name: dh.Name, Servers: servers, Sources: map[string]string{}, Focus: focus}
-		for _, pr := range provenance {
-			dv.Sources[pr.Server] = pr.Source
-		}
-		out = append(out, dv)
+		out = append(out, delegateView{Name: fd.Harness.Name, Focus: fd.Focus})
 	}
 	return out, nil
 }
@@ -545,27 +525,6 @@ func collectMCP(profile string, v *harness.Harness, sources map[string]string, b
 	return out
 }
 
-// collectDelegateMCP lists the servers the delegates of one view carry, with
-// the same profile-delta rule as collectMCP.
-func collectDelegateMCP(profile string, delegates []delegateView, base map[string]bool) []mcpExec {
-	var out []mcpExec
-	for _, d := range delegates {
-		for _, name := range slices.Sorted(maps.Keys(d.Servers)) {
-			src := d.Sources[name]
-			if src == harness.MCPSourceRoot {
-				src = ""
-			}
-			m := mcpFromServer(profile, name, src, d.Servers[name])
-			m.Delegate = d.Name
-			if profile != "" && base[mcpKey(m)] {
-				continue
-			}
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
 // harnessExecutables lists everything the harness can get executed, grouped by
 // kind and sorted so the digest does not depend on Go's randomised map order:
 // an unsorted digest would differ between two runs over an unchanged harness
@@ -587,7 +546,6 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
 		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, v.HookSources, baseHooks)...)
 		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, baseMCP)...)
-		set.MCPServers = append(set.MCPServers, collectDelegateMCP(v.Profile, v.Delegates, baseMCP)...)
 		if v.Profile != "" {
 			continue
 		}
@@ -638,10 +596,6 @@ func writeMCP(w io.Writer, m mcpExec) {
 	if m.Source != "" {
 		field(w, "from")
 		field(w, m.Source)
-	}
-	if m.Delegate != "" {
-		field(w, "delegate")
-		field(w, m.Delegate)
 	}
 }
 
@@ -825,6 +779,9 @@ type trustStatus struct {
 	DelegateFocuses []delegateFocusReport `json:"delegate_focuses,omitempty"`
 	// delegateFocuses is the set's, for `trust show` to fill the field.
 	delegateFocuses []delegateFocusReport
+	// hasDelegates is whether the harness names delegates_to entries, whose
+	// commands this digest does not cover.
+	hasDelegates bool
 }
 
 const (
@@ -856,6 +813,7 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 		UndeclaredEnv: undeclaredEnvNames(p, environ),
 
 		delegateFocuses: set.DelegateFocuses,
+		hasDelegates:    len(p.DelegatesTo) > 0,
 	}
 	if pr := p.InstalledFrom; pr != nil {
 		st.Source, st.SourceType, st.Ref, st.SHA = pr.Source, pr.SourceType, pr.Ref, pr.SHA
@@ -1109,6 +1067,9 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	if s.State == trustChanged {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
 	}
+	if s.hasDelegates {
+		_, _ = fmt.Fprintf(w, "  delegates: not covered by this digest; each runs as its own harness under its own trust grant\n")
+	}
 
 	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
@@ -1137,7 +1098,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	if len(s.MCPServers) > 0 {
 		_, _ = fmt.Fprintf(w, "\nMCP servers, launched or contacted by the vendor CLI:\n\n")
 		for _, m := range s.MCPServers {
-			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, delegateSuffix(m.Delegate)+fromSuffix(m.Source), scopeSuffix(m.Profile))
+			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, fromSuffix(m.Source), scopeSuffix(m.Profile))
 			if m.Command != "" {
 				_, _ = fmt.Fprintf(w, "    command: %s\n", strings.Join(append([]string{m.Command}, m.Args...), " "))
 			}
@@ -1226,6 +1187,9 @@ func warnIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
 		"warning: %s declares different commands than you accepted on %s.\n"+
 			"  accepted %s, now %s. Review with 'ynh trust show %s'.\n",
 		id, rec.AcceptedAt, rec.Digest, digest, id)
+	if len(p.DelegatesTo) > 0 {
+		_, _ = fmt.Fprintf(stderr, "  Delegates are not covered by this digest; each runs under its own trust grant.\n")
+	}
 	if rec.Scheme < trustScheme {
 		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyDigestNote, "\n", "\n  "))
 	}
