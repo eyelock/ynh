@@ -981,8 +981,8 @@ notes -> notes
 team -> team
 tracker -> tracker
 ---
-name: ops
-description: Delegate harness "ops".
+name: "ops"
+description: "Delegate harness \"ops\"."
 mcpServers: [{"pager":{"command":"python3","args":["<cache>/server.py"],"env":{"SERVER_NAME":"pager","TOKEN":"${PAGER_TOKEN}"}}}]
 ---
 ```

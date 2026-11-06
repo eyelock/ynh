@@ -369,8 +369,8 @@ Claude Code subagents accept an `mcpServers` frontmatter field: a list whose ent
 
 ```markdown
 ---
-name: probe
-description: Probe agent with a ping tool
+name: "probe"
+description: "Probe agent with a ping tool"
 mcpServers: [{"probe-srv":{"command":"python3","args":["/opt/probe/server.py"]}}]
 ---
 ```
