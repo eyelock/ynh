@@ -57,8 +57,8 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
 | Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Hooks | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
-| Session context (`on_session_start` output) | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Hooks | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
+| Session context (`on_session_start` output) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | MCP isolation (`mcp_isolation`) | Y | N [L6](#l6-mcp-isolation) | – | N [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) |
 | Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
 | `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
@@ -144,7 +144,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L7: Codex hooks need an accepted harness
 
-- **What:** Codex runs a hook only when it trusts it. `ynh run` grants that trust for one run, and only for an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
+- **What:** Codex runs a hook only when it trusts it. `ynh run` and `ynh agent run --backend codex` grant that trust for one run (see [L15](#l15-a-codex-worker-ran-no-hooks-fixed) and [Codex hook trust](hooks.md#codex-hook-trust)), under the same rule: only an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
 - **Owner:** ynh, by design: it grants trust only to a harness you have accepted.
 - **Evidence:** codex-cli 0.166.0, [ynh #701](https://github.com/eyelock/ynh/pull/701).
 - **Tracking:** none.
@@ -214,13 +214,13 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** run the harness on Copilot with `ynh run`.
 - **Detail:** [The Agent Loop](agent.md).
 
-### L15: A Codex worker runs no hooks
+### L15: A Codex worker ran no hooks (fixed)
 
-- **What:** `ynh agent run --backend codex` does not pass Codex the trust overrides that `ynh run` passes ([L7](#l7-codex-hooks-need-an-accepted-harness)), so a harness's hooks, and its `on_session_start` context, do not fire.
+- **What:** `ynh agent run --backend codex` did not pass Codex the trust overrides that `ynh run` passes ([L7](#l7-codex-hooks-need-an-accepted-harness)), so a harness's hooks, and its `on_session_start` context, did not fire. Fixed: for an accepted harness, ynh now hands the worker the hooks inline as `-c hooks.<Event>=[...]` overrides, each trusted by its hash, on every turn. A worker runs in the task's worktree, not the run directory, so Codex never loads the run directory's `.codex/hooks.json`; the overrides do not depend on the working directory. A harness that is not accepted gets none, with the same line on stderr as `ynh run`.
 - **Owner:** ynh.
-- **Evidence:** [Codex hook trust](hooks.md#codex-hook-trust).
-- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0.
-- **Workaround:** none.
+- **Evidence:** live on Codex (codex-cli 0.166.0), 2026-11-06: an installed harness with an `on_session_start` hook that prints a marker and touches a file. Before `ynh trust accept` the worker printed the not-trusted line and the file was not created; after it the hook ran, the marker reached the model and appeared in the trajectory, and `~/.codex/config.toml` was byte-identical afterwards. See [Codex hook trust](hooks.md#codex-hook-trust).
+- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0, fixed by [ynh #759](https://github.com/eyelock/ynh/pull/759).
+- **Workaround:** none needed.
 - **Detail:** [Codex hook trust](hooks.md#codex-hook-trust).
 
 ### L16: Cursor and OpenCode have no effort setting

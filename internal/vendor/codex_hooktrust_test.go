@@ -104,3 +104,60 @@ func TestCodexHookTrustArgsNoHooks(t *testing.T) {
 		t.Errorf("empty hook file: args = %q, want none", args)
 	}
 }
+
+func writeCodexHooks(t *testing.T, runDir string, hooks map[string][]plugin.HookEntry) {
+	t.Helper()
+	files, err := (&Codex{}).GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, data := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(runDir, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(runDir, rel), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestCodexSessionHookArgs(t *testing.T) {
+	runDir := t.TempDir()
+	writeCodexHooks(t, runDir, map[string][]plugin.HookEntry{
+		"before_tool":      {{Command: "echo bt", Matcher: "Bash"}, {Command: "echo bt2", Matcher: "Bash"}, {Command: "echo bt3"}},
+		"before_prompt":    {{Command: "echo p", Timeout: 7}},
+		"on_session_start": {{Command: "echo s"}},
+	})
+	args := CodexSessionHookArgs(runDir)
+	var overrides []string
+	for i := 0; i < len(args); i += 2 {
+		if args[i] != "-c" {
+			t.Fatalf("args = %q, want only -c overrides", args)
+		}
+		overrides = append(overrides, args[i+1])
+	}
+	joined := strings.Join(overrides, "\n")
+	for _, want := range []string{
+		`hooks.SessionStart=[{hooks=[{type="command",command="echo s"}]}]`,
+		`hooks.UserPromptSubmit=[{hooks=[{type="command",command="echo p",timeout=7}]}]`,
+		`hooks.PreToolUse=[{matcher="Bash",hooks=[{type="command",command="echo bt"},{type="command",command="echo bt2"}]},{hooks=[{type="command",command="echo bt3"}]}]`,
+		`"/<session-flags>/config.toml:pre_tool_use:0:1"={trusted_hash="` + codexHookIdentity{"pre_tool_use", "Bash", "echo bt2", 600}.hash(),
+		`"/<session-flags>/config.toml:pre_tool_use:1:0"={trusted_hash="` + codexHookIdentity{"pre_tool_use", "", "echo bt3", 600}.hash(),
+		`"/<session-flags>/config.toml:user_prompt_submit:0:0"={trusted_hash="` + codexHookIdentity{"user_prompt_submit", "", "echo p", 7}.hash(),
+		`"/<session-flags>/config.toml:session_start:0:0"={trusted_hash="` + codexHookIdentity{"session_start", "", "echo s", 600}.hash(),
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("overrides lack %q\n%s", want, joined)
+		}
+	}
+	// No project is trusted: the worker's project layer is not the run directory's.
+	if strings.Contains(joined, "projects=") {
+		t.Errorf("session hooks trust a project:\n%s", joined)
+	}
+}
+
+func TestCodexSessionHookArgsNoHooks(t *testing.T) {
+	if args := CodexSessionHookArgs(t.TempDir()); args != nil {
+		t.Errorf("no hook file: args = %q, want none", args)
+	}
+}
