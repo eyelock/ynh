@@ -10,8 +10,10 @@ shim or migration. The Claude Code native-subagent path is removed.
 
 Before v0.18.0 a delegate was turned into a vendor subagent definition inside the parent's session.
 A subagent carries only part of a harness: its instructions everywhere, its MCP servers only on
-Claude Code, and its hooks and workspace folders nowhere. On OpenCode it did not run at all (limit
-[L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness) on the parity page, [ynh #729](https://github.com/eyelock/ynh/issues/729)).
+Claude Code, and its hooks and workspace folders nowhere (limit
+[L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness) on the parity page, [ynh #729](https://github.com/eyelock/ynh/issues/729)). On
+OpenCode a delegate has run at all only since [ynh #762](https://github.com/eyelock/ynh/pull/762),
+and then only as a subagent.
 A subagent also dies with the parent's session. A delegate that is its own session carries its whole
 harness on every vendor, and can outlive whoever started it.
 
@@ -156,11 +158,16 @@ folder. Anything reading the project's links reads the newest.
 
 ## Evidence
 
-- **Parity audit** (ynw-17g.21, origin/develop 8fdfb1c, live runs on all five vendors): delegates
-  carry instructions only off Claude Code. On Claude Code they also carry MCP, but not hooks.
-  Workspace is carried nowhere, and delegates do not run on OpenCode.
-- **Round-trip spike** (ynw-17g.22): only Claude Code interactive offers Tasks. It was verified end
-  to end: handle, polling, `input_required` dialog, `tasks/update`, result. Blocking elicitation
-  was answered in the Codex, Copilot CLI and OpenCode interactive UIs. Cursor's CLI declines it in
-  6 ms. Every headless mode declines it or never answers. The Go MCP SDK v1.8.0 has no Tasks.
-  Vendor tool-call timeouts were not measured; the build measures them to set the bounded wait.
+- **Parity audit**, 2026-11-03, live runs on all five vendors at ynh 8fdfb1c (results on the
+  parity page, limit [L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)). Off Claude Code, a delegate carried only its
+  instructions. On Claude Code it also carried its MCP servers, but its hooks did not fire. No
+  vendor carried its workspace folders, and on OpenCode a delegate did not run until
+  [ynh #762](https://github.com/eyelock/ynh/pull/762).
+- **Round-trip spike**, 2026-11-03: a throwaway MCP server exposing one delegate as a tool, with
+  Claude Code 2.1.317, Codex 0.166.0, Cursor agent 2026.10.22, Copilot CLI 1.0.105 and OpenCode
+  2.2.3 as parent. Only Claude Code interactive offered Tasks. It was verified end to end: handle,
+  polling, `input_required` dialog, `tasks/update`, result. Blocking elicitation was answered in the
+  Codex, Copilot CLI and OpenCode interactive UIs. Cursor's CLI declined it in 6 ms without asking.
+  Every headless mode declined it or never answered. The Go MCP SDK v1.8.0 has no Tasks
+  ([go-sdk #626](https://github.com/modelcontextprotocol/go-sdk/issues/626)). Vendor tool-call
+  timeouts were not measured; the build measures them to set the bounded wait.
