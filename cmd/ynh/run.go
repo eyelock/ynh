@@ -444,6 +444,9 @@ func cmdRun(args []string) error {
 						rel, _ := filepath.Rel(projectDir, entry.Link)
 						fmt.Printf("  %s -> %s\n", rel, entry.Target)
 					}
+					if !stdinIsTerminal() {
+						return symlinkConsentError(adapter.Name(), p.Name, len(planned))
+					}
 					fmt.Printf("\nInstall %d symlinks? [Y/n] ", len(planned))
 					reader := bufio.NewReader(os.Stdin)
 					answer, _ := reader.ReadString('\n')
@@ -1002,4 +1005,26 @@ func parseRunArgs(args []string) runArgs {
 	}
 
 	return ra
+}
+
+// stdinIsTerminal reports whether stdin is a terminal a person can answer on.
+// A pipe, a file and /dev/null are not. A variable so tests can stand in.
+var stdinIsTerminal = func() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	if null, err := os.Stat(os.DevNull); err == nil && os.SameFile(fi, null) {
+		return false
+	}
+	return true
+}
+
+// symlinkConsentError is the refusal when a vendor needs symlinks in the
+// project and nobody can be asked: consent to write into a project is never
+// assumed from a closed or piped stdin.
+func symlinkConsentError(vendorName, harness string, n int) error {
+	return fmt.Errorf("%s needs %d symlinks in this project and there is no terminal to ask on; nothing was installed. "+
+		"Give consent explicitly by running `ynh run %s -v %s --install` once (it records the install, so later runs go ahead), or run from a terminal",
+		vendorName, n, harness, vendorName)
 }
