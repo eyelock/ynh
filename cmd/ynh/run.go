@@ -267,6 +267,9 @@ func cmdRun(args []string) error {
 		runDirName = "_inline-" + h[:8]
 	}
 	runDir := filepath.Join(config.RunDir(), runDirName)
+	// Held from the clean of the run dir to the last write into it, which
+	// includes the runtime instructions below; a no-op for a baked image.
+	unlockRun := func() {}
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
 	if preassembled {
 		// Pre-assembled layout (baked harness image) — use directly.
@@ -277,10 +280,11 @@ func cmdRun(args []string) error {
 		// Normal host flow — assemble now. Assembly of one run dir is
 		// serialised across ynh processes: parallel runs of one harness
 		// would otherwise interleave the clean and the writes below.
-		unlockRun, err := assembler.LockRunDir(filepath.Join(config.CacheDir(), "run-locks", runDirName+".lock"))
+		unlock, err := assembler.LockRunDir(filepath.Join(config.CacheDir(), "run-locks", runDirName+".lock"))
 		if err != nil {
 			return fmt.Errorf("assembling config: %w", err)
 		}
+		unlockRun = unlock
 		defer unlockRun()
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 			return fmt.Errorf("assembling config: %w", err)
@@ -396,7 +400,6 @@ func cmdRun(args []string) error {
 		if harnessID != "" {
 			updateLegacyRunAlias(p.Name, runDirName)
 		}
-		unlockRun()
 	}
 
 	// Inject per-invocation instructions into the vendor's pipeline.
@@ -407,6 +410,7 @@ func cmdRun(args []string) error {
 		}
 		vendorArgs = append(vendorArgs, extraArgs...)
 	}
+	unlockRun()
 
 	// Dispatch based on action.
 	switch action {
