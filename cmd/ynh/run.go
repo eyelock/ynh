@@ -274,7 +274,14 @@ func cmdRun(args []string) error {
 		// everything was vetted and assembled at image build time.
 		runDir = preassembledDir
 	} else {
-		// Normal host flow — assemble now
+		// Normal host flow — assemble now. Assembly of one run dir is
+		// serialised across ynh processes: parallel runs of one harness
+		// would otherwise interleave the clean and the writes below.
+		unlockRun, err := assembler.LockRunDir(filepath.Join(config.CacheDir(), "run-locks", runDirName+".lock"))
+		if err != nil {
+			return fmt.Errorf("assembling config: %w", err)
+		}
+		defer unlockRun()
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 			return fmt.Errorf("assembling config: %w", err)
 		}
@@ -389,6 +396,7 @@ func cmdRun(args []string) error {
 		if harnessID != "" {
 			updateLegacyRunAlias(p.Name, runDirName)
 		}
+		unlockRun()
 	}
 
 	// Inject per-invocation instructions into the vendor's pipeline.
