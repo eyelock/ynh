@@ -144,7 +144,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L7: Codex hooks need an accepted harness
 
-- **What:** Codex runs a hook only when it trusts it. `ynh run` grants that trust for one run, and only for an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
+- **What:** Codex runs a hook only when it trusts it. `ynh run` and `ynh agent run --backend codex` grant that trust for one run (see [L15](#l15-a-codex-worker-ran-no-hooks-fixed) and [Codex hook trust](hooks.md#codex-hook-trust)), under the same rule: only an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
 - **Owner:** ynh, by design: it grants trust only to a harness you have accepted.
 - **Evidence:** codex-cli 0.166.0, [ynh #701](https://github.com/eyelock/ynh/pull/701).
 - **Tracking:** none.
@@ -219,7 +219,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh agent run --backend codex` did not pass Codex the trust overrides that `ynh run` passes ([L7](#l7-codex-hooks-need-an-accepted-harness)), so a harness's hooks, and its `on_session_start` context, did not fire. Fixed: for an accepted harness, ynh now hands the worker the hooks inline as `-c hooks.<Event>=[...]` overrides, each trusted by its hash, on every turn. A worker runs in the task's worktree, not the run directory, so Codex never loads the run directory's `.codex/hooks.json`; the overrides do not depend on the working directory. A harness that is not accepted gets none, with the same line on stderr as `ynh run`.
 - **Owner:** ynh.
 - **Evidence:** live on Codex (codex-cli 0.166.0), 2026-11-06: an installed harness with an `on_session_start` hook that prints a marker and touches a file. Before `ynh trust accept` the worker printed the not-trusted line and the file was not created; after it the hook ran, the marker reached the model and appeared in the trajectory, and `~/.codex/config.toml` was byte-identical afterwards. See [Codex hook trust](hooks.md#codex-hook-trust).
-- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0, fixed.
+- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0, fixed by [ynh #759](https://github.com/eyelock/ynh/pull/759).
 - **Workaround:** none needed.
 - **Detail:** [Codex hook trust](hooks.md#codex-hook-trust).
 
