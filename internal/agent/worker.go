@@ -86,6 +86,11 @@ type StartOptions struct {
 	// vendor's flag through vendor.WorkspaceArgs; one whose vendor has none
 	// never receives any, because the decision reports it before this point.
 	Workspace []string
+	// TrustedHooks is set when the operator's trust record accepts the
+	// harness (cmd/ynh decides), so a backend that must be told to run its
+	// hooks does. Only codex reads it: its worker runs in the worktree, so it
+	// is handed the hooks ynh wrote to ConfigPath inline, already trusted.
+	TrustedHooks bool
 	// ConfigPath is the assembled harness directory (contains .claude/, CLAUDE.md, etc.).
 	ConfigPath string
 	// Sandbox is "srt" or "none".

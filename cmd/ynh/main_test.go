@@ -1924,3 +1924,36 @@ func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
 		t.Fatalf("YNH_PROFILE should be parsed as a selection, got: %v", err)
 	}
 }
+
+func TestSymlinkConsentError_NamesTheFlag(t *testing.T) {
+	err := symlinkConsentError("cursor", "demo", 5)
+	for _, want := range []string{"no terminal", "nothing was installed", "ynh run demo -v cursor --install", "5 symlinks"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
+func TestStdinIsTerminal_FalseForPipeAndDevNull(t *testing.T) {
+	orig := os.Stdin
+	defer func() { os.Stdin = orig }()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
+	os.Stdin = r
+	if stdinIsTerminal() {
+		t.Error("a pipe is not a terminal")
+	}
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = null.Close() }()
+	os.Stdin = null
+	if stdinIsTerminal() {
+		t.Error("/dev/null is not a terminal")
+	}
+}

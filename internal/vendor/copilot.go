@@ -566,9 +566,11 @@ type copilotMCPServer struct {
 
 // GenerateMCPConfig writes the MCP file for the `ynh run` layout, into
 // .copilot/ (the --plugin-dir target). buildCopilotArgs re-reads this same
-// file and passes it with --additional-mcp-config, because a plugin loaded via
-// --plugin-dir does not get its bundled MCP config read, and the expanded
-// values must not be written into the project. An export uses
+// file and passes it with --additional-mcp-config, because the expanded
+// values must not be written into the project. This file is the root .mcp.json
+// placement, which --plugin-dir did not read on Copilot CLI v1.0.75 and has not
+// been re-run on 1.0.105; the .github/mcp.json placement IS read under
+// --plugin-dir on 1.0.105 (docs/vendor-parity.md L37). An export uses
 // GeneratePluginMCPConfig.
 func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	data, err := copilotMCPDocument(servers)
