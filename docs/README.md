@@ -41,7 +41,7 @@ david -v codex                     # same harness, different vendor
 }
 ```
 
-**Delegation is partial.** Your personal harness can delegate to a team harness. A delegate carries its instructions to the vendor (Claude Code also its MCP servers), not yet a full harness, and does not run on OpenCode (see [Vendor Feature Parity](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)). No middleware, no proxy.
+**Delegation is partial.** Your personal harness can delegate to a team harness. A delegate carries its instructions to the vendor (Claude Code also its MCP servers), not yet a full harness. It runs as a subagent on OpenCode under `ynh run`, with its instructions only (see [Vendor Feature Parity](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)). No middleware, no proxy.
 
 ```bash
 david                              # personal context

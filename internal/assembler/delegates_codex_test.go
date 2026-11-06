@@ -63,3 +63,32 @@ func TestAssembleDelegates_CodexWritesTOMLAgent(t *testing.T) {
 		t.Error("the launch file is Claude's alone")
 	}
 }
+
+// OpenCode defaults an agent with no mode to primary, so its task tool cannot
+// run it as a subagent. A delegate is staged by the rule a harness's own agent
+// is, which gives it mode: all, so the parent can call it.
+func TestAssembleDelegates_OpenCodeAgentRunsAsSubagent(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	repo := delegateRepo(t, t.TempDir(), map[string]any{
+		"name": "probe", "version": "0.1.0", "description": "Probes things.",
+	})
+
+	adapter, err := vendor.Get("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workDir := t.TempDir()
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Warn: &strings.Builder{}, Launch: true}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(workDir, ".opencode", "agents", "probe.md"))
+	if err != nil {
+		t.Fatalf("agent file: %v", err)
+	}
+	if !strings.Contains(string(data), "\nmode: all\n") || !strings.Contains(string(data), "description: Probes things.\n") {
+		t.Errorf("agent = %q, want mode: all and the description", data)
+	}
+	if !strings.Contains(string(data), "invoked as a delegate") {
+		t.Errorf("agent lost its prompt: %q", data)
+	}
+}
