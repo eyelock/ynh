@@ -607,11 +607,11 @@ func (o *OpenCode) LaunchWithInitialPrompt(configPath string, prompt string, ext
 
 func (o *OpenCode) SupportsInitialPrompt() bool { return true }
 
-// IsolateMCP cannot isolate on OpenCode: ynh has not verified a way to keep
-// the servers in the user's own OpenCode config out of a run, so it says so
-// and launches normally, as for Codex and Cursor.
+// IsolateMCP is OpenCode's isolation as launch arguments, and there are none:
+// OpenCode's isolation is an environment variable, IsolateMCPEnv, which `ynh
+// run` uses in its place. This is what a caller that only reads arguments gets.
 func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation is not supported by OpenCode: servers in your OpenCode config will still load"
+	return nil, "MCP isolation on OpenCode is applied through the environment, not launch arguments: servers in your OpenCode config will still load"
 }
 
 // ReplacesProcess is true: every OpenCode launch ends in syscall.Exec.

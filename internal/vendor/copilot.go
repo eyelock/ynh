@@ -225,12 +225,25 @@ func copilotResumeArgs(sessionID, prompt string, interactive bool, extraArgs []s
 	return initial, append(args, extraArgs...)
 }
 
-// IsolateMCP is partial on Copilot: --disable-builtin-mcps drops the built-in
-// servers, but the servers in the user's own ~/.copilot/mcp-config.json still
-// load, and ynh has no flag that stops them.
+// IsolateMCP keeps the user's configured servers out of a launch. Copilot lists
+// every server it would load (`copilot mcp list --json`: the user's, the
+// workspace's, installed plugins' and the built-ins) and takes
+// --disable-mcp-server <name> per launch, so each listed server the harness
+// does not compose is turned off, and --disable-builtin-mcps drops the
+// built-ins as a group. The harness's own servers arrive by
+// --additional-mcp-config and are not in that listing. Verified live on
+// Copilot CLI 1.0.106 (docs/vendor-parity.md, L6). If the listing cannot be
+// read, only the built-ins are dropped and ynh says so.
 func (c *Copilot) IsolateMCP(configPath string) ([]string, string) {
-	return []string{"--disable-builtin-mcps"},
-		"MCP isolation is partial on Copilot: built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load"
+	bin, err := exec.LookPath(c.CLIName())
+	if err != nil {
+		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
+	}
+	listed, err := copilotMCPListNames(bin, nil, "")
+	if err != nil {
+		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
+	}
+	return copilotIsolationArgs(listed, harnessMCPNames(filepath.Join(configPath, ".copilot", ".mcp.json"), false)), ""
 }
 
 // ApplyRuntimeInstructions appends per-invocation text to the assembled

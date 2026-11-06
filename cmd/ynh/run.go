@@ -516,6 +516,19 @@ func cmdRun(args []string) error {
 // isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
 // servers, printing the vendor's warning when it cannot isolate fully.
 func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
+	if e, ok := adapter.(vendor.MCPEnvIsolator); ok {
+		env, warning := e.IsolateMCPEnv(runDir)
+		if warning != "" {
+			_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
+		}
+		// The vendor inherits ynh's environment when it is launched.
+		for _, kv := range env {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				_ = os.Setenv(k, v)
+			}
+		}
+		return nil
+	}
 	args, warning := adapter.IsolateMCP(runDir)
 	if warning != "" {
 		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
