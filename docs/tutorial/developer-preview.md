@@ -144,7 +144,7 @@ In the preview output, the `safety.mdc` entry reads:
 
 ```
 ---
-description: Production safety rules
+description: "Production safety rules"
 alwaysApply: true
 ---
 
