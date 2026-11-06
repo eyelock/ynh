@@ -59,7 +59,7 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 | Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | Hooks | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
 | Session context (`on_session_start` output) | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| MCP isolation (`mcp_isolation`) | Y | N [L6](#l6-mcp-isolation) | – | X [L6](#l6-mcp-isolation) | N [L6](#l6-mcp-isolation) |
+| MCP isolation (`mcp_isolation`) | Y | Y | – | X [L6](#l6-mcp-isolation) | Y |
 | Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
 | `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
 | `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
@@ -135,15 +135,16 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L6: MCP isolation
 
-- **What:** isolation runs with only the harness's MCP servers. Under `ynh run` it works on Claude Code, Codex, Copilot CLI and OpenCode, and not on Cursor. Under `ynh agent run` it applies on the Claude Code backend only: a Codex or OpenCode worker prints a `warning:` line and loads your own servers too, and Cursor cannot isolate at all.
-- **Owner:** ynh for the `ynh agent run` cells on Codex and OpenCode. The vendor for Cursor, whose cell is **X**. On the other cells there is no limit left.
+- **What:** isolation runs with only the harness's MCP servers. It works under `ynh run` on Claude Code, Codex, Copilot CLI and OpenCode, and under `ynh agent run` on the Claude Code, Codex and OpenCode backends. It does not work on Cursor, which gets a `warning:` line and loads your own servers too.
+- **Owner:** the vendor for Cursor, whose cells are **X**. On the other cells there is no limit left.
 - **Evidence:**
   - **Codex**, codex-cli 0.166.0, live through `ynh run`, 2026-11-06: a probe MCP server in `$CODEX_HOME/config.toml` started without isolation and did not with `--isolated-mcp`, while the harness's own probe server started in both. Codex has `codex mcp list --json` and `-c mcp_servers.<name>.enabled=false`; `codex exec --ignore-user-config` exists too but only on `exec`, so it cannot serve an interactive launch.
   - **Copilot CLI**, 1.0.106, live through `ynh run`, 2026-11-06: the same probe in `$COPILOT_HOME/mcp-config.json`, with the same result, using `copilot mcp list --json` and `--disable-mcp-server <name>`. This replaces the 1.0.105 result of the release verification, where only the built-ins could be turned off.
   - **OpenCode**, 2.2.3, live through `ynh run`, 2026-11-06: a server in the global `opencode.json` did not start even without isolation, since `OPENCODE_CONFIG_DIR` replaces the global config directory (`opencode debug config` lists no global source when it is set). A server in the project's `opencode.json` started without isolation and did not with it, and the harness's own server started in both. The "no isolation" claim recorded before was wrong for the global config.
+  - **`ynh agent run`**, live 2026-11-06 with a harness that sets `mcp_isolation`, a probe server in the operator's Codex config and another in the worktree's OpenCode `opencode.json`: on the Codex backend the operator's probe started without isolation and not with it; on the OpenCode backend the worktree's probe started without it and not with it; the harness's probe started in every run. The worker's environment is smaller than ynh's, so the vendor is asked which servers it would load under the worker's environment and in its worktree.
   - **Cursor**, cursor-agent 2026.11.05-86047df, **from documentation, not a live run** (no Cursor licence was available): [Cursor's MCP page](https://cursor.com/docs/mcp) documents `~/.cursor/mcp.json` and `.cursor/mcp.json` and only an in-app toggle for turning servers off. `cursor-agent --help` has no flag for it (`--approve-mcps` only approves); `cursor-agent mcp disable <name>` persists to the user's own state, which a launch must not rewrite; and the bundle reads no environment variable that moves its config. The live check is deferred with the rest of the Cursor `ynh run` column ([L35](#l35-cursor-under-ynh-run-not-shown-live)).
-- **Tracking:** [ynh #731](https://github.com/eyelock/ynh/issues/731), v0.18.0, for `ynh run`. The `ynh agent run` cells meet the delegates rewrite, [ynh #729](https://github.com/eyelock/ynh/issues/729), v0.18.0, whose delegate sessions need the same per-launch isolation on their own backends.
-- **Workaround:** for a Cursor launch, none. For a `ynh agent run` worker on Codex or OpenCode, remove the servers from your own config.
+- **Tracking:** [ynh #731](https://github.com/eyelock/ynh/issues/731), v0.18.0.
+- **Workaround:** none for Cursor.
 - **Detail:** [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
 ### L7: Codex hooks need an accepted harness

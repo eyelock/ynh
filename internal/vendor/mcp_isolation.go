@@ -42,14 +42,16 @@ var mcpListTimeout = 20 * time.Second
 
 // mcpListRunner runs a vendor CLI and returns its standard output. A variable
 // so tests never run the real binary. env, when non-nil, replaces the
-// process environment.
-var mcpListRunner = func(bin string, args []string, env []string) ([]byte, error) {
+// process environment; dir, when not empty, is the directory it runs in, since
+// a vendor also lists the servers of the project it is launched in.
+var mcpListRunner = func(bin string, args []string, env []string, dir string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), mcpListTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	if env != nil {
 		cmd.Env = env
 	}
+	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -102,8 +104,8 @@ func harnessMCPNames(path string, opencode bool) map[string]bool {
 }
 
 // codexMCPListNames returns the servers `codex mcp list --json` reports.
-func codexMCPListNames(bin string) ([]string, error) {
-	out, err := mcpListRunner(bin, []string{"mcp", "list", "--json"}, nil)
+func codexMCPListNames(bin string, env []string, dir string) ([]string, error) {
+	out, err := mcpListRunner(bin, []string{"mcp", "list", "--json"}, env, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +124,8 @@ func codexMCPListNames(bin string) ([]string, error) {
 
 // copilotMCPListNames returns the servers `copilot mcp list --json` reports:
 // the user's, the workspace's, installed plugins' and the built-ins.
-func copilotMCPListNames(bin string) ([]string, error) {
-	out, err := mcpListRunner(bin, []string{"mcp", "list", "--json"}, nil)
+func copilotMCPListNames(bin string, env []string, dir string) ([]string, error) {
+	out, err := mcpListRunner(bin, []string{"mcp", "list", "--json"}, env, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -170,46 +172,60 @@ func copilotIsolationArgs(listed []string, keep map[string]bool) []string {
 	return args
 }
 
-// opencodeListedServers returns the servers `opencode debug config` reports,
-// merged in the order it lists its sources (later wins), each as the raw
-// object so a disabled copy can repeat every field OpenCode requires.
-func opencodeListedServers(bin string) (map[string]map[string]any, error) {
-	env := make([]string, 0, len(os.Environ()))
-	for _, e := range os.Environ() {
+// opencodeListedServers returns the names of the servers `opencode debug
+// config` reports, merged across its sources, each with its transport type
+// ("local" or "remote"). Only the type is kept: the listing shows
+// {env:NAME} references in a command or url with their values substituted
+// (only "environment" and "headers" are masked), so anything beyond the type
+// could carry a credential.
+func opencodeListedServers(bin string, base []string, dir string) (map[string]string, error) {
+	env := make([]string, 0, len(base))
+	for _, e := range base {
 		if !strings.HasPrefix(e, opencodeConfigDirEnv+"=") {
 			env = append(env, e)
 		}
 	}
-	out, err := mcpListRunner(bin, []string{"--standalone", "debug", "config"}, env)
+	out, err := mcpListRunner(bin, []string{"--standalone", "debug", "config"}, env, dir)
 	if err != nil {
 		return nil, err
 	}
 	var sources []struct {
 		Info struct {
 			MCP struct {
-				Servers map[string]map[string]any `json:"servers"`
+				Servers map[string]struct {
+					Type string `json:"type"`
+				} `json:"servers"`
 			} `json:"mcp"`
 		} `json:"info"`
 	}
 	if err := json.Unmarshal(jsonFrom(out), &sources); err != nil {
 		return nil, fmt.Errorf("reading `opencode debug config`: %w", err)
 	}
-	merged := map[string]map[string]any{}
+	merged := map[string]string{}
 	for _, s := range sources {
 		for n, srv := range s.Info.MCP.Servers {
-			merged[n] = srv
+			merged[n] = srv.Type
 		}
 	}
 	return merged, nil
 }
 
+// opencodeDisabledServer is the smallest object that turns a server off. OpenCode
+// replaces a server's whole object when a higher-precedence source repeats its
+// name and requires a type and a command or url (a bare {"disabled": true} is
+// rejected as malformed and the server still starts), so the object carries
+// placeholders, never the server's own command, url, environment or headers.
+func opencodeDisabledServer(typ string) map[string]any {
+	if typ == "remote" {
+		return map[string]any{"type": "remote", "url": "https://disabled.invalid", "disabled": true}
+	}
+	return map[string]any{"type": "local", "command": []string{"false"}, "disabled": true}
+}
+
 // opencodeIsolationContent builds the OPENCODE_CONFIG_CONTENT that turns off,
-// for one launch, every listed server the harness does not compose. OpenCode
-// replaces a server's whole object when a higher-precedence source repeats
-// its name, so each copy repeats the server's own fields and adds
-// "disabled": true. existing is the caller's own OPENCODE_CONFIG_CONTENT, if
-// any, which is kept.
-func opencodeIsolationContent(listed map[string]map[string]any, keep map[string]bool, existing string) (string, error) {
+// for one launch, every listed server the harness does not compose. existing
+// is the caller's own OPENCODE_CONFIG_CONTENT, if any, which is kept.
+func opencodeIsolationContent(listed map[string]string, keep map[string]bool, existing string) (string, error) {
 	doc := map[string]any{}
 	if strings.TrimSpace(existing) != "" {
 		if err := json.Unmarshal([]byte(existing), &doc); err != nil {
@@ -224,16 +240,10 @@ func opencodeIsolationContent(listed map[string]map[string]any, keep map[string]
 	if servers == nil {
 		servers = map[string]any{}
 	}
-	for n, srv := range listed {
-		if keep[n] {
-			continue
+	for n, typ := range listed {
+		if !keep[n] {
+			servers[n] = opencodeDisabledServer(typ)
 		}
-		cp := make(map[string]any, len(srv)+1)
-		for k, v := range srv {
-			cp[k] = v
-		}
-		cp["disabled"] = true
-		servers[n] = cp
 	}
 	mcp["servers"] = servers
 	doc["mcp"] = mcp
@@ -241,21 +251,47 @@ func opencodeIsolationContent(listed map[string]map[string]any, keep map[string]
 	return string(data), err
 }
 
+// envValue returns name's value in env ("NAME=value" pairs), or in the
+// process environment when env is nil.
+func envValue(env []string, name string) string {
+	if env == nil {
+		return os.Getenv(name)
+	}
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, name+"="); ok {
+			return v
+		}
+	}
+	return ""
+}
+
 // IsolateMCPEnv turns off, for one launch, the servers OpenCode would load
 // besides the harness's: OPENCODE_CONFIG_CONTENT is the highest-precedence
 // config source a launch can set, and it needs no write to the user's config.
 func (o *OpenCode) IsolateMCPEnv(configPath string) ([]string, string) {
+	return o.IsolateMCPEnvIn(configPath, nil, "")
+}
+
+// IsolateMCPEnvIn is IsolateMCPEnv for a launch whose environment is env, not
+// ynh's own (a `ynh agent run` worker gets a smaller one): the vendor is asked
+// which servers it would load under that environment, in dir (the project's
+// directory; empty is the current one). A nil env is ynh's.
+func (o *OpenCode) IsolateMCPEnvIn(configPath string, env []string, dir string) ([]string, string) {
 	const fail = "MCP isolation could not be applied on OpenCode (%v): servers in your OpenCode config will still load"
 	bin, err := exec.LookPath(opencodeCLI)
 	if err != nil {
 		return nil, fmt.Sprintf(fail, err)
 	}
-	listed, err := opencodeListedServers(bin)
+	base := env
+	if base == nil {
+		base = os.Environ()
+	}
+	listed, err := opencodeListedServers(bin, base, dir)
 	if err != nil {
 		return nil, fmt.Sprintf(fail, err)
 	}
 	keep := harnessMCPNames(filepath.Join(configPath, ".opencode", "opencode.json"), true)
-	content, err := opencodeIsolationContent(listed, keep, os.Getenv("OPENCODE_CONFIG_CONTENT"))
+	content, err := opencodeIsolationContent(listed, keep, envValue(env, "OPENCODE_CONFIG_CONTENT"))
 	if err != nil {
 		return nil, fmt.Sprintf(fail, err)
 	}

@@ -1896,6 +1896,39 @@ func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 	}
 }
 
+// OpenCode's isolation is environment variables, not arguments, so the branch
+// in isolationLaunchArgs must set them in ynh's own environment, where the
+// launch inherits them. Without that branch this test fails.
+func TestIsolationLaunchArgs_OpenCodeSetsTheConfigContent(t *testing.T) {
+	bin := t.TempDir()
+	script := `#!/bin/sh
+case "$*" in
+*"debug config"*) echo '[{"type":"document","path":"/p","info":{"mcp":{"servers":{"usersrv":{"type":"remote","url":"https://x.example/mcp"}}}}}]' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "opencode"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("OPENCODE_CONFIG_CONTENT", "") // restored when the test ends
+
+	adapter, err := vendor.Get("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if args := isolationLaunchArgs(adapter, t.TempDir(), &buf); len(args) != 0 {
+		t.Errorf("args = %v, want none: OpenCode isolates through the environment", args)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("unexpected warning %q", buf.String())
+	}
+	got := os.Getenv("OPENCODE_CONFIG_CONTENT")
+	if !strings.Contains(got, `"usersrv"`) || !strings.Contains(got, `"disabled":true`) {
+		t.Errorf("OPENCODE_CONFIG_CONTENT = %q, want usersrv disabled", got)
+	}
+}
+
 func TestCmdRun_RepeatedProfileRules(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	t.Setenv("YNH_FOCUS", "")

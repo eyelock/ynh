@@ -721,8 +721,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 
 	isolatedMCP := harnessObj != nil && harnessObj.MCPIsolation
-	if isolatedMCP && wb.Name() != "claude" {
-		_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is only applied to the claude backend: %s will load your own MCP servers\n", wb.Name())
+	// The claude, codex and opencode backends isolate (each says so itself if it
+	// cannot do it fully); any other cannot.
+	switch wb.Name() {
+	case "claude", "codex", "opencode":
+	default:
+		if isolatedMCP {
+			_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is not supported by the %s backend: it will load your own MCP servers\n", wb.Name())
+		}
 	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,

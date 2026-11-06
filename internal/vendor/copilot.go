@@ -236,7 +236,7 @@ func (c *Copilot) IsolateMCP(configPath string) ([]string, string) {
 	if err != nil {
 		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
 	}
-	listed, err := copilotMCPListNames(bin)
+	listed, err := copilotMCPListNames(bin, nil, "")
 	if err != nil {
 		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
 	}

@@ -39,6 +39,9 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		opts:     opts,
 		threadID: opts.ResumeToken,
 	}
+	if opts.IsolatedMCP {
+		s.isolation, _ = workerMCPIsolation(&vendor.Codex{}, opts.ConfigPath, workerEnvFor(opts.Env), opts.WorktreeDir, opts.Stderr)
+	}
 	// Each turn registers the agents again (buildCodexArgs); say once which
 	// cannot be.
 	if _, warnings := vendor.CodexAgentArgs(opts.ConfigPath); opts.Stderr != nil {
@@ -274,6 +277,9 @@ type codexSession struct {
 	// known (see Start).
 	totals      codexTotals
 	totalsKnown bool
+	// isolation turns off the operator's own MCP servers (IsolatedMCP), found
+	// once in Start and passed on every turn.
+	isolation []string
 }
 
 // ResumeToken returns the codex thread id once known: the one resumed, or
@@ -295,7 +301,7 @@ func (s *codexSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending, s.hasMsg = "", false
 
-	cmd := exec.CommandContext(s.ctx, s.codexBin, buildCodexArgs(s.opts, s.threadID)...)
+	cmd := exec.CommandContext(s.ctx, s.codexBin, withIsolationArgs(buildCodexArgs(s.opts, s.threadID), s.isolation, 1)...)
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir

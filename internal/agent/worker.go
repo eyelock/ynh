@@ -115,7 +115,7 @@ type StartOptions struct {
 	UsageBase *Usage
 	// IsolatedMCP restricts the worker to the MCP servers the harness composes
 	// (its own and its included harnesses'), leaving out the operator's.
-	// Only the claude backend honours it.
+	// The claude, codex and opencode backends honour it; cursor cannot (L6).
 	IsolatedMCP bool
 	// MCPManualApproval leaves approval of the harness's MCP tools to the
 	// vendor (mcp_manual_approval). Without it the codex backend approves them,

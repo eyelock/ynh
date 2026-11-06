@@ -209,12 +209,21 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 // would also do it, but only for a one-shot run, and it drops the rest of the
 // user config (model, approvals) with it.
 func (c *Codex) IsolateMCP(configPath string) ([]string, string) {
+	return c.IsolateMCPIn(configPath, nil, "")
+}
+
+// IsolateMCPIn is IsolateMCP for a launch whose environment is env, not ynh's
+// own (a `ynh agent run` worker gets a smaller one, without CODEX_HOME unless
+// the harness passes it): Codex is asked which servers it would load under
+// that environment, so a name is never disabled that the launch would not
+// see, in dir (the project's directory; empty is the current one). A nil env is ynh's.
+func (c *Codex) IsolateMCPIn(configPath string, env []string, dir string) ([]string, string) {
 	const fail = "MCP isolation could not be applied on Codex (%v): servers in your Codex config will still load"
 	bin, err := exec.LookPath(c.CLIName())
 	if err != nil {
 		return nil, fmt.Sprintf(fail, err)
 	}
-	listed, err := codexMCPListNames(bin)
+	listed, err := codexMCPListNames(bin, env, dir)
 	if err != nil {
 		return nil, fmt.Sprintf(fail, err)
 	}

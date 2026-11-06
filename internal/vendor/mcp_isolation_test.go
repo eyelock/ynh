@@ -22,7 +22,7 @@ func stubMCPList(t *testing.T, out string, err error, bins ...string) *[][]strin
 	t.Setenv("PATH", dir)
 	var calls [][]string
 	old := mcpListRunner
-	mcpListRunner = func(bin string, args []string, env []string) ([]byte, error) {
+	mcpListRunner = func(bin string, args []string, env []string, dir string) ([]byte, error) {
 		calls = append(calls, args)
 		return []byte(out), err
 	}
@@ -96,7 +96,8 @@ func TestCopilotIsolateMCP_ListingFailsFallsBackToBuiltinsOnly(t *testing.T) {
 
 func TestOpenCodeIsolateMCPEnv_DisablesACopyOfEachOtherServer(t *testing.T) {
 	stubMCPList(t, `[{"type":"document","path":"/g","info":{"mcp":{"servers":{
-		"usersrv":{"type":"local","command":["a","b"]},
+		"usersrv":{"type":"local","command":["a","tok-in-arg"],"environment":{"T":"***"}},
+		"remsrv":{"type":"remote","url":"https://x.example/mcp?k=secret","headers":{"Authorization":"***"}},
 		"harnesssrv":{"type":"local","command":["h"]}}}}},
 		{"type":"directory","path":"/d"}]`, nil, "opencode")
 	dir := t.TempDir()
@@ -124,7 +125,17 @@ func TestOpenCodeIsolateMCPEnv_DisablesACopyOfEachOtherServer(t *testing.T) {
 	}
 	u := doc.MCP.Servers["usersrv"]
 	if u["disabled"] != true || u["type"] != "local" || u["command"] == nil {
-		t.Errorf("usersrv = %v, want a full copy with disabled:true", u)
+		t.Errorf("usersrv = %v, want a local placeholder with disabled:true", u)
+	}
+	r := doc.MCP.Servers["remsrv"]
+	if r["disabled"] != true || r["type"] != "remote" || r["url"] != "https://disabled.invalid" {
+		t.Errorf("remsrv = %v, want a remote placeholder with disabled:true", r)
+	}
+	// Nothing of the user's own servers, credentials included, is copied.
+	for _, leak := range []string{"tok-in-arg", "secret", "Authorization", "environment", "headers"} {
+		if strings.Contains(env[0], leak) {
+			t.Errorf("OPENCODE_CONFIG_CONTENT carries %q: %s", leak, env[0])
+		}
 	}
 }
 
