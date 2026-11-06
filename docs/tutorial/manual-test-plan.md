@@ -58,7 +58,7 @@ Re-run `make install` after any code change you want to test.
 | Create and install test harness | [Create and install a test harness](vendors-and-symlinks.md#create-and-install-a-test-harness) |
 | List available vendors | [List available vendors](vendors-and-symlinks.md#list-available-vendors) |
 | Switch vendors | [Switch vendors](vendors-and-symlinks.md#switch-vendors) |
-| Automatic symlink prompt | [Symlinks — automatic prompt](vendors-and-symlinks.md#symlinks-automatic-prompt) |
+| Automatic symlink prompt | [Symlinks — the prompt needs a terminal](vendors-and-symlinks.md#symlinks-the-prompt-needs-a-terminal) |
 | Explicit install and clean | [Symlinks — explicit install and clean](vendors-and-symlinks.md#symlinks-explicit-install-and-clean) |
 | Claude no-symlinks | [Symlinks — Claude doesn't need them](vendors-and-symlinks.md#symlinks-claude-doesn-t-need-them) |
 | Prune orphans | [Prune orphaned installations](vendors-and-symlinks.md#prune-orphaned-installations) |
