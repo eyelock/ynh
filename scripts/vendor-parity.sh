@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Seven assertions:
+# Eight assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -40,6 +40,11 @@
 #   G. Every vendor declares the flag that grants a workspace folder, or the
 #      reason it has none (scripts/workspace-parity.sh). A vendor that cannot
 #      warns; it never drops a folder silently.
+#
+#   H. docs/vendor-parity.md agrees with ynh (scripts/parity-page.sh, #718):
+#      a column for every vendor, legend marks only, every limit named, owned
+#      and evidenced, every N tracked by an issue, hook and workspace cells
+#      that match the adapters, and no second copy of the table.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -322,6 +327,13 @@ fi
 echo
 echo "== G. workspace folders =="
 if ! "$ROOT/scripts/workspace-parity.sh" "$ROOT" $(cut -f1 "$TMP/vendors.tsv"); then
+	fail=1
+fi
+
+# --- H. the parity page agrees with ynh -------------------------------------
+echo
+echo "== H. parity page =="
+if ! "$ROOT/scripts/parity-page.sh" "$ROOT" "$TMP/vendors.json"; then
 	fail=1
 fi
 

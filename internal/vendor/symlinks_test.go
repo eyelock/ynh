@@ -259,3 +259,55 @@ func TestNeedsSymlinks(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanSymlinks_RemovesEmptyConfigFolders(t *testing.T) {
+	project := t.TempDir()
+	target := filepath.Join(t.TempDir(), "t")
+	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(project, ".cursor", "rules", "r")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanSymlinks([]SymlinkEntry{{Target: target, Link: link}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(project, ".cursor")); !os.IsNotExist(err) {
+		t.Error("empty .cursor/ should have been removed")
+	}
+	if _, err := os.Stat(project); err != nil {
+		t.Error("the project folder must stay")
+	}
+}
+
+func TestCleanSymlinks_KeepsFoldersWithOtherFiles(t *testing.T) {
+	project := t.TempDir()
+	target := filepath.Join(t.TempDir(), "t")
+	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(project, ".cursor", "rules", "r")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	mine := filepath.Join(project, ".cursor", "mcp.json")
+	if err := os.WriteFile(mine, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanSymlinks([]SymlinkEntry{{Target: target, Link: link}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(mine); err != nil {
+		t.Error("the user's file must stay")
+	}
+	if _, err := os.Stat(filepath.Join(project, ".cursor", "rules")); !os.IsNotExist(err) {
+		t.Error("empty rules/ should have been removed")
+	}
+}

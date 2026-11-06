@@ -217,3 +217,28 @@ func TestCmdRun_HarnessFileCurrentFormat(t *testing.T) {
 		})
 	}
 }
+
+// Without a terminal, `ynh run -v cursor` refuses to install symlinks: it
+// returns the consent error, links nothing and records nothing.
+func TestCmdRun_NoTerminalRefusesSymlinkInstall(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "my-dev")
+	writeSkillHarness(t, harnessDir, "my-dev")
+	t.Chdir(work)
+
+	orig := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	defer func() { stdinIsTerminal = orig }()
+
+	err := cmdRun([]string{harnessDir, "-v", "cursor"})
+	if err == nil || !strings.Contains(err.Error(), "no terminal") || !strings.Contains(err.Error(), "--install") {
+		t.Fatalf("err = %v, want the consent refusal naming --install", err)
+	}
+	if _, statErr := os.Lstat(filepath.Join(work, ".cursor")); !os.IsNotExist(statErr) {
+		t.Errorf("a .cursor/ was created despite the refusal: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(os.Getenv("YNH_HOME"), "symlinks.json")); !os.IsNotExist(statErr) {
+		t.Errorf("symlinks.json was written despite the refusal: %v", statErr)
+	}
+}

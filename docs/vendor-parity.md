@@ -8,7 +8,7 @@ What each vendor receives from a harness, on each surface ynh has: `ynh run`, `y
   - **Cursor**, `ynd export` column: a package loaded live into cursor-agent 2026.11.05-86047df, at `develop` [c29ebd6](https://github.com/eyelock/ynh/commit/c29ebd6), whose export code is the same as at f2822a1. The record is on [ynh #735](https://github.com/eyelock/ynh/issues/735). [ynh #742](https://github.com/eyelock/ynh/pull/742), merged at `develop` [fbe9e14](https://github.com/eyelock/ynh/commit/fbe9e14), then stopped the export writing `.cursorrules` and `AGENTS.md`. A live load of the package it writes is deferred to a later release.
   - **Cursor**, `ynh run` and `ynh agent run` columns: not run live in this verification. Their live check is deferred to a later release. Four `ynh run` cells were shown live before it, through `ynh run -v cursor`, and were not re-checked: Hooks ([ynh #621](https://github.com/eyelock/ynh/pull/621), cursor-agent 2026.10.01-e373342, and [L8](#l8-cursor-print-mode-skips-two-hooks)), Session context ([ynh #627](https://github.com/eyelock/ynh/pull/627)), Resume ([ynh #714](https://github.com/eyelock/ynh/pull/714), cursor-agent 2026.10.22) and focuses ([Focus](focus.md), cursor-agent 2026.10.22). Every other Cursor cell on these two surfaces is U ([L35](#l35-cursor-under-ynh-run-not-shown-live), [L36](#l36-the-cursor-backend-not-shown-live)), or N or X with its own limit.
 
-This page is the only copy of this table. Other pages link here rather than repeat it. How each vendor is launched, and where its files go, is in [Vendor Support](vendors.md).
+This page is the only copy of this table. Other pages link here rather than repeat it. `make check-vendor-parity` checks the page against ynh (`scripts/parity-page.sh`, [ynh #718](https://github.com/eyelock/ynh/issues/718)): it fails when a vendor that `ynh vendors` reports has no column, when a cell is not a legend mark or a non-Y cell names no limit, when a limit has no Owner or Evidence, when an N limit links no issue, when a Hooks, Session context or Workspace folders cell contradicts what the vendor's adapter declares, and when another page holds a copy of the table. How each vendor is launched, and where its files go, is in [Vendor Support](vendors.md).
 
 ## Legend
 
@@ -46,7 +46,7 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | Profiles | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
 | Focuses, includes, sensors | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
 | Workspace folders | Y | P [L10](#l10-codex-workspace-folders-on-resume) | Y | U [L11](#l11-cursor-workspace-folders) | Y |
-| `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | N [L12](#l12-delegates-carry-only-part-of-a-harness) |
+| `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L12](#l12-delegates-carry-only-part-of-a-harness) |
 | Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | Y | Y |
 | Telemetry from `ynh run` | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) |
 
@@ -57,8 +57,8 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
 | Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Hooks | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
-| Session context (`on_session_start` output) | Y | N [L15](#l15-a-codex-worker-runs-no-hooks) | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Hooks | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
+| Session context (`on_session_start` output) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | MCP isolation (`mcp_isolation`) | Y | Y | – | X [L6](#l6-mcp-isolation) | Y |
 | Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
 | `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
@@ -137,7 +137,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 - **What:** isolation runs with only the harness's MCP servers. It works under `ynh run` on Claude Code, Codex, Copilot CLI and OpenCode, and under `ynh agent run` on the Claude Code, Codex and OpenCode backends. It does not work on Cursor, which gets a `warning:` line and loads your own servers too.
 - **Owner:** the vendor for Cursor, whose cells are **X**. On the other cells there is no limit left.
-- **Evidence:**
+- **Evidence:** live runs on Codex, Copilot CLI and OpenCode, and Cursor's documentation:
   - **Codex**, codex-cli 0.166.0, live through `ynh run`, 2026-11-06: a probe MCP server in `$CODEX_HOME/config.toml` started without isolation and did not with `--isolated-mcp`, while the harness's own probe server started in both. Codex has `codex mcp list --json` and `-c mcp_servers.<name>.enabled=false`; `codex exec --ignore-user-config` exists too but only on `exec`, so it cannot serve an interactive launch.
   - **Copilot CLI**, 1.0.106, live through `ynh run`, 2026-11-06: the same probe in `$COPILOT_HOME/mcp-config.json`, with the same result, using `copilot mcp list --json` and `--disable-mcp-server <name>`. This replaces the 1.0.105 result of the release verification, where only the built-ins could be turned off.
   - **OpenCode**, 2.2.3, live through `ynh run`, 2026-11-06: a server in the global `opencode.json` did not start even without isolation, since `OPENCODE_CONFIG_DIR` replaces the global config directory (`opencode debug config` lists no global source when it is set). A server in the project's `opencode.json` started without isolation and did not with it, and the harness's own server started in both. The "no isolation" claim recorded before was wrong for the global config.
@@ -149,7 +149,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L7: Codex hooks need an accepted harness
 
-- **What:** Codex runs a hook only when it trusts it. `ynh run` grants that trust for one run, and only for an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
+- **What:** Codex runs a hook only when it trusts it. `ynh run` and `ynh agent run --backend codex` grant that trust for one run (see [L15](#l15-a-codex-worker-ran-no-hooks-fixed) and [Codex hook trust](hooks.md#codex-hook-trust)), under the same rule: only an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
 - **Owner:** ynh, by design: it grants trust only to a harness you have accepted.
 - **Evidence:** codex-cli 0.166.0, [ynh #701](https://github.com/eyelock/ynh/pull/701).
 - **Tracking:** none.
@@ -194,9 +194,9 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L12: Delegates carry only part of a harness
 
-- **What:** a delegate reaches the vendor as an agent carrying its instructions. On Claude Code it also carries its MCP servers. On no vendor does it carry its hooks or workspace folders. On OpenCode a delegate does not run as a subagent. Its agent file is in the run directory, and another agent may read it. `ynd export -v opencode` leaves delegates out with the warning `opencode: skipping N delegates (not supported)`. In an export, a delegate carries only its instructions; on Claude Code its MCP servers are written into the agent, but Claude Code ignores them in a plugin agent (ynd warns).
+- **What:** a delegate reaches the vendor as an agent carrying its instructions. On Claude Code it also carries its MCP servers. On no vendor does it carry its hooks or workspace folders. Under `ynh run`, OpenCode offers a delegate as a subagent the task tool can call, with its instructions only. `ynd export -v opencode` leaves delegates out with the warning `opencode: skipping N delegates (not supported)`. In an export, a delegate carries only its instructions; on Claude Code its MCP servers are written into the agent, but Claude Code ignores them in a plugin agent (ynd warns).
 - **Owner:** ynh.
-- **Evidence:** under `ynh run`, live on Claude Code 2.1.318, codex-cli 0.166.0, Copilot CLI 1.0.105 and OpenCode 2.2.3, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) (the release verification, in the body of [ynh #753](https://github.com/eyelock/ynh/pull/753)): a delegate's codeword, set only in its instructions, came back on Claude Code, Codex and Copilot. On Claude Code the delegate's MCP server started (its log shows `initialize` and `tools/list`), and the one-shot run refused the tool call for permission. Codex, Copilot and OpenCode printed `warning: delegate <name> declares MCP servers (<server>) that <vendor> subagents cannot carry; they are not available to it`. The delegate's hooks fired on none of the four. On OpenCode the delegate was not offered as a subagent type (only `explore` and `general`); in another run its codeword came back through OpenCode's general agent, not the delegate. In an export, the same verification found that Claude Code ignores the MCP servers written into a plugin agent. Background: [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates).
+- **Evidence:** under `ynh run`, live on Claude Code 2.1.318, codex-cli 0.166.0, Copilot CLI 1.0.105 and OpenCode 2.2.3, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) (the release verification, in the body of [ynh #753](https://github.com/eyelock/ynh/pull/753)): a delegate's codeword, set only in its instructions, came back on Claude Code, Codex and Copilot. On Claude Code the delegate's MCP server started (its log shows `initialize` and `tools/list`), and the one-shot run refused the tool call for permission. Codex, Copilot and OpenCode printed `warning: delegate <name> declares MCP servers (<server>) that <vendor> subagents cannot carry; they are not available to it`. The delegate's hooks fired on none of the four. On OpenCode the delegate was not offered as a subagent type (only `explore` and `general`) because its agent file had no `mode`, which OpenCode reads as primary. It is written with `mode: all` now, and a live run on OpenCode 2.2.3, 2026-11-06, on [ynh #762](https://github.com/eyelock/ynh/pull/762) at 84b9e44, called the delegate through the task tool and got its codeword back from it. In an export, the same verification found that Claude Code ignores the MCP servers written into a plugin agent. Background: [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates).
 - **Tracking:** [ynh #729](https://github.com/eyelock/ynh/issues/729), v0.18.0.
 - **Workaround:** for everything else, include the harness (`includes`) rather than delegating to it.
 - **Detail:** [delegates_to](harnesses.md#delegates-to-optional).
@@ -219,13 +219,13 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** run the harness on Copilot with `ynh run`.
 - **Detail:** [The Agent Loop](agent.md).
 
-### L15: A Codex worker runs no hooks
+### L15: A Codex worker ran no hooks (fixed)
 
-- **What:** `ynh agent run --backend codex` does not pass Codex the trust overrides that `ynh run` passes ([L7](#l7-codex-hooks-need-an-accepted-harness)), so a harness's hooks, and its `on_session_start` context, do not fire.
+- **What:** `ynh agent run --backend codex` did not pass Codex the trust overrides that `ynh run` passes ([L7](#l7-codex-hooks-need-an-accepted-harness)), so a harness's hooks, and its `on_session_start` context, did not fire. Fixed: for an accepted harness, ynh now hands the worker the hooks inline as `-c hooks.<Event>=[...]` overrides, each trusted by its hash, on every turn. A worker runs in the task's worktree, not the run directory, so Codex never loads the run directory's `.codex/hooks.json`; the overrides do not depend on the working directory. A harness that is not accepted gets none, with the same line on stderr as `ynh run`.
 - **Owner:** ynh.
-- **Evidence:** [Codex hook trust](hooks.md#codex-hook-trust).
-- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0.
-- **Workaround:** none.
+- **Evidence:** live on Codex (codex-cli 0.166.0), 2026-11-06: an installed harness with an `on_session_start` hook that prints a marker and touches a file. Before `ynh trust accept` the worker printed the not-trusted line and the file was not created; after it the hook ran, the marker reached the model and appeared in the trajectory, and `~/.codex/config.toml` was byte-identical afterwards. See [Codex hook trust](hooks.md#codex-hook-trust).
+- **Tracking:** [ynh #730](https://github.com/eyelock/ynh/issues/730), v0.18.0, fixed by [ynh #759](https://github.com/eyelock/ynh/pull/759).
+- **Workaround:** none needed.
 - **Detail:** [Codex hook trust](hooks.md#codex-hook-trust).
 
 ### L16: Cursor and OpenCode have no effort setting

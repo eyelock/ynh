@@ -113,6 +113,12 @@ type RunOptions struct {
 	// the operator's allow-list and trust record, which this package does not
 	// read.
 	WorkspaceGrant func(h *harness.Harness, id, backend, worktree string) []string
+	// HookTrust decides whether the harness's hooks may run on the backend.
+	// It is handed the harness as loaded, the installed id ("" for a harness
+	// given by path), the backend and the assembled harness directory, and
+	// reports a refusal itself. Nil trusts nothing; the decision needs the
+	// operator's trust record, which this package does not read.
+	HookTrust func(h *harness.Harness, id, backend, configDir string) bool
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -358,6 +364,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	var gateProfile string
 	// workspaceDirs are the extra folders granted to the worker.
 	var workspaceDirs []string
+	// loadedHarness and loadedID are what the hook trust decision is made on:
+	// the harness as loaded, before any focus or profile, as for workspaces.
+	var loadedHarness *harness.Harness
+	var loadedID string
 
 	if opts.HarnessName != "" {
 		// An installed id or a local harness directory, resolved exactly as
@@ -374,11 +384,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			reportedName = harnessObj.Name
 		}
 
+		loadedHarness = harnessObj
+		if namespace.Classify(opts.HarnessName) == namespace.RefID {
+			loadedID = opts.HarnessName
+		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
-			id := ""
-			if namespace.Classify(opts.HarnessName) == namespace.RefID {
-				id = opts.HarnessName
-			}
+			id := loadedID
 			workspaceDirs = opts.WorkspaceGrant(harnessObj, id, opts.Backend, opts.WorktreeDir)
 		}
 
@@ -730,16 +741,18 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is not supported by the %s backend: it will load your own MCP servers\n", wb.Name())
 		}
 	}
+	trustedHooks := opts.HookTrust != nil && loadedHarness != nil && opts.HookTrust(loadedHarness, loadedID, wb.Name(), configPath)
 	sess, err := wb.Start(ctx, StartOptions{
-		WorktreeDir: opts.WorktreeDir,
-		Workspace:   workspaceDirs,
-		ConfigPath:  configPath,
-		Sandbox:     opts.Sandbox,
-		SessionDir:  sessionDir,
-		AutoApprove: opts.AutoApprove,
-		Model:       opts.Model,
-		Effort:      opts.Effort,
-		IsolatedMCP: isolatedMCP,
+		TrustedHooks: trustedHooks,
+		WorktreeDir:  opts.WorktreeDir,
+		Workspace:    workspaceDirs,
+		ConfigPath:   configPath,
+		Sandbox:      opts.Sandbox,
+		SessionDir:   sessionDir,
+		AutoApprove:  opts.AutoApprove,
+		Model:        opts.Model,
+		Effort:       opts.Effort,
+		IsolatedMCP:  isolatedMCP,
 		// The profile's mcp_manual_approval is already resolved into harnessObj.
 		MCPManualApproval: harnessObj != nil && harnessObj.MCPManualApproval,
 		ResumeToken:       resumeToken,

@@ -90,6 +90,9 @@ jobs:
               - 'scripts/**'
               - 'Makefile'
               - '.github/workflows/**'
+              # check-vendor-parity checks this page (assertion H, #718), so
+              # a PR that edits only the page must still run it.
+              - 'docs/vendor-parity.md'
 
   build:
     name: Build

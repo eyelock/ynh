@@ -123,3 +123,53 @@ func TestRunLoop_WorkspaceGrantReachesWorker(t *testing.T) {
 		}
 	})
 }
+
+func TestRunLoop_HookTrustReachesWorker(t *testing.T) {
+	setup := func(t *testing.T) (string, string) {
+		t.Setenv("YNH_HOME", t.TempDir())
+		dir := filepath.Join(t.TempDir(), "seat")
+		writePathHarness(t, dir)
+		recordCheck(t, gate.StatusPass)
+		return dir, t.TempDir()
+	}
+
+	for _, trusted := range []bool{true, false} {
+		name := "hook declines"
+		if trusted {
+			name = "hook trusts"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir, session := setup(t)
+			mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+			opts := resumeOpts(mb, session)
+			opts.HarnessName = dir
+			var gotName, gotID, gotBackend, gotConfig string
+			opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {
+				gotName, gotID, gotBackend, gotConfig = h.Name, id, backend, configDir
+				return trusted
+			}
+			if _, err := RunLoop(opts); err != nil {
+				t.Fatal(err)
+			}
+			if len(mb.startOpts) != 1 || mb.startOpts[0].TrustedHooks != trusted {
+				t.Fatalf("worker start options: %+v, want TrustedHooks %v", mb.startOpts, trusted)
+			}
+			if gotName != "authoring" || gotID != "" || gotBackend != "mock" || gotConfig == "" || gotConfig != mb.startOpts[0].ConfigPath {
+				t.Errorf("hook saw harness %q id %q backend %q config %q (worker config %q)", gotName, gotID, gotBackend, gotConfig, mb.startOpts[0].ConfigPath)
+			}
+		})
+	}
+
+	t.Run("no hook trusts nothing", func(t *testing.T) {
+		dir, session := setup(t)
+		mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+		opts := resumeOpts(mb, session)
+		opts.HarnessName = dir
+		if _, err := RunLoop(opts); err != nil {
+			t.Fatal(err)
+		}
+		if len(mb.startOpts) != 1 || mb.startOpts[0].TrustedHooks {
+			t.Fatalf("no hook trusted hooks: %+v", mb.startOpts)
+		}
+	})
+}
