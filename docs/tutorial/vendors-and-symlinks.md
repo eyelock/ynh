@@ -73,6 +73,15 @@ mkdir -p /tmp/ynh-tutorial/switch
 cd /tmp/ynh-tutorial/switch
 ```
 
+Give consent to the symlinks first with `--install`. ynh asks only on a terminal and refuses without one (see [the prompt](#symlinks-the-prompt-needs-a-terminal)):
+
+```bash
+my-harness -v codex --install
+my-harness -v cursor --install
+```
+
+Then launch:
+
 *This launches:* `codex`
 
 *This launches:* `agent`
@@ -94,7 +103,7 @@ cd /
 rm -rf /tmp/ynh-tutorial/switch
 ```
 
-Each `--clean` prints `Cleaned <vendor> symlinks for harness "my-harness" in /tmp/ynh-tutorial/switch`, or `No <vendor> installation found for harness "my-harness" in /tmp/ynh-tutorial/switch` if you declined the symlinks. ynh offers them before it starts the vendor CLI, so a missing CLI does not stop them being created.
+Each `--clean` prints `Cleaned <vendor> symlinks for harness "my-harness" in /tmp/ynh-tutorial/switch`, or `No <vendor> installation found for harness "my-harness" in /tmp/ynh-tutorial/switch` if the symlinks were never installed. `--install` writes them before any vendor CLI starts, so a missing CLI does not stop them being created.
 
 ## Symlinks — the prompt needs a terminal
 
