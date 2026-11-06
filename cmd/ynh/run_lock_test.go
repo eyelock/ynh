@@ -36,6 +36,15 @@ func runInParallel(t *testing.T, vendorName string, n int) {
 	writeSkillHarness(t, harnessDir, "h")
 	t.Chdir(work)
 
+	// A vendor that needs project symlinks asks before planting them, and
+	// refuses when there is no terminal. Give consent once, as a user would
+	// with --install, so the parallel runs do not depend on the prompt.
+	if vendorName == "cursor" {
+		if err := cmdRun([]string{harnessDir, "-v", vendorName, "--install"}); err != nil {
+			t.Fatalf("--install: %v", err)
+		}
+	}
+
 	errs := make(chan error, n)
 	var wg sync.WaitGroup
 	for i := range n {
