@@ -33,8 +33,18 @@ func TestExportSingleVendorCodex(t *testing.T) {
 	// Check .codex-plugin/plugin.json manifest
 	assertFileExists(t, filepath.Join(codexDir, ".codex-plugin", "plugin.json"))
 
-	// Check AGENTS.md present
-	assertFileExists(t, filepath.Join(codexDir, "AGENTS.md"))
+	// A Codex plugin cannot carry instructions, so none are written and the
+	// export says so (docs/vendors.md).
+	assertFileNotExists(t, filepath.Join(codexDir, "AGENTS.md"))
+	found := false
+	for _, w := range r.Warnings {
+		if strings.Contains(w, "cannot carry instructions") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no warning that instructions are not exported: %v", r.Warnings)
+	}
 
 	// No agents/rules/commands directories at top level
 	assertFileNotExists(t, filepath.Join(codexDir, "agents"))
@@ -230,5 +240,36 @@ func TestExportMergedCodexNote(t *testing.T) {
 				t.Errorf("codex notes = %q, want %q", codex, tt.want)
 			}
 		})
+	}
+}
+
+// A Copilot plugin carries a harness's commands: they load as skills, reached
+// by name through the skill tool (ynh #733, L24). Rules are still left out, and
+// the warning names only them.
+func TestExportCopilotCarriesCommands(t *testing.T) {
+	srcDir := filepath.Join(testdataDir(), "export-harness")
+	outputDir := t.TempDir()
+
+	results, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"copilot"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+	dir := filepath.Join(outputDir, "copilot")
+
+	entries, err := os.ReadDir(filepath.Join(dir, "commands"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("copilot export has no commands/: %v", err)
+	}
+	assertFileNotExists(t, filepath.Join(dir, "rules"))
+
+	for _, w := range results[0].Warnings {
+		if strings.Contains(w, "commands") && strings.Contains(w, "not supported") {
+			t.Errorf("warning still says commands are not supported: %s", w)
+		}
 	}
 }

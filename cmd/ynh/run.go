@@ -328,6 +328,11 @@ func cmdRun(args []string) error {
 			if err := vendor.WriteSecretFiles(runDir, mcpFiles); err != nil {
 				return fmt.Errorf("writing MCP config: %w", err)
 			}
+			if adapter.Name() == "codex" {
+				if err := vendor.WriteCodexEnvPassthrough(runDir, harness.ComposedEnvPassthrough(p, resolver.IncludedHarnesses(resolved))); err != nil {
+					return fmt.Errorf("writing env_passthrough names: %w", err)
+				}
+			}
 		}
 
 		// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)
@@ -362,6 +367,20 @@ func cmdRun(args []string) error {
 			}
 			if err := os.WriteFile(absPath, content, 0o644); err != nil {
 				return fmt.Errorf("writing manifest %s: %w", relPath, err)
+			}
+		}
+
+		// Codex runs in the run directory, so it never reads the project's own
+		// AGENTS.md: compose it in after the harness's (ynh #690).
+		if adapter.Name() == "codex" {
+			if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+				pi, err := vendor.ComposeProjectInstructions(runDir, cwd)
+				if err != nil {
+					return err
+				}
+				if pi.Size > vendor.CodexProjectDocMaxBytes {
+					fmt.Fprintf(os.Stderr, "warning: the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off\n", pi.Size, vendor.CodexProjectDocMaxBytes)
+				}
 			}
 		}
 
@@ -444,13 +463,23 @@ func cmdRun(args []string) error {
 			vendorArgs = append(vendorArgs, isolationLaunchArgs(adapter, runDir, os.Stderr)...)
 		}
 
+		// One-shot runs have no one to approve an MCP tool call: approve the
+		// tools of the harness's own servers on the vendors that refuse them,
+		// unless the harness opts out (mcp_manual_approval).
+		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		}
+
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
-		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)
+		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), runDir, preassembled, ra.NoWorkspace, os.Stderr)
 		if wsErr != nil {
 			return wsErr
 		}
 		vendorArgs = append(wsArgs, vendorArgs...)
+
+		// Codex hook and project trust, granted only for an accepted harness.
+		vendorArgs = append(codexHookTrustLaunchArgs(loaded, harnessID, adapter.Name(), runDir, os.Stderr), vendorArgs...)
 
 		// Launch
 		if launch.Bare {

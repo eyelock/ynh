@@ -214,8 +214,9 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| commands/         | commands/<name>.md               | NOT SUPPORTED in plugins         | commands/<name>.md               |
-|   <name>.md       | (LEGACY -- use skills instead)   |                                  |                                  |
+| commands/         | commands/<name>.md               | NOT SUPPORTED in plugins; under  | commands/<name>.md               |
+|   <name>.md       | (LEGACY -- use skills instead)   | `ynh run` written as a skill     |                                  |
+|                   |                                  | (skills/<name>/SKILL.md)         |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
@@ -378,7 +379,11 @@ spelling rather than passing the struct through:
   stdio, `"http"` for Streamable HTTP, `"sse"` for the legacy transport.
 - Claude Code and Codex share one `.mcp.json` shape: `"http"` or `"sse"` on a
   remote entry, no type on a stdio entry (Claude Code rejects a `url` entry
-  without a type, so this is load-bearing).
+  without a type, so this is load-bearing). That is the file ynh writes; Codex
+  does not read it in a run. `ynh run` and `ynh agent run` pass its servers as
+  `-c mcp_servers.<name>.*` overrides, with secrets kept off the command line,
+  and Codex has no legacy `sse` transport, so those servers are not loaded
+  (`internal/vendor/codex_mcp.go`, `docs/mcp.md` "Codex Format").
 - Cursor's `mcp.json` defines no transport key; the adapter drops it.
 - `tools` defaults to `["*"]` if omitted when set via `copilot mcp add`, but
   wasn't tested for omission entirely from a hand-written file — include it
@@ -501,8 +506,10 @@ for the full scaffolding checklist once these are resolved):
   match, but `allowed-tools` and other fields haven't been diffed against the
   spec.
 - No commands support means ynh's `commands/` artifact type has nowhere to
-  go for this vendor — same situation as Codex today (see Commands row in
-  the ASCII table above).
+  go for this vendor. Codex has the same gap in a plugin, but under `ynh run`
+  ynh writes each command as a skill there (see Commands row in the ASCII
+  table above); a vendor that reads skills can take the same route
+  (`assembler.CommandSkiller`).
 
 ### Instructions File
 
@@ -515,21 +522,21 @@ for the full scaffolding checklist once these are resolved):
 |                   |                                  |                                  |  deprecated)                     |
 |                   |                                  |                                  | .cursor/rules/*.mdc (current)    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh runtime:      | --append-system-prompt           | Written as codex.md in           | Written as .cursorrules in       |
+| ynh runtime:      | --append-system-prompt           | Written as AGENTS.md in          | Written as .cursorrules in       |
 |                   | (injected, no file conflict)     |   staging dir                    |   staging dir                    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh export:       | AGENTS.md + CLAUDE.md            | AGENTS.md                        | .cursorrules + AGENTS.md         |
-|                   |  (CLAUDE.md contains @AGENTS.md  |                                  |                                  |
-|                   |   import — see workaround below) |                                  |                                  |
+| ynh export:       | none (a plugin cannot carry      | none (a plugin cannot carry      | none (a plugin cannot carry      |
+|                   |  instructions; export warns)     |  instructions; export warns)     |  instructions; export warns)     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
-**Claude AGENTS.md workaround:** Claude Code does not read `AGENTS.md` natively
-(see https://code.claude.com/docs/en/memory). ynh exports a `CLAUDE.md` containing
-just `@AGENTS.md` which uses Claude's `@`-import syntax to pull in the cross-vendor
-instructions file. This avoids duplicating content while ensuring Claude reads the
-instructions. The plugin's `CLAUDE.md` lives inside the plugin directory, so it does
-not conflict with the project's own `CLAUDE.md`.
+**Claude, Copilot and Cursor exports carry no instructions:** a plugin's `AGENTS.md`, and a
+`CLAUDE.md` importing it with `@AGENTS.md`, never reach the session (OBSERVED live,
+2026-11-05: Claude Code 2.1.318 and Copilot CLI 1.0.105, `--plugin-dir`; ynh #722).
+Earlier ynh exported the `@AGENTS.md` bridge; it is gone. `ynd export` for Claude,
+Copilot, Codex and Cursor writes no instructions and warns (Cursor: ynh #739, cursor-agent 2026.11.05). Under `ynh run` they reach every
+vendor. A plugin can reach Claude Code's main thread only through a root
+`settings.json` `{"agent": "<plugin>:<agent>"}`, which ynh does not generate.
 
 ### Launch Strategy
 
@@ -558,8 +565,9 @@ not conflict with the project's own `CLAUDE.md`.
 +------+------------------------------------------+------------+
 | Prio | Gap                                      | Vendor     |
 +------+------------------------------------------+------------+
-| ---  | Claude AGENTS.md: RESOLVED               | Claude     |
-|      |   (CLAUDE.md with @AGENTS.md import)     |            |
+| ---  | Claude AGENTS.md: CANNOT (X)             | Claude     |
+|      |   (plugin cannot carry instructions;     |            |
+|      |    the @AGENTS.md bridge was removed)    |            |
 | ---  | Codex plugin manifest: RESOLVED          | Codex      |
 | ---  | Codex skills export path: RESOLVED       | Codex      |
 | ---  | Codex MCP format: RESOLVED               | Codex      |

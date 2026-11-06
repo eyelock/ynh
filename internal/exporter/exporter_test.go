@@ -29,7 +29,7 @@ func TestExportSingleVendorCursor(t *testing.T) {
 	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
-	_, err := Export(ExportOptions{
+	results, err := Export(ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
 		Vendors:   []string{"cursor"},
@@ -39,16 +39,24 @@ func TestExportSingleVendorCursor(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
+	cursorWarned := false
+	for _, w := range results[0].Warnings {
+		if strings.Contains(w, "cursor: plugins cannot carry instructions") {
+			cursorWarned = true
+		}
+	}
+	if !cursorWarned {
+		t.Errorf("no instructions warning: %v", results[0].Warnings)
+	}
+
 	cursorDir := filepath.Join(outputDir, "cursor")
 
 	// Check .cursor-plugin/plugin.json exists
 	assertFileExists(t, filepath.Join(cursorDir, ".cursor-plugin", "plugin.json"))
 
-	// Check .cursorrules (from instructions.md)
-	assertFileExists(t, filepath.Join(cursorDir, ".cursorrules"))
-
-	// Check AGENTS.md also present
-	assertFileExists(t, filepath.Join(cursorDir, "AGENTS.md"))
+	// None: a Cursor plugin cannot carry instructions (ynh #739)
+	assertFileNotExists(t, filepath.Join(cursorDir, ".cursorrules"))
+	assertFileNotExists(t, filepath.Join(cursorDir, "AGENTS.md"))
 
 	// Skills present
 	assertFileExists(t, filepath.Join(cursorDir, "skills", "dev-project", "SKILL.md"))
@@ -131,26 +139,25 @@ func TestExportWithInstructions(t *testing.T) {
 	_, err := Export(ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor", "codex"},
+		Vendors:   []string{"claude", "cursor", "codex", "opencode"},
 	})
 	if err != nil {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Claude: AGENTS.md + CLAUDE.md (with @-import)
-	claudeAgents := filepath.Join(outputDir, "claude", "AGENTS.md")
-	assertFileExists(t, claudeAgents)
-	assertFileExists(t, filepath.Join(outputDir, "claude", "CLAUDE.md"))
+	// Claude: none, a Claude Code plugin cannot carry instructions
+	assertFileNotExists(t, filepath.Join(outputDir, "claude", "AGENTS.md"))
+	assertFileNotExists(t, filepath.Join(outputDir, "claude", "CLAUDE.md"))
 
-	// Cursor: .cursorrules + AGENTS.md
-	assertFileExists(t, filepath.Join(outputDir, "cursor", ".cursorrules"))
-	assertFileExists(t, filepath.Join(outputDir, "cursor", "AGENTS.md"))
+	// Cursor: none, a Cursor plugin cannot carry instructions (ynh #739)
+	assertFileNotExists(t, filepath.Join(outputDir, "cursor", ".cursorrules"))
+	assertFileNotExists(t, filepath.Join(outputDir, "cursor", "AGENTS.md"))
 
-	// Codex: AGENTS.md only
-	assertFileExists(t, filepath.Join(outputDir, "codex", "AGENTS.md"))
+	// Codex: none, a Codex plugin cannot carry instructions
+	assertFileNotExists(t, filepath.Join(outputDir, "codex", "AGENTS.md"))
 
 	// Content should match instructions.md
-	data, err := os.ReadFile(claudeAgents)
+	data, err := os.ReadFile(filepath.Join(outputDir, "opencode", "AGENTS.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,10 +479,10 @@ func TestExportComposesIncludedInstructions(t *testing.T) {
 				"includes":       []any{map[string]any{"local": "./inc-one"}, second},
 			})
 			out := t.TempDir()
-			if _, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"codex"}}); err != nil {
+			if _, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"opencode"}}); err != nil {
 				t.Fatalf("Export: %v", err)
 			}
-			data, err := os.ReadFile(filepath.Join(out, "codex", "AGENTS.md"))
+			data, err := os.ReadFile(filepath.Join(out, "opencode", "AGENTS.md"))
 			if err != nil {
 				t.Fatal(err)
 			}

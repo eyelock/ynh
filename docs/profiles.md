@@ -186,6 +186,7 @@ Profiles can override or extend these fields:
 | `hooks` | Per-event replace |
 | `mcp_servers` | Deep merge (null removes) |
 | `mcp_isolation` | Replace when set, either way; inherited when absent |
+| `mcp_manual_approval` | Replace when set, either way; inherited when absent |
 | `includes` | Append (profile entries added after base entries) |
 | `sensor_overrides` | Per-sensor tolerance change (no ratchet; see [Sensor Overrides](#sensor-overrides)) |
 | `name`, `version`, `description` | Fixed — identity fields |

@@ -456,8 +456,11 @@ func TestCopilotIdentity(t *testing.T) {
 func TestCopilotExportArtifactDirs(t *testing.T) {
 	c := &Copilot{}
 	dirs := c.ExportArtifactDirs()
-	if _, ok := dirs["commands"]; ok {
-		t.Error("commands should be excluded — not supported by Copilot CLI")
+	if _, ok := dirs["commands"]; !ok {
+		t.Error("commands should be included — a Copilot plugin loads them as skills (ynh #733)")
+	}
+	if _, ok := dirs["rules"]; ok {
+		t.Error("rules should be excluded — no always-on equivalent in a Copilot plugin")
 	}
 	if _, ok := dirs["skills"]; !ok {
 		t.Error("skills should be included")
@@ -552,5 +555,57 @@ func TestIsolateMCP_PartialAndUnsupportedVendors(t *testing.T) {
 		if !strings.Contains(warning, "not supported") || strings.Contains(warning, "\n") {
 			t.Errorf("%s warning = %q, want a one-line 'not supported' warning", name, warning)
 		}
+	}
+}
+
+func TestWarnLegacyProjectMCP(t *testing.T) {
+	runDoc := `{"mcpServers":{"a":{"type":"local","command":"x","env":{"K":"secret"},"tools":["*"]}}}`
+	cases := []struct {
+		name    string
+		project string // "" means no file
+		warn    bool
+	}{
+		{"ynh-shaped, same servers", runDoc, true},
+		{"no project file", "", false},
+		{"export-shaped, unexpanded refs", `{"mcpServers":{"a":{"type":"local","command":"x","env":{"K":"${SECRET}"},"tools":["*"]}}}`, false},
+		{"export-shaped, header ref with prefix", `{"mcpServers":{"a":{"type":"http","url":"https://x","headers":{"Authorization":"Bearer ${TOKEN}"},"tools":["*"]}}}`, false},
+		{"export-shaped, no env or headers", `{"mcpServers":{"a":{"type":"local","command":"x","tools":["*"]}}}`, false},
+		{"one literal among refs", `{"mcpServers":{"a":{"type":"local","env":{"K":"${SECRET}","L":"literal"},"tools":["*"]}}}`, true},
+		{"literal header", `{"mcpServers":{"a":{"type":"http","url":"https://x","headers":{"Authorization":"Bearer abc"},"tools":["*"]}}}`, true},
+		{"missing type", `{"mcpServers":{"a":{"command":"x","env":{"K":"secret"},"tools":["*"]}}}`, false},
+		{"different server names", `{"mcpServers":{"b":{"type":"local","tools":["*"]}}}`, false},
+		{"hand-written without tools", `{"mcpServers":{"a":{"type":"local","command":"x"}}}`, false},
+		{"extra top-level key", `{"mcpServers":{"a":{"type":"local","tools":["*"]}},"other":{}}`, false},
+		{"not json", `nope`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configPath, projectDir := t.TempDir(), t.TempDir()
+			if err := os.MkdirAll(filepath.Join(configPath, ".copilot"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(configPath, ".copilot", ".mcp.json"), []byte(runDoc), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(projectDir, ".github", "mcp.json")
+			if tc.project != "" {
+				if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(target, []byte(tc.project), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var buf strings.Builder
+			warnLegacyProjectMCP(&buf, configPath, projectDir)
+			if got := strings.Contains(buf.String(), target); got != tc.warn {
+				t.Errorf("warned = %v, want %v (output %q)", got, tc.warn, buf.String())
+			}
+			if tc.project != "" {
+				if b, err := os.ReadFile(target); err != nil || string(b) != tc.project {
+					t.Errorf("project file was altered or removed: %v", err)
+				}
+			}
+		})
 	}
 }

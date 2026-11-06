@@ -52,6 +52,18 @@ func (c *Cursor) ConfigDir() string {
 
 func (c *Cursor) InstructionsFile() string { return ".cursorrules" }
 
+// ExportCarriesInstructions: a Cursor plugin cannot carry instructions.
+// Cursor's plugin docs (cursor.com/docs/plugins, /docs/reference/plugins) list
+// six components - rules, commands, agents, skills, hooks, MCP servers - and no
+// instructions file; AGENTS.md is read from a project's root and
+// subdirectories (cursor.com/docs/context/rules), and .cursorrules is not
+// mentioned. OBSERVED live on cursor-agent 2026.11.05, 2026-11-05: `-p
+// --plugin-dir` on a `ynd export -v cursor` package whose .cursorrules and
+// AGENTS.md held a codeword returned "unknown" in 3 runs while the skill's,
+// agent's and hook's codewords came back. Under `ynh run` ynh writes the
+// instructions into the run directory instead.
+func (c *Cursor) ExportCarriesInstructions() bool { return false }
+
 func (c *Cursor) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Cursor) GenerateSystemPrompt(content []byte) map[string][]byte {
@@ -111,20 +123,38 @@ func (c *Cursor) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 // --continue ("Continue previous session"). A bare --resume is never emitted:
 // Cursor documents it as "Select a session to resume", i.e. a picker.
 //
-// A prompt is refused: Cursor's CLI reference lists --resume, --continue and
-// the positional prompt separately and documents no combination of them
-// (cursor.com/docs/cli/reference/parameters).
+// A prompt is delivered to the resumed session: one-shot as `-p <prompt>`, as
+// a fresh one-shot run is, and interactive as the positional prompt, which
+// opens the session with it as the first message. Both were observed to answer
+// from the earlier session (cursor-agent 2026.10.22, 2026-11-05):
+// `cursor-agent -p --resume <id> "<prompt>"`.
 func (c *Cursor) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
-	if prompt != "" {
-		return ErrResumePromptNotSupported
+	if prompt != "" && !interactive {
+		for _, w := range CursorPrintModeWarnings(configPath) {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+		}
 	}
-	var resumeArgs []string
+	return launchCursor(configPath, cursorResumeArgs(sessionID, prompt, interactive, extraArgs))
+}
+
+// cursorResumeArgs is a resume's arguments: the session selector, then the
+// prompt (after -p for a one-shot run), then the caller's.
+func cursorResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) []string {
+	var args []string
 	if sessionID != "" {
-		resumeArgs = []string{"--resume", sessionID}
+		args = []string{"--resume", sessionID}
 	} else {
-		resumeArgs = []string{"--continue"}
+		args = []string{"--continue"}
 	}
-	return launchCursor(configPath, append(resumeArgs, extraArgs...))
+	switch {
+	case prompt == "":
+	case interactive:
+		args = append(args, extraArgs...)
+		return append(args, prompt)
+	default:
+		args = append(args, "-p", prompt)
+	}
+	return append(args, extraArgs...)
 }
 
 // IsolateMCP cannot isolate on Cursor: ynh knows no way to keep the user's
@@ -542,11 +572,8 @@ func launchCursor(configPath string, extraArgs []string) error {
 	return runChildProcess(cmd)
 }
 
-// Workspace folders: Cursor's CLI has no flag that adds a directory. Its
-// documented global options (cursor.com/docs/cli/reference/parameters) hold
-// --workspace <path>, which names the one workspace directory, and
-// `sandbox run --allow-paths`, which belongs to a different command. Neither
-// grants an extra folder to an agent session, so a requested folder is
-// refused with a warning rather than dropped.
-var cursorWorkspaceFlag = ""
-var cursorWorkspaceUnsupported = "the Cursor CLI has no flag that adds a directory to a session (--workspace names the single workspace)"
+// Workspace folders: Cursor's agent CLI (2026.10.22) takes --add-dir <path>,
+// "an additional workspace root directory", repeatable; --workspace still
+// names the single primary workspace.
+var cursorWorkspaceFlag = "--add-dir"
+var cursorWorkspaceUnsupported = ""

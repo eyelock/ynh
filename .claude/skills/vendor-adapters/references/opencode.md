@@ -55,7 +55,7 @@ run dir, via `syscall.Exec`, no symlinks.
 | `agents/<name>.md` | yes | **CONFIRMED** |
 | `skills/<name>/SKILL.md` | yes, via the `skill` tool | **CONFIRMED** |
 | `plugins/<name>.ts` | yes, auto-discovered | **CONFIRMED** |
-| `commands/<name>.md` | unclear: `/name` in an `opencode run` message was not expanded | unconfirmed; recheck in the TUI |
+| `commands/<name>.md` | works: `GET /api/command` lists it and `POST /api/session/{id}/command` expands it (2.2.3, live); a `/name` in an `opencode run` message is not expanded | TUI not driven |
 
 Project `.opencode/` in the working directory also loads, alongside the
 bundle. `~/.claude/skills` is also watched and loaded; 2.x has no
@@ -345,7 +345,7 @@ service, which does not see the key and lists no `anthropic/*` model;
 
 ## Known gaps
 
-- Slash commands from the bundle are unconfirmed under `opencode run`.
+- Slash commands from the bundle run through the command API; only a one-shot `opencode run` prompt sends `/name` as plain text.
 - Remote MCP servers were not connected to; only local stdio was.
 - A Claude `tools:` list becomes deny-by-default `permissions`. The live
   check that a `tools: Read` agent cannot run `shell` needs a paid provider:

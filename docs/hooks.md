@@ -29,17 +29,19 @@ ynh defines six canonical hook events. Each vendor translates these to its nativ
 
 ### on_session_start output becomes model context
 
-On every vendor but OpenCode, what an `on_session_start` hook prints reaches the model. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot and Cursor.
+What an `on_session_start` hook prints reaches the model on every vendor (on OpenCode, when ynh launches it: an `ynd export -v opencode` package carries `ynh-session-start.json`, but nothing runs it). **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot, Cursor and OpenCode.
 
-The vendors do not agree on how the output is read. Verified on 2026-10-30 with a hook printing a unique token and a one-shot prompt asking the model to repeat any token in its context:
+The vendors do not agree on how the output is read. Verified live with a token test ([ynh #627](https://github.com/eyelock/ynh/pull/627), 2026-10-30; Codex [ynh #701](https://github.com/eyelock/ynh/pull/701), OpenCode [ynh #706](https://github.com/eyelock/ynh/pull/706)):
 
 | Vendor | Plain stdout reaches the model? | The field that does | ynh |
 |--------|---------------------------------|---------------------|-----|
 | Claude Code | Yes | also `hookSpecificOutput.additionalContext` | writes the command as declared |
-| Codex | Per its docs ("Plain text on stdout is added as extra developer context"); **not verified live** | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Codex | Yes (CONFIRMED live, codex-cli 0.166.0, once the hook is trusted; see [Codex hook trust](#codex-hook-trust)) | also `hookSpecificOutput.additionalContext` | writes the command as declared |
 | Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
 | Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
-| OpenCode 2 | No | none: the hook runs from the event stream (`session.created`), which cannot add context, and the generated plugin discards its stdout | declares `unsupported`, so assembly warns |
+| OpenCode 2 | Yes | none: ynh runs the hook itself before launching OpenCode (the event stream's `session.created` cannot add context) and appends its stdout to the generated `AGENTS.md`; only the output of a hook that exits 0 is kept | declares `plain` |
+
+On OpenCode the hook's stdin is the `SessionStart` payload (`hook_event_name`, `cwd`), its working directory is the project, and a hook that fails or times out is reported on stderr without stopping the launch. The hook runs once per launch, from ynh. The generated plugin does not subscribe to `session.created`: observed live (OpenCode 2.2.3, `opencode run`), that event did not fire the hook, and it cannot add context, so a subscription would at best run the hook twice.
 
 On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-context.sh <field> '<your command>'`. The wrapper is a small generated POSIX `sh` and `awk` script shipped inside the session layout and inside every exported package (`hooks/ynh-session-context.sh`), so it works on a machine where ynh is not installed, with no python or jq. It:
 
@@ -51,6 +53,25 @@ On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-contex
 In a package that Claude Code and Copilot share one hook file for, the wrapper emits both shapes at once. Other events are untouched.
 
 Each vendor declares how it delivers this as `<vendor>SessionStartContext` in its adapter (`plain`, `json-field:<name>` or `unsupported:<reason>`), and `make check-vendor-parity` requires it. A vendor that declares `unsupported` makes `ynd validate`, `ynd lint` and assembly warn that the hook's output does not reach the model there.
+
+### Codex hook trust
+
+Codex runs a hook only when it trusts both the project layer holding it and the hook itself, and it records neither for ynh's run directory, so before this was handled a harness's hooks (and its `on_session_start` context) were written to `.codex/hooks.json` and never ran. A project's `.codex/` layer loads only for a trusted project, and a non-managed hook runs only when `hooks.state."<key>".trusted_hash` holds the hash Codex computes for its current definition ([learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)).
+
+`ynh run` passes both for the one invocation, as `-c` overrides: the run directory as a trusted project, and the hash of each hook ynh wrote. It does so only when the installed harness is accepted and current in `ynh trust` (the rule that gates [workspace folders](workspace.md)):
+
+| Harness | Hooks under Codex |
+|---------|-------------------|
+| Installed and accepted, unchanged since | Trusted for that run; they run |
+| Installed, `unreviewed` | Not trusted; Codex skips them |
+| Installed, `changed` since you accepted it | Not trusted; Codex skips them |
+| Run from a path (`ynh run ./dir`), which has no trust record | Not trusted; Codex skips them |
+
+When the grant is withheld, ynh prints one line on stderr saying Codex will skip the hooks, and what to run: `ynh trust accept local/<name>` (for a path run, install the harness first). A harness with no hooks needs no grant and prints nothing. Nothing refuses to run: only the hooks are withheld, as before this was handled.
+
+Nothing is written to your `~/.codex/config.toml`. The overrides are table-form, and they merge with the entries you persisted there rather than replacing them: your own Codex hooks stay trusted and other trusted projects still load during an `ynh run`. This was checked on codex-cli 0.166.0 with a separate Codex home (`hooks/list` through `codex app-server`), and `config.toml` was byte-identical afterwards. It has not been re-checked on other Codex versions. Trusting the run directory as a project also lets Codex load the rest of what ynh wrote under its `.codex/` (for example the agent files), and ynh is the only writer there. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
+
+This covers `ynh run` only. `ynh agent run --backend codex` does not pass these overrides, so a harness's hooks do not fire there. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
 
 ### on_session_end semantics
 
@@ -74,7 +95,7 @@ Per vendor:
 
 ## Hooks Cursor's CLI does not run
 
-Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`ynh run -v cursor --trust -- "<prompt>"`, cursor-agent 2026.10.01-e373342, 2026-10-30) with all six events in `.cursor/hooks.json`:
+Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`ynh run -v cursor --trust -- "<prompt>"`, cursor-agent 2026.10.01-e373342, 2026-10-30, [ynh #621](https://github.com/eyelock/ynh/pull/621)) with all six events in `.cursor/hooks.json`:
 
 | Canonical event | Cursor event | Print mode |
 |-----------------|--------------|------------|
@@ -84,6 +105,8 @@ Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`y
 | `on_session_end` | `sessionEnd` | fires |
 | `before_prompt` | `beforeSubmitPrompt` | **does not fire** |
 | `on_stop` | `stop` | **does not fire** |
+
+This is Cursor's behaviour, not ynh's: `cursor-agent -p` run directly, without ynh, skips `beforeSubmitPrompt` and `stop` too (cursor-agent 2026.10.22-27dcf5f, 2026-11-05), and Cursor's [hooks page](https://cursor.com/docs/hooks) and [CLI parameters page](https://cursor.com/docs/cli/reference/parameters) do not say which hooks the CLI runs ([ynh #710](https://github.com/eyelock/ynh/pull/710)).
 
 Also CONFIRMED there: a `Shell` matcher fires only for shell calls, a `Bash` matcher never fires, and a hook script runs with the run directory as its working directory, so a bare `./scripts/x.sh` works. Interactive CLI and IDE behaviour is untested.
 
@@ -194,7 +217,7 @@ Each vendor uses different event names and config file formats. GitHub Copilot C
 | `after_tool` | `PostToolUse` | `postToolUse` | `PostToolUse` | `PostToolUse` | `tool` hook `execute.after` |
 | `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` | `UserPromptSubmit` | `session` hook `prompt` |
 | `on_stop` | `Stop` | `stop` | `Stop` | `Stop` | event `session.execution.succeeded` / `session.execution.failed` |
-| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` | `SessionStart` | event `session.created` |
+| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` | `SessionStart` | run by ynh before launch |
 | `on_session_end` | `SessionEnd` | `sessionEnd` | `SessionEnd` | `SessionEnd` | *none*: no session-end hook or event |
 
 Sources: [Claude Code](https://code.claude.com/docs/en/hooks), [Codex](https://learn.chatgpt.com/docs/hooks) (12 events; `developers.openai.com/codex/hooks` redirects there), [Cursor](https://cursor.com/docs/hooks), [Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration).
@@ -260,7 +283,7 @@ OpenCode 2 has no declarative hook config, so ynh generates `.opencode/plugins/y
 | `before_tool` | Exit code 2 throws, which blocks the call; the hook's stderr is the tool error the model sees. The tool does not run |
 | `after_tool` | Runs after the call and cannot reject the result. The payload carries Claude's `file_path`, `old_string` and `new_string` beside OpenCode's own input keys |
 | `before_prompt` | Exit code 2 does block, before the model is called, but OpenCode surfaces only an opaque `UnexpectedStatus: 500`, not the hook's message. Prefer logging in a prompt hook over blocking |
-| `on_session_start` | Comes from the event stream (`session.created`). Cannot block; a matcher is ignored; its output does not reach the model (see [on_session_start output becomes model context](#on-session-start-output-becomes-model-context)) |
+| `on_session_start` | Run by ynh once before it launches OpenCode, not by the plugin. Cannot block; a matcher is ignored; its output reaches the model through `AGENTS.md` (see [on_session_start output becomes model context](#on-session-start-output-becomes-model-context)) |
 | `on_stop` | Comes from the event stream (`session.execution.succeeded` / `.failed`), once per turn. Cannot block; a matcher is ignored |
 | `on_session_end` | Not supported: nothing in OpenCode 2 fires when a session ends. Not written; assembly warns |
 
@@ -276,7 +299,7 @@ ynh run <harness> --print-logs -- "<prompt>"
 
 (or `<launcher> --print-logs -- "<prompt>"`). It takes no value, so it needs no `=` form. CONFIRMED live, OpenCode 2.2.3, 2026-10-30: with a prompt, which ynh runs as `opencode run --standalone`, the `[ynh hook]` timeout report appeared with `--print-logs` and not without it, though the hook ran and was killed both times. Only that one-shot `opencode run` was checked; the interactive TUI that `ynh run <harness>` opens without a prompt was not, so whether it shows the report there is unconfirmed.
 
-`on_session_start` and `on_stop` ride OpenCode's event stream rather than a documented hook, so they are the most likely to change in a later OpenCode release. Each MCP tool call fires the tool hooks under OpenCode's id `<server>_<tool>`, and a matcher written as on Claude Code, `mcp__<server>__<tool>`, matches it: exit code 2 blocks the call before the server sees it. What else fires depends on whether the agent may use OpenCode's `execute` tool. By default it may, and OpenCode's Code Mode is on: the model writes code in one `execute` tool that calls the server's tools, and the tool hooks fire for that `execute` call as well as for each MCP tool it calls. A block then also stops the rest of the `execute` call's code, so other tools it would have called in the same call do not run. A hook with no matcher runs for each MCP tool but not for the `execute` call, so it does not run twice for one MCP call; a matcher that names `execute` does run for it. An agent with a Claude `tools:` list may not use `execute` (ynh denies every tool the list does not name), so Code Mode is off for it: its granted MCP tools are ordinary tools, there is no `execute` call to fire hooks or to stop, and a block stops only the MCP call itself. Blocking with an `mcp__` matcher was confirmed live in both cases. The payload's `tool_name` is Claude's form on OpenCode too, so one hook script works on every vendor: `Bash` for a shell call, and `mcp__echo__ynh_ping` for the MCP tool OpenCode calls `echo_ynh_ping`. ynh gives the generated plugin the names of every MCP server in the session (the harness's own, its includes' and its delegates') and splits OpenCode's id on the longest server name that prefixes it, so a server whose name contains an underscore maps exactly. An id that no known server prefixes, such as OpenCode's own `opencode_list_mcp_resources`, keeps OpenCode's id as its `tool_name`.
+`on_stop` rides OpenCode's event stream rather than a documented hook, so it is the most likely to change in a later OpenCode release. Each MCP tool call fires the tool hooks under OpenCode's id `<server>_<tool>`, and a matcher written as on Claude Code, `mcp__<server>__<tool>`, matches it: exit code 2 blocks the call before the server sees it. What else fires depends on whether the agent may use OpenCode's `execute` tool. By default it may, and OpenCode's Code Mode is on: the model writes code in one `execute` tool that calls the server's tools, and the tool hooks fire for that `execute` call as well as for each MCP tool it calls. A block then also stops the rest of the `execute` call's code, so other tools it would have called in the same call do not run. A hook with no matcher runs for each MCP tool but not for the `execute` call, so it does not run twice for one MCP call; a matcher that names `execute` does run for it. An agent with a Claude `tools:` list may not use `execute` (ynh denies every tool the list does not name), so Code Mode is off for it: its granted MCP tools are ordinary tools, there is no `execute` call to fire hooks or to stop, and a block stops only the MCP call itself. Blocking with an `mcp__` matcher was confirmed live in both cases. The payload's `tool_name` is Claude's form on OpenCode too, so one hook script works on every vendor: `Bash` for a shell call, and `mcp__echo__ynh_ping` for the MCP tool OpenCode calls `echo_ynh_ping`. ynh gives the generated plugin the names of every MCP server in the session (the harness's own, its includes' and its delegates') and splits OpenCode's id on the longest server name that prefixes it, so a server whose name contains an underscore maps exactly. An id that no known server prefixes, such as OpenCode's own `opencode_list_mcp_resources`, keeps OpenCode's id as its `tool_name`.
 
 ### Hook script paths
 
@@ -300,7 +323,7 @@ The variable is quoted so an install path with spaces stays one word, as Claude 
 
 The hook is still written, anchored to the plugin root, so it will not find the script. To run a script that belongs to the project rather than to the plugin, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) and it is left alone. `ynd marketplace build` copies scripts the same way and prints the same warnings on stderr, each prefixed with the entry's name (`warning: reviewer: hook script ...`).
 
-Copilot's documentation does not say whether a plugin-root variable reaches a hook command, but a live run showed that it does: `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, and `"${PLUGIN_ROOT}"/...` expands (Copilot CLI 1.0.105, 2026-10-30, answering #497). ynd anchors Copilot's `./` scripts to `${PLUGIN_ROOT}`.
+Copilot's documentation does not say whether a plugin-root variable reaches a hook command, but it does: `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, and `"${PLUGIN_ROOT}"/...` expands (live, Copilot CLI 1.0.105, [ynh #621](https://github.com/eyelock/ynh/pull/621)). ynd anchors Copilot's `./` scripts to `${PLUGIN_ROOT}`.
 
 **In a session, a `./` script is part of the run directory.** `ynh run`, `ynd preview` and the agent loop copy each `./` script a hook runs into the run directory, by the same rules as an export (first word only, a regular file inside the harness, mode kept), and warn about any they cannot carry:
 
@@ -438,7 +461,7 @@ Copilot uses a flat structure with `"version": 1`, like Cursor, and PascalCase e
 
 **Where Copilot reads hooks.** Copilot combines hooks from several places: policy files, `.github/hooks/*.json` in the repository, a `hooks` field in `.github/copilot/settings.json` (and `.claude/settings.json`), `~/.copilot/hooks/*.json`, and the `hooks.json` or `hooks/hooks.json` of an installed plugin. ynd generates the **plugin** route only: `.copilot/hooks/hooks.json` for a session (the `--plugin-dir` directory) and `hooks.json` at the root of an export. It does not write into your repository's `.github/hooks/`, because that is the route the docs gate behind trust (below), and a hook written there would run for everyone who clones the repository. Copilot's Agent Plugins export (`ynd export --format agent-plugin`) carries the same file at `com.github.copilot/hooks/hooks.json`, the path the specification and Copilot's reference give.
 
-**Verified live (Copilot CLI 1.0.105, 2026-10-30).** Run with `ynh run -v copilot` in a scratch folder:
+**Verified live (Copilot CLI 1.0.105, 2026-10-30, [ynh #621](https://github.com/eyelock/ynh/pull/621)).** Run with `ynh run -v copilot` in a scratch folder:
 
 - All six events fire from `.copilot/hooks/hooks.json` loaded by `--plugin-dir`, **in an untrusted folder**. Plugin hooks do not need folder trust.
 - `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, so `"${PLUGIN_ROOT}"/...` expands (#497).

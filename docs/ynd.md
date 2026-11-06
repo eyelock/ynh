@@ -356,25 +356,20 @@ dist/my-harness/
 │   ├── skills/<name>/SKILL.md
 │   ├── agents/<name>.md
 │   ├── rules/<name>.md
-│   ├── commands/<name>.md
-│   └── AGENTS.md
+│   └── commands/<name>.md
 ├── cursor/
 │   ├── .cursor-plugin/plugin.json
 │   ├── skills/
 │   ├── agents/
 │   ├── rules/
-│   ├── commands/
-│   ├── .cursorrules
-│   └── AGENTS.md
+│   └── commands/
 ├── codex/
 │   ├── .codex-plugin/plugin.json
-│   ├── skills/<name>/SKILL.md
-│   └── AGENTS.md
+│   └── skills/<name>/SKILL.md
 ├── copilot/
 │   ├── .claude-plugin/plugin.json
 │   ├── skills/<name>/SKILL.md
-│   ├── agents/<name>.md
-│   └── AGENTS.md
+│   └── agents/<name>.md
 └── opencode/
     ├── skills/<name>/SKILL.md
     ├── agents/<name>.md
@@ -388,12 +383,12 @@ dist/my-harness/
 Key differences from runtime layout:
 
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
-- Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own `CLAUDE.md`)
-- Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
-- Copilot is limited to skills and agents — rules and commands are excluded with warnings
+- Claude, Copilot and Cursor exports write no instructions: a plugin cannot carry them (OBSERVED live, ynh #722 and #739), so the export warns. The instructions reach Claude Code and Copilot under `ynh run` (on Cursor that is unverified, [L35](vendor-parity.md#l35-cursor-under-ynh-run-not-shown-live)), or from the installing project's own file. Only OpenCode's export carries `AGENTS.md`
+- Codex carries skills, hooks and MCP servers only — agents, rules, commands and delegates are excluded with warnings, and so are the harness's instructions, which a Codex plugin cannot carry
+- Copilot carries skills, agents and commands (which it loads as skills); rules are excluded with a warning
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
-- OpenCode has no plugin manifest and no Agent Plugins support, so its export is the run-directory layout without a manifest: nothing installs it as a plugin. MCP servers go to `.opencode/opencode.json` and hooks to the generated `.opencode/plugins/ynh-hooks.ts`. Rules are written as files, not composed into `AGENTS.md`, which ynh does only at launch
-- `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex and Copilot warnings above are printed in merged mode too, because those vendors still do not load them
+- OpenCode has no plugin manifest and no Agent Plugins support, so its export is the run-directory layout without a manifest: nothing installs it as a plugin. Delegates are excluded with a warning, as for Codex. MCP servers go to `.opencode/opencode.json` and hooks to the generated `.opencode/plugins/ynh-hooks.ts`. Rules are written as files, not composed into `AGENTS.md`, which ynh does only at launch
+- `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex, Copilot and OpenCode warnings above are printed in merged mode too, because those vendors still do not load them
 - Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP servers go to each vendor's plugin file: `mcp/claude.json` (named by the `"mcpServers"` field of `.claude-plugin/plugin.json`), Codex's `.mcp.json` (named by its manifest), Cursor's `mcp.json` and Copilot's `.github/mcp.json`. No two share a path, and every manifest is written after the files it names (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
 - An MCP server carried by an included harness exports like the root's own, unless it points into the include's directory (a command or `cwd` starting with `./`, or a `${PLUGIN_ROOT}` reference), which the plugin does not contain. The export then stops with an error naming the server and the include; declare that server in the root harness, or set it to `null` there (see [MCP Servers: Exporting](mcp.md#exporting))
@@ -415,13 +410,12 @@ dist/my-harness/
 ├── skills/<name>/SKILL.md       # portable
 ├── mcp.json                     # portable, every server carries its transport type
 ├── AGENTS.md                    # ynh's instructions; not a portable component
-├── com.github.copilot/          # -v copilot: agents/ (and delegates)
+├── com.github.copilot/          # -v copilot: agents/, commands/ (and delegates); commands/ here not loaded live
 ├── com.openai/hooks/hooks.json  # -v codex: hooks, pointed to from extensions.com.openai
 ├── .claude-plugin/plugin.json   # -v claude: Claude Code has not adopted the format,
 ├── mcp/claude.json              #   so it gets its own manifest, the MCP and hooks files
 ├── hooks/claude.json            #   that manifest names, agents/, rules/, commands/ and
-├── agents/ rules/ commands/     #   CLAUDE.md at the root, which the spec calls a
-├── CLAUDE.md                    #   compatibility package
+├── agents/ rules/ commands/     #   which the spec calls a compatibility package
 └── scripts/                     # the scripts a hook runs, shipped once
 ```
 

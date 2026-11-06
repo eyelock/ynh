@@ -130,6 +130,24 @@ is kept whole as the rule's body.
 
 OpenCode has no concept of rules. For OpenCode ynh strips a rule's frontmatter and concatenates the bodies into `.opencode/AGENTS.md` at launch, after the harness instructions.
 
+Claude Code, Copilot and Codex do not read the rules ynh stages for them (Claude
+Code reads rules from a project's own `.claude/rules/`, not from a plugin
+directory; Copilot has no rules; Codex has no rules directory). So wherever ynh
+assembles a run directory (`ynh run`, `ynh agent run`, `ynh image` and `ynd preview`), ynh appends each rule to the instructions file the
+vendor does read, as a `## Rule: <name>` section after the harness
+instructions, in file-name order:
+
+| Vendor | Where the rules land |
+|---|---|
+| Claude | `CLAUDE.md`, which ynh passes as appended system prompt |
+| Copilot | `AGENTS.md`, projected into `.github/instructions/ynh-harness.instructions.md` |
+| Codex | the run directory's instructions file, written as `AGENTS.md`, which Codex reads ([ynh #689](https://github.com/eyelock/ynh/pull/689)); an exported Codex plugin cannot carry instructions |
+
+Rules folded this way are always on: a rule's frontmatter, including Claude
+Code's `paths` scoping, is dropped. No plugin package carries a rule that these
+three vendors would read, so `ynd export` is unchanged for them: Claude's export
+still ships `rules/`, and Copilot's and Codex's still exclude them.
+
 ## Commands
 
 A command defines a reusable action. Commands are vendor-specific markdown files.
@@ -151,22 +169,25 @@ make format && make lint && make test
 If any step fails, fix the issue and re-run until all checks pass.
 ```
 
+Codex reads no command files from a project, so under `ynh run` ynh writes each command as a skill (`.codex/skills/<name>/SKILL.md`) that Codex lists and invokes by name. Its `description` frontmatter becomes the skill's description; other frontmatter is dropped and `$ARGUMENTS` is not substituted. See [Vendor Feature Parity](vendor-parity.md#l3-codex-commands-arrive-as-skills).
+
 ## Project Instructions
 
 A harness can include an `AGENTS.md` file with project-level instructions.
 
 **The two paths differ, and the difference matters if you go looking for the
 file.** `ynd export` produces a redistributable plugin, so it emits `AGENTS.md`
-alongside a vendor instructions file that imports it. `ynh run` and
+for the vendors whose plugins can carry it (OpenCode only); Claude Code,
+Codex, Copilot and Cursor plugins cannot, so those exports write none. `ynh run` and
 `ynd preview` assemble a session, so they copy the instructions straight into
 the vendor's own file — there is no `AGENTS.md` to import, and no import.
 
 | Vendor | Reads `AGENTS.md` natively | `ynh run` / `ynd preview` | `ynd export` |
 |---|---|---|---|
-| Claude | No | instructions inlined into `CLAUDE.md` | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
-| Codex | Yes | `codex.md` | `AGENTS.md` |
-| Cursor | Yes | `.cursorrules` | `AGENTS.md` |
-| Copilot | Yes | `AGENTS.md` | `AGENTS.md` |
+| Claude | No | instructions inlined into `CLAUDE.md` | none: a Claude Code plugin cannot carry instructions, so the export writes no `AGENTS.md` or `CLAUDE.md` and warns |
+| Codex | Yes | `AGENTS.md` | none: a Codex plugin cannot carry instructions, so the export writes no `AGENTS.md` and warns |
+| Cursor | Yes | `.cursorrules` | none: a Cursor plugin cannot carry instructions, so the export writes no `AGENTS.md` or `.cursorrules` and warns |
+| Copilot | Yes | `AGENTS.md` | none: a Copilot plugin cannot carry instructions, so the export writes no `AGENTS.md` and warns |
 | OpenCode | Yes (`AGENTS.md` only; its `instructions` key is ignored) | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context | `AGENTS.md` |
 
 Verified by running both commands per vendor, not read from the adapters.

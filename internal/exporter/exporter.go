@@ -323,6 +323,9 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 			result.Warnings = append(result.Warnings, warnings...)
 		}
 		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
+		if len(instructions) > 0 && !vendor.ExportCarriesInstructions(adapter) {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(v))
+		}
 	}
 	result.Warnings = append(result.Warnings, workspaceWarnings(p)...)
 	if wroteHooks {
@@ -416,8 +419,12 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Instructions
 	if len(instructions) > 0 {
-		if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
-			return result, err
+		if vendor.ExportCarriesInstructions(adapter) {
+			if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
+				return result, err
+			}
+		} else {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(vendorName))
 		}
 	}
 
@@ -484,17 +491,36 @@ func workspaceWarnings(p *harness.Harness) []string {
 	return []string{fmt.Sprintf("workspace is not carried into exports: %d requested folder(s) dropped, because a plugin cannot grant a folder", len(p.Workspace))}
 }
 
-// skippedArtifactWarnings notes the artifact types and delegates the harness
-// carries that vendorName's plugin does not load, when the vendor restricts
-// its export to a subset (Codex: skills only). A per-vendor export leaves
+// noInstructionsWarning is the note for a vendor whose plugin cannot carry
+// the harness's instructions, whatever the export mode.
+func noInstructionsWarning(vendorName string) string {
+	return vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)"
+}
+
+// skippedArtifactWarnings notes the artifact types the harness carries that
+// vendorName's plugin does not load, when the vendor restricts its export to
+// a subset (Codex: skills only), and its delegates, for any vendor without
+// export-delegate support (Codex, OpenCode). A per-vendor export leaves
 // them out of the vendor's directory; a merged package keeps them in the
 // shared tree for the other vendors, but the vendor still does not read
 // them, so both say the same thing.
 func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
 	exportDirs := adapter.ExportArtifactDirs()
-	if exportDirs == nil {
-		return nil
+	var warnings []string
+	if exportDirs != nil {
+		warnings = skippedArtifactTypeWarnings(vendorName, adapter, exportDirs, content)
 	}
+	// A vendor with no export restriction (OpenCode) can still carry no
+	// delegates, so the delegate warning does not depend on exportDirs.
+	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
+		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
+	}
+	return warnings
+}
+
+// skippedArtifactTypeWarnings notes the artifact types the vendor's export
+// restricts itself to leave out.
+func skippedArtifactTypeWarnings(vendorName string, adapter VendorExporter, exportDirs map[string]string, content []resolver.ResolvedContent) []string {
 	skippedCounts := map[string]int{}
 	for artifactType := range adapter.ArtifactDirs() {
 		if _, ok := exportDirs[artifactType]; ok {
@@ -513,9 +539,6 @@ func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harne
 	}
 	if len(parts) > 0 {
 		warnings = append(warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
-	}
-	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
-		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
 	}
 	return warnings
 }

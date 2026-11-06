@@ -50,15 +50,12 @@ func TestExportSingleVendorClaude(t *testing.T) {
 	// Check commands copied
 	assertFileExists(t, filepath.Join(claudeDir, "commands", "check.md"))
 
-	// Check AGENTS.md (from instructions.md)
-	assertFileExists(t, filepath.Join(claudeDir, "AGENTS.md"))
-
-	// CLAUDE.md with @AGENTS.md import (Claude doesn't read AGENTS.md natively)
-	claudeMDPath := filepath.Join(claudeDir, "CLAUDE.md")
-	assertFileExists(t, claudeMDPath)
-	claudeMD, _ := os.ReadFile(claudeMDPath)
-	if string(claudeMD) != "@AGENTS.md\n" {
-		t.Errorf("CLAUDE.md = %q, want %q", string(claudeMD), "@AGENTS.md\n")
+	// A Claude Code plugin cannot carry instructions (OBSERVED live, ynh #722),
+	// so none are written and the export says so.
+	assertFileNotExists(t, filepath.Join(claudeDir, "AGENTS.md"))
+	assertFileNotExists(t, filepath.Join(claudeDir, "CLAUDE.md"))
+	if !hasWarning(r, "claude: plugins cannot carry instructions") {
+		t.Errorf("no instructions warning: %v", r.Warnings)
 	}
 
 	// No .cursorrules in Claude export

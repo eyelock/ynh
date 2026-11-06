@@ -34,12 +34,21 @@ type HarnessJSON struct {
 	// configured servers. A launch concern: it
 	// changes how `ynh run` starts the vendor CLI, not what an export ships.
 	MCPIsolation bool `json:"mcp_isolation,omitempty"`
+	// MCPManualApproval stops ynh approving the tools of the harness's own MCP
+	// servers on a one-shot run or an agent worker, where the vendor would otherwise refuse them
+	// unattended. By default ynh approves them on the vendors that need it
+	// (Codex); true leaves approval to the vendor and the caller. A launch
+	// concern, like MCPIsolation.
+	MCPManualApproval bool `json:"mcp_manual_approval,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`
 	// EnvPassthrough names the environment variables a harness may see:
-	// which ${VAR} references its MCP declarations may resolve, and which
-	// variables reach an agent worker's process. Empty means none — a worker
+	// which ${VAR} references its MCP declarations may resolve, which
+	// variables reach an agent worker's process, and, on Codex, which reach a
+	// stdio MCP server (vendor.CodexMCP, via the run directory's
+	// vendor.CodexEnvPassthroughFile; `ynh image` would have to write that
+	// file too if it ever bakes MCP config). Empty means none — a worker
 	// inheriting the operator's whole environment holds every credential the
 	// operator holds, which is not a default anyone chose.
 	EnvPassthrough []string `json:"env_passthrough,omitempty"`
@@ -537,6 +546,9 @@ type Profile struct {
 	// MCPIsolation overrides the harness-level mcp_isolation when set, either
 	// way. A pointer so that unset (inherit) and false (opt out) differ.
 	MCPIsolation *bool `json:"mcp_isolation,omitempty"`
+	// MCPManualApproval overrides the harness-level mcp_manual_approval when
+	// set, either way.
+	MCPManualApproval *bool `json:"mcp_manual_approval,omitempty"`
 
 	// SensorOverrides softens or hardens sensors while this profile is
 	// selected. Tolerance only: a ratchet decides how the committed baseline

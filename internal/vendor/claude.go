@@ -61,14 +61,20 @@ func (c *Claude) InstructionsFile() string { return "CLAUDE.md" }
 func (c *Claude) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Claude) GenerateSystemPrompt(content []byte) map[string][]byte {
-	// AGENTS.md: cross-vendor instructions (read by Codex, Cursor, Copilot, etc.)
-	// CLAUDE.md: @-import of AGENTS.md (Claude doesn't read AGENTS.md natively)
-	// See: https://code.claude.com/docs/en/memory
+	// Required by the adapter interface, but no export path reaches it: a
+	// Claude Code plugin cannot carry instructions (ExportCarriesInstructions),
+	// so no AGENTS.md or @AGENTS.md-importing CLAUDE.md is exported. Kept for
+	// the interface and for any caller that asks for the files directly.
 	return map[string][]byte{
 		"AGENTS.md": content,
 		"CLAUDE.md": []byte("@AGENTS.md\n"),
 	}
 }
+
+// FoldsRulesIntoInstructions: Claude does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Claude) FoldsRulesIntoInstructions() bool { return true }
 
 func (c *Claude) NeedsSymlinks() bool { return false }
 
@@ -549,6 +555,16 @@ func (c *Claude) AgentPluginLayout() AgentPluginLayout {
 }
 
 func (c *Claude) SupportsExportDelegates() bool { return true }
+
+// ExportCarriesInstructions: a Claude Code plugin cannot carry instructions.
+// A plugin's AGENTS.md (and the CLAUDE.md that imports it) is installed with
+// it but never reaches the session: Claude Code reads CLAUDE.md only from the
+// working directory's project and the user's ~/.claude (OBSERVED live on
+// Claude Code 2.1.318, 2026-11-05: `claude -p --plugin-dir` on a
+// `ynd export -v claude` package, whose AGENTS.md held a codeword, returned
+// "unknown" in two runs while the skill's codeword came back, and a codeword in
+// the project's own CLAUDE.md came back too).
+func (c *Claude) ExportCarriesInstructions() bool { return false }
 
 func (c *Claude) PluginManifestDir() string { return ".claude-plugin" }
 

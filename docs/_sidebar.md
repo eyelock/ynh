@@ -20,6 +20,7 @@
   * [Telemetry](/telemetry.md)
   * [Namespacing](/namespacing.md)
   * [Vendor Support](/vendors.md)
+  * [Vendor Feature Parity](/vendor-parity.md)
 
 * **Tools**
   * [CLI Reference](/reference.md)

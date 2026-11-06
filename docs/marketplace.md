@@ -99,12 +99,12 @@ AI coding assistants are converging on a plugin/marketplace model for distributi
 
 | | Claude Code | Cursor | Codex | Copilot | OpenCode |
 |---|---|---|---|---|---|
-| **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) | Unverified — schema not hand-confirmed | Not supported |
-| **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog | Unknown | Not supported |
+| **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) | Installs from a local marketplace directory: verified live on Copilot CLI 1.0.105, 2026-11-05 ([L28](vendor-parity.md#l28-copilot-marketplace-index)). GitHub's release status for marketplaces not checked | Not supported |
+| **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog | A marketplace you host yourself installs: a `ynd marketplace build` index added with `copilot plugin marketplace add <dir>` ([L28](vendor-parity.md#l28-copilot-marketplace-index)). Whether Copilot has an official or curated catalog is not checked | Not supported |
 | **Plugin format** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` (Copilot reads Claude's manifest schema) | None |
-| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort) | None |
-| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory | `--plugin-dir` (direct load, same as Claude) | `opencode --standalone` with `OPENCODE_CONFIG_DIR` (what `ynh run` does); no install step |
-| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) | Unknown | Not supported |
+| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (installed live, [L28](vendor-parity.md#l28-copilot-marketplace-index)) | None |
+| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory | `copilot plugin marketplace add <dir>`, then `copilot plugin install <plugin>@<marketplace>`, with no prompt ([L28](vendor-parity.md#l28-copilot-marketplace-index)). CLI: `--plugin-dir` (direct load, same as Claude) | `opencode --standalone` with `OPENCODE_CONFIG_DIR` (what `ynh run` does); no install step |
+| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) | A local directory works ([L28](vendor-parity.md#l28-copilot-marketplace-index)); a marketplace hosted in a private repository is not checked | Not supported |
 | **Ecosystem size** | Large (40+ marketplaces, 800+ plugins) | Growing (30+ curated plugins) | Growing (official directory coming soon) | Unknown | Not supported |
 
 ## Claude Code
@@ -296,7 +296,7 @@ Cursor and Claude Code share nearly identical plugin and marketplace formats:
 | Marketplace index | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` |
 | Schema | Same | Same |
 
-This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points only at `skills/`, so the shared agents, rules and commands do not reach Codex.
+This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points at `skills/`, the hooks file and `.mcp.json`, so the shared agents, rules and commands do not reach Codex, nor does the shared `AGENTS.md`, which no vendor but OpenCode carries.
 
 ### Official Resources
 
@@ -322,7 +322,7 @@ Codex's marketplace is curated rather than open. It supports:
 Codex has significant differences from Claude Code and Cursor:
 
 - **No self-hosted marketplaces** — the catalog is centrally managed (as of March 2026)
-- **Skills-only distribution** — Codex plugins carry only skills: there is no loading mechanism for agents, rules, or commands in a plugin. When it runs a harness under Codex, `ynh` writes a harness's agents as TOML custom agents and registers each one with Codex at launch (see [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor))
+- **Skills, hooks and MCP servers only** — Codex plugins carry skills, hooks and MCP servers, not agents, rules, commands or instructions: there is no loading mechanism for those in a plugin. When it runs a harness under Codex, `ynh` writes a harness's agents as TOML custom agents and registers each one with Codex at launch (see [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor))
 - **Limited marketplace.json** — the format exists but the schema is still evolving
 
 ynh includes Codex in marketplace generation. `ynd marketplace build` writes a Codex-specific index at `.agents/plugins/marketplace.json` (source/path pointers and an install policy per plugin) alongside the Claude Code and Cursor indexes. Individual Codex export (`ynd export -v codex`) produces a `.codex-plugin/plugin.json` manifest with a `skills/` directory at the plugin root.
@@ -336,11 +336,11 @@ ynh includes Codex in marketplace generation. `ynd marketplace build` writes a C
 
 ## GitHub Copilot CLI
 
-Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Its marketplace/index format, however, was only researched from documentation, not hand-verified against a real published marketplace — treat `ynd marketplace build`'s Copilot output as a best-effort starting point, not a confirmed-working artifact.
+Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.json` schema Claude Code uses, confirmed by hands-on testing. Copilot CLI 1.0.105 installed a marketplace from `ynd marketplace build` and loaded its plugin live on 2026-11-05. In an interactive session the plugin's MCP tool ran once its call was approved; a one-shot run refuses the call, as no one is there to approve it ([L28](vendor-parity.md#l28-copilot-marketplace-index), [L37](vendor-parity.md#l37-copilot-package-mcp-tools-need-approval)).
 
 ### Current State
 
-- Skills and agents export like Claude Code's; rules and commands are excluded (Copilot has no loading mechanism for them)
+- Skills, agents and commands export like Claude Code's. Rules are excluded, because they ride in the instructions, which a Copilot plugin cannot carry. Copilot loads a plugin's `commands/*.md` as skills, reached by name, with no `/name` expansion (see [L24](vendor-parity.md#l24-commands-in-a-copilot-package))
 - Marketplace index is written to `.github/plugin/marketplace.json`
 - **Hooks** are written to `hooks.json` at the plugin root, in Copilot's own format, and fire on Copilot CLI 1.0.105 (in a package that also targets Claude, Copilot loads Claude's `hooks/claude.json` instead); see [Hooks: Copilot](hooks.md#copilot-format-and-trust)
 
@@ -437,8 +437,6 @@ dist/
 │   └── reviewer/
 │       ├── .claude-plugin/plugin.json
 │       ├── .cursor-plugin/plugin.json
-│       ├── .cursorrules
-│       ├── AGENTS.md
 │       └── skills/...
 ├── .claude-plugin/marketplace.json    # Claude Code index
 ├── .cursor-plugin/marketplace.json    # Cursor index
@@ -465,9 +463,9 @@ dist/
 │       ├── plugin.json                  # portable manifest
 │       ├── skills/...                   # portable
 │       ├── mcp.json                     # portable, when the harness declares servers
-│       ├── com.github.copilot/agents/   # Copilot's namespace
+│       ├── com.github.copilot/{agents,commands}/   # Copilot's namespace; commands/ not loaded live
 │       ├── .claude-plugin/plugin.json   # Claude Code compatibility
-│       ├── agents/  CLAUDE.md  AGENTS.md
+│       ├── agents/  AGENTS.md
 │       └── ...
 ├── .agents/plugins/marketplace.json     # Codex index
 ├── .claude-plugin/marketplace.json      # Claude Code index
@@ -564,24 +562,13 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 **Why one marketplace.json per vendor?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor `.cursor-plugin/marketplace.json` and Copilot `.github/plugin/marketplace.json`. ynh generates each from the same source config, producing one physical plugin directory that serves every vendor.
 
-**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share the Claude and Cursor index shape. `ynd marketplace build` generates its index at `.agents/plugins/marketplace.json` alongside the other vendors' ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
+**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share the Claude and Cursor index shape. `ynd marketplace build` generates its index at `.agents/plugins/marketplace.json` alongside the other vendors' ones, using Codex's native format. A Codex plugin carries skills, hooks and MCP servers but no agents, rules, commands or instructions, so a plugin in a Codex-consumed marketplace delivers only those regardless of what the harness defines for the other vendors.
 
 **Why auto-init Git?** Claude Code's plugin loader resolves relative `source` paths (e.g., `./plugins/formatter`) within the Git working tree. A marketplace directory that isn't a Git repo causes path resolution failures at install time.
 
-## Cross-Vendor Compatibility Matrix
+## Cross-Vendor Compatibility
 
-| Feature | Claude Code | Cursor | Codex | Copilot | OpenCode |
-|---------|------------|--------|-------|---------|----------|
-| Skills | Yes | Yes | Yes | Yes | Yes |
-| Agents | Yes | Yes | No | Yes | Yes |
-| Rules | Yes | Yes | No | No | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
-| Commands | Yes | Yes | No | No | Yes (bundle slash commands unconfirmed under `opencode run`) |
-| Instructions | AGENTS.md | .cursorrules + AGENTS.md | AGENTS.md | AGENTS.md (projected to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
-| Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ | None |
-| Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) | None |
-| Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) | No |
-| Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) | No manifest to merge |
-| Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` | Not supported |
+What an export or a marketplace build carries to each vendor, and whose each gap is, is in the `ynd export` matrix of [Vendor Feature Parity](vendor-parity.md#ynd-export). The file each part becomes is in [Export Output by Vendor](vendors.md#export-output-by-vendor).
 
 ## References
 

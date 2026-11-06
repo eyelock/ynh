@@ -53,7 +53,7 @@ ynh delegates to the local `git` binary. If `git clone <url>` works on the machi
 | Vendor | CLI binary | Config dir | Instructions file |
 |--------|-----------|------------|-------------------|
 | Claude | `claude` | `.claude` | `CLAUDE.md` |
-| Codex | `codex` | `.codex` | `codex.md` |
+| Codex | `codex` | `.codex` | `AGENTS.md` |
 | Cursor | `agent` | `.cursor` | `.cursorrules` |
 | Copilot | `copilot` | `.copilot` | `AGENTS.md` |
 | OpenCode | `opencode` | `.opencode` | `AGENTS.md` |

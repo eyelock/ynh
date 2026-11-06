@@ -45,7 +45,7 @@ func (c *Codex) ConfigDir() string {
 	return ".codex"
 }
 
-func (c *Codex) InstructionsFile() string { return "codex.md" }
+func (c *Codex) InstructionsFile() string { return "AGENTS.md" }
 
 func (c *Codex) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
@@ -55,6 +55,11 @@ func (c *Codex) GenerateSystemPrompt(content []byte) map[string][]byte {
 		"AGENTS.md": content,
 	}
 }
+
+// FoldsRulesIntoInstructions: Codex does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Codex) FoldsRulesIntoInstructions() bool { return true }
 
 func (c *Codex) NeedsSymlinks() bool { return true }
 
@@ -84,9 +89,13 @@ func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []s
 	return launchCodex(configPath, args)
 }
 
-// codexAgentArgsWarned is CodexAgentArgs, printing its warnings on w.
+// codexAgentArgsWarned is CodexAgentArgs and CodexMCPArgs, printing their
+// warnings on w.
 func codexAgentArgsWarned(runDir string, w io.Writer) []string {
 	args, warnings := CodexAgentArgs(runDir)
+	mcp := CodexMCP(runDir)
+	args = append(args, mcp.Args...)
+	warnings = append(warnings, mcp.Warnings...)
 	for _, msg := range warnings {
 		_, _ = fmt.Fprintf(w, "warning: %s\n", msg)
 	}
@@ -144,7 +153,7 @@ func (c *Codex) ResolveLastSession(cwd string, notBefore time.Time) (string, err
 // `codex resume` documents no prompt argument, so that combination is refused
 // rather than guessed at.
 func (c *Codex) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
-	args, err := codexResumeArgs(sessionID, prompt, interactive, extraArgs)
+	args, err := codexResumeArgs(sessionID, prompt, interactive, extraArgs, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -167,7 +176,7 @@ func withCodexRunArgs(resumeArgs, agentArgs []string) []string {
 	return append(out, resumeArgs[n:]...)
 }
 
-func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) ([]string, error) {
+func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string, warn io.Writer) ([]string, error) {
 	if prompt != "" && interactive {
 		return nil, ErrResumePromptNotSupported
 	}
@@ -179,6 +188,9 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 		args = append(args, sessionID)
 	} else {
 		args = append(args, "--last")
+	}
+	if prompt != "" {
+		extraArgs = codexExecResumeExtraArgs(extraArgs, codexUserConfigPath(), warn)
 	}
 	args = append(args, extraArgs...)
 	if prompt != "" {
@@ -215,7 +227,8 @@ var codexHookEventMap = map[string]string{
 
 // How on_session_start output reaches the model: Per
 // learn.chatgpt.com/docs/hooks: "Plain text on stdout is added as extra
-// developer context." UNVERIFIED live: Codex was not installed to test.
+// developer context." Verified live (codex-cli 0.166.0) once the hook is
+// trusted, which ynh grants per run (CodexHookTrustArgs).
 var codexSessionStartContext = "plain"
 
 // codexUnsupportedHookEvents names the canonical events Codex cannot express,
@@ -391,6 +404,14 @@ func (c *Codex) ExportArtifactDirs() map[string]string {
 
 func (c *Codex) SupportsExportDelegates() bool { return false }
 
+// ExportCarriesInstructions: a Codex plugin cannot carry instructions. A
+// plugin's AGENTS.md is installed with it but never reaches the session: Codex
+// reads AGENTS.md only from the working directory's project and the user's
+// ~/.codex (OBSERVED live on codex-cli 0.166.0, 2026-11-05: a plugin installed
+// from a `ynd export -v codex` package, whose AGENTS.md held a codeword, never
+// returned it, while its skill and MCP server loaded).
+func (c *Codex) ExportCarriesInstructions() bool { return false }
+
 func (c *Codex) PluginManifestDir() string { return ".codex-plugin" }
 
 // AgentPluginLayout: Codex loads the format natively and keeps its own
@@ -489,8 +510,15 @@ func launchCodex(configPath string, extraArgs []string) error {
 
 	// Launch as child process so ynh stays alive for signal handling.
 	// Use cmd.Dir instead of --cd for CWD control.
+	// The hooks ynh wrote run only when Codex trusts them; `ynh run` adds the
+	// overrides (CodexHookTrustArgs) to extraArgs when the harness is accepted.
 	cmd := exec.Command(codexBin, extraArgs...)
 	cmd.Dir = configPath
+	// The values of the servers' headers are passed in the environment, never
+	// on the command line (CodexMCP).
+	if env := CodexMCP(configPath).Env; len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	return runChildProcess(cmd)
 }
 

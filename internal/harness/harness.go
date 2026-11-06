@@ -184,6 +184,9 @@ type Harness struct {
 	MCPRemovals    []string
 	EnvPassthrough []string
 	MCPIsolation   bool // run with only this harness's MCP servers (mcp_isolation)
+	// MCPManualApproval leaves approval of the harness's MCP tools on one-shot
+	// runs and agent workers to the vendor (mcp_manual_approval).
+	MCPManualApproval bool
 	// Workspace is the manifest's requested workspace folders, as written.
 	Workspace []string
 	// Labels is the manifest's run labels, as written; validated when a run
@@ -773,6 +776,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
 	p.MCPIsolation = hj.MCPIsolation
+	p.MCPManualApproval = hj.MCPManualApproval
 	if len(hj.Workspace) > 0 {
 		p.Workspace = hj.Workspace
 	}
@@ -895,6 +899,9 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 
 	if profile.MCPIsolation != nil {
 		resolved.MCPIsolation = *profile.MCPIsolation
+	}
+	if profile.MCPManualApproval != nil {
+		resolved.MCPManualApproval = *profile.MCPManualApproval
 	}
 
 	// Merge MCP servers: deep merge, nil removes inherited. A null also goes
@@ -1057,6 +1064,7 @@ func LoadFile(path string) (*Harness, error) {
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
 	p.MCPIsolation = hj.MCPIsolation
+	p.MCPManualApproval = hj.MCPManualApproval
 	if len(hj.Workspace) > 0 {
 		p.Workspace = hj.Workspace
 	}

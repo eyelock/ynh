@@ -33,7 +33,10 @@ func TestWorkspaceParityScript(t *testing.T) {
 			editCopy(t, r, "internal/vendor/codex.go", "var codexWorkspaceFlag = \"--add-dir\"", "var codexWorkspaceFlag = \"\"")
 		}, "codex: no workspace flag and no reason"},
 		{"both", func(r string) {
-			editCopy(t, r, "internal/vendor/cursor.go", "var cursorWorkspaceFlag = \"\"", "var cursorWorkspaceFlag = \"--add-dir\"")
+			editCopy(t, r, "internal/vendor/codex.go", "var codexWorkspaceUnsupported = \"\"", "var codexWorkspaceUnsupported = \"no flag\"")
+		}, "CONFLICT codex"},
+		{"a default alongside a flag", func(r string) {
+			editCopy(t, r, "internal/vendor/cursor.go", "var cursorWorkspaceUnsupported = \"\"", "var cursorWorkspaceUnsupported = \"\"\nvar cursorWorkspaceDefault = \"x\"")
 		}, "CONFLICT cursor"},
 		{"a reason instead of a flag passes", func(r string) {
 			editCopy(t, r, "internal/vendor/copilot.go", "var copilotWorkspaceFlag = \"--add-dir\"", "var copilotWorkspaceFlag = \"\"")

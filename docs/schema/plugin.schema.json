@@ -92,7 +92,7 @@
       }
     },
     "env_passthrough": {
-      "description": "Environment variables this harness may see. Governs two things deliberately: which ${VAR} references its MCP declarations may resolve, and which variables reach an agent worker's process. Absent or empty means none \u2014 a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
+      "description": "Environment variables this harness may see. Governs three things deliberately: which ${VAR} references its MCP declarations may resolve, which variables reach an agent worker's process, and, on Codex, which variables reach a stdio MCP server under ynh run and ynh agent run (Codex gives a server only a default environment otherwise). Absent or empty means none \u2014 a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
       "type": "array",
       "items": {
         "type": "string",
@@ -126,6 +126,10 @@
       "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex, Cursor and OpenCode cannot isolate and ynh warns.",
       "type": "boolean"
     },
+    "mcp_manual_approval": {
+      "description": "Leave approval of the harness's own MCP tools on a one-shot run or an `ynh agent run` worker to the vendor and the caller. Default false: on Codex, whose one-shot runs and workers refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run. A launch-time setting; it does not change an export. No other vendor needs it: Copilot gets --allow-all-tools regardless.",
+      "type": "boolean"
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",
@@ -144,6 +148,10 @@
           },
           "mcp_isolation": {
             "description": "Overrides the harness-level mcp_isolation when this profile is selected, either way. Absent inherits.",
+            "type": "boolean"
+          },
+          "mcp_manual_approval": {
+            "description": "Overrides the harness-level mcp_manual_approval when this profile is selected, either way. Absent inherits.",
             "type": "boolean"
           },
           "env_passthrough": {

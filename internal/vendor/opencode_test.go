@@ -314,6 +314,12 @@ func TestOpenCodeApplyRuntimeInstructionsErrors(t *testing.T) {
 func TestOpenCodeGenerateHookConfig(t *testing.T) {
 	o := &OpenCode{}
 
+	// Only a session-start hook: no plugin, just the list ynh runs at launch.
+	if only, err := o.GenerateHookConfig(map[string][]plugin.HookEntry{"on_session_start": {{Command: "s"}}}); err != nil ||
+		len(only) != 1 || only[filepath.Join(".opencode", opencodeSessionStartFile)] == nil {
+		t.Errorf("session-start only = %v, %v", keysOf(only), err)
+	}
+
 	if files, err := o.GenerateHookConfig(nil); files != nil || err != nil {
 		t.Errorf("nil hooks = %v, %v", files, err)
 	}
@@ -332,7 +338,8 @@ func TestOpenCodeGenerateHookConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := keysOf(files); len(got) != 1 || got[0] != filepath.Join(".opencode", "plugins", "ynh-hooks.ts") {
+	if got := keysOf(files); len(got) != 2 || got[0] != filepath.Join(".opencode", "plugins", "ynh-hooks.ts") ||
+		got[1] != filepath.Join(".opencode", opencodeSessionStartFile) {
 		t.Fatalf("files = %v", got)
 	}
 	src := string(files[".opencode/plugins/ynh-hooks.ts"])
@@ -360,7 +367,6 @@ func TestOpenCodeGenerateHookConfig(t *testing.T) {
 		`ctx.tool.hook("execute.after"`,
 		`ctx.session.hook("prompt"`,
 		`ctx.event.subscribe`,
-		`"session.created"`,
 		`"session.execution.succeeded"`,
 		`"session.execution.failed"`,
 		`shell: ["Bash"]`,
@@ -368,6 +374,9 @@ func TestOpenCodeGenerateHookConfig(t *testing.T) {
 		if !strings.Contains(src, want) {
 			t.Errorf("plugin lacks %s", want)
 		}
+	}
+	if strings.Contains(src, "session.created") || strings.Contains(src, "on_session_start") {
+		t.Error("the plugin must not carry on_session_start: ynh runs it once before launch")
 	}
 	if strings.Contains(src, "__HOOKS__") {
 		t.Error("placeholder left in plugin")
@@ -454,7 +463,7 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"claude agent", "agents", "code-reviewer.md",
 			"---\nname: code-reviewer\ndescription: Reviews code\nmodel: sonnet\ncolor: blue\n---\nBody\n",
-			"---\ndescription: Reviews code\n---\nBody\n",
+			"---\ndescription: Reviews code\nmode: all\n---\nBody\n",
 		},
 		{
 			"keeps mode and provider model", "agents", "a.md",
@@ -464,57 +473,57 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"tools comma string", "agents", "a.md",
 			"---\ndescription: d\ntools: Read, Grep\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("grep", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + allow("grep", "*") + "---\nB\n",
 		},
 		{
 			"tools yaml list, dupes and unknown", "agents", "a.md",
 			"---\ndescription: d\ntools:\n  - Edit\n  - Write\n  - mcp__x__y\n  - Bash\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("edit", "*") + allow("x_y", "*") + allow("shell", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("edit", "*") + allow("x_y", "*") + allow("shell", "*") + "---\nB\n",
 		},
 		{
 			"granted MCP tool is allowed, not denied", "agents", "a.md",
 			"---\ndescription: d\ntools: [Read, mcp__srv__do_it, mcp__bad, mcp__srv__x(y)]\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("srv_do_it", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + allow("srv_do_it", "*") + "---\nB\n",
 		},
 		{
 			"granted MCP tool with existing permissions is not denied", "agents", "a.md",
 			"---\ndescription: d\ntools: Read, Glob, Grep, Edit, Bash, WebFetch, WebSearch, Task, Skill, mcp__srv__do_it\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
-			"---\ndescription: d\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
 		},
 		{
 			"tools flow list, only unknown", "agents", "a.md",
 			"---\ndescription: d\ntools: [Foo, Bar]\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + "---\nB\n",
 		},
 		{
 			"scoped Bash keeps commas in parens and maps to a command pattern", "agents", "a.md",
 			"---\ndescription: d\ntools: Read, Bash(git status:*), Bash(git add -A, x), Read(./src/**)\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("shell", "git status *") + allow("shell", "git add -A, x") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + allow("shell", "git status *") + allow("shell", "git add -A, x") + "---\nB\n",
 		},
 		{
 			"empty tools inherits", "agents", "a.md",
 			"---\ndescription: d\ntools:\n---\nB\n",
-			"---\ndescription: d\n---\nB\n",
+			"---\ndescription: d\nmode: all\n---\nB\n",
 		},
 		{
 			"disallowedTools alone denies after the default allow-all", "agents", "a.md",
 			"---\ndescription: d\ndisallowedTools: Bash, Write, mcp__srv__do_it, Foo\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + deny("shell", "*") + deny("edit", "*") + deny("srv_do_it", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + deny("shell", "*") + deny("edit", "*") + deny("srv_do_it", "*") + "---\nB\n",
 		},
 		{
 			"disallowed-tools scoped Bash and scoped Read", "agents", "a.md",
 			"---\ndescription: d\ndisallowed-tools: Bash(rm:*), Read(./.env)\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + deny("shell", "rm *") + deny("read", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + deny("shell", "rm *") + deny("read", "*") + "---\nB\n",
 		},
 		{
 			"disallowed denies come after the allows", "agents", "a.md",
 			"---\ndescription: d\ntools: Bash\ndisallowedTools: Bash(rm:*)\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("shell", "*") + deny("shell", "rm *") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("shell", "*") + deny("shell", "rm *") + "---\nB\n",
 		},
 		{
 			"existing permissions are kept and only denies are appended", "agents", "a.md",
 			"---\ndescription: d\ntools: Bash\ndisallowedTools: Write\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
-			"---\ndescription: d\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n" +
+			"---\ndescription: d\nmode: all\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n" +
 				"  - action: read\n    resource: \"*\"\n    effect: deny\n" +
 				"  - action: edit\n    resource: \"*\"\n    effect: deny\n" +
 				"  - action: glob\n    resource: \"*\"\n    effect: deny\n" +
@@ -528,36 +537,36 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"existing permissions untouched without tool lists", "agents", "a.md",
 			"---\ndescription: d\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
-			"---\ndescription: d\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
 		},
 		{
 			"empty inline permissions are no permissions, so the lists still apply", "agents", "a.md",
 			"---\ndescription: d\ntools: Read\ndisallowedTools: Bash\npermissions: [ ]\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + deny("shell", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + deny("shell", "*") + "---\nB\n",
 		},
 		{
 			"empty inline permissions without tool lists are dropped", "agents", "a.md",
 			"---\ndescription: d\npermissions: []\n---\nB\n",
-			"---\ndescription: d\n---\nB\n",
+			"---\ndescription: d\nmode: all\n---\nB\n",
 		},
 		{
 			"inline permissions without tool lists are kept as written", "agents", "a.md",
 			"---\ndescription: d\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
-			"---\ndescription: d\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
 		},
 		{
 			"no description", "agents", "plan-helper.md",
 			"---\nname: x\ntools: Read\n---\nBody\n",
-			"---\ndescription: \"Plan Helper\"\npermissions:\n" + denyAll + allow("read", "*") + "---\nBody\n",
+			"---\ndescription: \"Plan Helper\"\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + "---\nBody\n",
 		},
 		{
 			"empty description", "agents", "e.md",
 			"---\ndescription:\n---\nBody\n",
-			"---\ndescription: \"E\"\n---\nBody\n",
+			"---\ndescription: \"E\"\nmode: all\n---\nBody\n",
 		},
 		{
 			"no frontmatter", "agents", "bare.md", "Just a body\n",
-			"---\ndescription: \"Bare\"\n---\nJust a body\n",
+			"---\ndescription: \"Bare\"\nmode: all\n---\nJust a body\n",
 		},
 	}
 	for _, tc := range cases {
@@ -671,6 +680,86 @@ func TestPrepareOpenCode(t *testing.T) {
 	}
 	if err := PrepareOpenCode("", "opencode"); err != nil {
 		t.Errorf("empty configPath: %v", err)
+	}
+}
+
+// TestPrepareOpenCodeSessionContext: the on_session_start hook runs before
+// launch and its stdout lands in the composed AGENTS.md, once per launch.
+func TestPrepareOpenCodeSessionContext(t *testing.T) {
+	old := opencodeVersionProbe
+	t.Cleanup(func() { opencodeVersionProbe = old })
+	opencodeVersionProbe = func(string) (string, error) { return "opencode v2.0.27", nil }
+
+	cfg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("base"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, err := (&OpenCode{}).GenerateHookConfig(map[string][]plugin.HookEntry{
+		"on_session_start": {
+			{Command: "echo ctx-one; cat >/dev/null"},
+			{Command: "echo broken; exit 1"},
+			{Command: "echo ctx-two"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, data := range files {
+		p := filepath.Join(cfg, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	agents := filepath.Join(cfg, ".opencode", "AGENTS.md")
+	for i := 0; i < 2; i++ {
+		if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+			t.Fatal(err)
+		}
+		b, _ := os.ReadFile(agents)
+		if got, want := string(b), "base\n\nctx-one\n\nctx-two\n"; got != want {
+			t.Fatalf("launch %d: AGENTS.md = %q, want %q (a failing hook's output must not be kept)", i+1, got, want)
+		}
+	}
+
+	// A later launch whose hooks print nothing carries no stale context.
+	if err := os.WriteFile(filepath.Join(cfg, ".opencode", opencodeSessionStartFile), []byte(`[{"command":"true"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(agents); string(b) != "base\n" {
+		t.Errorf("stale context kept: %q", b)
+	}
+}
+
+// TestPrepareOpenCodeSessionStartBackgroundChild: a hook that leaves a child
+// running does not hold the launch until the child exits, and its output is
+// kept.
+func TestPrepareOpenCodeSessionStartBackgroundChild(t *testing.T) {
+	old := opencodeVersionProbe
+	t.Cleanup(func() { opencodeVersionProbe = old })
+	opencodeVersionProbe = func(string) (string, error) { return "opencode v2.0.27", nil }
+
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, ".opencode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, ".opencode", opencodeSessionStartFile), []byte(`[{"command":"sleep 20 & echo hi"}]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := PrepareOpenCode(cfg, "opencode"); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Errorf("launch waited %v for a backgrounded child", d)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cfg, ".opencode", "AGENTS.md")); string(b) != "hi\n" {
+		t.Errorf("AGENTS.md = %q, want the hook's output", b)
 	}
 }
 
@@ -867,11 +956,11 @@ func TestOpenCodeHookDeclarations(t *testing.T) {
 	if _, ok := opencodeUnsupportedHookEvents["on_session_end"]; !ok {
 		t.Error("on_session_end must be declared unsupported, with a reason")
 	}
-	if !strings.HasPrefix(sessionStartContext["opencode"], sessionStartNoPrefix) {
-		t.Errorf("session-start context = %q, want unsupported:<why>", sessionStartContext["opencode"])
+	if sessionStartContext["opencode"] != sessionStartPlain {
+		t.Errorf("session-start context = %q, want plain", sessionStartContext["opencode"])
 	}
 	if sessionContextMode("opencode") != "" {
-		t.Error("an unsupported vendor gets no wrapper")
+		t.Error("a plain vendor gets no wrapper")
 	}
 	field, reason, _, ok := hookTimeoutSupport("opencode")
 	if !ok || field != "timeout" || reason != "" {

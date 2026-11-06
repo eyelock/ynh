@@ -734,10 +734,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		Model:       opts.Model,
 		Effort:      opts.Effort,
 		IsolatedMCP: isolatedMCP,
-		ResumeToken: resumeToken,
-		UsageBase:   usageBase,
-		Env:         workerEnv,
-		Stderr:      opts.Stderr,
+		// The profile's mcp_manual_approval is already resolved into harnessObj.
+		MCPManualApproval: harnessObj != nil && harnessObj.MCPManualApproval,
+		ResumeToken:       resumeToken,
+		UsageBase:         usageBase,
+		Env:               workerEnv,
+		Stderr:            opts.Stderr,
 
 		TelemetryEndpoint: relayEndpoint,
 	})
@@ -1752,6 +1754,12 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 		if err := vendor.WriteSecretFiles(dir, mcpFiles); err != nil {
 			_ = os.RemoveAll(dir)
 			return "", nil, err
+		}
+		if adapter.Name() == "codex" {
+			if err := vendor.WriteCodexEnvPassthrough(dir, harness.ComposedEnvPassthrough(h, resolver.IncludedHarnesses(resolved))); err != nil {
+				_ = os.RemoveAll(dir)
+				return "", nil, err
+			}
 		}
 	}
 

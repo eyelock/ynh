@@ -44,6 +44,9 @@ func WriteMergedSystemPrompt(content []byte, outputDir string, vendors []string)
 		if err != nil {
 			continue
 		}
+		if !vendor.ExportCarriesInstructions(adapter) {
+			continue
+		}
 		for path, data := range adapter.GenerateSystemPrompt(content) {
 			files[path] = data
 		}

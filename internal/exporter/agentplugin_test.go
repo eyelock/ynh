@@ -124,9 +124,9 @@ func TestAgentPlugin_AllVendorsLayout(t *testing.T) {
 	want := []string{
 		".claude-plugin/plugin.json", // Claude Code compatibility manifest
 		"AGENTS.md",
-		"CLAUDE.md",
 		"agents/checker.md", // Claude Code reads agents/ at the root
 		"com.github.copilot/agents/checker.md",
+		"com.github.copilot/commands/check.md",
 		"com.github.copilot/hooks/hooks.json",
 		"com.openai/hooks/hooks.json",
 		"commands/check.md",
@@ -281,17 +281,33 @@ func TestAgentPlugin_CodexOnly(t *testing.T) {
 	if !hasWarning(r, "1 agents not portable: no selected vendor (codex)") {
 		t.Errorf("warnings = %v", r.Warnings)
 	}
+	// The portable AGENTS.md stays, but a Codex plugin does not load it.
+	if !hasWarning(r, "codex: plugins cannot carry instructions") {
+		t.Errorf("warnings = %v", r.Warnings)
+	}
+}
+
+// Claude Code, Copilot and Cursor plugins cannot carry instructions either
+// (ynh #722, #739).
+func TestAgentPlugin_InstructionsWarningClaudeCopilotCursor(t *testing.T) {
+	for _, v := range []string{"claude", "copilot", "cursor"} {
+		src := writePortableSource(t, portableManifest)
+		_, r := exportPortable(t, src, v)
+		if !hasWarning(r, v+": plugins cannot carry instructions") {
+			t.Errorf("%s: warnings = %v", v, r.Warnings)
+		}
+	}
 }
 
 func TestAgentPlugin_CopilotNamespace(t *testing.T) {
 	src := writePortableSource(t, portableManifest)
 	out, r := exportPortable(t, src, "copilot")
-	want := []string{"AGENTS.md", "com.github.copilot/agents/checker.md", "com.github.copilot/hooks/hooks.json", "mcp.json", "plugin.json", "scripts/guard.sh", "skills/hello/SKILL.md"}
+	want := []string{"AGENTS.md", "com.github.copilot/agents/checker.md", "com.github.copilot/commands/check.md", "com.github.copilot/hooks/hooks.json", "mcp.json", "plugin.json", "scripts/guard.sh", "skills/hello/SKILL.md"}
 	if got := listFiles(t, out); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("files = %v, want %v", got, want)
 	}
-	// Copilot's legacy export excludes rules and commands; the namespace follows it.
-	if !hasWarning(r, "1 rules not portable") || !hasWarning(r, "1 commands not portable") || hasWarning(r, "hooks not portable") {
+	// Copilot's legacy export excludes rules but carries commands (ynh #733); the namespace follows it.
+	if !hasWarning(r, "1 rules not portable") || hasWarning(r, "commands not portable") || hasWarning(r, "hooks not portable") {
 		t.Errorf("warnings = %v", r.Warnings)
 	}
 	if r.Agents != 1 {

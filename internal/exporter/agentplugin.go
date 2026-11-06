@@ -55,7 +55,9 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	result.Skills = countDir(filepath.Join(out, "skills"))
 
 	// AGENTS.md is not a portable component, but it is how ynh carries
-	// instructions and what ynh reads back on import.
+	// instructions and what ynh reads back on import. It stays for Codex
+	// too: a Codex plugin does not load it (warned below), but the package
+	// is one portable tree.
 	if len(instructions) > 0 {
 		if err := os.WriteFile(filepath.Join(out, "AGENTS.md"), instructions, 0o644); err != nil {
 			return nil, fmt.Errorf("writing AGENTS.md: %w", err)
@@ -77,6 +79,10 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	for _, a := range adapters {
 		layout := a.AgentPluginLayout()
 		name := a.Name()
+
+		if len(instructions) > 0 && !vendor.ExportCarriesInstructions(a) {
+			result.Warnings = append(result.Warnings, noInstructionsWarning(name))
+		}
 
 		// Non-portable artifacts and delegates, where the client can take them.
 		if layout.ArtifactDir != "" {
@@ -173,7 +179,7 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 			if err := writeGeneratedFiles(out, manifest); err != nil {
 				return nil, err
 			}
-			if len(instructions) > 0 {
+			if len(instructions) > 0 && vendor.ExportCarriesInstructions(a) {
 				if err := writeGeneratedFiles(out, a.GenerateSystemPrompt(instructions)); err != nil {
 					return nil, err
 				}

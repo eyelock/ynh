@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -51,15 +52,23 @@ func (c *Copilot) InstructionsFile() string { return "AGENTS.md" }
 func (c *Copilot) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
 func (c *Copilot) GenerateSystemPrompt(content []byte) map[string][]byte {
-	// AGENTS.md: Copilot natively reads this (confirmed: --no-custom-instructions
-	// flag exists specifically to disable AGENTS.md loading, proving it's read
-	// by default). Whether a properly-installed plugin's bundled AGENTS.md is
-	// read is untested — --plugin-dir loading confirmed it is NOT (see package
-	// doc). Kept for export-path consistency with the other three adapters.
+	// AGENTS.md: Copilot natively reads this from a project (the
+	// --no-custom-instructions flag exists to disable it). A plugin's bundled
+	// AGENTS.md is not read: OBSERVED live on Copilot CLI 1.0.105, 2026-11-05,
+	// with --plugin-dir (docs/vendor-parity.md L20, #722). Whether an
+	// installed plugin reads it has not been run. No export calls this for
+	// Copilot now: ExportCarriesInstructions is false, so the export writes no
+	// AGENTS.md and warns. The method stays because the adapter interface
+	// requires it.
 	return map[string][]byte{
 		"AGENTS.md": content,
 	}
 }
+
+// FoldsRulesIntoInstructions: Copilot does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Copilot) FoldsRulesIntoInstructions() bool { return true }
 
 func (c *Copilot) NeedsSymlinks() bool { return false }
 
@@ -183,20 +192,34 @@ func readCopilotWorkspace(path string) (id string, cwd string, err error) {
 // worktree. Prefer an explicit id. A bare --resume is never emitted — Copilot's
 // own help describes it as "using session picker".
 //
-// A prompt is refused: Copilot documents -i and --resume separately and no
-// page confirms the pair together
-// (docs.github.com/en/copilot/reference/cli-command-reference).
+// A prompt is delivered to the resumed session: one-shot as `-p <prompt>`
+// with --allow-all-tools, as a fresh one-shot run is, and interactive as
+// `-i <prompt>`, which opens the session with it as the first message. The
+// one-shot form was observed to answer from the earlier session (Copilot CLI
+// 1.0.105, 2026-11-05): `copilot --resume=<id> -p "<prompt>"`.
 func (c *Copilot) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
-	if prompt != "" {
-		return ErrResumePromptNotSupported
-	}
-	var resumeArgs []string
+	initial, args := copilotResumeArgs(sessionID, prompt, interactive, extraArgs)
+	return launchCopilot(configPath, initial, args)
+}
+
+// copilotResumeArgs is a resume's launch inputs: the interactive prompt, which
+// launchCopilot places as -i, and the arguments after it.
+func copilotResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
+	var args []string
 	if sessionID != "" {
-		resumeArgs = []string{"--resume=" + sessionID}
+		args = []string{"--resume=" + sessionID}
 	} else {
-		resumeArgs = []string{"--continue"}
+		args = []string{"--continue"}
 	}
-	return launchCopilot(configPath, "", append(resumeArgs, extraArgs...))
+	initial := ""
+	if prompt != "" {
+		if interactive {
+			initial = prompt
+		} else {
+			args = append(args, "-p", prompt, "--allow-all-tools")
+		}
+	}
+	return initial, append(args, extraArgs...)
 }
 
 // IsolateMCP is partial on Copilot: --disable-builtin-mcps drops the built-in
@@ -442,15 +465,24 @@ func (c *Copilot) GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir
 }
 
 func (c *Copilot) ExportArtifactDirs() map[string]string {
-	// Skills and agents are confirmed supported in Copilot plugins. Rules have
-	// no reliable "always-on" equivalent (Copilot's applyTo-scoped instructions
-	// files aren't on by default) and commands aren't supported at all
-	// (confirmed gap, open feature requests upstream) — excluded, matching the
-	// precedent set by Codex's ExportArtifactDirs for its own unsupported types.
-	return map[string]string{"skills": "skills", "agents": "agents"}
+	// Skills, agents and commands are carried. Rules have no reliable
+	// "always-on" equivalent (Copilot's applyTo-scoped instructions files
+	// aren't on by default), so they are excluded. Copilot CLI has no slash
+	// commands of its own, but a plugin's commands/ load as skills, reached
+	// by name through the skill tool (OBSERVED live on Copilot CLI 1.0.105,
+	// 2026-11-05, ynh #733), the same as under `ynh run`.
+	return map[string]string{"skills": "skills", "agents": "agents", "commands": "commands"}
 }
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }
+
+// ExportCarriesInstructions: a Copilot plugin cannot carry instructions. A
+// plugin's AGENTS.md is installed with it but never reaches the session
+// (OBSERVED live on Copilot CLI 1.0.105, 2026-11-05: `copilot -p --plugin-dir`
+// on a `ynd export -v copilot` package, whose AGENTS.md held a codeword,
+// returned "unknown" while the skill's codeword came back). Under `ynh run`
+// ynh projects them into the project's .github/instructions instead.
+func (c *Copilot) ExportCarriesInstructions() bool { return false }
 
 // PluginManifestDir is the same as Claude: Copilot reads that manifest schema.
 func (c *Copilot) PluginManifestDir() string { return ".claude-plugin" }
@@ -471,11 +503,11 @@ func (c *Copilot) AgentPluginLayout() AgentPluginLayout {
 
 func (c *Copilot) MarketplaceManifestDir() string { return filepath.Join(".github", "plugin") }
 
-// GenerateMarketplaceIndex is best-effort: Copilot's marketplace.json schema
-// was researched but not hand-verified field-by-field the way the plugin
-// manifest, MCP config, and hook events were. Revisit once a real
-// copilot-plugins or awesome-copilot marketplace.json has been diffed against
-// this output.
+// GenerateMarketplaceIndex: Copilot CLI 1.0.105 installed a marketplace from
+// this index live (2026-11-05, `copilot plugin marketplace add <dir>` then
+// `copilot plugin install`, with no prompt): docs/vendor-parity.md L28. The
+// schema has not been diffed field by field against a published Copilot
+// marketplace.json.
 func (c *Copilot) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
 	type indexPlugin struct {
 		Name        string `json:"name"`
@@ -553,8 +585,12 @@ func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[st
 // The reference lists the manifest's "mcpServers" field as a third source
 // and does not say how the three combine. In a package that also carries
 // Claude, the shared manifest names Claude's mcp/claude.json, whose entries
-// lack the "type" field Copilot's own schema carries; which file an installed
-// Copilot plugin then loads has not been hand-tested (#499).
+// lack the "type" field Copilot's own schema carries. An installed Copilot
+// plugin loads .github/mcp.json and not the manifest-named mcp/claude.json:
+// CONFIRMED live on Copilot CLI 1.0.105, 2026-10-30, a merged package
+// installed from a local marketplace (#621, fixing #499). A tool call is
+// refused one-shot and runs interactively once approved: docs/vendor-parity.md
+// L37.
 func (c *Copilot) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	data, err := copilotMCPDocument(servers)
 	if err != nil || data == nil {
@@ -727,9 +763,100 @@ func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []strin
 		}
 	}
 	args = append(args, copilotMCPArgs(configPath)...)
+	if projectDir, err := os.Getwd(); err == nil {
+		warnLegacyProjectMCP(os.Stderr, configPath, projectDir)
+	}
 
 	args = append(args, extraArgs...)
 	return args, nil
+}
+
+// warnLegacyProjectMCP tells the user when the project's .github/mcp.json looks
+// like one an older ynh wrote, which held the servers' expanded credentials. It
+// never deletes or alters the file. The file carries no marker (JSON has no
+// comments), so "looks like" is judged by shape: the only top-level key is
+// mcpServers, every server has the "tools" and "type" fields ynh's document
+// carries, and the server names are exactly those of this run's document. A
+// hand-written file almost never matches all three, but a user's own file could,
+// so the message says "looks like" and leaves the decision to the user.
+func warnLegacyProjectMCP(w io.Writer, configPath, projectDir string) {
+	run, err := os.ReadFile(filepath.Join(configPath, ".copilot", ".mcp.json"))
+	if err != nil {
+		return
+	}
+	runNames, ok := copilotMCPServerNames(run)
+	if !ok {
+		return
+	}
+	path := filepath.Join(projectDir, ".github", "mcp.json")
+	proj, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	projNames, ok := copilotMCPServerNames(proj)
+	if !ok || strings.Join(projNames, "\x00") != strings.Join(runNames, "\x00") {
+		return
+	}
+	if !holdsLiteralSecret(proj) {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "warning: %s looks like one an older ynh wrote, and may hold your MCP credentials in plain text. ynh no longer writes it and has not touched it. If you did not write it yourself, delete it and rotate those credentials.\n", path)
+}
+
+// holdsLiteralSecret reports whether any env or headers value in a Copilot MCP
+// document is a literal rather than a ${VAR} reference. The document an older
+// ynh wrote into the project held the expanded values; the one ynd export
+// writes keeps the references, so it holds nothing to rotate and must not
+// draw the warning. A value is a reference when it contains "${". The values
+// themselves are never reported.
+func holdsLiteralSecret(data []byte) bool {
+	var doc struct {
+		MCPServers map[string]struct {
+			Env     map[string]string `json:"env"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		// Unexpected value types: err on the side of warning.
+		return true
+	}
+	for _, srv := range doc.MCPServers {
+		for _, m := range []map[string]string{srv.Env, srv.Headers} {
+			for _, v := range m {
+				if !strings.Contains(v, "${") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// copilotMCPServerNames returns the sorted server names of a Copilot MCP
+// document, and false when it is not shaped like one ynh renders (see
+// copilotMCPDocument): a sole top-level mcpServers key whose servers each carry
+// "type" and "tools".
+func copilotMCPServerNames(data []byte) ([]string, bool) {
+	var doc map[string]map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(data, &doc); err != nil || len(doc) != 1 {
+		return nil, false
+	}
+	servers, ok := doc["mcpServers"]
+	if !ok || len(servers) == 0 {
+		return nil, false
+	}
+	names := make([]string, 0, len(servers))
+	for name, fields := range servers {
+		if _, ok := fields["type"]; !ok {
+			return nil, false
+		}
+		if _, ok := fields["tools"]; !ok {
+			return nil, false
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, true
 }
 
 func launchCopilot(configPath string, initialPrompt string, extraArgs []string) error {

@@ -31,13 +31,16 @@ func TestWorkerArgsRenderWorkspace(t *testing.T) {
 			t.Errorf("stdin marker must stay last: %v", args)
 		}
 	})
-	t.Run("cursor carries none", func(t *testing.T) {
+	t.Run("cursor", func(t *testing.T) {
 		args := buildCursorArgs(StartOptions{Workspace: dirs}, "chat", true, "msg")
-		if slices.Contains(args, "--add-dir") || slices.Contains(args, "/w/one") {
-			t.Errorf("cursor has no such flag, got %v", args)
+		if !containsRun(args, want) {
+			t.Errorf("args %v lack %v", args, want)
+		}
+		if args[len(args)-1] != "msg" {
+			t.Errorf("the message must stay last: %v", args)
 		}
 	})
-	t.Run("opencode carries none", func(t *testing.T) {
+	t.Run("opencode carries none, it allows folders by default", func(t *testing.T) {
 		args := buildOpenCodeArgs(StartOptions{Workspace: dirs}, "", "msg")
 		if slices.Contains(args, "--add-dir") || slices.Contains(args, "/w/one") {
 			t.Errorf("opencode has no such flag, got %v", args)
