@@ -101,6 +101,9 @@ func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []
 
 func (c *Claude) SupportsInitialPrompt() bool { return true }
 
+// ReplacesProcess is true: every Claude launch ends in syscall.Exec.
+func (c *Claude) ReplacesProcess() bool { return true }
+
 func (c *Claude) SupportsResume() bool { return true }
 
 // ResolveLastSession reads Claude's own session store. Claude writes one

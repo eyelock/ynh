@@ -267,6 +267,10 @@ func cmdRun(args []string) error {
 		runDirName = "_inline-" + h[:8]
 	}
 	runDir := filepath.Join(config.RunDir(), runDirName)
+	// Held from the clean of the run dir to the last read or write of it
+	// before the vendor takes over (see the launch below); a no-op for a baked
+	// image.
+	unlockRun := func() {}
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
 	if preassembled {
 		// Pre-assembled layout (baked harness image) — use directly.
@@ -274,7 +278,15 @@ func cmdRun(args []string) error {
 		// everything was vetted and assembled at image build time.
 		runDir = preassembledDir
 	} else {
-		// Normal host flow — assemble now
+		// Normal host flow — assemble now. Assembly of one run dir is
+		// serialised across ynh processes: parallel runs of one harness
+		// would otherwise interleave the clean and the writes below.
+		unlock, err := assembler.LockRunDir(filepath.Join(config.CacheDir(), "run-locks", runDirName+".lock"))
+		if err != nil {
+			return fmt.Errorf("assembling config: %w", err)
+		}
+		unlockRun = unlock
+		defer unlockRun()
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 			return fmt.Errorf("assembling config: %w", err)
 		}
@@ -489,7 +501,15 @@ func cmdRun(args []string) error {
 			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)
 		}
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		// The launch still reads the run dir (Copilot's projection, OpenCode's
+		// workspace grant and AGENTS.md compose). A launch that replaces this
+		// process drops the lock at the exec, so it keeps it until then; a
+		// vendor that runs as a child releases it now rather than for the
+		// whole session.
+		if pr, ok := adapter.(vendor.ProcessReplacer); !ok || !pr.ReplacesProcess() {
+			unlockRun()
+		}
+		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
 }
 
@@ -566,6 +586,10 @@ func launchFocusPromptSupported(adapter vendor.Adapter) bool {
 // harnessKey identifies the harness for session binding: with --session-name on
 // a vendor that supports it, the session is bound to (harnessKey, directory,
 // name) rather than to the newest session in the directory.
+// launchSessionFn is launchSession; a variable so tests can stand in for the
+// vendor launch and observe the run dir at the moment it would start.
+var launchSessionFn = launchSession
+
 func launchSession(adapter vendor.Adapter, runDir, harnessKey string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
 	if binder, ok := adapter.(vendor.SessionBinder); ok && ra.SessionName != "" {
 		if flag := conflictingSessionFlag(vendorArgs); flag != "" {
