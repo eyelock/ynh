@@ -263,6 +263,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	}
 	carrier, _ := adapter.(DelegateMCPCarrier)
 	encoder, _ := adapter.(DelegateAgentEncoder)
+	transformer, _ := adapter.(ArtifactTransformer)
 	vendorName := configDir
 	if n, ok := adapter.(interface{ DisplayName() string }); ok {
 		vendorName = n.DisplayName()
@@ -325,6 +326,14 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, focus, fd.Declared, mcpLine))
 		if encoder != nil {
 			if fileName, agentContent, err = encoder.DelegateAgentFile(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included, focus, fd.Declared)); err != nil {
+				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
+			}
+		}
+		// A vendor that rewrites a harness's own agents so its CLI loads them
+		// (OpenCode: a mode that lets the task tool run one) rewrites a
+		// delegate's the same way, as it is staged by the same rule.
+		if encoder == nil && transformer != nil {
+			if fileName, agentContent, err = transformer.TransformArtifact("agents", fileName, agentContent); err != nil {
 				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
 			}
 		}
