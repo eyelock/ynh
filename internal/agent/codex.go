@@ -96,6 +96,12 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	if !opts.MCPManualApproval {
 		args = append(args, (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, nil)...)
 	}
+	// And its hooks, which codex reads from the project layer of its working
+	// directory, the worktree, and so would never find in ConfigPath. Passed
+	// only for an accepted harness; otherwise codex runs none, as before.
+	if opts.TrustedHooks {
+		args = append(args, vendor.CodexSessionHookArgs(opts.ConfigPath)...)
+	}
 	args = append(args, "--json")
 	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
 	if opts.Model != "" {
