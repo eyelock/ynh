@@ -269,13 +269,23 @@ both in the same PR since they share research.
     are declared.
   - G: `scripts/workspace-parity.sh`: the vendor declares a workspace flag or
     the reason it has none.
+  - H: `scripts/parity-page.sh`: `docs/vendor-parity.md` has a column for the
+    vendor, in `ynh vendors` order, and every cell in it is a legend mark.
+    Add the column with every cell **U** (unverified) until you have verified
+    it live; a non-Y cell also needs a limit with its Owner and Evidence, and
+    an **N** needs a linked issue. The Hooks, Session context and Workspace
+    folders cells must match what the adapter declares. The page is the only
+    copy of the table: do not repeat it on another page.
 
 ### Documentation
 
 Every file that enumerates vendors. The grep above finds them; at the time of
 writing these were:
 
-- [ ] Reference: `docs/vendors.md`, `docs/hooks.md`, `docs/mcp.md`,
+- [ ] Reference: `docs/vendor-parity.md` (a column for the vendor in each
+  matrix, in `ynh vendors` order, every cell a legend mark, **U** until
+  verified; assertion H of `make check-vendor-parity` fails without it),
+  `docs/vendors.md`, `docs/hooks.md`, `docs/mcp.md`,
   `docs/marketplace.md`, `docs/artifacts.md`, `docs/skills-standard.md`,
   `docs/docker.md`, `docs/ynd.md`, `docs/agent.md` (the `ynh agent run`
   backends, and the `--auto-approve` table, which has a column per backend),
