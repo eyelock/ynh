@@ -73,6 +73,15 @@ mkdir -p /tmp/ynh-tutorial/switch
 cd /tmp/ynh-tutorial/switch
 ```
 
+Give consent to the symlinks first with `--install`. ynh asks only on a terminal and refuses without one (see [the prompt](#symlinks-the-prompt-needs-a-terminal)):
+
+```bash
+my-harness -v codex --install
+my-harness -v cursor --install
+```
+
+Then launch:
+
 *This launches:* `codex`
 
 *This launches:* `agent`
@@ -94,23 +103,12 @@ cd /
 rm -rf /tmp/ynh-tutorial/switch
 ```
 
-Each `--clean` prints `Cleaned <vendor> symlinks for harness "my-harness" in /tmp/ynh-tutorial/switch`, or `No <vendor> installation found for harness "my-harness" in /tmp/ynh-tutorial/switch` if you declined the symlinks. ynh offers them before it starts the vendor CLI, so a missing CLI does not stop them being created.
+Each `--clean` prints `Cleaned <vendor> symlinks for harness "my-harness" in /tmp/ynh-tutorial/switch`, or `No <vendor> installation found for harness "my-harness" in /tmp/ynh-tutorial/switch` if the symlinks were never installed. `--install` writes them before any vendor CLI starts, so a missing CLI does not stop them being created.
 
-## Symlinks — automatic prompt
+## Symlinks — the prompt needs a terminal
 
-When you run a harness with a symlink vendor (`-v codex` or `-v cursor`), ynh checks if symlinks are already installed in the current project directory. If not, it **automatically prompts** you:
+When you run a harness with a symlink vendor (`-v codex` or `-v cursor`) from a terminal, ynh checks if symlinks are already installed in the current project directory. If not, it lists them and **asks** before creating any:
 
-```bash
-mkdir -p /tmp/ynh-tutorial/project
-cd /tmp/ynh-tutorial/project
-```
-
-*This launches:* `agent`
-```bash
-my-harness -v cursor
-```
-
-Expected:
 ```
 cursor requires symlinks in your project directory.
 The following symlinks will be created in /tmp/ynh-tutorial/project:
@@ -120,9 +118,30 @@ The following symlinks will be created in /tmp/ynh-tutorial/project:
 Install 1 symlinks? [Y/n]
 ```
 
-Press `Y` — ynh creates the symlinks and then launches the vendor CLI.
+Press `Y` — ynh creates the symlinks and then launches the vendor CLI. On subsequent runs from the same directory, ynh sees the symlinks are already in place and launches immediately without prompting.
 
-On subsequent runs from the same directory, ynh sees the symlinks are already in place and launches immediately without prompting.
+ynh asks only where someone can answer. When stdin is not a terminal (a pipe, a file, `/dev/null`, a CI job), it refuses rather than answer for you:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/project
+cd /tmp/ynh-tutorial/project
+```
+
+```bash
+my-harness -v cursor < /dev/null
+```
+
+Expected:
+```
+cursor requires symlinks in your project directory.
+The following symlinks will be created in /tmp/ynh-tutorial/project:
+
+  .cursor/skills/ping -> /Users/<you>/.ynh/run/local--my-harness/.cursor/skills/ping
+
+Error: cursor needs 1 symlinks in this project and there is no terminal to ask on; nothing was installed. Give consent explicitly by running `ynh run my-harness -v cursor --install` once (it records the install, so later runs go ahead), or run from a terminal
+```
+
+Nothing is created in `/tmp/ynh-tutorial/project`. The next section gives consent with `--install`.
 
 ## Symlinks — explicit install and clean
 
@@ -289,7 +308,7 @@ rm -rf /tmp/ynh-tutorial
 - ynh supports five vendors: Claude, Codex, Copilot, Cursor, OpenCode
 - Claude uses `--plugin-dir` (no symlinks needed); OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, also with no symlinks
 - Codex and Cursor need symlinks from the project directory to ynh's staging area
-- ynh **automatically prompts** to install symlinks on first run in a project
+- from a terminal, ynh **prompts** to install symlinks on first run in a project; without a terminal it refuses and names `--install`
 - `--install` and `--clean` manage symlinks explicitly without launching
 - `ynh status` shows all symlink installations across projects
 - `ynh prune` cleans orphaned symlink entries, stale launcher scripts and stale run directories
