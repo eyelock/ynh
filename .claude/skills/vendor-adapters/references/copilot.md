@@ -373,9 +373,14 @@ mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence.
 - SSE is flagged legacy/deprecated by GitHub's own docs.
 - No documented OAuth — static credentials only.
 
-**CONFIRMED: a `.mcp.json` bundled inside a `--plugin-dir` plugin is NOT read**
-(tested at both `.mcp.json` and `.github/mcp.json` placements inside the plugin
-dir). `GenerateMCPConfig` still writes `.copilot/.mcp.json` for interface
+**Bundled MCP files under `--plugin-dir`, by placement.** On v1.0.75 neither
+placement was read: not a root `.mcp.json`, and not `.github/mcp.json`, inside
+the plugin dir. On Copilot CLI 1.0.105 `.github/mcp.json` IS read
+(2026-11-05, [L37](../../../../docs/vendor-parity.md#l37-copilot-package-mcp-tools-need-approval): a
+`ynd export -v copilot` plugin with only `.github/mcp.json` started its server
+under `--plugin-dir`, and a control without the file started nothing). The root
+`.mcp.json` placement has not been re-run on 1.0.105.
+`GenerateMCPConfig` still writes `.copilot/.mcp.json` for interface
 consistency, and `buildCopilotArgs` passes that file with
 `--additional-mcp-config @<absolute path>` (CONFIRMED live on Copilot CLI
 1.0.105: the server starts and nothing is written into the project). It used to
@@ -387,7 +392,8 @@ root instead: the Copilot CLI plugin reference lists `.mcp.json` and
 `.github/mcp.json` as the default MCP paths of a legacy (`.claude-plugin`)
 plugin, and Codex already writes `.mcp.json` into a merged package. An
 installed plugin reads it (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30, #621,
-below); a plugin loaded with `--plugin-dir` does not. A tool call from the
+below); so does a plugin loaded with `--plugin-dir` (CONFIRMED live, Copilot CLI
+1.0.105, 2026-11-05, L37). A tool call from the
 installed plugin's server is refused in a one-shot run ("no one to approve") and
 runs in an interactive session once approved (docs/vendor-parity.md L37, L28).
 
