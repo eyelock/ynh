@@ -538,7 +538,7 @@ With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` po
 ynh run ./my-team --isolated-mcp "list your MCP servers"
 ```
 
-`--plugin-dir` stays in both, so the harness's hooks and skills still load. Isolation is a launch setting: `ynd preview` and `ynd export` are unchanged by it. Other vendors differ; see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
+`--plugin-dir` stays in both, so the harness's hooks and skills still load. Isolation is a launch setting: `ynd preview` and `ynd export` are unchanged by it. Other vendors differ (Cursor cannot do it); see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
 
 With a real model, ask every server to identify itself. `-p` is added for you when you pass a prompt, so it does not belong on the command line. A `-p` session cannot stop to ask you before it calls a tool, so name the tools it may call with `--allowedTools`, which `ynh run` passes through to Claude Code. Without it, every call is refused for want of permission:
 

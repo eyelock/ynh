@@ -151,7 +151,8 @@ with only that composed set, the same as `ynh run`; `ynh agent run` has no
 `--isolated-mcp` flag, so isolation comes from the manifest alone. It is
 applied on the `claude` backend only (its tools are then named `<server>`);
 on `codex`, `cursor` and `opencode` ynh prints one `warning:` line on stderr
-and the worker loads your own servers too. See
+and the worker loads your own servers too. (`ynh run` isolates on Codex,
+Copilot and OpenCode as well; see [L6](vendor-parity.md#l6-mcp-isolation).) See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
 **Codex and MCP approval.** A `codex` worker runs `codex exec`, which has no one

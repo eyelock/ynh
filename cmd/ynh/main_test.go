@@ -1860,6 +1860,10 @@ func TestParseRunArgs_IsolatedMCP(t *testing.T) {
 
 func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 	dir := t.TempDir()
+	// No vendor CLI on PATH: Codex, Copilot and OpenCode cannot list their
+	// servers, so each warns that isolation could not be applied. The listing
+	// itself is tested in internal/vendor with a stubbed runner.
+	t.Setenv("PATH", t.TempDir())
 	for _, tt := range []struct {
 		vendor   string
 		wantArgs int
@@ -1869,6 +1873,7 @@ func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 		{"copilot", 1, true},
 		{"codex", 0, true},
 		{"cursor", 0, true},
+		{"opencode", 0, true},
 	} {
 		t.Run(tt.vendor, func(t *testing.T) {
 			adapter, err := vendor.Get(tt.vendor)
