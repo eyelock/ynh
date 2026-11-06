@@ -535,7 +535,7 @@ func cursorRule(stem string, data []byte) []byte {
 
 	var b bytes.Buffer
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "description: %s\n", description)
+	fmt.Fprintf(&b, "description: %s\n", strconv.Quote(description))
 	if len(globs) > 0 {
 		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
 	}

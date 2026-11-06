@@ -34,7 +34,7 @@ func TestBuildDelegateAgent(t *testing.T) {
 	content := BuildDelegateAgent(p, dir, nil, nil, nil, "")
 
 	// Check frontmatter
-	if !strings.Contains(content, "name: team-dev") {
+	if !strings.Contains(content, `name: "team-dev"`) {
 		t.Error("missing name in frontmatter")
 	}
 	if !strings.Contains(content, "description:") {
@@ -63,7 +63,7 @@ func TestBuildDelegateAgent_NoRulesNoSkills(t *testing.T) {
 
 	content := BuildDelegateAgent(p, dir, nil, nil, nil, "")
 
-	if !strings.Contains(content, "name: minimal") {
+	if !strings.Contains(content, `name: "minimal"`) {
 		t.Error("missing name")
 	}
 	// Should not have Rules or Skills sections
@@ -124,7 +124,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "name: team-ops") {
+	if !strings.Contains(content, `name: "team-ops"`) {
 		t.Error("agent file missing name")
 	}
 	if !strings.Contains(content, "Always check before deploying.") {
