@@ -47,6 +47,17 @@ var ErrNoResumableSession = errors.New("no resumable session found")
 // so callers should resume with an empty id rather than launching cold.
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
 
+// ProcessReplacer is an optional capability for vendors whose every launch
+// replaces the ynh process (syscall.Exec). Such a launch reads the run dir up
+// to the exec, and ynh holds the run dir's assembly lock until then: the lock
+// closes with the exec, so it never outlives ynh's last touch of the dir.
+// A vendor that runs as a child of ynh does not implement it, and ynh releases
+// the lock before launching so one long session does not hold up every other
+// run of the harness.
+type ProcessReplacer interface {
+	ReplacesProcess() bool
+}
+
 // MCPToolApprover is an optional capability for vendors that refuse an MCP
 // tool call on a one-shot run or an agent worker turn until the tool is approved (Codex: "MCP tool
 // call requires approval, but approval policy is never"). ApproveMCPTools
