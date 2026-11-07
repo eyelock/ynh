@@ -87,7 +87,7 @@
         "effort": {
           "type": "string",
           "enum": ["low", "medium", "high"],
-          "description": "Reasoning effort the worker is asked to run with, mapped to each backend's own setting (claude --effort, codex model_reasoning_effort). A backend with no effort control (cursor) refuses the run rather than ignoring it. --effort wins over this."
+          "description": "Reasoning effort the worker is asked to run with, mapped to each backend's own setting (claude --effort, codex model_reasoning_effort, copilot --reasoning-effort). A backend with no effort control (cursor) refuses the run rather than ignoring it. --effort wins over this."
         }
       }
     },

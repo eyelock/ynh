@@ -57,16 +57,16 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
-| Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Hooks | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
-| Session context (`on_session_start` output) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| MCP isolation (`mcp_isolation`) | Y | Y | – | X [L6](#l6-mcp-isolation) | Y |
-| Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
-| `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
-| `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| `--sandbox srt` | Y | N [L18](#l18-sandbox-srt) | – | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) |
-| Telemetry (ynh's own spans and events) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | – | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
+| Backend (`--backend`) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Hooks | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
+| Session context (`on_session_start` output) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| MCP isolation (`mcp_isolation`) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | X [L6](#l6-mcp-isolation) | Y |
+| Effort (`--effort`, `agent.effort`) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
+| `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
+| `--auto-approve all` | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| `--sandbox srt` | Y | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) |
+| Telemetry (ynh's own spans and events) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | N [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynd export
 
@@ -211,11 +211,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** run the harness with `ynh agent run`.
 - **Detail:** [Telemetry](telemetry.md).
 
-### L14: Copilot is not a backend
+### L14: The Copilot backend, not shown live
 
-- **What:** `ynh agent run --backend` accepts `claude`, `codex`, `cursor` and `opencode`. There is no Copilot backend, so the rest of the Copilot column does not apply.
-- **Owner:** ynh.
-- **Evidence:** [Flags](agent.md#flags).
+- **What:** `ynh agent run --backend copilot` runs the worker with Copilot CLI's `copilot -p`, one process per turn, resumed by session id. Whether it runs a whole loop, and whether hooks, session context, MCP isolation, effort, `--auto-approve all` and ynh's own telemetry work on it, is unverified. The live check is deferred.
+- **Owner:** unknown until verified.
+- **Evidence:** checked, by code and tests rather than a live loop: the output shapes (`--output-format json`) were captured from Copilot CLI 1.0.107 and are the fixtures of [ynh #789](https://github.com/eyelock/ynh/pull/789); a signed-out run was captured and is an authentication failure (exit 20); `--allow-all-tools`, `--reasoning-effort` and `--resume` were checked against `copilot help`. Token usage assumes the session's totals carry across `--resume`, which a signed-in two-process probe has yet to confirm.
 - **Tracking:** [ynh #425](https://github.com/eyelock/ynh/issues/425), no milestone.
 - **Workaround:** run the harness on Copilot with `ynh run`.
 - **Detail:** [The Agent Loop](agent.md).
@@ -240,8 +240,8 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L17: auto-approve edits
 
-- **What:** `--auto-approve edits` is an error on `codex`, `cursor` and `opencode`.
-- **Owner:** the vendor: none of them has a mode that approves file edits while still asking before commands.
+- **What:** `--auto-approve edits` is an error on `codex`, `cursor`, `opencode` and `copilot`.
+- **Owner:** the vendor: none of them has a mode that approves file edits while still asking before commands. Copilot's nearest is `--allow-tool='write'`, which also approves a shell command's output redirection into a file (for example `cat a > b`), so it is wider than file edits.
 - **Evidence:** [Permissions and `--auto-approve`](agent.md#permissions-and-auto-approve).
 - **Tracking:** none.
 - **Workaround:** `--auto-approve all`, inside containment you own.

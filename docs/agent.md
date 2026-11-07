@@ -276,7 +276,10 @@ agent your credentials.
 
 - **Levels are exact or refused.** codex, cursor, opencode and copilot have no mode that approves
   edits while still withholding commands, so `edits` is an error on them rather
-  than something wider. Any other backend, or an unknown level, fails before
+  than something wider. Copilot's nearest, `--allow-tool='write'`, approves file
+  writes and not shell commands, but also a shell command's output redirection
+  into a file (`cat a > b`), so it is wider than edits. A `.github/copilot/settings.json` sets
+  no permission mode for a `-p` run, so there is nothing for the project to override. Any other backend, or an unknown level, fails before
   the run starts.
 - **An `edits` worker cannot run commands**, so it cannot run `go build` or
   `go test` itself. The sensors run them between turns and feed the results
