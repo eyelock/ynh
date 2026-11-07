@@ -44,7 +44,7 @@ func validateAutoApprove(level, backend string) error {
 	switch backend {
 	case "claude":
 		return nil
-	case "codex", "cursor", "opencode":
+	case "codex", "cursor", "opencode", "copilot":
 		if level == AutoApproveEdits {
 			return fmt.Errorf(
 				"%s cannot auto-approve edits only: it has no mode that approves file edits while still withholding commands; "+
@@ -52,7 +52,7 @@ func validateAutoApprove(level, backend string) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor, opencode)", backend)
+		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: %s)", backend, supportedBackends())
 	}
 }
 

@@ -767,22 +767,47 @@ func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []strin
 		args = append(args, "-i", initialPrompt)
 	}
 
-	pluginDir := filepath.Join(configPath, ".copilot")
-	args = append(args, "--plugin-dir", pluginDir)
-	args = append(args, "--add-dir", configPath)
+	projectDir, err := os.Getwd()
+	if err != nil {
+		projectDir = ""
+	}
+	harnessArgs, err := copilotHarnessArgs(configPath, projectDir)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, harnessArgs...)
+	args = append(args, extraArgs...)
+	return args, nil
+}
 
-	if projectDir, err := os.Getwd(); err == nil {
+// copilotHarnessArgs is what hands the assembled harness at configPath to a
+// Copilot launch: its plugin directory, the run directory as an allowed
+// folder and its MCP servers. It also projects the harness's instructions into
+// projectDir, which is the only way Copilot reads them. An empty projectDir
+// projects nothing.
+func copilotHarnessArgs(configPath, projectDir string) ([]string, error) {
+	args := []string{"--plugin-dir", filepath.Join(configPath, ".copilot"), "--add-dir", configPath}
+	if projectDir != "" {
 		if err := projectCopilotInstructions(configPath, projectDir); err != nil {
 			return nil, err
 		}
 	}
 	args = append(args, copilotMCPArgs(configPath)...)
-	if projectDir, err := os.Getwd(); err == nil {
+	if projectDir != "" {
 		warnLegacyProjectMCP(os.Stderr, configPath, projectDir)
 	}
-
-	args = append(args, extraArgs...)
 	return args, nil
+}
+
+// CopilotWorkerArgs is the harness part of one `ynh agent run` turn's Copilot
+// command line: see copilotHarnessArgs. projectDir is the worker's working
+// directory (its worktree). With no assembled harness (configPath empty) it
+// adds nothing.
+func CopilotWorkerArgs(configPath, projectDir string) ([]string, error) {
+	if configPath == "" {
+		return nil, nil
+	}
+	return copilotHarnessArgs(configPath, projectDir)
 }
 
 // warnLegacyProjectMCP tells the user when the project's .github/mcp.json looks
