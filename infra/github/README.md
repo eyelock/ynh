@@ -19,7 +19,8 @@ Not managed here: anything committed to the repository (`.github/`).
 Per the public-ready standard: discussions, projects and issues on, wiki off, branches deleted on
 merge, auto-merge off, no sign-off requirement. Squash merge (title from the commit or PR title,
 message from the commits) and merge commits (for release and back-merges) are allowed; rebase merge
-is off. Secret scanning and push protection are on while `visibility` is `public`, which they need.
+is off. The merge queues pick the method per branch (squash on `develop`, merge commit on `main`);
+the release back-merge into `develop` is merged as a merge commit by an admin, around the queue. Secret scanning and push protection are on while `visibility` is `public`, which they need.
 
 ## The rulesets
 

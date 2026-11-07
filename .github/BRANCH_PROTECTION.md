@@ -33,5 +33,7 @@ a PR into `main` unless its source is `develop`, `release/*` or `hotfix/*`.
 - Branch deletion blocked
 - Repository admins can bypass in emergencies
 
-Squash merges and merge commits are allowed, rebase merges are not. Merge commits are for
-release and back-merge PRs; everything else is squashed.
+Squash merges and merge commits are allowed, rebase merges are not. The queue's method is per
+branch: `develop`'s squashes and `main`'s makes merge commits. The release PR into `main` goes
+through `main`'s queue; the back-merge from `main` into `develop` goes around `develop`'s queue,
+as a merge commit merged by an admin (a human) once its CI is green, once per release.

@@ -52,13 +52,17 @@ Follow `.claude/commands/release.md`. In outline:
 
 1. Gate on `/evals` and `make check`
 2. Cut `release/vX.Y.Z` from `develop`; PR it into `main`
-3. Merge that PR with `gh pr merge --merge` — a **true merge**. Never `--squash`,
-   never `--admin`, and not `--delete-branch` (the branch is needed next)
+3. Merge that PR with `gh pr merge --merge` — a **true merge**, which joins `main`'s
+   merge queue. Never `--squash`, never `--admin` on this PR, and not
+   `--delete-branch` (the branch is needed next)
 4. Tag from `main` and push the tag; `.github/workflows/release.yml` runs
    goreleaser, which cross-compiles, creates the GitHub release, and pushes the
    Homebrew formula to `eyelock/homebrew-tap`
 5. **Back-merge** the release branch into `develop` via its own PR, carrying any
-   conflict resolutions made on it
+   conflict resolutions made on it. `develop`'s queue squashes, so this is the one
+   sanctioned `--admin` merge: once its CI is green, a human merges it as a merge
+   commit (`gh pr merge <pr> --merge --admin`), around the queue. You never merge it
+   yourself
 6. Forward-port anything CI wrote directly to `main`
 7. Only then delete the branches
 
