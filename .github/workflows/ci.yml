@@ -67,6 +67,16 @@ jobs:
               # .golangci.yml — the Lint job's config; a change to it alters
               #              what Lint accepts.
               - '.golangci.yml'
+              # **/*.md — internal/docs TestRepoMarkdownLinksResolve checks every
+              #              relative link and anchor in markdown outside docs/
+              #              (README.md, AGENTS.md, .github/, skills/, .claude/).
+              - '**/*.md'
+              # skills/ — cmd/ynd and internal/plugin starter_sets_test read
+              #              skills/ynh-sensors/references/starter-sets.md.
+              - 'skills/**'
+              # **/*.schema.json — internal/clischema TestSingleSchemaTree walks the
+              #              whole repo for a schema outside docs/schema.
+              - '**/*.schema.json'
             # ynh's telemetry registry, an OpenTelemetry Weaver registry
             # (ynr ADR-007), which Weaver itself checks.
             registry:
