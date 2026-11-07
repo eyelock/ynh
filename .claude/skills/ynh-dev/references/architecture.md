@@ -8,7 +8,7 @@
 
 1. **Detect** harness format and load manifest (`internal/harness/`, `internal/plugin/`)
 2. **Resolve** Git includes from local cache (`internal/resolver/`) — repos are pre-fetched at install time; run uses cache-only with fallback fetch on miss
-3. **Assemble** vendor config into `~/.ynh/run/<id-fsname>/` (e.g. `run/local--foo/`) (`internal/assembler/`)
+3. **Assemble** vendor config into a content-addressed snapshot, `~/.ynh/run/.snapshots/<id-fsname>/<hash>/`, behind the stable link `~/.ynh/run/<id-fsname>` (e.g. `run/local--foo`) (`internal/assembler/`)
 4. **Launch** vendor CLI, adapting to each vendor's capabilities (`internal/vendor/`)
 
 ## Package structure

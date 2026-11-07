@@ -112,7 +112,7 @@ Stubs also make `ynh vendors` deterministic: every vendor reports
 ### Launch blocks
 
 Because every vendor CLI is a stub, a block that launches a harness is safe to
-run: ynh assembles `~/.ynh/run/<id>/` and then executes the stub, which records
+run: ynh assembles a snapshot under `~/.ynh/run/.snapshots/<id>/` and then executes the stub, which records
 its arguments and exits 1. The launch block's success criterion is everything
 ynh does before the vendor starts: the assembly, which the blocks after it read
 (`ls ~/.ynh/run/...`), and the arguments the vendor receives. What the
@@ -126,7 +126,7 @@ own above the block, one line per launch, in order. The line reads
 as the block's expected call. In `first-harness.md` it reads:
 
 ```markdown
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what are you?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```
 
 The command is the program name, then its arguments joined by single spaces,

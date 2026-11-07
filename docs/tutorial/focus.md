@@ -247,7 +247,7 @@ Expected first line:
 
 A bare launch, with no `--focus` and no prompt, runs `--focus wake --interactive`: the session stays open, the focus prompt is its first message, and the focus's profile is applied. ynh says so on stderr.
 
-*This launches:* `claude Begin: act on your wake block --plugin-dir ~/.ynh/run/local--wake-demo/.claude --add-dir ~/.ynh/run/local--wake-demo`
+*This launches:* `claude Begin: act on your wake block --plugin-dir ~/.ynh/run/.snapshots/local--wake-demo/.../.claude --add-dir ~/.ynh/run/.snapshots/local--wake-demo/...`
 ```bash
 ynh run local/wake-demo
 ```
@@ -271,7 +271,7 @@ Expected:
 
 An explicit `--focus` is unchanged: it runs that focus one-shot, and the launch focus (its prompt, its profile, its interactive session) is not involved. A scheduler that runs `worker --focus next` still gets a one-shot run that exits.
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--wake-demo/.claude --add-dir ~/.ynh/run/local--wake-demo -p Take the next task`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--wake-demo/.../.claude --add-dir ~/.ynh/run/.snapshots/local--wake-demo/... -p Take the next task`
 ```bash
 ynh run local/wake-demo --focus next
 ```
@@ -289,7 +289,7 @@ Expected:
 
 An explicit prompt replaces the wake prompt but keeps the launch focus's profile. Whether the session is interactive is up to you, as it always was: one-shot unless you pass `--interactive`.
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--wake-demo/.claude --add-dir ~/.ynh/run/local--wake-demo -p summarise the repository`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--wake-demo/.../.claude --add-dir ~/.ynh/run/.snapshots/local--wake-demo/... -p summarise the repository`
 ```bash
 ynh run local/wake-demo -- "summarise the repository"
 ```
