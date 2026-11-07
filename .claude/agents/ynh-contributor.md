@@ -43,7 +43,7 @@ Follow the `add-vendor-adapter` skill: it is the checklist of every file a new v
   unattended relaunch waiting for a keypress. That warning is invisible if you
   work from a summary of the interface rather than the declaration.
 - Self-registers via `init()`
-- Two launch patterns: `syscall.Exec` for vendors with native plugin or config-directory loading (Claude and Copilot via `--plugin-dir`, OpenCode via `OPENCODE_CONFIG_DIR`), child process with signal forwarding for symlink-based vendors (Codex, Cursor)
+- One launch pattern: every vendor CLI runs as a child process of ynh, which stays alive as its parent (`execVendor` / `runChildProcess`); vendors with native plugin or config-directory loading (Claude and Copilot via `--plugin-dir`, OpenCode via `OPENCODE_CONFIG_DIR`) need no symlinks, Codex and Cursor do
 
 See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, `cursor.go` and `opencode.go` for working examples.
 

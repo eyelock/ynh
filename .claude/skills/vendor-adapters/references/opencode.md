@@ -44,7 +44,7 @@ that server honours `OPENCODE_CONFIG_DIR=<dir>`. Agents defined in the bundle
 are "not found" without `--standalone` and load with it.
 
 So ynh launches `opencode --standalone` with `OPENCODE_CONFIG_DIR` set to the
-run dir, via `syscall.Exec`, no symlinks.
+run dir, as a child process (`execVendor`), no symlinks.
 
 ## Config bundle layout (`OPENCODE_CONFIG_DIR`)
 

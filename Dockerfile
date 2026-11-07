@@ -163,8 +163,7 @@ LABEL org.opencontainers.image.title="ynh" \
       dev.ynh.ynr.version="${YNR_VERSION}" \
       dev.ynh.cursor-agent.version="latest"
 
-# tini handles PID 1 signal forwarding correctly for both:
-# - Claude's syscall.Exec (process replacement)
-# - Codex/Cursor's child process signal forwarding
+# tini handles PID 1 signal forwarding correctly for the vendor CLIs, which
+# ynh runs as child processes and forwards SIGTERM and SIGHUP to
 ENTRYPOINT ["tini", "-s", "--", "ynh"]
 CMD ["help"]

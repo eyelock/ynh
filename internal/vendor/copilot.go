@@ -12,7 +12,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -28,7 +27,7 @@ const copilotCLI = "copilot"
 // Copilot implements the Adapter interface for GitHub Copilot CLI.
 //
 // Launch strategy mirrors Claude: --plugin-dir for native plugin loading,
-// no symlinks, syscall.Exec for a clean process replacement. Confirmed via
+// no symlinks, launched as a child process of ynh like every vendor. Confirmed via
 // `copilot help`: --plugin-dir <directory> ("Load a plugin from a local
 // directory") is a direct analog of Claude's flag.
 //
@@ -97,9 +96,6 @@ func (c *Copilot) LaunchWithInitialPrompt(configPath, prompt string, extraArgs [
 }
 
 func (c *Copilot) SupportsInitialPrompt() bool { return true }
-
-// ReplacesProcess is true: every Copilot launch ends in syscall.Exec.
-func (c *Copilot) ReplacesProcess() bool { return true }
 
 func (c *Copilot) SupportsResume() bool { return true }
 
@@ -761,8 +757,8 @@ func copilotMCPArgs(configPath string) []string {
 // the foreground session mid-launch ("Successfully updated binary" followed
 // immediately by "Unregistering foreground session" in ~/.copilot/logs) —
 // silently dropping whatever initialPrompt/extraArgs this invocation carried,
-// including -i. ynh's launch is a one-shot process replacement
-// (syscall.Exec), so there is no opportunity to retry after such a restart;
+// including -i. ynh's launch is a one-shot start of the CLI
+// with the arguments it was given, so there is no opportunity to retry after such a restart;
 // the update must simply not happen mid-launch.
 func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []string) ([]string, error) {
 	args := []string{copilotCLI, "--no-auto-update"}
@@ -887,7 +883,7 @@ func launchCopilot(configPath string, initialPrompt string, extraArgs []string) 
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(copilotBin, args, os.Environ())
+	return execVendor(copilotBin, args, os.Environ())
 }
 
 // Workspace folders: Copilot CLI's /add-dir command is documented as "Allow

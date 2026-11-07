@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -38,9 +37,9 @@ const opencodeConfigDirEnv = "OPENCODE_CONFIG_DIR"
 // than half-supported.
 const opencodeSupportedMajor = 2
 
-// opencodeExec replaces the process. A variable so tests can observe the
-// launch instead of becoming OpenCode.
-var opencodeExec = syscall.Exec
+// opencodeExec runs OpenCode as a child of ynh. A variable so tests can observe
+// the launch instead of starting OpenCode.
+var opencodeExec = execVendor
 
 // opencodeVersionTimeout bounds `opencode --version`, which a wedged install
 // could otherwise hang forever. A variable so a test can shorten it.
@@ -61,8 +60,7 @@ var opencodeVersionProbe = func(bin string) (string, error) {
 // vendor-adapters skill, references/opencode.md.
 //
 // Launch strategy: native bundle loading by environment variable.
-// OPENCODE_CONFIG_DIR points at <run dir>/.opencode, and syscall.Exec gives a
-// clean process replacement with no symlinks. CONFIRMED: 2.x runs commands
+// OPENCODE_CONFIG_DIR points at <run dir>/.opencode, which needs no symlinks. CONFIRMED: 2.x runs commands
 // through a shared background service that ignores the client's environment,
 // so the variable has no effect unless the invocation is `--standalone`, which
 // starts a private server that does honour it. --standalone is therefore on
@@ -613,9 +611,6 @@ func (o *OpenCode) SupportsInitialPrompt() bool { return true }
 func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
 	return nil, "MCP isolation on OpenCode is applied through the environment, not launch arguments: servers in your OpenCode config will still load"
 }
-
-// ReplacesProcess is true: every OpenCode launch ends in syscall.Exec.
-func (o *OpenCode) ReplacesProcess() bool { return true }
 
 func (o *OpenCode) SupportsResume() bool { return true }
 

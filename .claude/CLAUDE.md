@@ -2,7 +2,7 @@
 
 ## What This Is
 
-ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor, GitHub Copilot, OpenCode). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
+ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor, GitHub Copilot, OpenCode). Resolves config, assembles vendor-specific layout, launches the vendor CLI as a child process and supervises it until the session ends.
 
 ## Two Binaries
 

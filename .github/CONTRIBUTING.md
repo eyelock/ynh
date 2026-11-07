@@ -394,9 +394,9 @@ signature, while the interface had 26.
 
 This follows the "accept interfaces, return structs" principle and keeps coupling minimal.
 
-**Two launch patterns exist:**
+**One launch pattern exists:** every vendor CLI runs as a child process of ynh, which stays alive as its parent for the whole session. Use `execVendor` (or `runChildProcess` when you build the `exec.Cmd` yourself); it forwards SIGTERM and SIGHUP, lets the terminal deliver SIGINT and SIGQUIT to the child, and returns an `*ExitError` carrying the child's exit code. Never call `syscall.Exec` for a vendor: it would replace ynh and lose cleanup, telemetry and the run directory's lock handling.
 
-Vendors with native plugin support (like Claude's `--plugin-dir`) use `syscall.Exec` for a clean process replacement:
+Vendors with native plugin support (like Claude's `--plugin-dir`) need no symlinks:
 
 ```go
 func launchMyVendor(configPath string, extraArgs []string) error {
@@ -406,11 +406,11 @@ func launchMyVendor(configPath string, extraArgs []string) error {
     }
     args := []string{"myvendor", "--plugin-dir", filepath.Join(configPath, ".myvendor")}
     args = append(args, extraArgs...)
-    return syscall.Exec(bin, args, os.Environ())
+    return execVendor(bin, args, os.Environ())
 }
 ```
 
-Vendors that need symlinks use a managed child process with signal forwarding, so ynh stays alive for cleanup:
+Vendors that need symlinks run in the symlinked directory, through the same child-process path:
 
 ```go
 func launchMyVendor(configPath string, extraArgs []string) error {
@@ -420,7 +420,7 @@ func launchMyVendor(configPath string, extraArgs []string) error {
     }
     cmd := exec.Command(bin, extraArgs...)
     cmd.Dir = configPath
-    return runChildProcess(cmd) // handles SIGINT/SIGTERM forwarding
+    return runChildProcess(cmd) // forwards SIGTERM/SIGHUP; the terminal delivers SIGINT/SIGQUIT
 }
 ```
 
