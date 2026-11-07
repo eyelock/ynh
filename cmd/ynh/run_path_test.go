@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/runsnap"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // isolateRun points every ynh location at a temp dir and clears the env
@@ -433,5 +434,55 @@ func TestCmdRun_OpenCodeWorkspaceGrantDoesNotOutliveItsRun(t *testing.T) {
 	// The first snapshot is untouched.
 	if !strings.Contains(agentIn(granted), "external_directory") {
 		t.Errorf("the granted snapshot lost its rule")
+	}
+}
+
+// Codex and Cursor start in a stable working folder whose entries link into
+// the newest snapshot, so the directory they key sessions and trust by does
+// not change when the harness does (ynh #765). Claude starts in the snapshot.
+func TestCmdRun_CodexAndCursorStartInAStableWorkDir(t *testing.T) {
+	for _, v := range []string{"codex", "cursor"} {
+		t.Run(v, func(t *testing.T) {
+			isolateRun(t)
+			work := t.TempDir()
+			harnessDir := filepath.Join(work, "my-dev")
+			writeSkillHarness(t, harnessDir, "my-dev")
+			t.Chdir(work)
+
+			var started []string
+			orig := launchSessionFn
+			launchSessionFn = func(_ vendor.Adapter, runDir, _ string, _ runArgs, _, _ string, _ []string, _ io.Writer) error {
+				started = append(started, runDir)
+				return nil
+			}
+			defer func() { launchSessionFn = orig }()
+
+			run := func() {
+				t.Helper()
+				if err := cmdRun([]string{harnessDir, "-v", v, "-p", "hi"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := cmdRun([]string{harnessDir, "-v", v, "--install"}); err != nil {
+				t.Fatal(err)
+			}
+			run()
+			skill := filepath.Join(harnessDir, "skills", "hello", "SKILL.md")
+			if err := os.WriteFile(skill, []byte("---\nname: hello\ndescription: Changed.\n---\n\n# hello\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			run()
+
+			if len(started) != 2 || started[0] != started[1] {
+				t.Fatalf("working folder changed between runs: %v", started)
+			}
+			if strings.Contains(started[0], runsnap.SnapshotsDirName+string(filepath.Separator)+"local") {
+				t.Errorf("started in a snapshot: %s", started[0])
+			}
+			got, err := os.ReadFile(filepath.Join(started[1], "."+v, "skills", "hello", "SKILL.md"))
+			if err != nil || !strings.Contains(string(got), "Changed.") {
+				t.Errorf("the working folder does not show the newest snapshot: %q %v", got, err)
+			}
+		})
 	}
 }

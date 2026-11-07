@@ -128,6 +128,8 @@ func cmdPrune() error {
 				unremoved++
 				continue
 			}
+			// The stable working folder of a Codex or Cursor run (links only).
+			_ = os.RemoveAll(filepath.Join(runDir, runsnap.SnapshotsDirName, runsnap.WorkDirsName, name))
 			fmt.Printf("Removed stale run dir: %s\n", staleRun)
 			staleRuns++
 		}
