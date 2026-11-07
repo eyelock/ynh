@@ -246,6 +246,10 @@ version, and its message names the key, never the refused value.
 - a value matches `^[A-Za-z0-9._/#-]{1,64}$`: no spaces, no `@`
 - a value does not start with `/` or `~`, and does not contain your home folder
 - at most 16 labels
+- at most 100 distinct values for one key: the registry declares this cap on
+  `ynh.label` (`ynr.cardinality: 100`), and `ynr conformance` checks metric
+  attributes against it. ynh does not count distinct values across runs, so
+  keep a key to a few ids (a team, a batch, a ticket queue), never one per run
 
 A label is never a person's name or email, a host name, a secret, or a run or
 item id. ynh checks the shape, not the meaning: choosing ids that are none of
