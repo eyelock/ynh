@@ -245,6 +245,13 @@ version, and its message names the key, never the refused value.
 - a value does not start with `/` or `~`, and does not contain your home folder
 - at most 16 labels
 
+Separately, the registry declares a cap of 100 distinct values for one key on
+`ynh.label` (`ynr.cardinality: 100`). ynh does not enforce it: it does not count
+distinct values across runs, and never refuses a run for it. The cap is declared
+for ynr, and `ynr conformance` checks metric attributes against it only once a
+ynh metric carries labels; none does yet. Keep a key to a few ids (a team, a
+batch, a ticket queue), never one per run.
+
 A label is never a person's name or email, a host name, a secret, or a run or
 item id. ynh checks the shape, not the meaning: choosing ids that are none of
 these is yours.

@@ -113,3 +113,6 @@ groups:
           and value are the user's own ids, within ynr ADR-006 rule 10 (key ^[a-z][a-z0-9_.-]{0,31}$, value
           ^[A-Za-z0-9._/#-]{1,64}$, at most 16 per run), and ynh refuses a run whose labels break them.
         examples: ["wheelhouse:ynw"]
+        annotations:
+          # ynr ADR-006 rule 10 and ADR-008 check 8: the most distinct values one label key may take.
+          ynr.cardinality: 100
