@@ -17,10 +17,13 @@ locals {
     main = {
       name   = "Main Branch Protection"
       checks = ["All Clear", "Verify PR source branch"]
+      # Release and hotfix PRs into main are true merges (see repository.tf).
+      queue_merge_method = "MERGE"
     }
     develop = {
-      name   = "Develop Branch Protection"
-      checks = ["All Clear"]
+      name               = "Develop Branch Protection"
+      checks             = ["All Clear"]
+      queue_merge_method = "SQUASH"
     }
   }
 }
@@ -59,6 +62,19 @@ resource "github_repository_ruleset" "this" {
       require_code_owner_review         = false
       require_last_push_approval        = false
       required_review_thread_resolution = true
+    }
+
+    # The merge queue: a PR is merged only after its checks pass on the branch as it will be
+    # with every queued PR ahead of it merged first, so two PRs that are each green cannot
+    # combine red. Workflows whose checks are required above must trigger on merge_group.
+    merge_queue {
+      merge_method                      = each.value.queue_merge_method
+      grouping_strategy                 = "ALLGREEN"
+      max_entries_to_build              = 5
+      min_entries_to_merge              = 1
+      max_entries_to_merge              = 5
+      min_entries_to_merge_wait_minutes = 5
+      check_response_timeout_minutes    = 60
     }
 
     required_status_checks {

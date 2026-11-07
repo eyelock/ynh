@@ -35,7 +35,7 @@ CI enforces `hotfix/*` for hotfixes targeting `main`. Release tags are cut from 
 `develop` and `main` diverged for ~6 weeks once (#54 → v0.2.3) because a release landed on `main` without back-merging to `develop`. To prevent recurrence:
 
 - Every release cuts a `release/vX.Y.Z` branch from `develop`, PRs into `main`, and is merged with a **true merge** (not squash) — never `develop` → `main` directly.
-- After tagging, the release branch (plus any conflict resolutions made on it) is **mandatorily back-merged into `develop`** via its own PR before the release branch is deleted.
+- After tagging, the release branch (plus any conflict resolutions made on it) is **mandatorily back-merged into `develop`** via its own PR before the release branch is deleted. `develop`'s merge queue squashes, which would defeat the back-merge, so the back-merge PR is the one sanctioned `--admin` merge: a human (seats never merge) merges it as a **merge commit** (`gh pr merge <pr> --merge --admin`), around the queue, and only after its CI is green.
 - Any auto-generated files CI writes directly to `main` after a release must also be forward-ported to `develop` in the same or a follow-up PR.
 - Hotfixes off `main` back-merge to `develop` the same way.
 
@@ -54,11 +54,12 @@ git fetch origin develop
 git merge origin/develop
 git push
 
-# Merge (squash only)
-gh pr merge --squash
+# Merge: add the PR to the merge queue ("Merge when ready" in the UI, or gh pr merge,
+# which queues it). The queue squashes on develop and makes merge commits on main.
+gh pr merge
 ```
 
-**Never use `gh pr merge --admin`** — it bypasses CI and is forbidden.
+**Never use `gh pr merge --admin`** — it bypasses CI and is forbidden. The one exception is the release back-merge PR into `develop` (see above): a human merges it as a merge commit with `--admin`, only after its CI is green. Nothing else is exempt.
 
 ## Stacked PRs
 

@@ -97,9 +97,13 @@ gh pr checks <pr> --watch
 gh pr merge <pr> --merge          # NOT --squash, NOT --rebase
 ```
 
+`main` has a merge queue that makes merge commits, so this adds the release PR to the queue and it
+merges once All Clear passes there.
+
 A squash would collapse the release into a single commit with no shared history,
-which is what makes the back-merge conflict later. **Never `--admin`** — it
-bypasses CI and is forbidden by the rules.
+which is what makes the back-merge conflict later. **Never `--admin`** on this
+PR — it bypasses CI and is forbidden by the rules. The only `--admin` merge is the
+back-merge below.
 
 Do **not** pass `--delete-branch`. The branch is still needed for the
 back-merge, and deleting a base branch closes any PR stacked on it.
@@ -127,8 +131,17 @@ gh pr create --base develop --head backmerge/vX.Y.Z \
   --body "Mandatory back-merge per .claude/rules/branching.md."
 ```
 
-It must carry any conflict resolutions made on the release branch. Merge it once
-CI is green.
+It must carry any conflict resolutions made on the release branch. `develop`'s
+merge queue squashes, which would collapse the shared history, so this PR does not
+go through the queue. Once its CI is green, **a human** (a seat never merges) merges
+it as a merge commit, as an admin, around the queue:
+
+```bash
+gh pr checks <pr> --watch
+gh pr merge <pr> --merge --admin
+```
+
+This is the only sanctioned `--admin` merge, and only after CI is green.
 
 Then check whether CI wrote anything directly to `main` after the release —
 generated changelogs, formula updates, docs. Anything it wrote must be

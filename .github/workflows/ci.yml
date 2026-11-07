@@ -10,6 +10,10 @@ on:
   # squashed into one unreviewable PR. Both are worse than running CI a few
   # extra times.
   pull_request:
+  # The merge queue (infra/github/branches.tf) runs the required checks on the
+  # branch as it will be with the queued PRs merged. All Clear is required, so
+  # it must run here, and every job it needs must run or be skipped by design.
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -22,15 +26,19 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # In the merge queue there is no pull request to diff, so every filter is true
+    # and every job runs: the queue's whole point is to test the combined result,
+    # and a skipped required check there would stall it.
     outputs:
-      code: ${{ steps.filter.outputs.code }}
-      artifacts: ${{ steps.filter.outputs.artifacts }}
-      packaging: ${{ steps.filter.outputs.packaging }}
-      registry: ${{ steps.filter.outputs.registry }}
+      code: ${{ github.event_name == 'merge_group' || steps.filter.outputs.code }}
+      artifacts: ${{ github.event_name == 'merge_group' || steps.filter.outputs.artifacts }}
+      packaging: ${{ github.event_name == 'merge_group' || steps.filter.outputs.packaging }}
+      registry: ${{ github.event_name == 'merge_group' || steps.filter.outputs.registry }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4
         id: filter
+        if: github.event_name != 'merge_group'
         with:
           filters: |
             code:
