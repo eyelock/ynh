@@ -462,11 +462,11 @@ Flags:
   --focus <name>              Load a named focus instead of a task
   --profile <name>            Apply a named profile overlay
   --backend <name>            Worker backend: claude (default), codex, cursor,
-                              opencode.
+                              opencode, copilot.
                               On --resume, the session's backend
   --model <name>              Model override
   --effort low|medium|high    Reasoning effort, mapped to the backend's own
-                              setting (claude, codex; refused on cursor and
+                              setting (claude, codex, copilot; refused on cursor and
                               opencode).
                               Overrides the harness's agent.effort. Not
                               restored on --resume.
@@ -481,7 +481,7 @@ Flags:
                               write allowlist (claude only); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
-                              codex, cursor, opencode). Only for runs inside
+                              codex, cursor, opencode, copilot). Only for runs inside
                               containment you own; refused if the project sets
                               its own permission mode. Not restored on --resume.
   --convergence-sensor <name> Sensor that decides the run is done
