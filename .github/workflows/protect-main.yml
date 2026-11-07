@@ -3,6 +3,10 @@ name: Protect Main
 on:
   pull_request:
     branches: [main]
+  # Required on main, so it must report in the merge queue too. The queue holds
+  # only a PR that already passed this check, and a merge group has no head_ref,
+  # so there the job passes without re-checking.
+  merge_group:
 
 jobs:
   check-source-branch:
@@ -14,7 +18,13 @@ jobs:
         # environment variable, never interpolated into the shell source.
         env:
           SOURCE: ${{ github.head_ref }}
+          EVENT: ${{ github.event_name }}
         run: |
+          if [[ "$EVENT" == "merge_group" ]]; then
+            echo "Merge queue: the source branch was verified when the PR entered the queue"
+            exit 0
+          fi
+
           echo "PR source branch: $SOURCE"
 
           if [[ "$SOURCE" == "develop" ]] || [[ "$SOURCE" == hotfix/* ]] || [[ "$SOURCE" == release/* ]]; then

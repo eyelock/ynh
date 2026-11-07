@@ -25,6 +25,10 @@ a PR into `main` unless its source is `develop`, `release/*` or `hotfix/*`.
 - Changes reach the branch through a pull request, with zero required approvals
 - All review conversations must be resolved
 - The branch need not be up to date before merging (required status checks are not strict)
+- A merge queue: a PR joins the queue and merges only after All Clear passes on the branch as it
+  will be with the PRs ahead of it merged (squash on `develop`, merge commit on `main`), so two
+  PRs that are each green cannot combine red. `ci.yml` and `protect-main.yml` trigger on
+  `merge_group`; in the queue every CI job runs, since there is no pull request to diff
 - Force pushes blocked
 - Branch deletion blocked
 - Repository admins can bypass in emergencies
