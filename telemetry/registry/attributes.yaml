@@ -98,6 +98,37 @@ groups:
         stability: development
         brief: The commit the harness was installed from.
         examples: ["3f2c9a1"]
+      - id: ynh.session.id
+        type: string
+        stability: development
+        brief: "A new random id for each ynh run launch. It joins the launch's record to the vendor's own, through OTEL_RESOURCE_ATTRIBUTES."
+        examples: ["5f1c0e9a7b3d4a68b2c9e04d1a7f3b52"]
+      - id: ynh.session.outcome
+        type:
+          members:
+            - {id: exited, value: exited, stability: development, brief: "The vendor CLI exited 0."}
+            - {id: failed, value: failed, stability: development, brief: "The vendor CLI exited non-zero."}
+            - {id: signalled, value: signalled, stability: development, brief: "A signal ended the vendor CLI."}
+            - {id: refused, value: refused, stability: development, brief: "ynh did not start the vendor CLI."}
+        stability: development
+        brief: "How the launch ended. It also sets the span's status, ok for exited and an error otherwise."
+        examples: ["exited"]
+      - id: ynh.session.signal
+        type: string
+        stability: development
+        brief: The signal that ended the vendor CLI, when one did.
+        examples: ["SIGTERM"]
+      - id: ynh.session.vendor
+        type:
+          members:
+            - {id: claude, value: claude, stability: development, brief: "Claude Code."}
+            - {id: codex, value: codex, stability: development, brief: "Codex."}
+            - {id: cursor, value: cursor, stability: development, brief: "Cursor."}
+            - {id: copilot, value: copilot, stability: development, brief: "GitHub Copilot."}
+            - {id: opencode, value: opencode, stability: development, brief: "OpenCode."}
+        stability: development
+        brief: The vendor CLI the launch ran.
+        examples: ["claude"]
       - id: ynh.call.outcome
         type: string
         stability: development

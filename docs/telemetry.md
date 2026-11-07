@@ -5,13 +5,15 @@ each sensor check, and an event when the run starts and when it ends. A factory
 can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
-It is the only ynh command that does. The commands that launch a vendor CLI
-(`ynh run` and the like) emit nothing, whatever the vendor, and what ynh does
-with its own process differs by vendor:
+`ynh run` writes a record of its own too, for every launch and every vendor:
+a `ynh.session` span with a started and a finished event ([What a launch
+emits](#what-a-launch-emits)). It carries no tokens, cost, paths or content;
+a vendor's own telemetry is a separate matter ([Vendor telemetry through the
+relay](#vendor-telemetry-through-the-relay), `ynh agent run` only for now).
+The other commands that launch a vendor CLI emit nothing.
 
-- **Every vendor:** ynh stays the parent process while the vendor CLI runs as
-  its child, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
-  It is running throughout, but these commands still emit no telemetry.
+ynh stays the parent process while the vendor CLI runs as its child, on every
+vendor, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
@@ -210,6 +212,59 @@ Outcomes, one per [exit code](agent.md#exit-codes): `converged`, `refused`,
 `user_aborted`, `interrupted`. The span's status is ok for `converged` and an
 error otherwise, described by the outcome word alone.
 
+## What a launch emits
+
+`ynh run` records each launch of a vendor CLI, whichever of the five vendors
+runs (`claude`, `codex`, `cursor`, `copilot`, `opencode`) and whether or not
+the vendor has telemetry of its own. It uses the same machinery as `ynh agent
+run`: the [destination order](#where-it-goes), the [spool](#the-spool) writer,
+the once-a-minute look for the spool, the resource and the [run
+labels](#run-labels). `ynh.run` stays `ynh agent run`'s alone.
+
+| Name | Kind | When |
+|---|---|---|
+| `ynh.session.started` | event (log record) | the launch begins, before the vendor CLI starts, written at once |
+| `ynh.session` | span | the launch, from start to end |
+| `ynh.session.finished` | event (log record) | the vendor CLI has ended |
+
+A `ynh run` that is not a launch (`--install`, `--clean`) and an argument or
+harness error before the vendor is known emit nothing. After that, a launch
+ynh refuses still emits all three, with the outcome `refused`.
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `ynh.session.id` | all | a new random id for each launch (32 hex digits) |
+| `ynh.session.outcome` | span, finished | `exited` (the vendor exited 0), `failed` (it exited non-zero), `signalled` (a signal ended it) or `refused` (ynh did not start it) |
+| `process.exit.code` | span, finished | the code `ynh run` exits with: the vendor's, `128+n` for a signal as a shell reports it, `1` for `refused` |
+| `ynh.session.signal` | span, finished | the signal's name, such as `SIGTERM`, when `signalled` |
+| `ynh.session.vendor` | all | the vendor CLI |
+| `ynh.harness.name` | all | the harness's canonical id, absent for a harness given by path |
+| `ynh.harness.version`, `ynh.harness.commit` | all | the declared version, and the commit it was installed from |
+| `ynh.run.focus`, `ynh.run.profile` | all | the focus and profile given |
+| `ynh.run.resumed` | all | `true` for a `--resume` |
+
+The span is ok for `exited` and an error otherwise, described by the outcome
+word alone. There are no tokens or cost, because an interactive vendor reports
+none to ynh, and no paths or content (ADR-006): those come from the vendor's
+own records.
+
+When telemetry is on, every process `ynh run` starts, the vendor CLI and what
+it launches, gets:
+
+- `TRACEPARENT` (and `TRACESTATE`, if any) naming the `ynh.session` span. A
+  launch under a factory step or another session joins the trace in the
+  `TRACEPARENT` it was given. Whether a vendor honours it differs: Codex does,
+  interactive Claude Code ignores it.
+- `ynh.session.id` appended to `OTEL_RESOURCE_ATTRIBUTES`, percent-encoded,
+  with an operator's value kept (an earlier `ynh.session.id`, from a session
+  that launched this one, is replaced), so a vendor's own records name the
+  launch they belong to.
+
+ynh sets these in its own environment before the launch, so they reach the
+vendor on every vendor. `YNR_SPOOL` is not set. When there is no destination,
+the vendor's environment is exactly what it was. A spool that appears mid-launch
+does not reach a vendor already running, as for `ynh agent run`.
+
 ## Run labels
 
 A label is a short `key:value` id the user chooses for a run, such as
@@ -252,10 +307,11 @@ these is yours.
 ### Where they go
 
 - **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
-  record `ynh agent run` writes (the registry declares the template
-  `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment when the run starts (with a note on stderr naming the keys), since only these were validated; on `ynh agent run` the vendor and `ynh check` never inherit one. `ynh run` does not strip them yet, so its vendor still inherits an operator `ynh.label.*`: the strip belongs with the vendor's `OTEL_RESOURCE_ATTRIBUTES` that bead ynw-17g.17 writes on `ynh run`.
-  `ynh run` writes no record of its own yet: when it does, it carries the
-  same labels.
+  record `ynh agent run` and `ynh run` write (the registry declares the
+  template `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is
+  removed from ynh's environment when the run starts (with a note on stderr
+  naming the keys), since only these were validated; the vendor and `ynh check`
+  never inherit one.
 - **Child processes:** ynh sets `YNH_LABELS` to the merged set in the
   environment of every process it starts: the vendor CLI (including past
   `env_passthrough`, which does not apply to it) and each `ynh check`. With no
