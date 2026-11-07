@@ -38,12 +38,12 @@ Claude and Copilot support `--plugin-dir` natively, and OpenCode loads a whole c
 
 ### Supervision
 
-Every vendor CLI is a child of `ynh run`, and ynh stays alive as its parent for the whole session, with or without telemetry. There is no opt-in flag, and ynh has no zero-runtime mode. The child keeps ynh's terminal, working directory and environment, so the session looks the same from inside.
+Every vendor CLI is a child of `ynh run`, and ynh stays alive as its parent for the whole session, with or without telemetry. There is no opt-in flag, and ynh has no zero-runtime mode. The child keeps ynh's terminal and environment. Claude, Copilot and OpenCode also keep ynh's working directory (the project); Codex and Cursor start in the run directory, as they did before ynh supervised them, so the session looks the same from inside.
 
 | Event | What ynh does |
 |-------|---------------|
 | The CLI exits | ynh exits with the same code (0, 1 and 255 are passed through exactly). A CLI ended by a signal gives `128` plus the signal number, as a shell reports it. |
-| Ctrl-C (SIGINT) | Nothing. The terminal delivers it to the CLI, and ynh stays alive until the CLI exits. ynh does not forward it (the CLI would see it twice) and does not set it to ignored (the CLI would inherit that). |
+| Ctrl-C (SIGINT) or Ctrl-\\ (SIGQUIT) | Nothing. The terminal delivers it to the CLI, and ynh stays alive until the CLI exits. ynh does not forward it (the CLI would see it twice) and does not set it to ignored (the CLI would inherit that). Left to Go's default, SIGQUIT would dump ynh's goroutines and end the session. |
 | SIGTERM or SIGHUP sent to ynh | Forwarded to the CLI. |
 | ynh is killed (SIGKILL) or crashes | The CLI is ended, so no vendor CLI is left running without its parent. On Linux the kernel does it (parent-death signal). On macOS a small detached watchdog shell does it within about three seconds; if the watchdog cannot start, the CLI runs unwatched. |
 

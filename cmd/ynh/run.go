@@ -503,13 +503,11 @@ func cmdRun(args []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch still reads the run dir (Copilot's projection, OpenCode's
-		// workspace grant and AGENTS.md compose). A launch that replaces this
-		// process drops the lock at the exec, so it keeps it until then; a
-		// vendor that runs as a child releases it now rather than for the
-		// whole session.
-		if pr, ok := adapter.(vendor.ProcessReplacer); !ok || !pr.ReplacesProcess() {
-			unlockRun()
-		}
+		// workspace grant and AGENTS.md compose), so the lock is held through
+		// those reads. Every vendor then runs as a child of ynh: the lock is
+		// released as the child starts rather than held for the whole session.
+		removeHook := vendor.OnChildStart(unlockRun)
+		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
 }

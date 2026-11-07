@@ -97,9 +97,6 @@ func (c *Copilot) LaunchWithInitialPrompt(configPath, prompt string, extraArgs [
 
 func (c *Copilot) SupportsInitialPrompt() bool { return true }
 
-// ReplacesProcess is true: every Copilot launch ends in syscall.Exec.
-func (c *Copilot) ReplacesProcess() bool { return true }
-
 func (c *Copilot) SupportsResume() bool { return true }
 
 // ResolveLastSession reads Copilot's own session store. Each session gets a

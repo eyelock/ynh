@@ -139,39 +139,59 @@ func TestChildResult(t *testing.T) {
 	}
 }
 
-// Ctrl-C reaches the vendor from the terminal. ynh must neither die from it nor
-// forward a second copy, and must not leave the vendor deaf to it.
-func TestRunChildProcessSurvivesAndDoesNotForwardSIGINT(t *testing.T) {
-	dir := t.TempDir()
-	pidFile, got := filepath.Join(dir, "pid"), filepath.Join(dir, "got-int")
-	script := fmt.Sprintf(`trap 'echo x >> %s; exit 7' INT
+// Ctrl-C and Ctrl-\ reach the vendor from the terminal. ynh must neither die
+// from them (Go's default for SIGQUIT dumps every goroutine and exits 2) nor
+// forward a second copy, and must not leave the vendor deaf to them.
+func TestRunChildProcessSurvivesAndDoesNotForwardTerminalSignals(t *testing.T) {
+	for _, tc := range []struct {
+		sig  syscall.Signal
+		trap string
+	}{{syscall.SIGINT, "INT"}, {syscall.SIGQUIT, "QUIT"}} {
+		t.Run(tc.sig.String(), func(t *testing.T) {
+			dir := t.TempDir()
+			pidFile, got := filepath.Join(dir, "pid"), filepath.Join(dir, "got")
+			script := fmt.Sprintf(`trap 'echo x >> %s; exit 7' %s
 echo $$ > %s
-while :; do sleep 0.05; done`, got, pidFile)
-	ynh := startSupervisor(t, script)
-	child := waitPid(t, pidFile)
+while :; do sleep 0.05; done`, got, tc.trap, pidFile)
+			ynh := startSupervisor(t, script)
+			child := waitPid(t, pidFile)
 
-	// SIGINT to ynh alone: it must live, and the child must not hear of it.
-	if err := ynh.Process.Signal(syscall.SIGINT); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(500 * time.Millisecond)
-	if !alive(ynh.Process.Pid) {
-		t.Fatal("ynh died from SIGINT: the session would lose its parent")
-	}
-	if _, err := os.Stat(got); err == nil {
-		t.Fatal("ynh forwarded SIGINT to the vendor: it would receive it twice")
-	}
+			// The signal to ynh alone: it must live, and the child must not hear of it.
+			if err := ynh.Process.Signal(tc.sig); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(500 * time.Millisecond)
+			if !alive(ynh.Process.Pid) {
+				t.Fatalf("ynh died from %s: the session would lose its parent", tc.sig)
+			}
+			if _, err := os.Stat(got); err == nil {
+				t.Fatalf("ynh forwarded %s to the vendor: it would receive it twice", tc.sig)
+			}
 
-	// The terminal's SIGINT, which only the vendor gets: its handler must run,
-	// proving ynh did not hand it an ignored disposition.
-	if err := syscall.Kill(child, syscall.SIGINT); err != nil {
-		t.Fatal(err)
+			// The terminal's copy, which only the vendor gets: its handler must
+			// run, proving ynh did not hand it an ignored disposition.
+			if err := syscall.Kill(child, tc.sig); err != nil {
+				t.Fatal(err)
+			}
+			if code := waitExit(t, ynh, 10*time.Second); code != 7 {
+				t.Fatalf("ynh exit code = %d, want the vendor's 7", code)
+			}
+			if b, _ := os.ReadFile(got); strings.Count(string(b), "x") != 1 {
+				t.Fatalf("vendor handled %s %d times, want once", tc.sig, strings.Count(string(b), "x"))
+			}
+		})
 	}
-	if code := waitExit(t, ynh, 10*time.Second); code != 7 {
-		t.Fatalf("ynh exit code = %d, want the vendor's 7", code)
-	}
-	if b, _ := os.ReadFile(got); strings.Count(string(b), "x") != 1 {
-		t.Fatalf("vendor handled SIGINT %d times, want once", strings.Count(string(b), "x"))
+}
+
+// The hook registered with OnChildStart runs before the child does, and not
+// after it has been started.
+func TestRunChildProcessFiresOnChildStartBeforeTheChild(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "marker")
+	remove := OnChildStart(func() { _ = os.WriteFile(marker, []byte("x"), 0o644) })
+	defer remove()
+	script := fmt.Sprintf(`test -f %s`, marker)
+	if err := runChildProcess(exec.Command("sh", "-c", script)); err != nil {
+		t.Fatalf("the hook had not run when the child started: %v", err)
 	}
 }
 

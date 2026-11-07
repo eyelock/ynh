@@ -612,9 +612,6 @@ func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
 	return nil, "MCP isolation on OpenCode is applied through the environment, not launch arguments: servers in your OpenCode config will still load"
 }
 
-// ReplacesProcess is true: every OpenCode launch ends in syscall.Exec.
-func (o *OpenCode) ReplacesProcess() bool { return true }
-
 func (o *OpenCode) SupportsResume() bool { return true }
 
 // ResolveLastSession cannot resolve an id: OpenCode's session store is SQLite

@@ -63,8 +63,7 @@ func runInParallel(t *testing.T, vendorName string, n int) {
 	}
 }
 
-// A vendor that replaces the process keeps the run dir's lock until its
-// launch, so what it reads from the run dir then (Copilot's AGENTS.md, which it
+// The lock is held until the launch, so what a vendor reads from the run dir then (Copilot's AGENTS.md, which it
 // projects into the project; OpenCode's workspace grant and AGENTS.md compose)
 // is the run's own. It fails if the lock is released before the launch: another
 // run then re-assembles the dir and appends its own instructions. ynh #724.
@@ -83,27 +82,70 @@ func TestCmdRun_ParallelRunsKeepTheLockUntilTheLaunch(t *testing.T) {
 	runInParallel(t, "copilot", 6)
 }
 
-// A vendor that runs as a child of ynh must not hold the lock for its whole
-// session: the runs all reach their launch while the others are still in it.
-// It deadlocks (and times out) if the lock is kept past the launch.
-func TestCmdRun_ChildVendorReleasesTheLockBeforeTheLaunch(t *testing.T) {
-	const runs = 3
-	var mu sync.Mutex
-	arrived := 0
-	allIn := make(chan struct{})
-	stubLaunch(t, func(string, runArgs) error {
-		mu.Lock()
-		arrived++
-		if arrived == runs {
-			close(allIn)
+// Every vendor runs as a child of ynh, so none may hold the run dir's lock for
+// its session. Two real `ynh run`s of one harness, each launching a stand-in
+// vendor CLI: the first vendor stays running until the second one has started,
+// which can only happen if the second run was not blocked by the first's lock.
+// It fails (the first vendor times out) if the lock is kept past the child's
+// start. Each vendor that ynh launches through the shared supervisor is covered
+// by the same release; Claude stands in for them.
+func TestCmdRun_SecondRunIsNotBlockedWhileTheFirstVendorRuns(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "h")
+	writeSkillHarness(t, harnessDir, "h")
+	t.Chdir(work)
+
+	bin := t.TempDir()
+	state := t.TempDir()
+	script := `#!/bin/sh
+# The first vendor to start waits for the second; the second just starts.
+if mkdir "$STATE/first" 2>/dev/null; then
+  i=0
+  while [ ! -e "$STATE/second" ]; do
+    i=$((i+1)); [ $i -gt 200 ] && exit 3
+    sleep 0.05
+  done
+  exit 0
+fi
+touch "$STATE/second"
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("STATE", state)
+
+	run := func(label string) chan error {
+		ch := make(chan error, 1)
+		go func() {
+			ch <- cmdRun([]string{harnessDir, "-v", "claude", "--instructions", label})
+		}()
+		return ch
+	}
+	first := run("first")
+	// Let the first vendor reach its wait before the second run starts.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(state, "first")); err == nil {
+			break
 		}
-		mu.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatal("the first vendor never started")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	second := run("second")
+
+	for name, ch := range map[string]chan error{"first": first, "second": second} {
 		select {
-		case <-allIn:
-			return nil
-		case <-time.After(10 * time.Second):
-			return fmt.Errorf("a run is still holding the run dir lock while its vendor runs")
+		case err := <-ch:
+			if err != nil {
+				t.Errorf("%s run: %v", name, err)
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatalf("%s run did not finish: the run dir lock is held while the vendor runs", name)
 		}
-	})
-	runInParallel(t, "cursor", runs)
+	}
 }
