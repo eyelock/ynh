@@ -166,3 +166,33 @@ func TestResolveDelegateNoCommandsNeedsNoGrant(t *testing.T) {
 		t.Errorf("a delegate with no commands: %+v, %v", got, err)
 	}
 }
+
+// Two installs of one source match one entry. A trusted match wins whichever
+// way the listing orders them, and with none trusted the refusal does not
+// depend on the order either (ynw-6z0v).
+func TestResolveDelegateSeveralMatchesPreferTrusted(t *testing.T) {
+	const repo = "https://github.com/eyelock/assistants"
+	parent := &harness.Harness{Name: "parent", Dir: t.TempDir()}
+	d := remoteEntry(repo, "harnesses/planner", "")
+	for _, trustedName := range []string{"alpha", "zeta"} {
+		t.Run("trusted "+trustedName, func(t *testing.T) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			a := installGitHarness(t, repo, "harnesses/planner", "", "alpha", mcpFields("a"))
+			z := installGitHarness(t, repo, "harnesses/planner", "", "zeta", mcpFields("z"))
+			want := map[string]string{"alpha": a, "zeta": z}[trustedName]
+			got, err := resolveDelegate(parent, d, accepted(t, want))
+			if err != nil || got.ID != want {
+				t.Fatalf("resolved %+v, %v; want the trusted install %s", got, err, want)
+			}
+		})
+	}
+	t.Run("none trusted", func(t *testing.T) {
+		t.Setenv("YNH_HOME", t.TempDir())
+		a := installGitHarness(t, repo, "harnesses/planner", "", "alpha", mcpFields("a"))
+		installGitHarness(t, repo, "harnesses/planner", "", "zeta", mcpFields("z"))
+		_, err := resolveDelegate(parent, d, trustStore{Harnesses: map[string]trustRecord{}})
+		if err == nil || !strings.Contains(err.Error(), "ynh trust accept "+a) {
+			t.Errorf("error = %v, want the smallest id's refusal", err)
+		}
+	})
+}

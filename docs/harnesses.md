@@ -331,7 +331,7 @@ Delegates form a graph too, and ynh flattens it: starting from the root's `deleg
 - **Each agent's prompt lists the delegates it declares itself**, under "Delegates", and tells it to hand back to the main session: it reports to the session that invoked it. It does not list the root or itself.
 - **One harness, one selection.** A [profile or focus](#profile-or-focus-of-a-delegate) is per entry. The same harness reached with two different selections (or one with a selection and one without) is an error naming both routes, as one agent cannot be both. Two different harnesses with the same `name` are an error too.
 
-A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every delegate reached this way. `ynh install` and `ynh update` fetch the whole graph, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
+A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every delegate reached this way. The trust digest also covers each such entry's source (git URL, path, ref) and selection, so repointing an entry at another harness changes it even when that harness has the same name and servers; a parent accepted before this reads `changed` once. `ynh install` and `ynh update` fetch the whole graph, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
 
 #### Profile or focus of a delegate
 

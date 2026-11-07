@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -132,26 +133,50 @@ func resolveDelegate(parent *harness.Harness, d harness.Delegate, store trustSto
 	if err != nil {
 		return nil, fmt.Errorf("delegate %s: listing installed harnesses: %w", src, err)
 	}
+	// Several installs can match one entry (one source installed by git and
+	// by registry, or at two refs). The result must not depend on listing
+	// order: the trusted match with the smallest id wins, and when none is
+	// trusted the smallest id's refusal is the one reported.
+	type match struct {
+		id string
+		h  *harness.Harness
+	}
+	var matches []match
 	for _, e := range entries {
 		id := canonicalIDForEntry(e)
 		h, lerr := harness.LoadByID(id)
 		if lerr != nil || !installedMatches(h, src) {
 			continue
 		}
+		matches = append(matches, match{id, h})
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].id < matches[j].id })
+	var refusal error
+	for _, m := range matches {
+		id, h := m.id, m.h
 		st := trustStatusFor(id, h, store, nil)
 		switch st.State {
 		case trustAccepted, trustNoCommands:
 			return &resolvedDelegate{ID: id, Harness: h, Profile: d.Profile, Focus: d.Focus}, nil
 		case trustUnavailable:
-			return nil, fmt.Errorf("delegate %s of %s is installed as %s but cannot be read in full: %s\n  Run: ynh update %s",
-				src, parent.Name, id, strings.Join(st.Problems, "; "), id)
+			if refusal == nil {
+				refusal = fmt.Errorf("delegate %s of %s is installed as %s but cannot be read in full: %s\n  Run: ynh update %s",
+					src, parent.Name, id, strings.Join(st.Problems, "; "), id)
+			}
 		case trustChanged:
-			return nil, fmt.Errorf("delegate %s of %s is installed as %s but its commands changed since you accepted them\n  Review with 'ynh trust show %s', then run: ynh trust accept %s",
-				src, parent.Name, id, id, id)
+			if refusal == nil {
+				refusal = fmt.Errorf("delegate %s of %s is installed as %s but its commands changed since you accepted them\n  Review with 'ynh trust show %s', then run: ynh trust accept %s",
+					src, parent.Name, id, id, id)
+			}
 		default:
-			return nil, fmt.Errorf("delegate %s of %s is installed as %s but not trusted\n  Review with 'ynh trust show %s', then run: ynh trust accept %s",
-				src, parent.Name, id, id, id)
+			if refusal == nil {
+				refusal = fmt.Errorf("delegate %s of %s is installed as %s but not trusted\n  Review with 'ynh trust show %s', then run: ynh trust accept %s",
+					src, parent.Name, id, id, id)
+			}
 		}
+	}
+	if refusal != nil {
+		return nil, refusal
 	}
 	return nil, fmt.Errorf("delegate %s of %s is not installed\n  Run: %s, then ynh trust accept <the installed id>",
 		src, parent.Name, installHint(d, src))
