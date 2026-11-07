@@ -280,3 +280,23 @@ func TestCopilotSession_FailureAndEmpty(t *testing.T) {
 		t.Errorf("err = %v, want io.EOF", err)
 	}
 }
+
+// A signed-out copilot (captured on 1.0.107) writes no events, says on stderr
+// that it has no authentication, and exits 1. That is an authentication
+// WorkerError, which the loop ends with exit 20.
+func TestCopilotSession_SignedOutIsAnAuthWorkerError(t *testing.T) {
+	fakeVendor(t, "copilot", "", readCopilotFixture(t, "copilot-signed-out.stderr"), 1)
+	sess, err := (&CopilotBackend{}).Start(context.Background(), StartOptions{WorktreeDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = sess.Send("go")
+	_, err = sess.Next()
+	var we *WorkerError
+	if !errors.As(err, &we) || !we.Auth || !strings.Contains(we.Message, "No authentication information found") {
+		t.Fatalf("err = %v, want an Auth WorkerError carrying stderr", err)
+	}
+	if exit := workerTurnExit(err, "x"); exit.Code != ExitWorkerError {
+		t.Errorf("exit code = %d, want %d", exit.Code, ExitWorkerError)
+	}
+}

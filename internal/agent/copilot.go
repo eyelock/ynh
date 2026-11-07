@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -124,17 +125,43 @@ func (s *copilotSession) Next() (Turn, error) {
 	failedExit := run.finished && run.exitCode != 0
 	if (waitErr != nil && !run.finished) || failedExit {
 		if waitErr == nil {
-			return Turn{}, &WorkerError{
+			return Turn{}, markCopilotAuth(&WorkerError{
 				Backend: "copilot",
 				Message: firstNonBlank(tail.String(), fmt.Sprintf("exited with code %d and no message", run.exitCode)),
-			}
+			})
 		}
-		return Turn{}, exitedWorkerError("copilot", waitErr, tail)
+		return Turn{}, markCopilotAuth(exitedWorkerError("copilot", waitErr, tail))
 	}
 	if run.turn.Content == "" {
-		return Turn{}, exitedWorkerError("copilot", waitErr, tail)
+		return Turn{}, markCopilotAuth(exitedWorkerError("copilot", waitErr, tail))
 	}
 	return run.turn, nil
+}
+
+// copilotAuthMarkers are the words Copilot's stderr opens with when it has no
+// usable login. A signed-out `copilot -p` run (captured on 1.0.107, fixture
+// testdata/copilot-signed-out.stderr) writes nothing to stdout, no events and
+// no result, prints this to stderr and exits 1. Copilot gives no structured
+// signal for it, so stderr is the only thing to read. A bad credential has
+// not been captured: that needs a token to corrupt, and a wrong one may well
+// word it differently, so only the signed-out case is recognised.
+var copilotAuthMarkers = []string{"No authentication information found"}
+
+// markCopilotAuth flags a WorkerError whose message is Copilot saying it is
+// not signed in, so the failure reads as an authentication one. Any other
+// error, or none, passes through unchanged.
+func markCopilotAuth(err error) error {
+	var we *WorkerError
+	if !errors.As(err, &we) {
+		return err
+	}
+	for _, m := range copilotAuthMarkers {
+		if strings.Contains(we.Message, m) {
+			we.Auth = true
+			break
+		}
+	}
+	return err
 }
 
 // buildCopilotWorkerArgs constructs the arguments for one turn.
