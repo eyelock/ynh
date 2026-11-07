@@ -958,3 +958,34 @@ func TestDelegateIncludeMCPServersAreCovered(t *testing.T) {
 		t.Fatalf("servers %+v, problems %v", st.MCPServers, st.Problems)
 	}
 }
+
+// Repointing a delegates_to entry at another harness that carries the same
+// name and the same servers still changes the parent's digest: the entry's
+// source is reviewed, not only what it resolves to (ynw-op8n.2). So does a
+// change of ref or focus selection on the entry.
+func TestDelegateEntrySourceMovesTheDigest(t *testing.T) {
+	h, _ := ownRepoWithDelegate(t, mcpFields("same"))
+	if err := os.CopyFS(filepath.Join(h.Dir, "harnesses", "other"), os.DirFS(filepath.Join(h.Dir, "harnesses", "del"))); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, h.Dir, "add", "-A")
+	gitRun(t, h.Dir, "commit", "-q", "-m", "copy")
+	digest := func(h *harness.Harness) string {
+		st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+		if len(st.Problems) > 0 {
+			t.Fatalf("problems: %v", st.Problems)
+		}
+		return st.Digest
+	}
+	orig := digest(h)
+	moved := *h
+	moved.DelegatesTo = []harness.Delegate{{GitSource: harness.GitSource{Git: ".", Path: "harnesses/other"}}}
+	if digest(&moved) == orig {
+		t.Error("repointing an entry at another path with the same harness name left the digest alone")
+	}
+	pinned := *h
+	pinned.DelegatesTo = []harness.Delegate{{GitSource: harness.GitSource{Git: ".", Path: "harnesses/del", Ref: "main"}}}
+	if digest(&pinned) == orig {
+		t.Error("changing an entry's ref left the digest alone")
+	}
+}

@@ -200,6 +200,12 @@ type trustSet struct {
 	// that subagent as launch_focus steers a session, and the digest covers
 	// it. delegates_to is not changed by a profile, so they are read once.
 	DelegateFocuses []delegateFocusReport
+	// DelegateSources are the sources the delegates_to entries name (git URL,
+	// path, ref or local folder), in entry order, with the delegate's name.
+	// Repointing an entry at another harness that happens to carry the same
+	// name and commands must still change the digest, so the entry itself is
+	// covered, not only what it resolves to.
+	DelegateSources []string
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -301,7 +307,9 @@ type runView struct {
 // skipped, so the caller can refuse to call a partial set complete.
 // delegateView is one delegate's own MCP servers, with their sources.
 type delegateView struct {
-	Name    string
+	Name string
+	// Source is the entry's source, as written (see delegateSource).
+	Source  string
 	Servers map[string]plugin.MCPServer
 	Sources map[string]string
 	// Focus is the focus the delegates_to entry selects, nil for none. Its
@@ -442,13 +450,19 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 		if err != nil {
 			return nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
 		}
-		dv := delegateView{Name: dh.Name, Servers: servers, Sources: map[string]string{}, Focus: focus}
+		dv := delegateView{Name: dh.Name, Source: entrySourceKey(fd.Entry), Servers: servers, Sources: map[string]string{}, Focus: focus}
 		for _, pr := range provenance {
 			dv.Sources[pr.Server] = pr.Source
 		}
 		out = append(out, dv)
 	}
 	return out, nil
+}
+
+// entrySourceKey is a delegates_to entry's source and selection as written,
+// for the digest: where it points, at which ref, and which profile or focus.
+func entrySourceKey(e harness.Delegate) string {
+	return strings.Join([]string{e.Git, e.Local, e.Path, e.Ref, e.Profile, e.Focus}, "\x00")
 }
 
 func sensorKey(e executable) string {
@@ -592,6 +606,12 @@ func harnessExecutables(p *harness.Harness) trustSet {
 			continue
 		}
 		for _, d := range v.Delegates {
+			// Only a delegate that brings something to review (servers or a
+			// focus) adds its entry to the digest, so a harness whose
+			// delegates carry nothing keeps the digest it had.
+			if len(d.Servers) > 0 || d.Focus != nil {
+				set.DelegateSources = append(set.DelegateSources, d.Name+"\x00"+d.Source)
+			}
 			if d.Focus != nil {
 				set.DelegateFocuses = append(set.DelegateFocuses, delegateFocusReport{
 					Delegate: d.Name, Name: d.Focus.Name, Profile: d.Focus.Profile, Prompt: d.Focus.Prompt,
@@ -695,6 +715,10 @@ func executablesDigest(set trustSet) string {
 	}
 	// Likewise only when a delegates_to entry selects a focus, so a harness
 	// whose delegates name none keeps its digest.
+	for _, ds := range set.DelegateSources {
+		field(h, "delegate_source")
+		field(h, ds)
+	}
 	for _, df := range set.DelegateFocuses {
 		field(h, "delegate_focus")
 		field(h, df.Delegate)
