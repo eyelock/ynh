@@ -62,11 +62,11 @@ func TestBuildCopilotWorkerArgs(t *testing.T) {
 		{
 			name:      "resumed turn with model, effort and allow-all",
 			opts:      StartOptions{Model: "gpt-5", Effort: EffortHigh, AutoApprove: AutoApproveAll, Workspace: []string{"/w/a"}},
-			sessionID: "be461914-d466-4905-b39e-1d02f0806516",
+			sessionID: "00000000-0000-4000-8000-000000000002",
 			want: []string{
 				"--output-format", "json", "--no-ask-user", "--no-auto-update",
 				"--add-dir", "/w/a", "--model", "gpt-5", "--reasoning-effort", "high",
-				"--allow-all-tools", "--resume=be461914-d466-4905-b39e-1d02f0806516", "--prompt=hi",
+				"--allow-all-tools", "--resume=00000000-0000-4000-8000-000000000002", "--prompt=hi",
 			},
 		},
 	}
@@ -124,7 +124,7 @@ func TestParseCopilotOutput_OneWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.sessionID != "2120d876-c9c2-4571-9b70-fcb8a86d1d04" {
+	if run.sessionID != "00000000-0000-4000-8000-000000000001" {
 		t.Errorf("sessionID = %q", run.sessionID)
 	}
 	if run.turn.Content != "ok" {
@@ -155,7 +155,7 @@ func TestParseCopilotOutput_ToolTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if run.sessionID != "be461914-d466-4905-b39e-1d02f0806516" {
+	if run.sessionID != "00000000-0000-4000-8000-000000000002" {
 		t.Errorf("sessionID = %q", run.sessionID)
 	}
 	if want := "Files here:\n- No files or directories found in the current workspace.\n\ndone."; run.turn.Content != want {
@@ -224,7 +224,7 @@ func TestCopilotSession_ResumeTokenSeededAndLearned(t *testing.T) {
 	if !strings.HasSuffix(turn.Content, "done.") {
 		t.Errorf("Content = %q", turn.Content)
 	}
-	const id = "be461914-d466-4905-b39e-1d02f0806516"
+	const id = "00000000-0000-4000-8000-000000000002"
 	if sess.ResumeToken() != id {
 		t.Errorf("token = %q, want %q", sess.ResumeToken(), id)
 	}
