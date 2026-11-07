@@ -56,6 +56,15 @@ func validateEffort(level, backend string) error {
 		return fmt.Errorf("opencode has no reasoning effort setting, so effort %q cannot be honoured; "+
 			"run without an effort, pick a model variant with --model (provider/model#variant), or use a different backend", level)
 	default:
-		return fmt.Errorf("effort is not supported by the %s backend (supported: claude, codex, copilot)", backend)
+		return fmt.Errorf("effort is not supported by the %s backend (supported: claude, codex%s)", backend, copilotEffortNote())
 	}
+}
+
+// copilotEffortNote is ", copilot" when the copilot backend is selectable, so
+// the one message that lists effort-capable backends follows the dark switch.
+func copilotEffortNote() string {
+	if copilotWorkerSelectable {
+		return ", copilot"
+	}
+	return ""
 }

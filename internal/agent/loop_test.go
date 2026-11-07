@@ -352,7 +352,9 @@ func TestValidateBackend(t *testing.T) {
 		}
 	})
 	t.Run("accepts canonical names", func(t *testing.T) {
-		for _, name := range []string{"claude", "codex", "cursor", "opencode", "copilot"} {
+		// workerBackends follows the copilot switch, so this holds with it on
+		// or off; the switch's own test checks copilot specifically.
+		for _, name := range workerBackends() {
 			got, err := validateBackend(name)
 			if err != nil || got != name {
 				t.Errorf("validateBackend(%q) = (%q, %v); want (%q, nil)", name, got, err, name)
