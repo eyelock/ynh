@@ -51,6 +51,9 @@ func fireChildStart() {
 // lets deferred cleanup run first.
 type ExitError struct {
 	Code int
+	// Signal is the signal that ended the child, or 0 when it exited by
+	// itself. Code is then 128+Signal, as a shell reports it.
+	Signal syscall.Signal
 }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("vendor CLI exited with code %d", e.Code) }
@@ -142,7 +145,7 @@ func childResult(err error) error {
 		return err
 	}
 	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
-		return &ExitError{Code: 128 + int(ws.Signal())}
+		return &ExitError{Code: 128 + int(ws.Signal()), Signal: ws.Signal()}
 	}
 	return &ExitError{Code: exitErr.ExitCode()}
 }
