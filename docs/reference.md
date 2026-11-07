@@ -20,7 +20,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
 | `OTEL_RESOURCE_ATTRIBUTES` | _(none)_ | `ynh agent run` | extra telemetry resource attributes |
 | `YNH_WORKSPACE_ROOTS` | _(none)_ | `ynh run`, `ynh agent run` | colon-separated allow-list of folders a harness may be granted; replaces `workspace_roots` in `config.json` for the run ([Workspace Folders](workspace.md)) |
-| `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
+| `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh run`, `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
 | `YNH_LABELS` | _(none)_ | `ynh run`, `ynh agent run` | run [labels](telemetry.md#run-labels), comma-separated `key:value`; overridden per key by `--label`. ynh also **sets** it, to the merged set, for every process it starts (the vendor CLI, `ynh check`) |
 
 **Note:** `YNH_VENDOR` is not used by `ynd diff` — diff always compares across multiple vendors and a single vendor value is not meaningful. Use `-v` with a comma-separated list instead.
@@ -45,7 +45,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--label <key:value>` (repeatable; `key:` removes a [run label](telemetry.md#run-labels)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
+| `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--label <key:value>` (repeatable; `key:` removes a [run label](telemetry.md#run-labels)), `--telemetry-relay` (see [telemetry](telemetry.md#vendor-telemetry-through-the-relay)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |

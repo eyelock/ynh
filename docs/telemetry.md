@@ -6,12 +6,14 @@ can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
 It is the only ynh command that does. The commands that launch a vendor CLI
-(`ynh run` and the like) emit nothing, whatever the vendor, and what ynh does
-with its own process differs by vendor:
+(`ynh run` and the like) emit no ynh telemetry of their own, whatever the vendor
+(with the [relay](#vendor-telemetry-through-the-relay) on, a Copilot CLI `ynh run`
+does collect Copilot's own records), and what ynh does with its own process
+differs by vendor:
 
 - **Every vendor:** ynh stays the parent process while the vendor CLI runs as
   its child, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
-  It is running throughout, but these commands still emit no telemetry.
+  It is running throughout, but these commands still emit no telemetry of ynh's own.
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
@@ -311,18 +313,21 @@ may still change, and when one does, the registry says so.
 
 ## Vendor telemetry through the relay
 
-Claude Code and Codex can report their own spans, metrics and events, but only
-over the network. The telemetry relay setting lets a run collect them into its spool
+Claude Code, Codex and Copilot CLI can report their own spans, metrics and events, but only
+over the network. Claude Code and Codex are collected under `ynh agent run`, Copilot CLI under
+`ynh run`. The telemetry relay setting lets a run collect them into its spool
 too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
-folder, beside ynh's own records and in the same trace.
+folder. Under `ynh agent run` that is beside ynh's own records and in the same
+trace; under `ynh run` ynh writes no records of its own, and Copilot CLI starts
+its own trace (see below).
 
 ### Turning it on
 
 The setting is off by default. The first of these that says anything decides:
 
-1. `--telemetry-relay` on `ynh agent run` turns it on for that run.
+1. `--telemetry-relay` on `ynh agent run` or `ynh run` turns it on for that run.
 2. `YNH_TELEMETRY_RELAY`: `1`, `true`, `yes` or `on` turn it on; `0`, `false`,
    `no` or `off` turn it off, including when the configuration turns it on.
    Any other value is a note on stderr, and off. A factory lane turns the
@@ -333,7 +338,8 @@ The setting is off by default. The first of these that says anything decides:
 With the setting on, ynh starts the relay only when all of these hold, just
 before the worker starts:
 
-- the backend is `claude` or `codex` (see [Other vendors](#other-vendors))
+- the backend is `claude` or `codex` under `ynh agent run`, or `copilot` under
+  `ynh run` (see [Other vendors](#other-vendors))
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write
@@ -361,7 +367,7 @@ process group, and its stderr is kept in a small buffer that ynh shows only if
 the relay fails.
 
 The relay's standard input is a pipe that ynh holds open for the run and never
-writes to. No other process ynh starts, the worker included, holds it. With
+writes to. No other process ynh starts, the worker or the vendor CLI included, holds it. With
 `--exit-on-stdin-eof` the relay treats that pipe closing as it treats
 `SIGTERM`: it drains, flushes and exits. So when ynh ends by any means, a
 `kill -9` included, the kernel closes the pipe and the relay ends with it, on
@@ -369,7 +375,7 @@ Linux and macOS alike. This needs a `ynr` that has `--exit-on-stdin-eof`; an
 older one fails to start and the run carries on without it, with the note
 below.
 
-When the worker has exited, ynh closes the pipe and sends the relay `SIGTERM`
+When the worker (under `ynh run`, the vendor CLI child) has exited, ynh closes the pipe and sends the relay `SIGTERM`
 (either one stops it), so it drains the requests in flight, flushes and closes
 its spool file, and waits up to 10 seconds before killing it. The same happens
 when ynh itself is interrupted with `SIGINT` or `SIGTERM`, or a run ends in a
@@ -549,10 +555,39 @@ its commands.
 Unchecked: whether Codex passes them to the MCP servers it starts, and whether
 it sends a W3C `traceparent` header on its requests to the OpenAI API.
 
+### What Copilot CLI receives
+
+Under `ynh run` the vendor is a child of ynh for the whole session, so the relay lives as
+long as the session and is stopped when the child exits. ynh adds these to its own
+environment, which Copilot inherits (`copilot help monitoring`, Copilot CLI 1.0.106):
+
+| Variable | Value |
+|---|---|
+| `COPILOT_OTEL_ENABLED` | `true` |
+| `COPILOT_OTEL_EXPORTER_TYPE` | `otlp-http` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the relay |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` |
+| `OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT` | `NO_CONTENT`, so no prompt, response or tool argument |
+| `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `false` |
+
+`COPILOT_OTEL_FILE_EXPORTER_PATH` is removed, since it would send the telemetry to a file.
+An `OTEL_EXPORTER_OTLP_*` already in the environment means the telemetry is the operator's,
+so no relay starts. `ynh run` writes no run span, so Copilot is given no `TRACEPARENT`; it
+does not join one anyway, and its spans start their own trace.
+
+Verified on 2026-11-07 with Copilot CLI 1.0.106 against a real `ynr relay`: `ynh run
+--telemetry-relay -v copilot` with a one-shot prompt wrote `invoke_agent` and `chat` spans and
+the `gen_ai.*` metrics into the spool (model, token counts, cost), with no prompt text and no
+path, and no relay was left running. The relay is not yet started for Claude Code or Codex under
+`ynh run` ([vendor parity, L13](vendor-parity.md#l13-ynh-run-emits-no-telemetry)).
+
 ### Other vendors
 
-Cursor is unexamined. With the setting on, a Cursor run starts no relay and
-prints one note.
+OpenCode and Cursor cannot send their telemetry to the run's relay
+([vendor parity, L19](vendor-parity.md#l19-vendor-telemetry-through-the-relay)). With the
+setting on, their runs start no relay and print one note. Under `ynh run`, Claude Code
+and Codex do the same, with the note "ynh does not configure claude's telemetry yet"
+(or the vendor's name).
 
 ## No content
 

@@ -174,4 +174,4 @@ Any change that bumps capabilities MUST also update goldens under `test/golden/<
 | `TRACEPARENT` / `TRACESTATE` | _(none)_ | ynh agent run: the trace the run joins |
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | ynh agent run: an OTLP endpoint wins over the spool; not exported yet, so it turns telemetry off with a note |
 | `YNH_WORKSPACE_ROOTS` | _(none)_ | ynh run, ynh agent run: colon-separated allow-list of folders a harness may be granted as workspace folders; replaces `workspace_roots` in config.json for the run; see `docs/workspace.md` |
-| `YNH_TELEMETRY_RELAY` | _(off)_ | ynh agent run: fallback for `--telemetry-relay`, over `telemetry_relay` in config.json; starts `ynr relay` for Claude Code's own telemetry; see `docs/telemetry.md` |
+| `YNH_TELEMETRY_RELAY` | _(off)_ | ynh run, ynh agent run: fallback for `--telemetry-relay`, over `telemetry_relay` in config.json; starts `ynr relay` for the vendor's own telemetry (Copilot CLI under `ynh run`; Claude Code and Codex under `ynh agent run`); see `docs/telemetry.md` |

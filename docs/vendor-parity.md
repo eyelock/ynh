@@ -49,6 +49,7 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L12](#l12-delegates-carry-only-part-of-a-harness) |
 | Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | Y | Y |
 | Telemetry from `ynh run` | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) |
+| Vendor telemetry through the relay (`--telemetry-relay`) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | Y | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynh agent run
 
@@ -65,7 +66,7 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 | `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | `--sandbox srt` | Y | N [L18](#l18-sandbox-srt) | – | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) |
 | Telemetry (ynh's own spans and events) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | – | N [L19](#l19-vendor-telemetry-through-the-relay) | N [L19](#l19-vendor-telemetry-through-the-relay) |
+| Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | – | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynd export
 
@@ -206,7 +207,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh run` writes no OpenTelemetry on any vendor. Only `ynh agent run` does.
 - **Owner:** ynh.
 - **Evidence:** [Telemetry](telemetry.md).
-- **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0, for Claude Code. [ynh #732](https://github.com/eyelock/ynh/issues/732), v0.19.0, for Codex, Copilot CLI, Cursor and OpenCode.
+- **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0, for Claude Code; [ynh #782](https://github.com/eyelock/ynh/issues/782) for Codex. Cursor and OpenCode: none yet, and their telemetry through the relay is [L19](#l19-vendor-telemetry-through-the-relay). [ynh #732](https://github.com/eyelock/ynh/issues/732) collects Copilot CLI's own telemetry under `ynh run` through the relay ([L19](#l19-vendor-telemetry-through-the-relay)) and does not make `ynh run` write its own.
 - **Workaround:** run the harness with `ynh agent run`.
 - **Detail:** [Telemetry](telemetry.md).
 
@@ -257,11 +258,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L19: Vendor telemetry through the relay
 
-- **What:** the telemetry relay collects the vendor's own telemetry for Claude Code and Codex only.
-- **Owner:** not established: the record names no OTLP export in Cursor or OpenCode.
-- **Evidence:** [Vendor telemetry through the relay](telemetry.md#vendor-telemetry-through-the-relay).
-- **Tracking:** [ynh #732](https://github.com/eyelock/ynh/issues/732), v0.19.0.
-- **Workaround:** none. ynh's own spans and events are still written.
+- **What:** the telemetry relay collects the vendor's own telemetry under `ynh agent run` for Claude Code and Codex, and under `ynh run` for Copilot CLI. Cursor and OpenCode cannot send it to the run's relay.
+- **Owner:** the vendor. Cursor documents no OTLP export. OpenCode's `opencode run` is a thin client of a shared `opencode serve` that never sees the run's environment.
+- **Evidence:** Copilot CLI 1.0.106, live under `ynh run --telemetry-relay` with a real `ynr relay`, 2026-11-07: `invoke_agent` and `chat` spans and `gen_ai.*` metrics reached the spool, with no prompt, response or path, in a trace of Copilot's own ([Copilot CLI](telemetry.md#what-copilot-cli-receives)). OpenCode 2.2.3, live, 2026-11-06: only the client's startup spans reach the relay, and its `cli starting` log record carries the whole command line, the prompt included, which [ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md) forbids. Cursor, cursor-agent 2026.11.05: its [documentation](https://cursor.com/docs/cli/overview) and installed bundle show no OTLP export setting; not verified live, as there is no licence.
+- **Tracking:** [ynh #732](https://github.com/eyelock/ynh/issues/732), v0.19.0, for Copilot CLI. A per-run `opencode serve`, which would give OpenCode the run's environment, is [ynh #771](https://github.com/eyelock/ynh/issues/771), unscheduled.
+- **Workaround:** none. ynh's own spans and events are still written under `ynh agent run`.
 - **Detail:** [Vendor telemetry through the relay](telemetry.md#vendor-telemetry-through-the-relay).
 
 ### L20: Claude Code and Copilot plugins carry no instructions
