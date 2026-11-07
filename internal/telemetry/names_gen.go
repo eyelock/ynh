@@ -36,6 +36,14 @@ const (
 	AttrHarnessVersion attribute.Key = "ynh.harness.version"
 	// The commit the harness was installed from.
 	AttrHarnessCommit attribute.Key = "ynh.harness.commit"
+	// A new random id for each ynh run launch. It joins the launch's record to the vendor's own, through OTEL_RESOURCE_ATTRIBUTES.
+	AttrSessionID attribute.Key = "ynh.session.id"
+	// How the launch ended. It also sets the span's status, ok for exited and an error otherwise.
+	AttrSessionOutcome attribute.Key = "ynh.session.outcome"
+	// The signal that ended the vendor CLI, when one did.
+	AttrSessionSignal attribute.Key = "ynh.session.signal"
+	// The vendor CLI the launch ran.
+	AttrSessionVendor attribute.Key = "ynh.session.vendor"
 	// On a call span, the call's outcome: the gate's verdict (pass, blocked), the sensor's status word, or error when the call could not run.
 	AttrCallOutcome attribute.Key = "ynh.call.outcome"
 	// A run label, one attribute per key under the prefix: ynh.label.<key>, on ynh's resource. The key and value are the user's own ids, within ynr ADR-006 rule 10 (key ^[a-z][a-z0-9_.-]{0,31}$, value ^[A-Za-z0-9._/#-]{1,64}$, at most 16 per run), and ynh refuses a run whose labels break them.
@@ -53,6 +61,8 @@ const (
 const (
 	// One `ynh agent run`, from start to end.
 	SpanRun = "ynh.run"
+	// One `ynh run` launch of a vendor CLI, from start to end, whichever vendor ran.
+	SpanSession = "ynh.session"
 	// A `ynh check` the run calls: the gate between turns, or the convergence verifiers.
 	SpanCheck = "ynh.check"
 )
@@ -63,6 +73,10 @@ const (
 	EventRunStarted = "ynh.run.started"
 	// A run ended. It carries the started event's attributes and how the run ended.
 	EventRunFinished = "ynh.run.finished"
+	// A `ynh run` launch began, before the vendor CLI started. A start with no finish is how a crash shows.
+	EventSessionStarted = "ynh.session.started"
+	// A `ynh run` launch ended. It carries the started event's attributes and how the launch ended.
+	EventSessionFinished = "ynh.session.finished"
 )
 
 // Values of ynh.run.outcome.
@@ -105,6 +119,32 @@ const (
 	RunBoundByTokens = "tokens"
 	// The wall-clock budget.
 	RunBoundByWallClock = "wall_clock"
+)
+
+// Values of ynh.session.outcome.
+const (
+	// The vendor CLI exited 0.
+	SessionOutcomeExited = "exited"
+	// The vendor CLI exited non-zero.
+	SessionOutcomeFailed = "failed"
+	// A signal ended the vendor CLI.
+	SessionOutcomeSignalled = "signalled"
+	// ynh did not start the vendor CLI.
+	SessionOutcomeRefused = "refused"
+)
+
+// Values of ynh.session.vendor.
+const (
+	// Claude Code.
+	SessionVendorClaude = "claude"
+	// Codex.
+	SessionVendorCodex = "codex"
+	// Cursor.
+	SessionVendorCursor = "cursor"
+	// GitHub Copilot.
+	SessionVendorCopilot = "copilot"
+	// OpenCode.
+	SessionVendorOpencode = "opencode"
 )
 
 // CardinalityLimits is the most distinct values each metric attribute may take, from the

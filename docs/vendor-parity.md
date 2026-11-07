@@ -51,7 +51,7 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | `delegates_to`, `transport: a2a`: the delegate's workspace grant | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | X [L41](#l41-opencode-reads-outside-folders-without-a-workspace-grant) |
 | `delegates_to`, `transport: native` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L12](#l12-delegates-carry-only-part-of-a-harness) |
 | Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | U [L38](#l38-cursor-resume-and-interactive-trust-across-snapshots-not-shown-live) | Y |
-| Telemetry from `ynh run` | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) |
+| Own `ynh.session` record from `ynh run` | Y | Y | Y | Y | Y |
 | Vendor telemetry through the relay (`--telemetry-relay`) | N [L13](#l13-ynh-run-emits-no-telemetry) | Y [L19](#l19-vendor-telemetry-through-the-relay) | Y | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynh agent run
@@ -205,13 +205,13 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** use `transport: a2a`, the default, which runs the delegate as its own ynh session ([L40](#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live)); or include the harness (`includes`) rather than delegating to it.
 - **Detail:** [delegates_to](harnesses.md#delegates-to-optional), [Delegate sessions](delegate-sessions.md).
 
-### L13: ynh run emits no telemetry
+### L13: ynh run does not wire vendor telemetry
 
-- **What:** `ynh run` writes no OpenTelemetry on any vendor. Only `ynh agent run` does.
+- **What:** `ynh run` writes its own `ynh.session` record for every launch, on every vendor ([Telemetry](telemetry.md#what-a-launch-emits)). It does not yet point a vendor's own telemetry (Claude Code's, Codex's) at the spool, so the vendor's spans, metrics and events are not collected. Only `ynh agent run` does that, with the [relay](telemetry.md#vendor-telemetry-through-the-relay).
 - **Owner:** ynh.
 - **Evidence:** [Telemetry](telemetry.md).
 - **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0, for Claude Code; Codex's own telemetry under `ynh run` is done ([ynh #782](https://github.com/eyelock/ynh/issues/782), [L19](#l19-vendor-telemetry-through-the-relay)). Cursor and OpenCode: none yet, and their telemetry through the relay is [L19](#l19-vendor-telemetry-through-the-relay). [ynh #732](https://github.com/eyelock/ynh/issues/732) collects Copilot CLI's own telemetry under `ynh run` through the relay ([L19](#l19-vendor-telemetry-through-the-relay)) and does not make `ynh run` write its own.
-- **Workaround:** run the harness with `ynh agent run`.
+- **Workaround:** run the harness with `ynh agent run`, or read `ynh.session` for when a launch ran and how it ended.
 - **Detail:** [Telemetry](telemetry.md).
 
 ### L14: Copilot is not a backend
