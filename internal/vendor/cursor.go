@@ -157,10 +157,15 @@ func cursorResumeArgs(sessionID, prompt string, interactive bool, extraArgs []st
 	return append(args, extraArgs...)
 }
 
-// IsolateMCP cannot isolate on Cursor: ynh knows no way to keep the user's
-// configured servers out, so it says so and launches normally.
+// IsolateMCP cannot isolate on Cursor, and the limit is Cursor's: a launch has
+// no way to leave ~/.cursor/mcp.json or .cursor/mcp.json out. cursor-agent
+// 2026.11.05-86047df has no flag for it (--approve-mcps only approves), no
+// environment variable that moves its config (the bundle reads none), and its
+// `agent mcp disable <name>` persists to the user's own state, which a launch
+// must not rewrite. From Cursor's documentation and the CLI's own help, not a
+// live run (docs/vendor-parity.md, L6). ynh says so and launches normally.
 func (c *Cursor) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation is not supported by Cursor: servers in your Cursor config will still load"
+	return nil, "MCP isolation is not supported by Cursor: servers in ~/.cursor/mcp.json and .cursor/mcp.json will still load"
 }
 
 func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
@@ -535,7 +540,7 @@ func cursorRule(stem string, data []byte) []byte {
 
 	var b bytes.Buffer
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "description: %s\n", description)
+	fmt.Fprintf(&b, "description: %s\n", strconv.Quote(description))
 	if len(globs) > 0 {
 		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
 	}

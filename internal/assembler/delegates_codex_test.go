@@ -85,7 +85,7 @@ func TestAssembleDelegates_OpenCodeAgentRunsAsSubagent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("agent file: %v", err)
 	}
-	if !strings.Contains(string(data), "\nmode: all\n") || !strings.Contains(string(data), "description: Probes things.\n") {
+	if !strings.Contains(string(data), "\nmode: all\n") || !strings.Contains(string(data), `description: "Probes things."`) {
 		t.Errorf("agent = %q, want mode: all and the description", data)
 	}
 	if !strings.Contains(string(data), "invoked as a delegate") {

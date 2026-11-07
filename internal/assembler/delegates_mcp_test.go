@@ -488,7 +488,7 @@ func TestAssembleDelegates_NoServersUnchanged(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := "---\nname: probe\ndescription: Plain.\n---\n\nYou are the **probe** harness, invoked as a delegate.\n\n"
+			want := "---\nname: \"probe\"\ndescription: \"Plain.\"\n---\n\nYou are the **probe** harness, invoked as a delegate.\n\n"
 			if agent != want {
 				t.Errorf("agent =\n%q\nwant\n%q", agent, want)
 			}

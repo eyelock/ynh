@@ -149,9 +149,12 @@ named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
 names them. A harness or profile that sets `mcp_isolation` runs its worker
 with only that composed set, the same as `ynh run`; `ynh agent run` has no
 `--isolated-mcp` flag, so isolation comes from the manifest alone. It is
-applied on the `claude` backend only (its tools are then named `<server>`);
-on `codex`, `cursor` and `opencode` ynh prints one `warning:` line on stderr
-and the worker loads your own servers too. See
+applied on the `claude`, `codex` and `opencode` backends (on `claude` its tools are
+then named `<server>`); on `cursor`, which cannot isolate, ynh prints one
+`warning:` line on stderr and the worker loads your own servers too. The
+vendor is asked which servers it would load under the worker's environment,
+which is smaller than ynh's, so pass `CODEX_HOME` or `XDG_CONFIG_HOME` in
+`env_passthrough` if the worker should see your config at all. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
 **Codex and MCP approval.** A `codex` worker runs `codex exec`, which has no one

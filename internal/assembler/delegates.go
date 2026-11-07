@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
@@ -373,11 +374,11 @@ func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver
 	var b strings.Builder
 
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "name: %s\n", p.Name)
+	fmt.Fprintf(&b, "name: %s\n", strconv.Quote(p.Name))
 	if p.Description != "" {
-		fmt.Fprintf(&b, "description: %s\n", p.Description)
+		fmt.Fprintf(&b, "description: %s\n", strconv.Quote(p.Description))
 	} else {
-		fmt.Fprintf(&b, "description: Delegate harness %q.\n", p.Name)
+		fmt.Fprintf(&b, "description: %s\n", strconv.Quote(fmt.Sprintf("Delegate harness %q.", p.Name)))
 	}
 	if mcpLine != "" {
 		b.WriteString(mcpLine)

@@ -271,12 +271,14 @@ Isolation is a launch setting. It changes how `ynh run` and `ynh agent run` star
 | Vendor | Isolation |
 |--------|-----------|
 | Claude Code | Full. ynh adds `--strict-mcp-config` and, when the harness has servers, `--mcp-config=<run dir>/.claude/.mcp.json`; `--plugin-dir` stays, so hooks still fire. A harness with no servers gets none at all. |
-| Copilot | Partial. ynh adds `--disable-builtin-mcps` and warns: servers in `~/.copilot/mcp-config.json` still load. |
-| Codex | Not supported. ynh warns that your servers will load, and launches normally. |
-| Cursor | Not supported. ynh warns that your servers will load, and launches normally. |
-| OpenCode | Not supported. ynh warns that your servers will load, and launches normally. |
+| Codex | Full. ynh asks `codex mcp list --json` which servers Codex would load and adds `-c mcp_servers.<name>.enabled=false` for each one the harness does not compose. Your Codex config is not written. |
+| Copilot | Full. ynh asks `copilot mcp list --json` which servers Copilot would load (yours, the project's, installed plugins' and the built-ins) and adds `--disable-mcp-server <name>` for each one the harness does not compose, and `--disable-builtin-mcps`. |
+| OpenCode | Full. `ynh run` already leaves your global `~/.config/opencode` config out, because it points `OPENCODE_CONFIG_DIR` at the run directory, which replaces that directory. Isolation also turns off the servers in the project's `opencode.json`: ynh reads their names from `opencode debug config` and sets `OPENCODE_CONFIG_CONTENT` with a disabled placeholder for each. |
+| Cursor | Not supported, and not ynh's to fix. `cursor-agent` has no flag, environment variable or per-launch setting that leaves `~/.cursor/mcp.json` or `.cursor/mcp.json` out. ynh warns that your servers will load, and launches normally. |
 
-The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude backend only and warns on the others.
+On OpenCode, ynh copies nothing of your servers into the launch: each one it turns off is replaced by a placeholder (`opencode debug config` shows a `{env:NAME}` in a command or url with the value substituted, so a copy could carry a credential). On Codex, Copilot and OpenCode, ynh can turn off only the servers the vendor's own listing reports, by name. If the listing cannot be read, ynh warns and launches without isolation (on Copilot it still drops the built-ins). A Codex server whose name has a `.` cannot be passed with `-c`, so ynh names it in the warning. A server the harness composes under the same name as one of yours is left on.
+
+The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude, Codex and OpenCode backends, the same way, and warns on Cursor (see [L6](vendor-parity.md#l6-mcp-isolation)).
 
 **Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>` (`ynh run` and `ynh agent run` write a plugin manifest carrying the harness's name into the plugin directory, because Claude Code names a plugin without one after its directory); with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
 
@@ -369,8 +371,8 @@ Claude Code subagents accept an `mcpServers` frontmatter field: a list whose ent
 
 ```markdown
 ---
-name: probe
-description: Probe agent with a ping tool
+name: "probe"
+description: "Probe agent with a ping tool"
 mcpServers: [{"probe-srv":{"command":"python3","args":["/opt/probe/server.py"]}}]
 ---
 ```

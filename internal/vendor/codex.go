@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -199,10 +200,38 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 	return args, nil
 }
 
-// IsolateMCP cannot isolate on Codex: ynh knows no way to keep the user's
-// configured servers out, so it says so and launches normally.
+// IsolateMCP keeps the user's configured servers out of a launch. Codex has no
+// "only these servers" switch, but it lists the servers it would load
+// (`codex mcp list --json`) and takes `-c mcp_servers.<name>.enabled=false`
+// per launch, so every listed server the harness does not compose is turned
+// off. Nothing is written to the user's config. Verified live on codex-cli
+// 0.166.0 (docs/vendor-parity.md, L6). `codex exec --ignore-user-config`
+// would also do it, but only for a one-shot run, and it drops the rest of the
+// user config (model, approvals) with it.
 func (c *Codex) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation is not supported by Codex: servers in your Codex config will still load"
+	return c.IsolateMCPIn(configPath, nil, "")
+}
+
+// IsolateMCPIn is IsolateMCP for a launch whose environment is env, not ynh's
+// own (a `ynh agent run` worker gets a smaller one, without CODEX_HOME unless
+// the harness passes it): Codex is asked which servers it would load under
+// that environment, so a name is never disabled that the launch would not
+// see, in dir (the project's directory; empty is the current one). A nil env is ynh's.
+func (c *Codex) IsolateMCPIn(configPath string, env []string, dir string) ([]string, string) {
+	const fail = "MCP isolation could not be applied on Codex (%v): servers in your Codex config will still load"
+	bin, err := exec.LookPath(c.CLIName())
+	if err != nil {
+		return nil, fmt.Sprintf(fail, err)
+	}
+	listed, err := codexMCPListNames(bin, env, dir)
+	if err != nil {
+		return nil, fmt.Sprintf(fail, err)
+	}
+	args, skipped := codexIsolationArgs(listed, harnessMCPNames(filepath.Join(configPath, ".mcp.json"), false))
+	if len(skipped) > 0 {
+		return args, fmt.Sprintf("MCP isolation is partial on Codex: %s cannot be turned off, since a name with a '.' cannot be passed with -c", strings.Join(skipped, ", "))
+	}
+	return args, ""
 }
 
 func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
