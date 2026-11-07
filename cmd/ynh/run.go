@@ -273,6 +273,7 @@ func cmdRun(args []string) error {
 	// before the vendor takes over (see the launch below); a no-op for a baked
 	// image.
 	unlockRun := func() {}
+	instructionsApplied := false
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
 	if preassembled {
 		// Pre-assembled layout (baked harness image) — use directly.
@@ -413,6 +414,20 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// The per-run instructions are appended into the tree (Copilot,
+		// Cursor, OpenCode), so they go in before the seal: written into a
+		// shared, reused snapshot they would pile up across runs and leak
+		// into other sessions. They are part of the hash, so runs with
+		// different instructions get different snapshots.
+		if ra.Instructions != "" {
+			extraArgs, err := adapter.ApplyRuntimeInstructions(runDir, ra.Instructions)
+			if err != nil {
+				return fmt.Errorf("applying runtime instructions: %w", err)
+			}
+			vendorArgs = append(vendorArgs, extraArgs...)
+			instructionsApplied = true
+		}
+
 		// Seal the staged tree as a snapshot (or reuse the identical one) and
 		// swap <run>/<name> to it. From here every use of the run dir is the
 		// snapshot's real path. The shared lock on the snapshot is held until
@@ -435,8 +450,9 @@ func cmdRun(args []string) error {
 		}
 	}
 
-	// Inject per-invocation instructions into the vendor's pipeline.
-	if ra.Instructions != "" {
+	// Inject per-invocation instructions into the vendor's pipeline (a host
+	// assembly already did, before sealing).
+	if ra.Instructions != "" && !instructionsApplied {
 		extraArgs, err := adapter.ApplyRuntimeInstructions(runDir, ra.Instructions)
 		if err != nil {
 			return fmt.Errorf("applying runtime instructions: %w", err)
