@@ -21,6 +21,9 @@ var (
 // point, so a session that lasts hours does not hold up the next run of the
 // same harness. fn must be safe to call more than once. The returned function
 // removes the registration.
+//
+// There is one hook slot, so this assumes a single launch per process, as
+// `ynh run` has: a second registration replaces the first.
 func OnChildStart(fn func()) (remove func()) {
 	childStartMu.Lock()
 	childStartHook = fn
