@@ -56,8 +56,8 @@ func validateAutoApprove(level, backend string) error {
 		// 1.0.107).
 		if level == AutoApproveEdits {
 			return fmt.Errorf(
-				"copilot cannot auto-approve edits only: its only file-write grant (--allow-tool='write') "+
-					"also approves a shell command's output redirection into a file (for example `cat a > b`); "+
+				"copilot cannot auto-approve edits only: its only file-write grant (--allow-tool='write') " +
+					"also approves a shell command's output redirection into a file (for example `cat a > b`); " +
 					"use --auto-approve all or a different backend")
 		}
 		return nil
