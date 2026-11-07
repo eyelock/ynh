@@ -124,9 +124,9 @@ So a run dir becomes a **content-addressed snapshot** behind a stable link:
    link renamed over the old one). Existing project symlinks and the legacy bare-name alias keep
    resolving.
 4. Still under the assembly lock, the run takes a **shared lock** on its snapshot's lock file
-   (outside the snapshot, under `cache/run-locks/`). The session holds it for its life: ynh clears
-   close-on-exec on it, so Claude Code, Copilot CLI and OpenCode inherit it across the exec. For
-   Codex and Cursor, which run as children, ynh holds it.
+   (outside the snapshot, under `cache/run-locks/`). `ynh run` stays alive as the parent of every
+   vendor CLI ([ynh #745](https://github.com/eyelock/ynh/issues/745)), so it holds that lock until
+   the vendor exits.
 5. The run launches the vendor on the snapshot's **real path**, never the stable link, so the
    session reads its own snapshot to the end.
 6. Still under the assembly lock, the run deletes each snapshot that is neither current nor
