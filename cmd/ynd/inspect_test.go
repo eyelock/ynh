@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseInspectArgs_VendorFlag(t *testing.T) {
@@ -408,7 +409,7 @@ func TestEnsureFrontmatter_CleanContent(t *testing.T) {
 	p := proposal{Type: "skill", Name: "my-skill", Line: "1. **Skill: `my-skill`** — Does things."}
 	raw := "---\nname: my-skill\ndescription: Does things\n---\n\nBody content.\n"
 	got := ensureFrontmatter(raw, p)
-	if !strings.HasPrefix(got, "---\nname: my-skill\n") {
+	if !strings.HasPrefix(got, "---\nname: \"my-skill\"\n") {
 		t.Errorf("expected correct frontmatter, got %q", got[:50])
 	}
 	if !strings.Contains(got, "Body content.") {
@@ -420,7 +421,7 @@ func TestEnsureFrontmatter_NoFrontmatter(t *testing.T) {
 	p := proposal{Type: "skill", Name: "my-skill", Line: "1. **Skill: `my-skill`** — Does things."}
 	raw := "Just instructions without any frontmatter.\n"
 	got := ensureFrontmatter(raw, p)
-	if !strings.HasPrefix(got, "---\nname: my-skill\n") {
+	if !strings.HasPrefix(got, "---\nname: \"my-skill\"\n") {
 		t.Errorf("expected injected frontmatter, got %q", got[:50])
 	}
 	if !strings.Contains(got, "Just instructions") {
@@ -432,7 +433,7 @@ func TestEnsureFrontmatter_Agent(t *testing.T) {
 	p := proposal{Type: "agent", Name: "my-agent", Line: "1. **Agent: `my-agent`** — Reviews code."}
 	raw := "---\nname: my-agent\ndescription: Reviews\ntools: Read, Bash\n---\n\nBody.\n"
 	got := ensureFrontmatter(raw, p)
-	if !strings.Contains(got, "tools: Read, Bash") {
+	if !strings.Contains(got, `tools: "Read, Bash"`) {
 		t.Error("expected tools preserved from LLM output")
 	}
 }
@@ -596,7 +597,7 @@ func TestEnsureFrontmatter_AgentDefaultTools(t *testing.T) {
 	p := proposal{Type: "agent", Name: "my-agent", Line: "1. **Agent: `my-agent`** — Reviews code."}
 	raw := "Just agent instructions without any frontmatter.\n"
 	got := ensureFrontmatter(raw, p)
-	if !strings.Contains(got, "tools: Read, Grep, Glob") {
+	if !strings.Contains(got, `tools: "Read, Grep, Glob"`) {
 		t.Error("expected default tools for agent without frontmatter")
 	}
 	if !strings.Contains(got, "Just agent instructions") {
@@ -1491,7 +1492,7 @@ func TestEnsureFrontmatter_WrappedInFence(t *testing.T) {
 	p := proposal{Type: "skill", Name: "my-skill", Line: "1. **Skill: `my-skill`** — Does things."}
 	raw := "```markdown\n---\nname: my-skill\ndescription: Does things\n---\n\nBody.\n```\n"
 	got := ensureFrontmatter(raw, p)
-	if !strings.HasPrefix(got, "---\nname: my-skill\n") {
+	if !strings.HasPrefix(got, "---\nname: \"my-skill\"\n") {
 		t.Errorf("expected correct frontmatter, got %q", got[:50])
 	}
 	if strings.Contains(got, "```") {
@@ -1503,7 +1504,7 @@ func TestEnsureFrontmatter_EmptyBody(t *testing.T) {
 	p := proposal{Type: "skill", Name: "test", Line: "1. **Skill: test** — A test."}
 	raw := "---\nname: test\ndescription: A test\n---\n"
 	got := ensureFrontmatter(raw, p)
-	if !strings.HasPrefix(got, "---\nname: test\n") {
+	if !strings.HasPrefix(got, "---\nname: \"test\"\n") {
 		t.Errorf("expected frontmatter, got %q", got)
 	}
 }
@@ -1772,5 +1773,65 @@ func TestDiscoverExistingAll_SearchesEveryVendorConfigDir(t *testing.T) {
 	}
 	if got := discoverExistingAgentsAll(dir); len(got) != len(names) {
 		t.Errorf("found %d agents %q, want one per vendor (%d)", len(got), got, len(names))
+	}
+}
+
+// frontmatterMap parses the YAML block that opens generated content.
+func frontmatterMap(t *testing.T, content string) map[string]any {
+	t.Helper()
+	rest, ok := strings.CutPrefix(content, "---\n")
+	if !ok {
+		t.Fatalf("no frontmatter in %q", content)
+	}
+	block, _, ok := strings.Cut(rest, "\n---")
+	if !ok {
+		t.Fatalf("unclosed frontmatter in %q", content)
+	}
+	var fm map[string]any
+	if err := yaml.Unmarshal([]byte(block), &fm); err != nil {
+		t.Fatalf("frontmatter does not parse: %v\n%s", err, block)
+	}
+	return fm
+}
+
+// TestEnsureFrontmatter_RoundTrips guards #770: a name or description taken
+// from an LLM proposal that holds YAML-significant text must survive as a
+// scalar, not break or reshape the frontmatter.
+func TestEnsureFrontmatter_RoundTrips(t *testing.T) {
+	descs := []string{
+		"Reviews pull requests: one at a time",
+		"Handles # comments and \"quotes\"",
+		"Starts with a [bracket], {brace} and - dash",
+		"true",
+		"Uses 'single' quotes\\and a backslash",
+	}
+	for _, typ := range []string{"skill", "agent"} {
+		for _, d := range descs {
+			p := proposal{Type: typ, Name: "my-" + typ, Line: "1. **x** \u2014 " + d}
+			want := extractDescription(p.Line)
+			got := ensureFrontmatter("Body.\n", p)
+			fm := frontmatterMap(t, got)
+			if fm["name"] != p.Name {
+				t.Errorf("%s name = %#v, want %q", typ, fm["name"], p.Name)
+			}
+			if fm["description"] != want {
+				t.Errorf("%s description = %#v, want %q", typ, fm["description"], want)
+			}
+			if typ == "agent" && fm["tools"] != "Read, Grep, Glob" {
+				t.Errorf("agent tools = %#v", fm["tools"])
+			}
+			if len(fm) != map[string]int{"skill": 2, "agent": 3}[typ] {
+				t.Errorf("%s frontmatter has unexpected keys: %v", typ, fm)
+			}
+		}
+	}
+}
+
+func TestEnsureFrontmatter_SalvagedToolsRoundTrip(t *testing.T) {
+	p := proposal{Type: "agent", Name: "a", Line: "1. **x** \u2014 Does things."}
+	raw := "---\nname: a\ntools: Read: Bash, \"Grep\"\n---\n\nBody.\n"
+	fm := frontmatterMap(t, ensureFrontmatter(raw, p))
+	if _, ok := fm["tools"].(string); !ok {
+		t.Errorf("tools did not round-trip as a string: %#v", fm["tools"])
 	}
 }
