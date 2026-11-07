@@ -207,7 +207,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh run` writes no OpenTelemetry on any vendor. Only `ynh agent run` does.
 - **Owner:** ynh.
 - **Evidence:** [Telemetry](telemetry.md).
-- **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0, for Claude Code. Codex, Cursor and OpenCode: none yet; [ynh #732](https://github.com/eyelock/ynh/issues/732) collects Copilot CLI's own telemetry under `ynh run` through the relay ([L19](#l19-vendor-telemetry-through-the-relay)) and does not make `ynh run` write its own.
+- **Tracking:** [ynh #673](https://github.com/eyelock/ynh/issues/673), v0.19.0, for Claude Code; [ynh #782](https://github.com/eyelock/ynh/issues/782) for Codex. Cursor and OpenCode: none yet, and their telemetry through the relay is [L19](#l19-vendor-telemetry-through-the-relay). [ynh #732](https://github.com/eyelock/ynh/issues/732) collects Copilot CLI's own telemetry under `ynh run` through the relay ([L19](#l19-vendor-telemetry-through-the-relay)) and does not make `ynh run` write its own.
 - **Workaround:** run the harness with `ynh agent run`.
 - **Detail:** [Telemetry](telemetry.md).
 

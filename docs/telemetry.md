@@ -6,12 +6,14 @@ can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
 It is the only ynh command that does. The commands that launch a vendor CLI
-(`ynh run` and the like) emit nothing, whatever the vendor, and what ynh does
-with its own process differs by vendor:
+(`ynh run` and the like) emit no ynh telemetry of their own, whatever the vendor
+(with the [relay](#vendor-telemetry-through-the-relay) on, a Copilot CLI `ynh run`
+does collect Copilot's own records), and what ynh does with its own process
+differs by vendor:
 
 - **Every vendor:** ynh stays the parent process while the vendor CLI runs as
   its child, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
-  It is running throughout, but these commands still emit no telemetry.
+  It is running throughout, but these commands still emit no telemetry of ynh's own.
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
@@ -310,7 +312,9 @@ over the network. Claude Code and Codex are collected under `ynh agent run`, Cop
 too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
-folder, beside ynh's own records and in the same trace.
+folder. Under `ynh agent run` that is beside ynh's own records and in the same
+trace; under `ynh run` ynh writes no records of its own, and Copilot CLI starts
+its own trace (see below).
 
 ### Turning it on
 
@@ -356,7 +360,7 @@ process group, and its stderr is kept in a small buffer that ynh shows only if
 the relay fails.
 
 The relay's standard input is a pipe that ynh holds open for the run and never
-writes to. No other process ynh starts, the worker included, holds it. With
+writes to. No other process ynh starts, the worker or the vendor CLI included, holds it. With
 `--exit-on-stdin-eof` the relay treats that pipe closing as it treats
 `SIGTERM`: it drains, flushes and exits. So when ynh ends by any means, a
 `kill -9` included, the kernel closes the pipe and the relay ends with it, on
@@ -364,7 +368,7 @@ Linux and macOS alike. This needs a `ynr` that has `--exit-on-stdin-eof`; an
 older one fails to start and the run carries on without it, with the note
 below.
 
-When the worker has exited, ynh closes the pipe and sends the relay `SIGTERM`
+When the worker (under `ynh run`, the vendor CLI child) has exited, ynh closes the pipe and sends the relay `SIGTERM`
 (either one stops it), so it drains the requests in flight, flushes and closes
 its spool file, and waits up to 10 seconds before killing it. The same happens
 when ynh itself is interrupted with `SIGINT` or `SIGTERM`, or a run ends in a
@@ -574,7 +578,9 @@ path, and no relay was left running. The relay is not yet started for Claude Cod
 
 OpenCode and Cursor cannot send their telemetry to the run's relay
 ([vendor parity, L19](vendor-parity.md#l19-vendor-telemetry-through-the-relay)). With the
-setting on, their runs start no relay and print one note.
+setting on, their runs start no relay and print one note. Under `ynh run`, Claude Code
+and Codex do the same, with the note "ynh does not configure claude's telemetry yet"
+(or the vendor's name).
 
 ## No content
 
