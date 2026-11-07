@@ -43,6 +43,16 @@ func (b *CopilotBackend) Start(ctx context.Context, opts StartOptions) (WorkerSe
 		opts:      opts,
 		sessionID: opts.ResumeToken,
 	}
+	// Running totals, as codex's: a fresh session starts at zero; a resumed
+	// one continues from what the checkpoint recorded, or, with no record,
+	// its first turn's share is unknown. See recordUsage.
+	switch {
+	case opts.ResumeToken == "":
+		sess.totalsKnown = true
+	case opts.UsageBase != nil:
+		sess.totals = *opts.UsageBase
+		sess.totalsKnown = true
+	}
 	if opts.IsolatedMCP {
 		sess.isolation, _ = workerMCPIsolation(&vendor.Copilot{}, opts.ConfigPath, workerEnvFor(opts.Env), opts.WorktreeDir, opts.Stderr)
 	}
@@ -60,6 +70,11 @@ type copilotSession struct {
 	// isolation turns off the operator's own MCP servers (IsolatedMCP),
 	// found once in Start and passed on every turn.
 	isolation []string
+	// totals are the session's running token totals as of the last turn, in
+	// Usage's meaning (input excludes cache); totalsKnown is false until they
+	// are known. See recordUsage.
+	totals      Usage
+	totalsKnown bool
 }
 
 // ResumeToken returns the Copilot session id once known: the one resumed, or
@@ -135,7 +150,41 @@ func (s *copilotSession) Next() (Turn, error) {
 	if run.turn.Content == "" {
 		return Turn{}, markCopilotAuth(exitedWorkerError("copilot", waitErr, tail))
 	}
+	s.recordUsage(&run.turn)
 	return run.turn, nil
+}
+
+// recordUsage turns the checkpoint's token details, which parseCopilotOutput
+// leaves as the session's running totals, into this turn's usage.
+//
+// ASSUMPTION, not verified live (ynw-blk3): the totals carry across
+// `--resume`, as codex's do, so turn 2 reports turns 1 and 2 together. This
+// takes the difference from the totals already counted, as the codex backend
+// does. A signed-in two-process probe settles it (the inbox bead blocking
+// ynw-blk3 has the commands). If instead the totals restart in a resumed
+// process, the difference is an undercount by the previous turn's share, never
+// a double count; a total that falls is the proof of a restart and is reported
+// as no usage, never a guess. An unknown base (resumed with no recorded usage)
+// also reports no usage for that turn.
+func (s *copilotSession) recordUsage(turn *Turn) {
+	if !turn.UsageReported {
+		return
+	}
+	cur := turn.Usage
+	prev, known := s.totals, s.totalsKnown
+	s.totals, s.totalsKnown = cur, true
+	d := Usage{
+		InputTokens:         cur.InputTokens - prev.InputTokens,
+		OutputTokens:        cur.OutputTokens - prev.OutputTokens,
+		CacheTokens:         cur.CacheTokens - prev.CacheTokens,
+		CacheCreationTokens: cur.CacheCreationTokens - prev.CacheCreationTokens,
+	}
+	if !known || d.InputTokens < 0 || d.OutputTokens < 0 || d.CacheTokens < 0 || d.CacheCreationTokens < 0 {
+		turn.UsageReported, turn.CacheReported, turn.CacheCreationReported = false, false, false
+		turn.Usage = Usage{}
+		return
+	}
+	turn.Usage = d
 }
 
 // copilotAuthMarkers are the words Copilot's stderr opens with when it has no
@@ -228,7 +277,8 @@ type copilotMessage struct {
 
 // copilotCheckpoint is a session.usage_checkpoint's data. Its accounting
 // snapshot holds the session's running totals, so the last checkpoint of the
-// process is the turn's usage.
+// process is the session's usage so far; the turn's share is the difference
+// from the previous turn's (recordUsage).
 type copilotCheckpoint struct {
 	AccountingSnapshot struct {
 		TokenDetails map[string]struct {
@@ -252,7 +302,7 @@ type copilotRun struct {
 //
 // Content is every non-empty assistant.message, joined with a blank line (a
 // tool call makes one message with no text and the answer comes in the next),
-// which is what the codex backend returns. Usage is the last usage
+// which is what the codex backend returns. Usage (before recordUsage) is the last usage
 // checkpoint's token details: input is what was not cached, beside cache_read
 // and cache_write, so none of them is counted inside another. Copilot reports
 // no cost in money, only premium requests, so no cost is reported; and no
