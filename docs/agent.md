@@ -29,7 +29,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile. `namespace:name` takes a focus of an included harness |
 | `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one). Repeatable: one unqualified value for the harness and one `namespace:name` per included harness (see [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses)) |
-| `--backend <name>` | Backend to drive: `claude`, `codex`, `cursor` or `opencode` (default: `claude`; on `--resume`, the session's own) |
+| `--backend <name>` | Backend to drive: `claude`, `codex`, `cursor`, `opencode` or `copilot` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
 | `--convergence-sensor <name>` | Sensor added to the convergence verifiers, consulted once all blocking sensors pass |
@@ -149,7 +149,7 @@ named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
 names them. A harness or profile that sets `mcp_isolation` runs its worker
 with only that composed set, the same as `ynh run`; `ynh agent run` has no
 `--isolated-mcp` flag, so isolation comes from the manifest alone. It is
-applied on the `claude`, `codex` and `opencode` backends (on `claude` its tools are
+applied on the `claude`, `codex`, `opencode` and `copilot` backends (on `claude` its tools are
 then named `<server>`); on `cursor`, which cannot isolate, ynh prints one
 `warning:` line on stderr and the worker loads your own servers too. The
 vendor is asked which servers it would load under the worker's environment,
@@ -229,7 +229,7 @@ not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
 
 `--sandbox srt` is honoured by the `claude` backend only. Requesting it with
-`codex`, `cursor` or `opencode` is an **error**, not a warning — a containment control that
+`codex`, `cursor`, `opencode` or `copilot` is an **error**, not a warning — a containment control that
 silently does not apply is worse than an absent one, because it gets relied
 upon. ynh does not provide isolation; it runs inside one you configured.
 
@@ -265,18 +265,21 @@ writes.
 
 `--auto-approve` grants more, for one run:
 
-| Level | Approves | claude | codex | cursor | opencode |
-|---|---|---|---|---|---|
-| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error | error |
-| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` | `--auto` |
+| Level | Approves | claude | codex | cursor | opencode | copilot |
+|---|---|---|---|---|---|---|
+| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error | error | error |
+| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` | `--auto` | `--allow-all-tools` |
 
 It exists for runs inside containment you own: a container, an egress policy,
 a diff gate, human review of what lands. Outside that, it hands an unattended
 agent your credentials.
 
-- **Levels are exact or refused.** codex, cursor and opencode have no mode that approves
+- **Levels are exact or refused.** codex, cursor, opencode and copilot have no mode that approves
   edits while still withholding commands, so `edits` is an error on them rather
-  than something wider. Any other backend, or an unknown level, fails before
+  than something wider. Copilot's nearest, `--allow-tool='write'`, approves file
+  writes and not shell commands, but also a shell command's output redirection
+  into a file (`cat a > b`), so it is wider than edits. A `.github/copilot/settings.json` sets
+  no permission mode for a `-p` run, so there is nothing for the project to override. Any other backend, or an unknown level, fails before
   the run starts.
 - **An `edits` worker cannot run commands**, so it cannot run `go build` or
   `go test` itself. The sensors run them between turns and feed the results
@@ -410,7 +413,7 @@ precedence and anything omitted comes from the checkpoint.
 The backend, task and focus cannot be changed on a resume, only repeated:
 
 - **Backend.** A resume drives the backend the run started on. The resume token
-  belongs to that backend (a codex thread id, a claude, cursor or opencode session id) and
+  belongs to that backend (a codex thread id, a claude, cursor, opencode or copilot session id) and
   means nothing to another, so `--backend` naming a different one is refused
   with exit 21. A checkpoint that records no backend predates recording it and
   resumes on `claude`.
@@ -616,6 +619,7 @@ What each backend reports today:
 | `claude` | yes | yes | yes | yes | yes |
 | `codex` | yes | yes | when its usage carries `cache_write_input_tokens` | no | no |
 | `cursor` | when its output carries usage | when its output carries usage | when its usage carries `cache_creation_input_tokens` | no | no |
+| `copilot` | when its output carries a usage checkpoint | same | same | no (it reports premium requests, not money) | no |
 
 Every backend reports the fields in the same meaning. `input_tokens` excludes
 cache reads and cache writes, `cache_read_tokens` is the cache reads,
@@ -714,11 +718,11 @@ The backends offer more levels than these (Claude Code's `xhigh` and `max`,
 Codex's `minimal`, `xhigh` and above), which ynh does not expose, so a level
 means the same thing whichever backend runs it.
 
-| ynh | `claude` | `codex` | `cursor` | `opencode` |
-|---|---|---|---|---|
-| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused | refused |
-| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused | refused |
-| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused | refused |
+| ynh | `claude` | `codex` | `copilot` | `cursor` | `opencode` |
+|---|---|---|---|---|---|
+| `low` | `--effort low` | `-c model_reasoning_effort="low"` | `--reasoning-effort low` | refused | refused |
+| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | `--reasoning-effort medium` | refused | refused |
+| `high` | `--effort high` | `-c model_reasoning_effort="high"` | `--reasoning-effort high` | refused | refused |
 
 Sources:
 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
