@@ -83,7 +83,8 @@ question up the way the parent can take it:
   interactive UIs of Codex, Copilot CLI and OpenCode. Cursor's CLI declines it without asking.
 - **Headless parent** (`claude -p`, `codex exec`, `copilot -p`, `opencode run`): there is no one to
   ask. The question is declined, and the delegate's tool says so, so the delegate goes on with its
-  own default or fails plainly. Headless delegate questions are a documented CANNOT.
+  own default or fails plainly. A headless parent cannot answer a delegate's question, on any
+  vendor, and the parity page will list that as a limit.
 
 A question asked while the parent is away waits in the delegation record until a parent comes back
 and collects it.
@@ -132,7 +133,7 @@ So a run dir becomes a **content-addressed snapshot** behind a stable link:
 6. Still under the assembly lock, the run deletes each snapshot that is neither current nor
    locked (it can take the lock exclusively without waiting).
 
-A baked image's pre-assembled run dir is used as it is, as now.
+A baked image's pre-assembled run dir is used as it is, as in v0.17.0.
 
 **Limit:** Codex and Cursor project symlinks point through the stable link, so they show the newest
 snapshot, not the session's. A session ynh launches reads its own snapshot through its working
@@ -151,8 +152,9 @@ folder. Anything reading the project's links reads the newest.
 - **A2A** ([v1.0](https://a2a-protocol.org/latest/specification/)) as a binding for remote
   delegates. Its task states map onto MCP Tasks, but it is HTTP-only, and no vendor CLI is known to
   be an A2A client.
-- **The layer-1 record** of every launch (v0.19.0) builds on the delegation record, so each
-  delegate session leaves its own record like any other ynh session.
+- **The layer-1 record** (v0.19.0, [ynh #746](https://github.com/eyelock/ynh/issues/746)): `ynh run`'s
+  own vendor-neutral record of every launch, written to the ynr spool. It builds on the delegation
+  record, so each delegate session leaves its own record like any other ynh session.
 - **Continuing a delegate's session** with a follow-up message, where the vendor can resume with a
   prompt.
 
