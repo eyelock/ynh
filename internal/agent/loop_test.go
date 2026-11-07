@@ -352,7 +352,7 @@ func TestValidateBackend(t *testing.T) {
 		}
 	})
 	t.Run("accepts canonical names", func(t *testing.T) {
-		for _, name := range []string{"claude", "codex", "cursor"} {
+		for _, name := range []string{"claude", "codex", "cursor", "opencode", "copilot"} {
 			got, err := validateBackend(name)
 			if err != nil || got != name {
 				t.Errorf("validateBackend(%q) = (%q, %v); want (%q, nil)", name, got, err, name)
