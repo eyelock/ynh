@@ -300,3 +300,65 @@ func TestCopilotSession_SignedOutIsAnAuthWorkerError(t *testing.T) {
 		t.Errorf("exit code = %d, want %d", exit.Code, ExitWorkerError)
 	}
 }
+
+func copilotUsageTurn(in, out, cacheRead, cacheWrite int64) Turn {
+	return Turn{
+		UsageReported: true, CacheReported: true, CacheCreationReported: true,
+		Usage: Usage{InputTokens: in, OutputTokens: out, CacheTokens: cacheRead, CacheCreationTokens: cacheWrite},
+	}
+}
+
+// The checkpoint is the session's running total (assumed to carry across
+// --resume, ynw-blk3), so each turn reports the difference from the last.
+func TestCopilotSession_RecordUsageSubtractsTheRunningTotal(t *testing.T) {
+	s := &copilotSession{totalsKnown: true}
+	first := copilotUsageTurn(100, 10, 1000, 0)
+	s.recordUsage(&first)
+	if want := (Usage{InputTokens: 100, OutputTokens: 10, CacheTokens: 1000}); first.Usage != want {
+		t.Errorf("first turn = %+v, want %+v", first.Usage, want)
+	}
+	second := copilotUsageTurn(150, 30, 1900, 5)
+	s.recordUsage(&second)
+	if want := (Usage{InputTokens: 50, OutputTokens: 20, CacheTokens: 900, CacheCreationTokens: 5}); second.Usage != want || !second.UsageReported {
+		t.Errorf("second turn = %+v (reported %v), want %+v", second.Usage, second.UsageReported, want)
+	}
+}
+
+// A resumed session with no recorded base cannot tell this turn from the
+// earlier ones, and a total that falls was not this session's: no usage, never
+// a guess. The totals still move on, so the next turn is counted.
+func TestCopilotSession_RecordUsageUnknownOrFallingReportsNone(t *testing.T) {
+	s := &copilotSession{}
+	turn := copilotUsageTurn(100, 10, 0, 0)
+	s.recordUsage(&turn)
+	if turn.UsageReported || turn.Usage != (Usage{}) {
+		t.Errorf("unknown base: turn = %+v", turn)
+	}
+	next := copilotUsageTurn(130, 15, 0, 0)
+	s.recordUsage(&next)
+	if want := (Usage{InputTokens: 30, OutputTokens: 5}); !next.UsageReported || next.Usage != want {
+		t.Errorf("after an unknown base: %+v, want %+v", next.Usage, want)
+	}
+	fell := copilotUsageTurn(20, 2, 0, 0)
+	s.recordUsage(&fell)
+	if fell.UsageReported {
+		t.Errorf("falling total reported usage: %+v", fell)
+	}
+}
+
+// A resumed run seeded with the usage the checkpoint recorded counts only
+// what comes after it.
+func TestCopilotBackend_StartSeedsTotalsFromUsageBase(t *testing.T) {
+	fakeVendor(t, "copilot", "", "", 0)
+	base := Usage{InputTokens: 100, OutputTokens: 10, CacheTokens: 1000}
+	sess, err := (&CopilotBackend{}).Start(context.Background(), StartOptions{ResumeToken: "abc", UsageBase: &base, WorktreeDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := sess.(*copilotSession)
+	turn := copilotUsageTurn(130, 15, 1200, 0)
+	cs.recordUsage(&turn)
+	if want := (Usage{InputTokens: 30, OutputTokens: 5, CacheTokens: 200}); turn.Usage != want {
+		t.Errorf("Usage = %+v, want %+v", turn.Usage, want)
+	}
+}
