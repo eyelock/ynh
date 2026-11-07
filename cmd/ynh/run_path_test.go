@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/runsnap"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // isolateRun points every ynh location at a temp dir and clears the env
@@ -72,6 +74,14 @@ func TestCmdRun_LocalPath(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// The snapshot store sits beside the stable link and is not a harness.
+			var dirs []os.DirEntry
+			for _, e := range entries {
+				if !runsnap.IsSnapshotsDir(e.Name()) {
+					dirs = append(dirs, e)
+				}
+			}
+			entries = dirs
 			if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "_inline-") {
 				t.Errorf("run dirs = %v, want one _inline-*", entries)
 			}
@@ -240,5 +250,239 @@ func TestCmdRun_NoTerminalRefusesSymlinkInstall(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(os.Getenv("YNH_HOME"), "symlinks.json")); !os.IsNotExist(statErr) {
 		t.Errorf("symlinks.json was written despite the refusal: %v", statErr)
+	}
+}
+
+// Each run seals its assembled tree as a snapshot behind the stable
+// <run>/<name> link: an unchanged rebuild reuses the snapshot, changed inputs
+// make a new one, and the earlier snapshot is left as it was (ynh #765).
+func TestCmdRun_SnapshotsReusedAndKept(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "my-dev")
+	writeSkillHarness(t, harnessDir, "my-dev")
+	t.Chdir(work)
+
+	snaps := func() []string {
+		var out []string
+		root := filepath.Join(os.Getenv("YNH_HOME"), "run", runsnap.SnapshotsDirName)
+		names, _ := os.ReadDir(root)
+		for _, n := range names {
+			hs, _ := os.ReadDir(filepath.Join(root, n.Name()))
+			for _, h := range hs {
+				out = append(out, filepath.Join(root, n.Name(), h.Name()))
+			}
+		}
+		return out
+	}
+	run := func() {
+		t.Helper()
+		if err := cmdRun([]string{harnessDir, "-v", "cursor", "--install"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run()
+	first := snaps()
+	if len(first) != 1 {
+		t.Fatalf("snapshots after first run = %v", first)
+	}
+	run()
+	if got := snaps(); len(got) != 1 || got[0] != first[0] {
+		t.Fatalf("unchanged rebuild made a new snapshot: %v, want %v", got, first)
+	}
+
+	skill := filepath.Join(harnessDir, "skills", "hello", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("---\nname: hello\ndescription: Changed.\n---\n\n# hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run()
+	if got := snaps(); len(got) != 2 {
+		t.Fatalf("changed input should add a snapshot: %v", got)
+	}
+	old, err := os.ReadFile(filepath.Join(first[0], ".cursor", "skills", "hello", "SKILL.md"))
+	if err != nil || !strings.Contains(string(old), "A trivial skill.") {
+		t.Fatalf("the first snapshot changed under a later run: %q %v", old, err)
+	}
+}
+
+// Cursor and Codex project symlinks are planted through the stable link
+// <run>/<name>, not at the snapshot's real path: a snapshot is never deleted,
+// so a link at a snapshot path would stay intact and show the first snapshot
+// for good. After an input changes, the next run shows the new content through
+// the project's own link (ynh #765).
+func TestCmdRun_ProjectSymlinksFollowTheStableLink(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "my-dev")
+	writeSkillHarness(t, harnessDir, "my-dev")
+	project := filepath.Join(work, "project")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+
+	run := func() {
+		t.Helper()
+		if err := cmdRun([]string{harnessDir, "-v", "cursor", "--install"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run()
+
+	projLink := filepath.Join(project, ".cursor", "skills", "hello")
+	target, err := os.Readlink(projLink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runRoot := filepath.Join(os.Getenv("YNH_HOME"), "run")
+	if strings.Contains(target, runsnap.SnapshotsDirName) {
+		t.Fatalf("project link points at a snapshot path: %s", target)
+	}
+	if !strings.HasPrefix(target, runRoot+string(filepath.Separator)) {
+		t.Fatalf("project link %s is not under the run dir %s", target, runRoot)
+	}
+
+	skill := filepath.Join(harnessDir, "skills", "hello", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("---\nname: hello\ndescription: Changed.\n---\n\n# hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run()
+	got, err := os.ReadFile(filepath.Join(projLink, "SKILL.md"))
+	if err != nil || !strings.Contains(string(got), "Changed.") {
+		t.Fatalf("the project link did not follow the newer snapshot: %q %v", got, err)
+	}
+}
+
+// An OpenCode workspace grant is a rule in the agent files, so it is part of
+// the snapshot's hash: a later run that was not granted the folder
+// (--no-workspace, or the grant withdrawn) gets a snapshot without the rule,
+// and the first run's snapshot keeps its own.
+func TestCmdRun_OpenCodeWorkspaceGrantDoesNotOutliveItsRun(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "oc")
+	if err := os.MkdirAll(filepath.Join(harnessDir, ".agents/harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(harnessDir, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"oc","version":"0.1.0","default_vendor":"opencode","workspace":["../shared"]}`
+	if err := os.WriteFile(filepath.Join(harnessDir, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agent := "---\ndescription: d\npermissions:\n  - action: \"*\"\n    resource: \"*\"\n    effect: deny\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(harnessDir, "agents", "a.md"), []byte(agent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shared := filepath.Join(work, "shared")
+	project := filepath.Join(work, "project")
+	for _, d := range []string{shared, project} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(project)
+	// A run from a path has no trust record, so the operator's allow-list
+	// grants the folder.
+	t.Setenv("YNH_WORKSPACE_ROOTS", work)
+
+	var launchedDirs []string
+	stubLaunch(t, func(runDir string, _ runArgs) error {
+		launchedDirs = append(launchedDirs, runDir)
+		return nil
+	})
+	agentIn := func(runDir string) string {
+		b, err := os.ReadFile(filepath.Join(runDir, ".opencode", "agents", "a.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	run := func(args ...string) string {
+		t.Helper()
+		before := len(launchedDirs)
+		if err := cmdRun(append([]string{harnessDir, "-v", "opencode"}, args...)); err != nil {
+			t.Fatal(err)
+		}
+		if len(launchedDirs) != before+1 {
+			t.Fatalf("launch ran %d times", len(launchedDirs)-before)
+		}
+		return launchedDirs[len(launchedDirs)-1]
+	}
+
+	granted := run()
+	if !strings.Contains(agentIn(granted), "external_directory") {
+		t.Fatalf("the first run was not granted the folder:\n%s", agentIn(granted))
+	}
+	// Same inputs: the granted snapshot is reused.
+	if again := run(); again != granted {
+		t.Errorf("an identical run made a new snapshot: %s vs %s", again, granted)
+	}
+	// --no-workspace: no snapshot with the rule.
+	denied := run("--no-workspace")
+	if denied == granted || strings.Contains(agentIn(denied), "external_directory") {
+		t.Fatalf("--no-workspace reused or carried the grant (%s):\n%s", denied, agentIn(denied))
+	}
+	// The grant withdrawn (nothing allows the folder): same.
+	t.Setenv("YNH_WORKSPACE_ROOTS", filepath.Join(work, "nowhere"))
+	withdrawn := run()
+	if strings.Contains(agentIn(withdrawn), "external_directory") {
+		t.Fatalf("a withdrawn grant survived into a reused snapshot:\n%s", agentIn(withdrawn))
+	}
+	// The first snapshot is untouched.
+	if !strings.Contains(agentIn(granted), "external_directory") {
+		t.Errorf("the granted snapshot lost its rule")
+	}
+}
+
+// Codex and Cursor start in a stable working folder whose entries link into
+// the newest snapshot, so the directory they key sessions and trust by does
+// not change when the harness does (ynh #765). Claude starts in the snapshot.
+func TestCmdRun_CodexAndCursorStartInAStableWorkDir(t *testing.T) {
+	for _, v := range []string{"codex", "cursor"} {
+		t.Run(v, func(t *testing.T) {
+			isolateRun(t)
+			work := t.TempDir()
+			harnessDir := filepath.Join(work, "my-dev")
+			writeSkillHarness(t, harnessDir, "my-dev")
+			t.Chdir(work)
+
+			var started []string
+			orig := launchSessionFn
+			launchSessionFn = func(_ vendor.Adapter, runDir, _ string, _ runArgs, _, _ string, _ []string, _ io.Writer) error {
+				started = append(started, runDir)
+				return nil
+			}
+			defer func() { launchSessionFn = orig }()
+
+			run := func() {
+				t.Helper()
+				if err := cmdRun([]string{harnessDir, "-v", v, "-p", "hi"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := cmdRun([]string{harnessDir, "-v", v, "--install"}); err != nil {
+				t.Fatal(err)
+			}
+			run()
+			skill := filepath.Join(harnessDir, "skills", "hello", "SKILL.md")
+			if err := os.WriteFile(skill, []byte("---\nname: hello\ndescription: Changed.\n---\n\n# hello\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			run()
+
+			if len(started) != 2 || started[0] != started[1] {
+				t.Fatalf("working folder changed between runs: %v", started)
+			}
+			if strings.Contains(started[0], runsnap.SnapshotsDirName+string(filepath.Separator)+"local") {
+				t.Errorf("started in a snapshot: %s", started[0])
+			}
+			got, err := os.ReadFile(filepath.Join(started[1], "."+v, "skills", "hello", "SKILL.md"))
+			if err != nil || !strings.Contains(string(got), "Changed.") {
+				t.Errorf("the working folder does not show the newest snapshot: %q %v", got, err)
+			}
+		})
 	}
 }

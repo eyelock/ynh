@@ -72,7 +72,8 @@ func (c *Codex) Clean(entries []SymlinkEntry) error {
 	return cleanSymlinks(entries)
 }
 
-// Every launch runs Codex in configPath, ynh's run directory, and registers
+// Every launch runs Codex in configPath (under `ynh run`, the harness's stable
+// working folder: runsnap.WorkDir) and registers
 // the harness's agents and delegates written there (CodexAgentArgs).
 
 func (c *Codex) LaunchInteractive(configPath string, extraArgs []string) error {
@@ -538,7 +539,9 @@ func launchCodex(configPath string, extraArgs []string) error {
 	}
 
 	// Launch as child process so ynh stays alive for signal handling.
-	// Use cmd.Dir instead of --cd for CWD control.
+	// Use cmd.Dir instead of --cd for CWD control. configPath is the stable
+	// working folder under `ynh run`, so Codex's cwd-keyed state survives a
+	// change of snapshot.
 	// The hooks ynh wrote run only when Codex trusts them; `ynh run` adds the
 	// overrides (CodexHookTrustArgs) to extraArgs when the harness is accepted.
 	cmd := exec.Command(codexBin, extraArgs...)
