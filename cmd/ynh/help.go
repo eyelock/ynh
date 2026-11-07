@@ -120,7 +120,8 @@ Flags:
                            Merged over config.json, the harness manifest and
                            YNH_LABELS; see docs/telemetry.md
   --telemetry-relay        Start ynr relay for the session and send the vendor's
-                           own telemetry to the spool (copilot). Also
+                           own telemetry to the spool (copilot,
+                           codex). Also
                            YNH_TELEMETRY_RELAY, or "telemetry_relay": true in
                            config.json
   --install                Install symlinks for the vendor in this project
