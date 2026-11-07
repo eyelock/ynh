@@ -24,10 +24,11 @@ func (d runDestination) SpoolDir() string                   { return d.dir }
 // vendor at it through ynh's own environment, which the vendor child inherits.
 // The conditions and the notes are those of `ynh agent run`
 // (docs/telemetry.md). It returns the function that stops the relay, safe to
-// defer and to call when no relay started.
-func startRunRelay(backend string, flag bool, stderr io.Writer) func() {
+// defer and to call when no relay started, and the vendor arguments that
+// point a vendor configured on its command line (Codex) at the relay.
+func startRunRelay(backend string, flag bool, stderr io.Writer) (func(), []string) {
 	if !telemetryRelaySetting(flag, stderr) {
-		return func() {}
+		return func() {}, nil
 	}
 	dest, dir := telemetry.ChooseDestination()
 	r := &runRelay{
@@ -37,7 +38,7 @@ func startRunRelay(backend string, flag bool, stderr io.Writer) func() {
 	}
 	endpoint := r.endpoint(backend)
 	if endpoint == "" {
-		return func() {}
+		return func() {}, nil
 	}
 	for _, name := range agent.RunRelayUnset(backend) {
 		_ = os.Unsetenv(name)
@@ -45,5 +46,5 @@ func startRunRelay(backend string, flag bool, stderr io.Writer) func() {
 	for _, kv := range agent.RunRelayEnv(backend, endpoint) {
 		_ = os.Setenv(kv[0], kv[1])
 	}
-	return r.stop
+	return r.stop, agent.RunRelayArgs(backend, endpoint)
 }
