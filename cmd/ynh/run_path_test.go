@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/runsnap"
 )
 
 // isolateRun points every ynh location at a temp dir and clears the env
@@ -72,6 +73,14 @@ func TestCmdRun_LocalPath(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// The snapshot store sits beside the stable link and is not a harness.
+			var dirs []os.DirEntry
+			for _, e := range entries {
+				if !runsnap.IsSnapshotsDir(e.Name()) {
+					dirs = append(dirs, e)
+				}
+			}
+			entries = dirs
 			if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "_inline-") {
 				t.Errorf("run dirs = %v, want one _inline-*", entries)
 			}
@@ -240,5 +249,58 @@ func TestCmdRun_NoTerminalRefusesSymlinkInstall(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(os.Getenv("YNH_HOME"), "symlinks.json")); !os.IsNotExist(statErr) {
 		t.Errorf("symlinks.json was written despite the refusal: %v", statErr)
+	}
+}
+
+// Each run seals its assembled tree as a snapshot behind the stable
+// <run>/<name> link: an unchanged rebuild reuses the snapshot, changed inputs
+// make a new one, and the earlier snapshot is left as it was (ynh #765).
+func TestCmdRun_SnapshotsReusedAndKept(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "my-dev")
+	writeSkillHarness(t, harnessDir, "my-dev")
+	t.Chdir(work)
+
+	snaps := func() []string {
+		var out []string
+		root := filepath.Join(os.Getenv("YNH_HOME"), "run", runsnap.SnapshotsDirName)
+		names, _ := os.ReadDir(root)
+		for _, n := range names {
+			hs, _ := os.ReadDir(filepath.Join(root, n.Name()))
+			for _, h := range hs {
+				out = append(out, filepath.Join(root, n.Name(), h.Name()))
+			}
+		}
+		return out
+	}
+	run := func() {
+		t.Helper()
+		if err := cmdRun([]string{harnessDir, "-v", "cursor", "--install"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run()
+	first := snaps()
+	if len(first) != 1 {
+		t.Fatalf("snapshots after first run = %v", first)
+	}
+	run()
+	if got := snaps(); len(got) != 1 || got[0] != first[0] {
+		t.Fatalf("unchanged rebuild made a new snapshot: %v, want %v", got, first)
+	}
+
+	skill := filepath.Join(harnessDir, "skills", "hello", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("---\nname: hello\ndescription: Changed.\n---\n\n# hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run()
+	if got := snaps(); len(got) != 2 {
+		t.Fatalf("changed input should add a snapshot: %v", got)
+	}
+	old, err := os.ReadFile(filepath.Join(first[0], ".cursor", "skills", "hello", "SKILL.md"))
+	if err != nil || !strings.Contains(string(old), "A trivial skill.") {
+		t.Fatalf("the first snapshot changed under a later run: %q %v", old, err)
 	}
 }

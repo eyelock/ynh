@@ -21,6 +21,7 @@ import (
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/runsnap"
 	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -267,7 +268,7 @@ func cmdRun(args []string) error {
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
 	}
-	runDir := filepath.Join(config.RunDir(), runDirName)
+	var runDir string // the snapshot, or a baked image's vendor dir
 	// Held from the clean of the run dir to the last read or write of it
 	// before the vendor takes over (see the launch below); a no-op for a baked
 	// image.
@@ -288,6 +289,21 @@ func cmdRun(args []string) error {
 		}
 		unlockRun = unlock
 		defer unlockRun()
+		// Assemble into a staging folder; the tree is sealed as a
+		// content-addressed snapshot below and runDir then names it. A
+		// session already running on an earlier snapshot never sees this
+		// run's writes (ynh #765).
+		stagingDir, err := runsnap.Stage(config.RunDir(), runDirName)
+		if err != nil {
+			return fmt.Errorf("assembling config: %w", err)
+		}
+		sealed := false
+		defer func() {
+			if !sealed {
+				_ = os.RemoveAll(stagingDir)
+			}
+		}()
+		runDir = stagingDir
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 			return fmt.Errorf("assembling config: %w", err)
 		}
@@ -396,6 +412,21 @@ func cmdRun(args []string) error {
 				}
 			}
 		}
+
+		// Seal the staged tree as a snapshot (or reuse the identical one) and
+		// swap <run>/<name> to it. From here every use of the run dir is the
+		// snapshot's real path. The shared lock on the snapshot is held until
+		// this function returns; a launch that replaces the process drops it
+		// at the exec (holding it for the child's life is a later slice).
+		snap, err := runsnap.Seal(config.RunDir(), runDirName, stagingDir, func(hash string) string {
+			return filepath.Join(config.CacheDir(), "run-locks", runDirName, hash+".lock")
+		})
+		if err != nil {
+			return fmt.Errorf("sealing run snapshot: %w", err)
+		}
+		sealed = true
+		defer snap.Release()
+		runDir = snap.Dir
 
 		// Keep the legacy bare-name run path resolving for project symlinks
 		// planted before run dirs were keyed by canonical id.
