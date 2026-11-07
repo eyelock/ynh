@@ -308,7 +308,7 @@ rm -rf /tmp/ynh-tutorial
 - `instructions.md` becomes vendor-specific project instructions
 - `ynh install` copies the harness and generates a launcher script
 - The launcher is a shell script that calls `ynh run`
-- `ynh run` assembles artifacts into `~/.ynh/run/<id>/` (the canonical id with `/` as `--`, e.g. `local--my-harness`) and launches the vendor CLI
+- `ynh run` assembles artifacts into a snapshot under `~/.ynh/run/.snapshots/` and launches the vendor CLI from it. `~/.ynh/run/<id>` (the canonical id with `/` as `--`, e.g. `local--my-harness`) is a symlink to the newest snapshot; snapshots are kept, not deleted, until a later release adds pruning
 
 ## Next
 

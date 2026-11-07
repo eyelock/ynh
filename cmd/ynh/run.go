@@ -252,10 +252,9 @@ func cmdRun(args []string) error {
 	}
 	content = append(content, localContent)
 
-	// Assemble vendor config into deterministic run dir.
-	// We use a stable path instead of a temp dir because the vendor session
-	// reads its run dir for as long as it lives, and a later launch of the same
-	// harness must find it again.
+	// Assemble vendor config into a run snapshot behind a stable link, not a
+	// temp dir: the config outlives this process for project symlinks and
+	// resumed sessions, and snapshots are kept for later runs to reuse.
 	//
 	// Run-dir naming uses the canonical id's fs name ("local/foo" →
 	// "local--foo") so same-named installs with distinct canonical ids get
@@ -269,17 +268,37 @@ func cmdRun(args []string) error {
 		runDirName = "_inline-" + h[:8]
 	}
 	var runDir string // the snapshot, or a baked image's vendor dir
+	// The stable path of the run dir: the link <run>/<name> that always
+	// resolves to the newest snapshot. Project symlinks are planted through
+	// it, so a project shows the newest snapshot, not the first one it met.
+	// For a baked image it is the image's own dir.
+	linkDir := ""
 	// Held from the clean of the run dir to the last read or write of it
 	// before the vendor takes over (see the launch below); a no-op for a baked
 	// image.
 	unlockRun := func() {}
 	instructionsApplied := false
+	// The workspace folders granted for this launch, decided once. OpenCode
+	// reads the grant from rules in its agent files, so on a host assembly
+	// it is decided and written before the seal (see below).
+	var wsGranted []string
+	wsDecided := false
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
+	decideWorkspace := func() error {
+		if wsDecided {
+			return nil
+		}
+		wsDecided = true
+		g, err := workspaceGrantFor(loaded, harnessID, adapter.Name(), preassembled, ra.NoWorkspace, os.Stderr)
+		wsGranted = g
+		return err
+	}
 	if preassembled {
 		// Pre-assembled layout (baked harness image) — use directly.
 		// Skip AssembleTo, delegate allow-list check, AND AssembleDelegates —
 		// everything was vetted and assembled at image build time.
 		runDir = preassembledDir
+		linkDir = preassembledDir
 	} else {
 		// Normal host flow — assemble now. Assembly of one run dir is
 		// serialised across ynh processes: parallel runs of one harness
@@ -428,11 +447,27 @@ func cmdRun(args []string) error {
 			instructionsApplied = true
 		}
 
+		// OpenCode's workspace grant is a rule appended to each agent file,
+		// so it is written into the tree before the seal, like the per-run
+		// instructions: it is part of the hash, and a later run that was not
+		// granted the folder (--no-workspace, a withdrawn grant) hashes to a
+		// different snapshot instead of reusing this one with the rule in it.
+		if action != "install" && action != "clean" && adapter.Name() == "opencode" {
+			if err := decideWorkspace(); err != nil {
+				return err
+			}
+			if len(wsGranted) > 0 {
+				if err := vendor.GrantOpenCodeWorkspace(runDir, wsGranted); err != nil {
+					return err
+				}
+			}
+		}
+
 		// Seal the staged tree as a snapshot (or reuse the identical one) and
-		// swap <run>/<name> to it. From here every use of the run dir is the
-		// snapshot's real path. The shared lock on the snapshot is held until
-		// this function returns; a launch that replaces the process drops it
-		// at the exec (holding it for the child's life is a later slice).
+		// swap <run>/<name> to it. From here the run dir is the snapshot's
+		// real path. ynh stays the parent of the vendor process, so the
+		// deferred Release holds the shared lock on the snapshot for the
+		// child's whole life, and the snapshot is never deleted under it.
 		snap, err := runsnap.Seal(config.RunDir(), runDirName, stagingDir, func(hash string) string {
 			return filepath.Join(config.CacheDir(), "run-locks", runDirName, hash+".lock")
 		})
@@ -442,6 +477,7 @@ func cmdRun(args []string) error {
 		sealed = true
 		defer snap.Release()
 		runDir = snap.Dir
+		linkDir = filepath.Join(config.RunDir(), runDirName)
 
 		// Keep the legacy bare-name run path resolving for project symlinks
 		// planted before run dirs were keyed by canonical id.
@@ -467,7 +503,7 @@ func cmdRun(args []string) error {
 			fmt.Printf("%s uses native plugin loading - no symlink installation needed.\n", adapter.Name())
 			return nil
 		}
-		return cmdInstallVendor(adapter, runDir, p.Name)
+		return cmdInstallVendor(adapter, linkDir, p.Name)
 	case "clean":
 		if !adapter.NeedsSymlinks() {
 			fmt.Printf("%s uses native plugin loading - no symlinks to clean.\n", adapter.Name())
@@ -493,7 +529,7 @@ func cmdRun(args []string) error {
 				inst = nil
 			}
 			if inst == nil {
-				planned, err := vendor.PlanSymlinks(runDir, projectDir, adapter.ConfigDir(), adapter.ArtifactDirs())
+				planned, err := vendor.PlanSymlinks(linkDir, projectDir, adapter.ConfigDir(), adapter.ArtifactDirs())
 				if err != nil {
 					return err
 				}
@@ -512,7 +548,7 @@ func cmdRun(args []string) error {
 					answer, _ := reader.ReadString('\n')
 					answer = strings.TrimSpace(strings.ToLower(answer))
 					if answer == "" || answer == "y" || answer == "yes" {
-						if err := cmdInstallVendor(adapter, runDir, p.Name); err != nil {
+						if err := cmdInstallVendor(adapter, linkDir, p.Name); err != nil {
 							return err
 						}
 					}
@@ -535,7 +571,10 @@ func cmdRun(args []string) error {
 
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
-		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), runDir, preassembled, ra.NoWorkspace, os.Stderr)
+		if wsErr := decideWorkspace(); wsErr != nil {
+			return wsErr
+		}
+		wsArgs, _, wsErr := vendor.WorkspaceArgs(adapter.Name(), wsGranted)
 		if wsErr != nil {
 			return wsErr
 		}
@@ -550,9 +589,10 @@ func cmdRun(args []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch still reads the run dir (Copilot's projection, OpenCode's
-		// workspace grant and AGENTS.md compose), so the lock is held through
-		// those reads. Every vendor then runs as a child of ynh: the lock is
-		// released as the child starts rather than held for the whole session.
+		// AGENTS.md compose), so the assembly lock is held through those reads.
+		// Every vendor then runs as a child of ynh: the assembly lock is
+		// released as the child starts, and the deferred snap.Release holds the
+		// shared lock on the snapshot until the child has exited.
 		removeHook := vendor.OnChildStart(unlockRun)
 		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
