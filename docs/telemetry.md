@@ -9,11 +9,9 @@ It is the only ynh command that does. The commands that launch a vendor CLI
 (`ynh run` and the like) emit nothing, whatever the vendor, and what ynh does
 with its own process differs by vendor:
 
-- **Claude, Copilot and OpenCode:** ynh replaces itself with the vendor CLI
-  (`syscall.Exec`). No ynh process is left, so there is nothing to report from.
-- **Codex and Cursor:** ynh stays the parent process while the vendor CLI runs
-  as its child, forwards signals, and exits with the child's exit code. It is
-  running throughout, but these commands still emit no telemetry.
+- **Every vendor:** ynh stays the parent process while the vendor CLI runs as
+  its child, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
+  It is running throughout, but these commands still emit no telemetry.
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and

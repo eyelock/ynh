@@ -452,8 +452,8 @@ followed by "Unregistering foreground session". Whatever the original
 invocation carried, including an `-i` initial prompt, is lost with that
 session; the CLI comes back up as a fresh, idle interactive session.
 
-Since `launchCopilot` replaces the ynh process via `syscall.Exec`, there is no
-process left to retry after such a mid-launch restart. `buildCopilotArgs`
+`launchCopilot` starts the CLI once with the arguments it was given and does
+not retry after such a mid-launch restart. `buildCopilotArgs`
 always passes `--no-auto-update` to prevent the update from happening during
 an `ynh run` launch at all. Users still get updates via their own `copilot
 update` / the CLI's normal update flow outside of an ynh-launched session.
@@ -466,7 +466,7 @@ update` / the CLI's normal update flow outside of an ynh-launched session.
 - Config dir: **no single project dotfolder** — spread across `.github/*`
   subpaths plus root files. User home is `~/.copilot/` (override: `COPILOT_HOME`)
 - Plugin loading: `--plugin-dir <directory>` (repeatable), same pattern as Claude
-- Interactive: `syscall.Exec`, `NeedsSymlinks() == false`
+- Interactive: child process (`execVendor`), `NeedsSymlinks() == false`
 - Non-interactive: `-p, --prompt <text>` — **requires `--allow-all-tools`** or
   the run hangs on a permission prompt with no TTY
 - Initial prompt into interactive: `-i, --interactive <prompt>`

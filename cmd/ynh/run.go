@@ -252,8 +252,9 @@ func cmdRun(args []string) error {
 	content = append(content, localContent)
 
 	// Assemble vendor config into deterministic run dir.
-	// We use a stable path instead of a temp dir because syscall.Exec
-	// replaces this process — deferred cleanup would never run.
+	// We use a stable path instead of a temp dir because the vendor session
+	// reads its run dir for as long as it lives, and a later launch of the same
+	// harness must find it again.
 	//
 	// Run-dir naming uses the canonical id's fs name ("local/foo" →
 	// "local--foo") so same-named installs with distinct canonical ids get

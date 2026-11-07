@@ -12,7 +12,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/mcpexec"
@@ -108,8 +107,8 @@ func (c *Claude) SupportsResume() bool { return true }
 // ~/.claude/projects/<slugified-cwd>/, so the newest file's stem is the id
 // `--resume` wants.
 //
-// This lookup is only correct because Claude is launched via syscall.Exec and
-// therefore inherits ynh's cwd — the project directory. (Codex and Cursor set
+// This lookup is only correct because Claude is launched as a child of ynh
+// without a cmd.Dir and therefore inherits ynh's cwd — the project directory. (Codex and Cursor set
 // cmd.Dir to the run dir, so a cwd-keyed lookup would be meaningless for them.)
 func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	home, err := vendorHomeDir()
@@ -821,7 +820,7 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
-	return syscall.Exec(claudeBin, args, append(env, extra...))
+	return execVendor(claudeBin, args, append(env, extra...))
 }
 
 // Workspace folders: the flag that grants a directory beside the project

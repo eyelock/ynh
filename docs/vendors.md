@@ -28,13 +28,26 @@ Each vendor gets the strategy that matches its capabilities:
 
 | Vendor | Launch | Artifacts | Process |
 |--------|--------|-----------|---------|
-| **Claude** | `syscall.Exec` with `--plugin-dir` | Native plugin loading | Clean handoff (ynh exits) |
-| **Codex** | Child process with `cmd.Dir` | Symlinks into project | Managed (signal forwarding) |
-| **Cursor** | Child process with `cmd.Dir` | Symlinks into project | Managed (signal forwarding) |
-| **Copilot** | `syscall.Exec` with `--plugin-dir` | Native plugin loading | Clean handoff (ynh exits) |
-| **OpenCode** | `syscall.Exec` of `opencode --standalone` with `OPENCODE_CONFIG_DIR` | Native config-directory loading | Clean handoff (ynh exits) |
+| **Claude** | Child process with `--plugin-dir` | Native plugin loading | Supervised |
+| **Codex** | Child process with `cmd.Dir` | Symlinks into project | Supervised |
+| **Cursor** | Child process with `cmd.Dir` | Symlinks into project | Supervised |
+| **Copilot** | Child process with `--plugin-dir` | Native plugin loading | Supervised |
+| **OpenCode** | Child process of `opencode --standalone` with `OPENCODE_CONFIG_DIR` | Native config-directory loading | Supervised |
 
-Claude and Copilot support `--plugin-dir` natively, and OpenCode loads a whole config directory named by `OPENCODE_CONFIG_DIR`, so ynh can exec directly into all three. Codex and Cursor don't have plugin loading, so ynh installs symlinks and manages the child process for signal forwarding.
+Claude and Copilot support `--plugin-dir` natively, and OpenCode loads a whole config directory named by `OPENCODE_CONFIG_DIR`, so ynh needs no symlinks for all three. Codex and Cursor don't have plugin loading, so ynh installs symlinks.
+
+### Supervision
+
+Every vendor CLI is a child of `ynh run`, and ynh stays alive as its parent for the whole session, with or without telemetry. There is no opt-in flag, and ynh has no zero-runtime mode. The child keeps ynh's terminal, working directory and environment, so the session looks the same from inside.
+
+| Event | What ynh does |
+|-------|---------------|
+| The CLI exits | ynh exits with the same code (0, 1 and 255 are passed through exactly). A CLI ended by a signal gives `128` plus the signal number, as a shell reports it. |
+| Ctrl-C (SIGINT) | Nothing. The terminal delivers it to the CLI, and ynh stays alive until the CLI exits. ynh does not forward it (the CLI would see it twice) and does not set it to ignored (the CLI would inherit that). |
+| SIGTERM or SIGHUP sent to ynh | Forwarded to the CLI. |
+| ynh is killed (SIGKILL) or crashes | The CLI is ended, so no vendor CLI is left running without its parent. On Linux the kernel does it (parent-death signal). On macOS a small detached watchdog shell does it within about three seconds; if the watchdog cannot start, the CLI runs unwatched. |
+
+A process that looked at the vendor's parent and found the shell now finds ynh.
 
 ### Symlink Installation (Codex/Cursor)
 

@@ -24,10 +24,11 @@ skill owns the per-vendor references this skill asks you to write.
    `make check-vendor-parity` (check A) fails until the row exists.
 4. Decide the **launch strategy** up front. It drives most other decisions:
    - **Native bundle loading by flag** (Claude, Copilot: `--plugin-dir`):
-     `syscall.Exec`, no symlinks, `NeedsSymlinks() == false`.
+     launched as a child process (`execVendor`), no symlinks,
+     `NeedsSymlinks() == false`. Every vendor is a child of ynh; none is exec'd.
    - **Native bundle loading by environment variable** (a CLI that takes a
-     config file or config directory from an env var): also `syscall.Exec`
-     with the variable added to the environment, no symlinks. Confirm by hand
+     config file or config directory from an env var): also a child
+     process (`execVendor`) with the variable added to the environment, no symlinks. Confirm by hand
      which artifact types the vendor actually reads from that location; docs
      often list fewer than the loader takes, or more.
    - **No native bundle loading** (Codex, Cursor): symlink install into the
