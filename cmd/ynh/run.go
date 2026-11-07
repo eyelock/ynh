@@ -501,6 +501,10 @@ func cmdRun(args []string) error {
 		if launch.Bare {
 			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)
 		}
+		// The vendor's own telemetry, through a relay that lives as long as
+		// the session (the child ynh supervises).
+		defer startRunRelay(adapter.Name(), ra.Relay, os.Stderr)()
+
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch still reads the run dir (Copilot's projection, OpenCode's
 		// workspace grant and AGENTS.md compose), so the lock is held through
@@ -909,6 +913,7 @@ type runArgs struct {
 	ResumeID     string   // --resume=<id>: continue one specific session
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
+	Relay        bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
 }
 
 // ynhValueFlags are ynh's own run flags that take the next argument as their
@@ -993,6 +998,8 @@ func parseRunArgs(args []string) runArgs {
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
 		case flagArgs[i] == "--no-workspace":
 			ra.NoWorkspace = true
+		case flagArgs[i] == "--telemetry-relay":
+			ra.Relay = true
 		case flagArgs[i] == "--label" && i+1 < len(flagArgs):
 			ra.Labels = append(ra.Labels, flagArgs[i+1])
 			i++
