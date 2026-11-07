@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -155,7 +156,7 @@ func TestDelegate_Update(t *testing.T) {
 	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/fork-source")
 
 	agent := assembledDelegateAgent(t, s, "fork-source")
-	if !strings.Contains(agent, "description: "+updated) {
+	if !strings.Contains(agent, "description: "+strconv.Quote(updated)) {
 		t.Errorf("delegate agent was not assembled from the updated commit %s:\n%s", next, agent)
 	}
 }
