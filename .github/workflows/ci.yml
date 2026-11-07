@@ -60,6 +60,13 @@ jobs:
               - 'telemetry/**'
               # .ynr/ — the ynr conformance scenarios the Conformance job runs.
               - '.ynr/**'
+              # scripts/ — Go tests run scripts from it (internal/vendor's
+              #              TestHookEventParityScript runs hook-event-parity.sh),
+              #              so a scripts-only PR must run Test.
+              - 'scripts/**'
+              # .golangci.yml — the Lint job's config; a change to it alters
+              #              what Lint accepts.
+              - '.golangci.yml'
             # ynh's telemetry registry, an OpenTelemetry Weaver registry
             # (ynr ADR-007), which Weaver itself checks.
             registry:
