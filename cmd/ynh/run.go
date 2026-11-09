@@ -593,7 +593,9 @@ func cmdRun(args []string) error {
 		}
 		// The vendor's own telemetry, through a relay that lives as long as
 		// the session (the child ynh supervises).
-		defer startRunRelay(adapter.Name(), ra.Relay, os.Stderr)()
+		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, os.Stderr)
+		defer stopRelay()
+		vendorArgs = append(relayArgs, vendorArgs...)
 
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch still reads the run dir (Copilot's projection, OpenCode's

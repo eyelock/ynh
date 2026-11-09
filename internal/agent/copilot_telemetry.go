@@ -2,10 +2,21 @@ package agent
 
 // SupportsRunRelay reports whether ynh points backend's own telemetry at a
 // relay under `ynh run`, where the vendor CLI is a child of ynh and the relay
-// lives as long as the session. Copilot CLI only: Claude Code and Codex are
+// lives as long as the session. Copilot CLI and Codex: Claude Code is
 // configured for `ynh agent run` (SupportsTelemetryRelay) and not yet here.
 func SupportsRunRelay(backend string) bool {
-	return backend == "copilot"
+	return backend == "copilot" || backend == "codex"
+}
+
+// RunRelayArgs is what `ynh run` adds to the vendor's command line to send
+// backend's telemetry to the relay at endpoint. Codex takes its settings as
+// -c overrides, not from the environment; they are the ones `ynh agent run`
+// gives it (codexTelemetryArgs), content and logs off. Others take none.
+func RunRelayArgs(backend, endpoint string) []string {
+	if backend != "codex" {
+		return nil
+	}
+	return codexTelemetryArgs(endpoint)
 }
 
 // RunRelayEnv is what `ynh run` adds to its own environment, which the vendor
