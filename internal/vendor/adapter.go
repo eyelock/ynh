@@ -47,6 +47,16 @@ var ErrNoResumableSession = errors.New("no resumable session found")
 // so callers should resume with an empty id rather than launching cold.
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
 
+// LaunchPreparer is an optional capability for vendors that write files into
+// the run dir to start (OpenCode's composed AGENTS.md and the output of its
+// on_session_start hooks). `ynh run` calls PrepareLaunch on the staged tree
+// before the snapshot is sealed, so those files are part of the snapshot's hash
+// and a Launch* method only reads the run dir: a snapshot is never written to
+// once a session may be running on it (ynh #765).
+type LaunchPreparer interface {
+	PrepareLaunch(runDir string) error
+}
+
 // MCPToolApprover is an optional capability for vendors that refuse an MCP
 // tool call on a one-shot run or an agent worker turn until the tool is approved (Codex: "MCP tool
 // call requires approval, but approval policy is never"). ApproveMCPTools

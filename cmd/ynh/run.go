@@ -299,6 +299,13 @@ func cmdRun(args []string) error {
 		// everything was vetted and assembled at image build time.
 		runDir = preassembledDir
 		linkDir = preassembledDir
+		// Not a snapshot: nothing else shares it, and the vendor still needs
+		// its launch-time files.
+		if prep, ok := adapter.(vendor.LaunchPreparer); ok {
+			if err := prep.PrepareLaunch(runDir); err != nil {
+				return fmt.Errorf("preparing launch: %w", err)
+			}
+		}
 	} else {
 		// Normal host flow — assemble now. Assembly of one run dir is
 		// serialised across ynh processes: parallel runs of one harness
@@ -463,6 +470,15 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// Files a vendor writes at launch (OpenCode's session-start context
+		// and composed AGENTS.md) go in before the seal too, so a launch only
+		// reads the run dir.
+		if prep, ok := adapter.(vendor.LaunchPreparer); ok {
+			if err := prep.PrepareLaunch(runDir); err != nil {
+				return fmt.Errorf("preparing launch: %w", err)
+			}
+		}
+
 		// Seal the staged tree as a snapshot (or reuse the identical one) and
 		// swap <run>/<name> to it. From here the run dir is the snapshot's
 		// real path. ynh stays the parent of the vendor process, so the
@@ -598,11 +614,16 @@ func cmdRun(args []string) error {
 		vendorArgs = append(relayArgs, vendorArgs...)
 
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		// The launch still reads the run dir (Copilot's projection, OpenCode's
-		// AGENTS.md compose), so the assembly lock is held through those reads.
-		// Every vendor then runs as a child of ynh: the assembly lock is
-		// released as the child starts, and the deferred snap.Release holds the
-		// shared lock on the snapshot until the child has exited.
+		// The launch only reads the run dir: every file a vendor writes at
+		// launch went in before the seal (PrepareLaunch), and Copilot projects
+		// its instructions into the project, not the run dir. What it still
+		// reads (Codex's MCP environment, Claude's session-end environment,
+		// Copilot's instructions) is the sealed snapshot, which the snapshot's
+		// shared lock protects, so those reads do not need the assembly lock.
+		// It is nonetheless held up to the child's start, where the hook below
+		// releases it. Every vendor runs as a child of ynh, and the deferred
+		// snap.Release holds the shared lock on the snapshot until the child
+		// has exited.
 		removeHook := vendor.OnChildStart(unlockRun)
 		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)

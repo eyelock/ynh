@@ -587,3 +587,35 @@ func TestWarnLegacyProjectMCP(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildCopilotArgsWritesNothingToRunDir: Copilot's launch projects the
+// instructions into the project folder, never into the run dir, which is a
+// sealed snapshot by then (ynh #765).
+func TestBuildCopilotArgsWritesNothingToRunDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through read-only folders")
+	}
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, ".copilot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("base"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, ".copilot", ".mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := treeDigest(t, cfg)
+	sealRunDir(t, cfg)
+	project := t.TempDir()
+	t.Chdir(project)
+	if _, err := buildCopilotArgs(cfg, "go", nil); err != nil {
+		t.Fatalf("launch arguments on a read-only run dir: %v", err)
+	}
+	if after := treeDigest(t, cfg); after != before {
+		t.Errorf("the launch changed the run dir:\nbefore %s\nafter  %s", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(project, copilotInstructionsRelPath)); err != nil {
+		t.Errorf("instructions not projected into the project: %v", err)
+	}
+}
