@@ -128,14 +128,16 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 		}()
 	}
 	for i := range 60 {
-		s := build(t, root, "h", map[string]string{"f": "v" + string(rune('a'+i%26)) + string(rune('A'+i/26))})
-		s.Release()
+		// Each snapshot stays held until the test ends: this test is about the
+		// link swap, and a reader resolving the link is not a session, so it
+		// holds no lock and an unheld old snapshot may be pruned under it.
+		build(t, root, "h", map[string]string{"f": "v" + string(rune('a'+i%26)) + string(rune('A'+i/26))})
 	}
 	close(stop)
 	wg.Wait()
 }
 
-func TestSharedLockHeldAndNeverDeleted(t *testing.T) {
+func TestSharedLockHeld(t *testing.T) {
 	root := t.TempDir()
 	a := build(t, root, "h", map[string]string{"f": "v1"})
 	f, err := os.OpenFile(lockPathFn(root)(a.Hash), os.O_RDWR, 0)
@@ -150,11 +152,113 @@ func TestSharedLockHeldAndNeverDeleted(t *testing.T) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
 		t.Fatalf("shared lock refused: %v", err)
 	}
-	a.Release()
-	build(t, root, "h", map[string]string{"f": "v2"})
-	if _, err := os.Stat(a.Dir); err != nil {
-		t.Fatal("old snapshot deleted")
+}
+
+func exists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+func TestLiveSessionsSnapshotIsNeverDeleted(t *testing.T) {
+	root := t.TempDir()
+	a := build(t, root, "h", map[string]string{"f": "v1"}) // live: lock held
+	build(t, root, "h", map[string]string{"f": "v2"}).Release()
+	build(t, root, "h", map[string]string{"f": "v3"})
+	if !exists(a.Dir) {
+		t.Fatal("a live session's snapshot was deleted")
 	}
+	if !exists(lockPathFn(root)(a.Hash)) {
+		t.Fatal("a live session's lock file was deleted")
+	}
+	data, _ := os.ReadFile(filepath.Join(a.Dir, "f"))
+	if string(data) != "v1" {
+		t.Fatalf("live snapshot changed: %q", data)
+	}
+}
+
+func TestFinishedSessionsSnapshotIsDeletedByNextRun(t *testing.T) {
+	root := t.TempDir()
+	a := build(t, root, "h", map[string]string{"f": "v1"})
+	b := build(t, root, "h", map[string]string{"f": "v2"})
+	if !exists(a.Dir) {
+		t.Fatal("snapshot deleted while its session is live")
+	}
+	a.Release()
+	// b is current and held; a is finished and not current.
+	c := build(t, root, "h", map[string]string{"f": "v2"})
+	if !c.Reused || c.Dir != b.Dir {
+		t.Fatal("expected reuse of the current snapshot")
+	}
+	if exists(a.Dir) {
+		t.Fatal("a finished session's non-current snapshot was kept")
+	}
+	if exists(lockPathFn(root)(a.Hash)) {
+		t.Fatal("its lock file was kept")
+	}
+	if !exists(b.Dir) {
+		t.Fatal("current snapshot deleted")
+	}
+}
+
+func TestCurrentSnapshotIsNeverDeleted(t *testing.T) {
+	root := t.TempDir()
+	a := build(t, root, "h", map[string]string{"f": "v1"})
+	a.Release() // no session holds it
+	b := build(t, root, "h", map[string]string{"f": "v1"})
+	if !b.Reused || !exists(b.Dir) {
+		t.Fatal("the current snapshot was deleted or not reused")
+	}
+	b.Release()
+	Prune(root, "h", b.Hash, lockPathFn(root))
+	if !exists(b.Dir) {
+		t.Fatal("Prune deleted the current snapshot")
+	}
+}
+
+func TestPruneLeavesOtherHarnessesAndStaging(t *testing.T) {
+	root := t.TempDir()
+	o := build(t, root, "other", map[string]string{"f": "x"})
+	o.Release()
+	a := build(t, root, "h", map[string]string{"f": "v1"})
+	a.Release()
+	b := build(t, root, "h", map[string]string{"f": "v2"})
+	staging := filepath.Join(root, SnapshotsDirName, "h", stagingPrefix+"x")
+	_ = os.MkdirAll(staging, 0o700)
+	Prune(root, "h", b.Hash, lockPathFn(root))
+	if !exists(o.Dir) || !exists(staging) {
+		t.Fatal("Prune touched another harness's snapshot or a staging folder")
+	}
+}
+
+// Sessions come and go while runs seal: a held snapshot always survives.
+func TestPruneUnderConcurrentSessions(t *testing.T) {
+	root := t.TempDir()
+	var wg sync.WaitGroup
+	var mu sync.Mutex // stands in for the assembly lock
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				mu.Lock()
+				st, err := Stage(root, "h")
+				if err != nil {
+					t.Error(err)
+					mu.Unlock()
+					return
+				}
+				_ = os.WriteFile(filepath.Join(st, "f"), []byte{byte('a' + (i+j)%4)}, 0o644)
+				s, err := Seal(root, "h", st, lockPathFn(root))
+				mu.Unlock()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if !exists(filepath.Join(s.Dir, "f")) {
+					t.Error("held snapshot missing")
+				}
+				s.Release()
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func TestStageClearsOnlyStaleStaging(t *testing.T) {
