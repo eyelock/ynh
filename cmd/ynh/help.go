@@ -155,7 +155,21 @@ Flags:
   --format text|json   Output format (default text)
   --check-updates      Check each harness's source for newer content
   --label key:value    Only harnesses whose own manifest labels include this
-                       (repeatable; every one must match)`,
+                       (repeatable; every one must match)
+  --source repo        Only harnesses installed from this repository
+                       (repeatable; any one may match)
+  --includes repo      Only harnesses that include or delegate to this
+                       repository (repeatable; any one may match)
+  --columns a,b,...    Columns to show: id, kind, vendor, source, artifacts,
+                       includes, delegates, labels (text only)
+
+A repo is owner/repo, host/owner/repo or a URL (all the same repository), a
+subpath narrows it, and a local path matches by prefix. Different filters must
+all match.
+
+On a terminal, a row wider than the terminal is cut to fit: INCLUDES and
+DELEGATES TO first (ending "… (+N)"), then SOURCE, then LABELS. Piped output is
+never cut. An empty INCLUDES or DELEGATES TO shows "-".`,
 
 	"info": `ynh info <name> [flags]
 

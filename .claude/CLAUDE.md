@@ -125,7 +125,8 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 - Go 1.26+, standard library by default. A few direct dependencies, each
   deliberate: `santhosh-tekuri/jsonschema/v6` (JSON Schema draft 2020-12 is
   not in the standard library and hand-rolling a validator for the published
-  schemas would be worse), `golang.org/x/text`, and the OpenTelemetry Go SDK
+  schemas would be worse), `golang.org/x/text`, `golang.org/x/term` (terminal-width detection for
+  `ynh ls`: the standard library has no portable way to ask), and the OpenTelemetry Go SDK
   with ynr's spool exporter, `github.com/eyelock/ynr/spoolexporter` (ynr's
   instrumentation contract requires both for `ynh agent run` telemetry; not
   the SDK's OTLP exporters, which bring in gRPC). **Do not add
