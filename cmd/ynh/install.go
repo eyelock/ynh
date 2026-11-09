@@ -56,7 +56,10 @@ func cmdInstall(args []string) error {
 	// 2. Starts with git@ → Git SSH URL
 	// 3. Starts with https:// or http:// → Git HTTPS URL
 	// 4. Contains @ (not matching 2/3) → registry lookup name@registry-name
-	// 5. Contains / → Git URL shorthand
+	// 5. Contains / → Git URL shorthand when host-qualified; a host-less
+	//    shorthand that isn't on disk is reported as a missing local path
+	//    (use ./ or a host-qualified form, or git@alias:org/repo.git for an
+	//    SSH alias)
 	// 6. Plain word → registry search
 	var srcDir string
 

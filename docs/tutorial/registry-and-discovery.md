@@ -435,7 +435,8 @@ ynh resolves the install argument in this order:
 | Starts with `git@` | `git@github.com:user/repo.git` | Git SSH URL |
 | Starts with `https://` | `https://github.com/user/repo` | Git HTTPS URL |
 | Contains `@` | `david@my-registry` | Registry qualified name |
-| Contains `/` | `github.com/user/repo` | Git URL shorthand |
+| Contains `/` with a host (first segment has a `.` or `:`) | `github.com/user/repo` | Git URL shorthand |
+| Contains `/` with no host, not on disk | `harnesses/x` | Reported as a missing local path; use `./harnesses/x`, a host-qualified form (`github.com/org/repo`), or `git@alias:org/repo.git` for an SSH alias |
 | Plain word | `david` | Registry search |
 
 Rules are applied in order. Earlier rules take precedence.
