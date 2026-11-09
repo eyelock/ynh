@@ -572,8 +572,6 @@ func launchCursor(configPath string, extraArgs []string) error {
 	// Cursor Agent has no --cwd or --plugin-dir flags.
 	// Use symlink-based installation (--install) to integrate with projects.
 	// Launch as child process so ynh stays alive for signal handling.
-	// configPath is the stable working folder under `ynh run`, so the
-	// Workspace Trust cursor-agent keeps per directory survives a new snapshot.
 	cmd := exec.Command(agentBin, extraArgs...)
 	cmd.Dir = configPath
 	return runChildProcess(cmd)

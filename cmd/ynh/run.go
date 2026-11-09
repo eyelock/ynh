@@ -311,12 +311,8 @@ func cmdRun(args []string) error {
 		defer unlockRun()
 		// Assemble into a staging folder; the tree is sealed as a
 		// content-addressed snapshot below and runDir then names it. A
-		// Claude, Copilot or OpenCode session already running on an earlier
-		// snapshot never sees this run's writes (ynh #765). Codex and Cursor
-		// start in the stable working folder, which links to the newest
-		// snapshot, so a live session of those does see them, and two runs of
-		// one harness share that folder (docs/vendors.md, "Stable working
-		// folder").
+		// session already running on an earlier snapshot never sees this
+		// run's writes (ynh #765).
 		stagingDir, err := runsnap.Stage(config.RunDir(), runDirName)
 		if err != nil {
 			return fmt.Errorf("assembling config: %w", err)
@@ -498,18 +494,6 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("applying runtime instructions: %w", err)
 		}
 		vendorArgs = append(vendorArgs, extraArgs...)
-	}
-
-	// Codex and Cursor key state by the directory they start in (Codex's
-	// `resume --last`, Cursor's Workspace Trust), and a snapshot is a new
-	// folder whenever the harness changes. They start in a stable working
-	// folder instead, whose entries link into the snapshot just sealed.
-	if !preassembled && action != "install" && action != "clean" && usesStableWorkDir(adapter.Name()) {
-		wd, err := runsnap.WorkDir(config.RunDir(), runDirName, runDir, ".codex", ".cursor")
-		if err != nil {
-			return fmt.Errorf("preparing working folder: %w", err)
-		}
-		runDir = wd
 	}
 
 	// Dispatch based on action.
@@ -1166,11 +1150,4 @@ func symlinkConsentError(vendorName, harness string, n int) error {
 	return fmt.Errorf("%s needs %d symlinks in this project and there is no terminal to ask on; nothing was installed. "+
 		"Give consent explicitly by running `ynh run %s -v %s --install` once (it records the install, so later runs go ahead), or run from a terminal",
 		vendorName, n, harness, vendorName)
-}
-
-// usesStableWorkDir reports whether a vendor starts in a stable working folder
-// rather than the snapshot: the vendors that key sessions or trust by the
-// directory they start in (Codex, Cursor).
-func usesStableWorkDir(vendorName string) bool {
-	return vendorName == "codex" || vendorName == "cursor"
 }

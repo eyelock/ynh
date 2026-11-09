@@ -149,7 +149,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L7: Codex hooks need an accepted harness
 
-- **What:** Codex runs a hook only when it trusts it. `ynh run` and `ynh agent run --backend codex` grant that trust for one run (see [L15](#l15-a-codex-worker-ran-no-hooks-fixed) and [Codex hook trust](hooks.md#codex-hook-trust)), under the same rule: only an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so. Since [ynh #765](https://github.com/eyelock/ynh/issues/765), ynh starts Codex in a stable working folder whose `.codex/hooks.json` is a link, and whether Codex keys a hook's trust by that unresolved path is not yet shown live: [L38](#l38-codex-and-cursor-start-in-a-stable-working-folder-not-shown-live).
+- **What:** Codex runs a hook only when it trusts it. `ynh run` and `ynh agent run --backend codex` grant that trust for one run (see [L15](#l15-a-codex-worker-ran-no-hooks-fixed) and [Codex hook trust](hooks.md#codex-hook-trust)), under the same rule: only an installed harness that is accepted and unchanged in `ynh trust`. Otherwise Codex skips the hooks, and with them the `on_session_start` context, and ynh prints a line saying so.
 - **Owner:** ynh, by design: it grants trust only to a harness you have accepted.
 - **Evidence:** codex-cli 0.166.0, [ynh #701](https://github.com/eyelock/ynh/pull/701).
 - **Tracking:** none.
@@ -365,7 +365,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L30: Codex resumes a prompt one-shot only
 
-- **What:** `ynh run --resume` with a prompt runs on Codex as a one-shot `codex exec resume`. With `--interactive` it is refused before Codex runs (ynh has printed `Launching codex...` by then): `codex cannot resume a session interactively with a prompt; drop --resume or the prompt`, exit status 1. A resume without a prompt, and a one-shot resume with one, work. Since [ynh #765](https://github.com/eyelock/ynh/issues/765), a resume finds its session by the stable working folder; that is not yet shown live: [L38](#l38-codex-and-cursor-start-in-a-stable-working-folder-not-shown-live).
+- **What:** `ynh run --resume` with a prompt runs on Codex as a one-shot `codex exec resume`. With `--interactive` it is refused before Codex runs (ynh has printed `Launching codex...` by then): `codex cannot resume a session interactively with a prompt; drop --resume or the prompt`, exit status 1. A resume without a prompt, and a one-shot resume with one, work.
 - **Owner:** the vendor: Codex's interactive resume documents no prompt argument.
 - **Evidence:** live on codex-cli 0.166.0, 2026-11-05, at `release/v0.17.0` [3916dd5](https://github.com/eyelock/ynh/commit/3916dd5) (the release verification, in the body of [ynh #753](https://github.com/eyelock/ynh/pull/753)): `ynh run <harness> -v codex --resume --interactive -- hello` printed `Launching codex...`, then `Error: codex cannot resume a session interactively with a prompt; drop --resume or the prompt`, and exited 1. Background: [Resuming a Session](focus.md#resuming-a-session).
 - **Tracking:** none.
@@ -410,7 +410,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L35: Cursor under ynh run, not shown live
 
-- **What:** under `ynh run -v cursor`, ynh writes the harness into the run directory in Cursor's project layout, but whether its instructions, skills, agents, rules, commands, MCP servers, profiles, includes, sensors and delegates then reach the model on Cursor is unverified. The live check is deferred to a later release. Since [ynh #765](https://github.com/eyelock/ynh/issues/765), Cursor also starts in a stable working folder of links, which is not yet shown live: [L38](#l38-codex-and-cursor-start-in-a-stable-working-folder-not-shown-live).
+- **What:** under `ynh run -v cursor`, ynh writes the harness into the run directory in Cursor's project layout, but whether its instructions, skills, agents, rules, commands, MCP servers, profiles, includes, sensors and delegates then reach the model on Cursor is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** checked: the files ynh writes, by running `ynh run` and `ynd preview` ([Project Instructions](artifacts.md#project-instructions)): instructions in `.cursorrules`, rules as `.mdc` files ([Rules](artifacts.md#rules)), MCP servers in `.cursor/mcp.json` ([MCP Servers](mcp.md#config-file-locations)), and the other artifacts linked under `.cursor/` ([Symlink Installation](vendors.md#symlink-installation-codex-cursor)). Cursor's docs name `.cursor/mcp.json` as the project file it reads MCP servers from ([MCP](https://cursor.com/docs/context/mcp)) and `.mdc` as its rule format ([Rules](https://cursor.com/docs/context/rules)); that Rules page does not mention `.cursorrules` ([ynh #742](https://github.com/eyelock/ynh/pull/742)). Shown live through `ynh run -v cursor`: hooks, session context, resume and focuses (the runs are named under **Checked on** above). Deferred: a live `ynh run -v cursor` for each of the rest. The record shows none, and the live runs on 2026-11-05 made no Cursor run under `ynh run`.
 - **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
@@ -434,12 +434,3 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Tracking:** none.
 - **Workaround:** call the tool from an interactive session. An approval given there for the location carries over to later one-shot runs in the same Copilot home and folder (shown on Copilot CLI 1.0.106). Under `ynh run`, a harness's MCP servers reach Copilot with `--additional-mcp-config` instead ([Copilot Format](mcp.md#copilot-format)).
 - **Detail:** [Config File Locations](mcp.md#config-file-locations).
-
-### L38: Codex and Cursor start in a stable working folder, not shown live
-
-- **What:** under `ynh run`, Codex and Cursor start in `$YNH_HOME/run/.snapshots/.work/<id>/`, a real folder whose entries link into the newest snapshot ([Stable working folder](vendors.md#stable-working-folder-codex-and-cursor)). The cells that rested on a live run in the harness's own run directory now rest on these points, none yet shown live: Codex's hook trust ([L7](#l7-codex-hooks-need-an-accepted-harness)) and session context, keyed by the unresolved `<folder>/.codex/hooks.json` (if Codex resolves the link, the hooks are skipped, not run untrusted); Codex reading `AGENTS.md`, skills, config and MCP servers through links, which its MCP servers, Instructions, Skills and Profiles cells assume; `codex resume --last` finding its session by this folder ([L30](#l30-codex-resumes-a-prompt-one-shot-only)); and, for Cursor, following the links, keying Workspace Trust by the folder, and `--continue` (its Resume cell, and [L35](#l35-cursor-under-ynh-run-not-shown-live)). The cells keep the values the earlier live runs showed. Separately, a live Codex or Cursor session reads the newest snapshot through the links, and two runs of one harness share the folder.
-- **Owner:** ynh, until shown live.
-- **Evidence:** checked: the design and its tests (`TestWorkDirStablePathFollowsNewestSnapshot`, `TestCmdRun_CodexAndCursorStartInAStableWorkDir`). Not shown live: no signed-in Codex or any Cursor login was available.
-- **Tracking:** [ynh #765](https://github.com/eyelock/ynh/issues/765), in [ynh #776](https://github.com/eyelock/ynh/pull/776).
-- **Workaround:** none verified.
-- **Detail:** [Stable working folder](vendors.md#stable-working-folder-codex-and-cursor).
