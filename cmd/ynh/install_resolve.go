@@ -99,9 +99,9 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 		if first, _, _ := strings.Cut(source, "/"); !strings.ContainsAny(first, ".:") {
 			return resolvedSource{}, fmt.Errorf(
 				"%q does not exist as a local path (relative to %s); "+
-					"for a local harness pass a path that exists, e.g. 'ynh install ./%s', "+
-					"or for a Git repository give a host, e.g. 'ynh install github.com/%s'",
-				source, cwdForMessage(), source, source)
+					"for a local harness pass a path that exists, e.g. './%s', "+
+					"or for a Git repository give a host, e.g. 'github.com/<org>/<repo>'",
+				source, cwdForMessage(), source)
 		}
 		return resolvedSource{sourceType: "git"}, nil
 	}
