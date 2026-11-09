@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
@@ -307,7 +306,11 @@ func (s *codexSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending, s.hasMsg = "", false
 
-	cmd := exec.CommandContext(s.ctx, s.codexBin, withIsolationArgs(buildCodexArgs(s.opts, s.threadID), s.isolation, 1)...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, codexSrtPolicy, s.codexBin, withIsolationArgs(buildCodexArgs(s.opts, s.threadID), s.isolation, 1))
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
