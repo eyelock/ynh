@@ -52,7 +52,8 @@ func cmdInstall(args []string) error {
 	originalSource := source
 
 	// Determine source type using disambiguation rules:
-	// 1. Starts with . or / → local path
+	// 1. Starts with . or /, or is an existing relative path such as
+	//    harnesses/x (isLocalPath stats it) → local path
 	// 2. Starts with git@ → Git SSH URL
 	// 3. Starts with https:// or http:// → Git HTTPS URL
 	// 4. Contains @ (not matching 2/3) → registry lookup name@registry-name

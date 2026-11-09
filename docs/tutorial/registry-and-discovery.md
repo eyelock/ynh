@@ -431,7 +431,7 @@ ynh resolves the install argument in this order:
 
 | Pattern | Example | Interpretation |
 |---|---|---|
-| Starts with `.` or `/` | `./my-harness`, `/tmp/foo` | Local path |
+| Starts with `.` or `/`, or is an existing relative path | `./my-harness`, `/tmp/foo`, `harnesses/x` (when the folder exists) | Local path |
 | Starts with `git@` | `git@github.com:user/repo.git` | Git SSH URL |
 | Starts with `https://` | `https://github.com/user/repo` | Git HTTPS URL |
 | Contains `@` | `david@my-registry` | Registry qualified name |
