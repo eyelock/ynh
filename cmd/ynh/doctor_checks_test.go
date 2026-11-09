@@ -14,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -431,23 +432,60 @@ func TestDoctor_DelegateCommittedIsSilent(t *testing.T) {
 	}
 }
 
-func TestDoctor_DelegateOwnRepoInSubfolder(t *testing.T) {
-	fakeHome(t)
-	top := t.TempDir()
-	sub := filepath.Join(top, "sub")
-	if err := os.MkdirAll(filepath.Join(sub, "worker"), 0o755); err != nil {
-		t.Fatal(err)
+// Doctor's verdict on an own-repo delegate must be the one `ynh run` reaches:
+// each fixture is checked by doctor and resolved the way run does
+// (resolver.ResolveSourceForRun), and the two must agree on failing.
+func TestDoctor_OwnRepoVerdictAgreesWithRun(t *testing.T) {
+	build := func(t *testing.T, inSubfolder, commitWorker bool) (harnessDir string) {
+		t.Helper()
+		top := t.TempDir()
+		harnessDir = top
+		if inSubfolder {
+			harnessDir = filepath.Join(top, "sub")
+		}
+		if err := os.MkdirAll(filepath.Join(harnessDir, "worker"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(harnessDir, "worker", "f"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(top, "README"), []byte("r"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, top, "init", "-q")
+		gitIn(t, top, "add", "README")
+		if commitWorker {
+			gitIn(t, top, "add", ".")
+		}
+		gitIn(t, top, "commit", "-qm", "x")
+		return harnessDir
 	}
-	if err := os.WriteFile(filepath.Join(sub, "worker", "f"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name                      string
+		inSubfolder, commitWorker bool
+		wantFail                  bool
+	}{
+		{"root, committed", false, true, false},
+		{"root, on disk but not committed", false, false, true},
+		{"subfolder, committed", true, true, true},
+		{"subfolder, not committed", true, false, true},
 	}
-	gitIn(t, top, "init", "-q")
-	gitIn(t, top, "add", ".")
-	gitIn(t, top, "commit", "-qm", "x")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+			dir := build(t, tc.inSubfolder, tc.commitWorker)
+			d := harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "worker"}}
 
-	d := harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "worker"}}
-	if f, bad := checkDelegate("local/desk", sub, d); bad {
-		t.Errorf("a committed delegate under a subfolder must be silent: %+v", f)
+			_, doctorBad := checkDelegate("local/desk", dir, d)
+			_, _, runErr := resolver.ResolveSourceForRun(d.GitSource, dir)
+
+			if doctorBad != (runErr != nil) {
+				t.Errorf("doctor reports a problem = %v, but run's resolution failed = %v (%v)", doctorBad, runErr != nil, runErr)
+			}
+			if doctorBad != tc.wantFail {
+				t.Errorf("doctor reports a problem = %v, want %v", doctorBad, tc.wantFail)
+			}
+		})
 	}
 }
 

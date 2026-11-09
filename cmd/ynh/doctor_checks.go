@@ -346,6 +346,15 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 	repo := resolver.GitSourceURL(gs.Git, harnessDir)
 
 	if resolver.IsOwnRepoSource(gs, harnessDir) {
+		// run clones this folder (EnsureRepo on GitSourceURL), and git can
+		// clone only a repository's root: a harness in a subfolder of its
+		// repository, with git ".", fails every run however its delegate is
+		// committed.
+		if !isRepoRoot(repo) {
+			return fail(sevError,
+				fmt.Sprintf("delegate %q: %s is a subfolder of its repository, and `ynh run` can clone only a repository's root", label, repo),
+				fmt.Sprintf("give the delegate a git URL in delegates_to of %s, or keep the harness at the root of its repository", id))
+		}
 		ref := gs.Ref
 		if ref == "" {
 			ref = "HEAD"
@@ -385,4 +394,15 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 		}
 	}
 	return doctorFinding{}, false
+}
+
+// isRepoRoot reports whether dir is the top of a git working tree.
+func isRepoRoot(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return false
+	}
+	top, err1 := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	here, err2 := filepath.EvalSymlinks(dir)
+	return err1 == nil && err2 == nil && top == here
 }
