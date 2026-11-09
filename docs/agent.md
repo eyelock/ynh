@@ -228,8 +228,9 @@ parent process environment holds every credential the operator holds, which is
 not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
 
-`--sandbox srt` is honoured by the `claude`, `codex` and `cursor` backends.
-Requesting it with `opencode` is an **error**, not a warning — a containment
+`--sandbox srt` is honoured by the `claude`, `codex` and `cursor` backends,
+and by `opencode` on Linux. Requesting it with `opencode` on macOS is an
+**error**, not a warning — a containment
 control that silently does not apply is worse than an absent one, because it
 gets relied upon ([L18](vendor-parity.md#l18-sandbox-srt)). ynh does not
 provide isolation; it runs inside one you configured.
@@ -250,7 +251,7 @@ missing or invalid. Neither falls back to running unsandboxed.
 | | Allowed | Everything else |
 |---|---|---|
 | Network | Claude Code: `api.anthropic.com`, `claude.ai`, `platform.claude.com` (the API, and signing in and refreshing a claude.ai or Console login). Codex: `api.openai.com`, `auth.openai.com`, `chatgpt.com`. Cursor: `*.cursor.sh`, `cursor.com`, `*.cursor.com` | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
-| Writes | the worktree; the vendor's own state: Claude Code's `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; Codex's `$CODEX_HOME`, `~/.codex` by default; Cursor's `~/.cursor/` and `~/.config/cursor/`; srt's own temporary directory (`TMPDIR` is set to `/tmp/claude`) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
+| Writes | the worktree; the vendor's own state: Claude Code's `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; Codex's `$CODEX_HOME`, `~/.codex` by default; Cursor's `~/.cursor/` and `~/.config/cursor/`; srt's own temporary directory, `/tmp/claude` (srt sets `TMPDIR` to it, but makes it writable only if the folder already exists; ynh creates it before every srt launch, see below) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
 | Reads | everywhere, srt's default | |
 
 For Codex and Cursor, ynh also sets srt's `enableWeakerNetworkIsolation`,
@@ -263,6 +264,31 @@ The network list is the worker's only way out: a task that needs `github.com`
 or a package registry fails under `--sandbox srt`. The telemetry relay is not
 reachable from inside srt and is skipped; see
 [telemetry](telemetry.md#turning-it-on).
+
+#### srt's temporary directory
+
+srt sets `TMPDIR=/tmp/claude` for the worker and makes it writable only when
+the folder already exists. On a host where nothing has made it, the worker
+fails with `EROFS: mkdir /tmp/claude`. So before every `--sandbox srt` launch,
+on every backend, ynh creates `/tmp/claude` with mode `0700`. `/tmp` is shared,
+so when the folder already exists ynh uses it only if it is a real directory
+(not a link), owned by the user running ynh, and writable by no group or other
+user. Otherwise the run is refused with one error naming the folder, and ynh
+never changes or reuses someone else's folder.
+
+#### OpenCode under srt
+
+`--sandbox srt` runs `opencode` on Linux only. On macOS it stays an error:
+srt's macOS profile refuses the setuid `/bin/ps` that `opencode run` spawns
+([L18](vendor-parity.md#l18-sandbox-srt)). The proof behind the Linux support
+has limits: it ran in a container on arm64 that needed
+`--security-opt systempaths=unconfined`, and hosts that restrict user
+namespaces (for example Ubuntu with
+`kernel.apparmor_restrict_unprivileged_userns`) were not tested.
+
+One call is not sandboxed: `opencode --version`, which the OpenCode backend
+runs once when a session starts, before the sandboxed turns, to check OpenCode
+is version 2.x. It reads no task input and sends no request.
 
 ## Permissions and `--auto-approve`
 
