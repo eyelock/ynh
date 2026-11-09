@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -171,7 +172,6 @@ func TestOpenCodeLaunchErrors(t *testing.T) {
 		}
 	})
 	t.Run("compose failure", func(t *testing.T) {
-		call := stubOpencode(t, "opencode v2.0.27")
 		cfg := t.TempDir()
 		rules := filepath.Join(cfg, ".opencode", "rules")
 		if err := os.MkdirAll(filepath.Join(rules, "bad.md"), 0o755); err != nil {
@@ -183,8 +183,9 @@ func TestOpenCodeLaunchErrors(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("root reads unreadable files")
 		}
-		if err := (&OpenCode{}).LaunchInteractive(cfg, nil); err == nil || call.bin != "" {
-			t.Errorf("expected a compose error before exec, got %v (exec %q)", err, call.bin)
+		// The compose is the prepare step, run before the snapshot is sealed.
+		if err := (&OpenCode{}).PrepareLaunch(cfg); err == nil {
+			t.Error("expected a compose error from PrepareLaunch")
 		}
 	})
 }
@@ -971,4 +972,85 @@ func TestOpenCodeHookDeclarations(t *testing.T) {
 	if err != nil || files != nil {
 		t.Errorf("on_session_end alone = %v, %v; want no plugin", keysOf(files), err)
 	}
+}
+
+// TestOpenCodeLaunchWritesNothing: a launch only reads the run dir. The tree is
+// prepared first (PrepareLaunch, before the seal) and then made read-only, as a
+// sealed snapshot is, and every launch path still starts OpenCode and leaves the
+// tree as it was (ynh #765).
+func TestOpenCodeLaunchWritesNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through read-only folders")
+	}
+	runs := map[string]func(o *OpenCode, c string) error{
+		"interactive":     func(o *OpenCode, c string) error { return o.LaunchInteractive(c, nil) },
+		"initial prompt":  func(o *OpenCode, c string) error { return o.LaunchWithInitialPrompt(c, "go", nil) },
+		"non-interactive": func(o *OpenCode, c string) error { return o.LaunchNonInteractive(c, "go", nil) },
+		"resume":          func(o *OpenCode, c string) error { return o.LaunchResume(c, "ses_1", "", true, nil) },
+	}
+	for name, run := range runs {
+		t.Run(name, func(t *testing.T) {
+			call := stubOpencode(t, "opencode v2.0.27")
+			cfg := t.TempDir()
+			oc := filepath.Join(cfg, ".opencode")
+			if err := os.MkdirAll(oc, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("base"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(oc, opencodeSessionStartFile), []byte(`[{"command":"echo ctx"}]`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			o := &OpenCode{}
+			if err := o.PrepareLaunch(cfg); err != nil {
+				t.Fatal(err)
+			}
+			before := treeDigest(t, cfg)
+			for _, d := range []string{cfg, oc} {
+				if err := os.Chmod(d, 0o555); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Cleanup(func() {
+				_ = os.Chmod(cfg, 0o755)
+				_ = os.Chmod(oc, 0o755)
+			})
+			if err := run(o, cfg); err != nil {
+				t.Fatalf("launch on a read-only run dir: %v", err)
+			}
+			if call.bin == "" {
+				t.Error("OpenCode was not started")
+			}
+			if after := treeDigest(t, cfg); after != before {
+				t.Errorf("the launch changed the run dir:\nbefore %s\nafter  %s", before, after)
+			}
+		})
+	}
+}
+
+// treeDigest lists every path under root with its size and content.
+func treeDigest(t *testing.T, root string) string {
+	t.Helper()
+	var b strings.Builder
+	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, p)
+		if d.IsDir() {
+			fmt.Fprintf(&b, "%s/\n", rel)
+			return nil
+		}
+		data, rerr := os.ReadFile(p)
+		if rerr != nil {
+			return rerr
+		}
+		fmt.Fprintf(&b, "%s %d %q\n", rel, len(data), data)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
 }

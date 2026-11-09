@@ -299,6 +299,13 @@ func cmdRun(args []string) error {
 		// everything was vetted and assembled at image build time.
 		runDir = preassembledDir
 		linkDir = preassembledDir
+		// Not a snapshot: nothing else shares it, and the vendor still needs
+		// its launch-time files.
+		if prep, ok := adapter.(vendor.LaunchPreparer); ok {
+			if err := prep.PrepareLaunch(runDir); err != nil {
+				return fmt.Errorf("preparing launch: %w", err)
+			}
+		}
 	} else {
 		// Normal host flow — assemble now. Assembly of one run dir is
 		// serialised across ynh processes: parallel runs of one harness
@@ -460,6 +467,15 @@ func cmdRun(args []string) error {
 				if err := vendor.GrantOpenCodeWorkspace(runDir, wsGranted); err != nil {
 					return err
 				}
+			}
+		}
+
+		// Files a vendor writes at launch (OpenCode's session-start context
+		// and composed AGENTS.md) go in before the seal too, so a launch only
+		// reads the run dir.
+		if prep, ok := adapter.(vendor.LaunchPreparer); ok {
+			if err := prep.PrepareLaunch(runDir); err != nil {
+				return fmt.Errorf("preparing launch: %w", err)
 			}
 		}
 
