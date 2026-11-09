@@ -612,11 +612,16 @@ func cmdRun(args []string) error {
 		defer startRunRelay(adapter.Name(), ra.Relay, os.Stderr)()
 
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		// The launch still reads the run dir (Copilot's projection, OpenCode's
-		// AGENTS.md compose), so the assembly lock is held through those reads.
-		// Every vendor then runs as a child of ynh: the assembly lock is
-		// released as the child starts, and the deferred snap.Release holds the
-		// shared lock on the snapshot until the child has exited.
+		// The launch only reads the run dir: every file a vendor writes at
+		// launch went in before the seal (PrepareLaunch), and Copilot projects
+		// its instructions into the project, not the run dir. What it still
+		// reads (Codex's MCP environment, Claude's session-end environment,
+		// Copilot's instructions) is the sealed snapshot, which the snapshot's
+		// shared lock protects, so those reads do not need the assembly lock.
+		// It is nonetheless held up to the child's start, where the hook below
+		// releases it. Every vendor runs as a child of ynh, and the deferred
+		// snap.Release holds the shared lock on the snapshot until the child
+		// has exited.
 		removeHook := vendor.OnChildStart(unlockRun)
 		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)

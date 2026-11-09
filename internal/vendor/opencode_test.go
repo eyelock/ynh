@@ -975,9 +975,10 @@ func TestOpenCodeHookDeclarations(t *testing.T) {
 }
 
 // TestOpenCodeLaunchWritesNothing: a launch only reads the run dir. The tree is
-// prepared first (PrepareLaunch, before the seal) and then made read-only, as a
-// sealed snapshot is, and every launch path still starts OpenCode and leaves the
-// tree as it was (ynh #765).
+// prepared first (PrepareLaunch, before the seal) and then sealed: every file
+// and folder read-only, as a snapshot is. Every launch path still starts
+// OpenCode, and the tree keeps its content and modification times, so even a
+// same-content rewrite fails the test (ynh #765).
 func TestOpenCodeLaunchWritesNothing(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root writes through read-only folders")
@@ -1007,15 +1008,7 @@ func TestOpenCodeLaunchWritesNothing(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := treeDigest(t, cfg)
-			for _, d := range []string{cfg, oc} {
-				if err := os.Chmod(d, 0o555); err != nil {
-					t.Fatal(err)
-				}
-			}
-			t.Cleanup(func() {
-				_ = os.Chmod(cfg, 0o755)
-				_ = os.Chmod(oc, 0o755)
-			})
+			sealRunDir(t, cfg)
 			if err := run(o, cfg); err != nil {
 				t.Fatalf("launch on a read-only run dir: %v", err)
 			}
@@ -1029,7 +1022,8 @@ func TestOpenCodeLaunchWritesNothing(t *testing.T) {
 	}
 }
 
-// treeDigest lists every path under root with its size and content.
+// treeDigest lists every path under root with its modification time, size and
+// content, so a rewrite of a file shows even when the content is the same.
 func treeDigest(t *testing.T, root string) string {
 	t.Helper()
 	var b strings.Builder
@@ -1046,7 +1040,11 @@ func treeDigest(t *testing.T, root string) string {
 		if rerr != nil {
 			return rerr
 		}
-		fmt.Fprintf(&b, "%s %d %q\n", rel, len(data), data)
+		info, ierr := d.Info()
+		if ierr != nil {
+			return ierr
+		}
+		fmt.Fprintf(&b, "%s %d %d %q\n", rel, info.ModTime().UnixNano(), len(data), data)
 		return nil
 	})
 	if err != nil {

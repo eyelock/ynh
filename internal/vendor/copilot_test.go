@@ -606,15 +606,7 @@ func TestBuildCopilotArgsWritesNothingToRunDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := treeDigest(t, cfg)
-	for _, d := range []string{cfg, filepath.Join(cfg, ".copilot")} {
-		if err := os.Chmod(d, 0o555); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Cleanup(func() {
-		_ = os.Chmod(cfg, 0o755)
-		_ = os.Chmod(filepath.Join(cfg, ".copilot"), 0o755)
-	})
+	sealRunDir(t, cfg)
 	project := t.TempDir()
 	t.Chdir(project)
 	if _, err := buildCopilotArgs(cfg, "go", nil); err != nil {
