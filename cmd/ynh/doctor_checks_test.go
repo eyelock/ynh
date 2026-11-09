@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -350,5 +351,82 @@ func TestDoctor_HealthyHarnessIsSilent(t *testing.T) {
 
 	if c := checkHarnesses(); c.Status != sevOK {
 		t.Errorf("a loadable harness must be silent, got %q:\n%s", c.Status, findingsOf(c))
+	}
+}
+
+// installOwnRepoDesk installs "desk", a harness that is itself a git repo and
+// delegates to harnesses/worker in that repo. It returns the repo directory.
+func installOwnRepoDesk(t *testing.T) string {
+	t.Helper()
+	dir := harness.InstalledDirByID("local/desk")
+	if err := os.MkdirAll(filepath.Join(dir, "harnesses", "worker", ".agents", "harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"name":"desk","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":".","path":"harnesses/worker"}]}`
+	if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	worker := filepath.Join(dir, "harnesses", "worker", ".agents", "harness", "plugin.json")
+	if err := os.WriteFile(worker, []byte(`{"name":"worker","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "init", "-q")
+	return dir
+}
+
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	full := append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)
+	if out, err := exec.Command("git", full...).CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// The first case of #806: the delegate is on disk but not in HEAD.
+func TestDoctor_DelegateOnDiskButNotCommitted(t *testing.T) {
+	fakeHome(t)
+	dir := installOwnRepoDesk(t)
+	gitIn(t, dir, "add", ".agents")
+	gitIn(t, dir, "commit", "-qm", "desk only")
+
+	c := checkDelegates()
+	if c.Status != sevError {
+		t.Fatalf("an uncommitted own-repo delegate must be an error, got %q:\n%s", c.Status, findingsOf(c))
+	}
+	got := findingsOf(c)
+	for _, want := range []string{"local/desk", "harnesses/worker", "on disk but is not committed", "add harnesses/worker"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("finding should contain %q:\n%s", want, got)
+		}
+	}
+}
+
+// The second case: the delegate is in neither HEAD nor the working tree.
+func TestDoctor_DelegateMissing(t *testing.T) {
+	fakeHome(t)
+	dir := installOwnRepoDesk(t)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-qm", "desk and worker")
+	gitIn(t, dir, "rm", "-rq", "harnesses")
+	gitIn(t, dir, "commit", "-qm", "remove worker")
+
+	c := checkDelegates()
+	if c.Status != sevError {
+		t.Fatalf("a missing own-repo delegate must be an error, got %q:\n%s", c.Status, findingsOf(c))
+	}
+	got := findingsOf(c)
+	if !strings.Contains(got, "missing from the committed tree") || strings.Contains(got, "on disk but") {
+		t.Errorf("finding should say missing, not uncommitted:\n%s", got)
+	}
+}
+
+func TestDoctor_DelegateCommittedIsSilent(t *testing.T) {
+	fakeHome(t)
+	dir := installOwnRepoDesk(t)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-qm", "desk and worker")
+
+	if c := checkDelegates(); c.Status != sevOK {
+		t.Errorf("a committed delegate must be silent, got %q:\n%s", c.Status, findingsOf(c))
 	}
 }
