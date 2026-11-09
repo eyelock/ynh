@@ -128,16 +128,22 @@ So a run dir becomes a **content-addressed snapshot** behind a stable link:
    (outside the snapshot, under `cache/run-locks/`). `ynh run` stays alive as the parent of every
    vendor CLI ([ynh #745](https://github.com/eyelock/ynh/issues/745)), so it holds that lock until
    the vendor exits.
-5. The run launches the vendor on the snapshot's **real path**, never the stable link, so the
-   session reads its own snapshot to the end.
+5. The run launches Claude Code, Copilot CLI and OpenCode on the snapshot's **real path**, never
+   the stable link, so those sessions read their own snapshot to the end. Codex and Cursor start in
+   a stable working folder, `run/.snapshots/.work/<id>/`, whose entries link into the newest
+   snapshot (see [Stable working folder](vendors.md#stable-working-folder-codex-and-cursor)), so
+   a live Codex or Cursor session reads the newest snapshot, not its own.
 6. Still under the assembly lock, the run deletes each snapshot that is neither current nor
    locked (it can take the lock exclusively without waiting).
 
 A baked image's pre-assembled run dir is used as it is, as in v0.17.0.
 
 **Limit:** Codex and Cursor project symlinks point through the stable link, so they show the newest
-snapshot, not the session's. A session ynh launches reads its own snapshot through its working
-folder. Anything reading the project's links reads the newest.
+snapshot, not the session's. A Claude Code, Copilot CLI or OpenCode session ynh launches reads its
+own snapshot through its working folder. A Codex or Cursor session does not: its working folder
+links to the newest snapshot, and two runs of one harness share that folder
+([Stable working folder](vendors.md#stable-working-folder-codex-and-cursor)). Anything reading
+the project's links reads the newest.
 
 ## What is removed
 

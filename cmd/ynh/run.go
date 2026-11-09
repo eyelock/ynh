@@ -311,8 +311,12 @@ func cmdRun(args []string) error {
 		defer unlockRun()
 		// Assemble into a staging folder; the tree is sealed as a
 		// content-addressed snapshot below and runDir then names it. A
-		// session already running on an earlier snapshot never sees this
-		// run's writes (ynh #765).
+		// Claude, Copilot or OpenCode session already running on an earlier
+		// snapshot never sees this run's writes (ynh #765). Codex and Cursor
+		// start in the stable working folder, which links to the newest
+		// snapshot, so a live session of those does see them, and two runs of
+		// one harness share that folder (docs/vendors.md, "Stable working
+		// folder").
 		stagingDir, err := runsnap.Stage(config.RunDir(), runDirName)
 		if err != nil {
 			return fmt.Errorf("assembling config: %w", err)
