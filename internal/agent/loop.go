@@ -1891,7 +1891,7 @@ func resumeTaskConflict(focus, task string, cp *Checkpoint) string {
 // callers get a useful message instead of "unknown vendor" from deeper in.
 // validateSandbox rejects a sandbox request the chosen backend cannot honour.
 //
-// `--sandbox srt` was read only by the Claude backend; codex and cursor
+// `--sandbox srt` was once read only by the Claude backend; codex and cursor
 // contained no reference to it, so `--sandbox srt --backend codex` ran
 // completely unsandboxed and said nothing. A declared containment control that
 // silently does not apply is worse than an absent one, because it gets relied
@@ -1903,13 +1903,21 @@ func validateSandbox(sandbox, backend string) error {
 	case "", "none":
 		return nil
 	case "srt":
-		if backend != "claude" {
+		switch backend {
+		case "claude", "codex", "cursor":
+			return nil
+		case "opencode":
+			// opencode run spawns /bin/ps, which srt's macOS profile refuses
+			// (see L18 in docs/vendor-parity.md); it is not shown to run on
+			// any platform, so it stays refused on all of them.
 			return fmt.Errorf(
-				"--sandbox srt is not supported by the %s backend (only claude implements it); "+
-					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
-				backend)
+				"--sandbox srt is not supported by the opencode backend (opencode run cannot start under srt: it spawns ps, which srt's macOS sandbox refuses); " +
+					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed")
 		}
-		return nil
+		return fmt.Errorf(
+			"--sandbox srt is not supported by the %s backend; "+
+				"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
+			backend)
 	default:
 		return fmt.Errorf("unknown sandbox %q (supported: none, srt)", sandbox)
 	}

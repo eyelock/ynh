@@ -228,17 +228,19 @@ parent process environment holds every credential the operator holds, which is
 not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
 
-`--sandbox srt` is honoured by the `claude` backend only. Requesting it with
-`codex`, `cursor` or `opencode` is an **error**, not a warning — a containment control that
-silently does not apply is worse than an absent one, because it gets relied
-upon. ynh does not provide isolation; it runs inside one you configured.
+`--sandbox srt` is honoured by the `claude`, `codex` and `cursor` backends.
+Requesting it with `opencode` is an **error**, not a warning — a containment
+control that silently does not apply is worse than an absent one, because it
+gets relied upon ([L18](vendor-parity.md#l18-sandbox-srt)). ynh does not
+provide isolation; it runs inside one you configured.
 
 ### What `--sandbox srt` allows
 
 [srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install
 -g @anthropic-ai/sandbox-runtime`) reads its rules from a settings file, so ynh
 writes one for each run and starts the worker as
-`srt --settings <file> -- claude ...`. The file is `srt-settings.json` in the
+`srt --settings <file> -- claude ...` (or `codex`, or Cursor's CLI; a backend
+that runs one process per turn wraps each turn). The file is `srt-settings.json` in the
 session directory (beside the `--emit-jsonl` file), mode 0600. A run with no
 session directory gets it in a private directory under `$YNH_HOME/run/`,
 removed when the worker exits. If the file cannot be written the run stops
@@ -247,9 +249,15 @@ missing or invalid. Neither falls back to running unsandboxed.
 
 | | Allowed | Everything else |
 |---|---|---|
-| Network | `api.anthropic.com`, `claude.ai`, `platform.claude.com`: the API, and signing in and refreshing a claude.ai or Console login | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
-| Writes | the worktree; Claude Code's own state: `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; srt's own temporary directory (`TMPDIR` is set to `/tmp/claude`) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
+| Network | Claude Code: `api.anthropic.com`, `claude.ai`, `platform.claude.com` (the API, and signing in and refreshing a claude.ai or Console login). Codex: `api.openai.com`, `auth.openai.com`, `chatgpt.com`. Cursor: `*.cursor.sh`, `cursor.com`, `*.cursor.com` | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
+| Writes | the worktree; the vendor's own state: Claude Code's `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; Codex's `$CODEX_HOME`, `~/.codex` by default; Cursor's `~/.cursor/` and `~/.config/cursor/`; srt's own temporary directory (`TMPDIR` is set to `/tmp/claude`) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
 | Reads | everywhere, srt's default | |
+
+For Codex and Cursor, ynh also sets srt's `enableWeakerNetworkIsolation`,
+which lets the worker reach macOS's `trustd`. Codex verifies TLS through the
+system trust store, and without it every request fails, an allowed host's too.
+srt warns that this opens a possible exfiltration path through `trustd`; it is
+not set for Claude Code.
 
 The network list is the worker's only way out: a task that needs `github.com`
 or a package registry fails under `--sandbox srt`. The telemetry relay is not

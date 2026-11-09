@@ -314,7 +314,7 @@ The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and 
 
 The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `.agents/harness/marketplace.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
 
-The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
+The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand (host-qualified only; a host-less `a/b` not on disk is a missing-local-path error) → plain name registry search. See `cmd/ynh/install_resolve.go`.
 
 ### Migration Chain
 
