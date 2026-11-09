@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -172,3 +175,67 @@ var errUnreadableStore = &storeError{}
 type storeError struct{}
 
 func (e *storeError) Error() string { return "permission denied" }
+
+// snapshotAdapter is a vendor whose sessions are keyed by snapshot, recording
+// the folder it was asked about.
+type snapshotAdapter struct {
+	vendor.Adapter
+	id   string
+	err  error
+	root *string
+}
+
+func (s snapshotAdapter) Name() string { return "codex" }
+func (s snapshotAdapter) ResolveLastSession(root string, _ time.Time) (string, error) {
+	*s.root = root
+	return s.id, s.err
+}
+
+// --resume on Codex and Cursor looks in every snapshot of the harness, finds
+// the newest session by id, and refuses (no fall back to the vendor's own
+// "last session") when there is none or the store cannot be read.
+func TestResolveSnapshotSession(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	var root string
+	id, err := resolveSnapshotSession(snapshotAdapter{id: "sess-1", root: &root}, "local--seat", io.Discard)
+	if err != nil || id != "sess-1" {
+		t.Fatalf("got %q, %v", id, err)
+	}
+	if want := filepath.Join(config.RunDir(), ".snapshots", "local--seat"); root != want {
+		t.Errorf("looked in %s, want %s", root, want)
+	}
+
+	_, err = resolveSnapshotSession(snapshotAdapter{err: vendor.ErrNoResumableSession, root: &root}, "local--seat", io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "local--seat") || !strings.Contains(err.Error(), "--resume=<session-id>") {
+		t.Errorf("none found should refuse naming the harness and --resume=<id>: %v", err)
+	}
+	_, err = resolveSnapshotSession(snapshotAdapter{err: errUnreadableStore, root: &root}, "local--seat", io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "--resume=<session-id>") {
+		t.Errorf("unreadable store should refuse: %v", err)
+	}
+}
+
+func (s snapshotAdapter) SupportsResume() bool          { return true }
+func (s snapshotAdapter) SessionsKeyedBySnapshot() bool { return true }
+func (s snapshotAdapter) LaunchInteractive(string, []string) error {
+	panic("a refused resume must not launch cold")
+}
+func (s snapshotAdapter) LaunchResume(_, id, _ string, _ bool, _ []string) error {
+	*s.root = "resumed " + id
+	return nil
+}
+
+func TestLaunchSession_SnapshotResumeNeverFallsBackToACold(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	var got string
+	err := launchSession(snapshotAdapter{err: vendor.ErrNoResumableSession, root: &got}, "/run", "local--seat", runArgs{Resume: true}, "", "", nil, io.Discard)
+	if err == nil {
+		t.Fatal("--resume with no session must refuse, not launch")
+	}
+	if err := launchSession(snapshotAdapter{id: "s9", root: &got}, "/run", "local--seat", runArgs{Resume: true}, "", "", nil, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if got != "resumed s9" {
+		t.Errorf("got %q, want the session resumed by id", got)
+	}
+}

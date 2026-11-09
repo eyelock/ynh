@@ -143,9 +143,12 @@ func workspaceGrantUnless(loaded *harness.Harness, id, vendorName, projectDir st
 	return granted
 }
 
-// workspaceLaunchArgs is workspaceGrant rendered as the vendor's flags for
-// `ynh run`.
-func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string, preassembled, noWorkspace bool, stderr io.Writer) ([]string, error) {
+// workspaceGrantFor is workspaceGrant for `ynh run`: it takes the project
+// directory from the working directory and blocks a grant that cannot be
+// written, and it only decides. The vendor's flags are vendor.WorkspaceArgs of
+// the result; OpenCode has none and is granted by GrantOpenCodeWorkspace, which
+// the caller runs on the tree before it is sealed as a snapshot.
+func workspaceGrantFor(loaded *harness.Harness, id, vendorName string, preassembled, noWorkspace bool, stderr io.Writer) ([]string, error) {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -157,18 +160,7 @@ func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string,
 		// be read-only. Leave it alone and say so, once per folder.
 		blocked = "opencode: a pre-assembled run directory is not edited; bake the folder into the image"
 	}
-	granted := workspaceGrantUnless(loaded, id, vendorName, projectDir, noWorkspace, blocked, stderr)
-	args, _, err := vendor.WorkspaceArgs(vendorName, granted)
-	if err != nil {
-		return nil, err
-	}
-	if vendorName == "opencode" && len(granted) > 0 {
-		// No flag: the grant is a rule in each agent file of the run dir.
-		if err := vendor.GrantOpenCodeWorkspace(runDir, granted); err != nil {
-			return nil, err
-		}
-	}
-	return args, nil
+	return workspaceGrantUnless(loaded, id, vendorName, projectDir, noWorkspace, blocked, stderr), nil
 }
 
 // workspaceReport is the `trust show` view of a harness's workspace request.

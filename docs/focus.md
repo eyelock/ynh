@@ -127,6 +127,11 @@ Where a vendor refuses, ynh stops before launching with an error naming it
 (for example `codex cannot resume a session interactively with a prompt; drop
 --resume or the prompt`). The prompt is never dropped silently.
 
+On Codex and Cursor, `--resume` continues the newest session that started in any
+snapshot of the harness, by id, in the newest snapshot. With none found it stops
+with an error naming the harness and suggesting `--resume=<id>`; it never falls
+back to the vendor's own "last session".
+
 ### Binding a resume to a session name
 
 Without `--session-name`, `--resume` continues the newest session in the

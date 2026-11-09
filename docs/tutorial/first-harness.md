@@ -213,7 +213,7 @@ exec ynh run "local/my-harness" "$@"
 
 ## Run interactive
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... by the ynh tutorial.`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... by the ynh tutorial.`
 ```bash
 my-harness
 ```
@@ -222,7 +222,7 @@ Opens an interactive Claude session. Try `/greet` — the skill should introduce
 
 ## Run non-interactive
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what are you?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```bash
 my-harness "what are you?"
 ```
@@ -231,7 +231,7 @@ Should mention it was created by the ynh tutorial (from `instructions.md`).
 
 ## Run with vendor flags
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what are you? one sentence. --model opus`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what are you? one sentence. --model opus`
 ```bash
 my-harness --model opus -- "what are you? one sentence."
 ```
@@ -242,7 +242,7 @@ my-harness --model opus -- "what are you? one sentence."
 
 `--instructions` injects text into the vendor's instructions pipeline for this session only — after the harness `instructions.md`, before the session starts. It doesn't modify the harness.
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what's my current task? --append-system-prompt ticket: PROJ-42 ... fix login timeout`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what's my current task? --append-system-prompt ticket: PROJ-42 ... fix login timeout`
 ```bash
 my-harness --instructions "ticket: PROJ-42 — fix login timeout" -- "what's my current task?"
 ```
@@ -251,7 +251,7 @@ The agent should reference the ticket context in its response, even though it is
 
 Combined with `--focus`, using the `code-review` focus defined in `plugin.json`:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p Review the staged changes for correctness and style --append-system-prompt PR #22 in eyelock/assistants`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p Review the staged changes for correctness and style --append-system-prompt PR #22 in eyelock/assistants`
 ```bash
 my-harness --focus code-review --instructions "PR #22 in eyelock/assistants"
 ```
@@ -308,7 +308,7 @@ rm -rf /tmp/ynh-tutorial
 - `instructions.md` becomes vendor-specific project instructions
 - `ynh install` copies the harness and generates a launcher script
 - The launcher is a shell script that calls `ynh run`
-- `ynh run` assembles artifacts into `~/.ynh/run/<id>/` (the canonical id with `/` as `--`, e.g. `local--my-harness`) and launches the vendor CLI
+- `ynh run` assembles artifacts into a snapshot under `~/.ynh/run/.snapshots/` and launches the vendor CLI from it. `~/.ynh/run/<id>` (the canonical id with `/` as `--`, e.g. `local--my-harness`) is a symlink to the newest snapshot; snapshots are kept, not deleted, until a later release adds pruning
 
 ## Next
 
