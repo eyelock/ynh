@@ -437,9 +437,9 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L38: Cursor resume and interactive trust across snapshots, not shown live
 
-- **What:** `ynh run -v cursor --resume` resumes the newest chat that started in any snapshot of the harness, by id, in the newest snapshot, and passes `--trust` for an accepted harness. Not shown live: that `cursor-agent --resume <id>` from a different directory continues the chat, and that `--trust` is honoured by an interactive session. The live check is deferred.
+- **What:** `ynh run -v cursor --resume` resumes the newest chat that started in any snapshot of the harness, by id, in the newest snapshot, and passes `--trust` for an accepted harness. Not shown live: that `cursor-agent --resume <id>` from a different directory continues the chat, and that `--trust` is honoured by an interactive session. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** checked: the chat store's format (`~/.cursor/chats/*/<chatId>/meta.json` with `cwd` and `updatedAtMs`, read on this machine, cursor-agent 2026.11.05-86047df) and tests on fixtures; one-shot trust live on 2026-11-09: a path-run harness was refused with `Workspace Trust Required`, an accepted harness passed that stage with `--trust` and `-p`. The model calls were refused by the account's Cursor usage limit, so no chat was started.
-- **Tracking:** [ynh #765](https://github.com/eyelock/ynh/issues/765), with [ynh #776](https://github.com/eyelock/ynh/pull/776).
+- **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. Built in [ynh #776](https://github.com/eyelock/ynh/pull/776) for [ynh #765](https://github.com/eyelock/ynh/issues/765).
 - **Workaround:** none verified; if an interactive session still asks for trust, accept it once for that snapshot.
 - **Detail:** [Vendors](vendors.md), [Delegate sessions](delegate-sessions.md).
