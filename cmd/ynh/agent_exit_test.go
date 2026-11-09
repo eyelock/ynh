@@ -116,8 +116,6 @@ func TestCmdAgentRun_RefusalExitCodeMatchesResult(t *testing.T) {
 	}{
 		{name: "unknown backend", args: []string{"--task", "t", "--backend", "gemini"},
 			wantCode: 1, wantSub: `unknown backend "gemini"`},
-		{name: "sandbox the backend cannot use", args: []string{"--task", "t", "--backend", "opencode", "--sandbox", "srt"},
-			wantCode: 1, wantSub: "not supported by the opencode backend"},
 		{name: "unknown auto-approve level", args: []string{"--task", "t", "--auto-approve", "sometimes"},
 			wantCode: 1, wantSub: "unknown --auto-approve level"},
 		{name: "auto-approve edits on codex", args: []string{"--task", "t", "--backend", "codex", "--auto-approve", "edits"},
@@ -159,6 +157,21 @@ func TestCmdAgentRun_RefusalExitCodeMatchesResult(t *testing.T) {
 		{name: "resume during planning with no task", args: []string{"--resume", "{resume}"},
 			resume:   map[string]any{"backend": "claude", "phase": "plan"},
 			wantCode: 21, wantSub: "pass --task"},
+	}
+	// opencode runs under srt on Linux (ynh #805), so there it is no backend
+	// srt refuses; the refusal is checked where it holds, on macOS, and
+	// TestValidateSandbox covers the platform split.
+	if runtime.GOOS != "linux" {
+		tests = append(tests, struct {
+			name     string
+			args     []string
+			files    map[string]string
+			harness  string
+			resume   map[string]any
+			wantCode int
+			wantSub  string
+		}{name: "sandbox the backend cannot use", args: []string{"--task", "t", "--backend", "opencode", "--sandbox", "srt"},
+			wantCode: 1, wantSub: "not supported by the opencode backend"})
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
