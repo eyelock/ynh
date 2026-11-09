@@ -420,7 +420,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L36: The Cursor backend, not shown live
 
-- **What:** `ynh agent run --backend cursor` runs the worker with Cursor's CLI, `agent`. Whether it runs turns, and whether hooks, session context, `--auto-approve all` and ynh's own telemetry work on it, is unverified. The live check is deferred to a later release.
+- **What:** `ynh agent run --backend cursor` runs the worker with Cursor's CLI, `agent`. Whether it runs turns, and whether hooks, session context, `--auto-approve all`, ynh's own telemetry and `--sandbox srt` (a blocked host shown refused; [L18](#l18-sandbox-srt) records that the sandboxed worker reaches Cursor's servers but no turn could be run) work on it, is unverified. The live check is deferred to a later release.
 - **Owner:** unknown until verified.
 - **Evidence:** checked, by code and tests rather than a live run: the worker takes its binary, `agent`, from the Cursor adapter ([ynh #536](https://github.com/eyelock/ynh/pull/536)); it reads the model from the init event of Cursor's documented stream-json ([ynh #444](https://github.com/eyelock/ynh/pull/444)); and the `--auto-approve` mapping was checked against Cursor's CLI parameters page ([ynh #426](https://github.com/eyelock/ynh/pull/426)). Deferred: a live `ynh agent run --backend cursor`. The record shows none.
 - **Tracking:** [ynh #751](https://github.com/eyelock/ynh/issues/751), v0.18.0: the live check is deferred to a later release. [ynh #716](https://github.com/eyelock/ynh/issues/716) records the v0.17.0 verification.
