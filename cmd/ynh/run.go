@@ -582,6 +582,10 @@ func cmdRun(args []string) error {
 
 		// Codex hook and project trust, granted only for an accepted harness.
 		vendorArgs = append(codexHookTrustLaunchArgs(loaded, harnessID, adapter.Name(), runDir, os.Stderr), vendorArgs...)
+		// Cursor's Workspace Trust, on the same terms: a snapshot is a new
+		// folder whenever the harness changes, and cursor-agent asks once per
+		// folder.
+		vendorArgs = append(cursorTrustLaunchArgs(loaded, harnessID, adapter.Name()), vendorArgs...)
 
 		// Launch
 		if launch.Bare {
@@ -701,6 +705,13 @@ func launchSession(adapter vendor.Adapter, runDir, harnessKey string, ra runArgs
 		if !adapter.SupportsResume() {
 			return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
 		}
+		if sn, ok := adapter.(vendor.SnapshotSessions); ok && sn.SessionsKeyedBySnapshot() && ra.ResumeID == "" {
+			sessionID, err := resolveSnapshotSession(adapter, harnessKey, stderr)
+			if err != nil {
+				return err
+			}
+			return launchResume(adapter, runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
+		}
 		sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, stderr)
 		if resumed {
 			return launchResume(adapter, runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
@@ -801,6 +812,27 @@ func launchBound(adapter vendor.Adapter, binder vendor.SessionBinder, runDir, ha
 	}
 	bind(id)
 	return binder.LaunchWithSessionID(runDir, id, prompt, ra.Interactive, vendorArgs)
+}
+
+// resolveSnapshotSession is --resume for Codex and Cursor, which key their
+// sessions by the directory they started in, and a harness starts in a new
+// snapshot folder whenever it changes. It finds the newest session that started
+// in any snapshot of the harness; the caller resumes it in the newest snapshot.
+//
+// There is no fall back: a vendor's own "last session" could be another
+// project's, so when no session is found, or the store cannot be read, the run
+// stops and says so.
+func resolveSnapshotSession(adapter vendor.Adapter, harnessKey string, _ io.Writer) (string, error) {
+	root := filepath.Join(config.RunDir(), runsnap.SnapshotsDirName, harnessKey)
+	id, err := adapter.ResolveLastSession(root, time.Time{})
+	switch {
+	case err == nil:
+		return id, nil
+	case errors.Is(err, vendor.ErrNoResumableSession):
+		return "", fmt.Errorf("no %s session to resume for %s: none started in a snapshot of this harness; pass --resume=<session-id> to name one", adapter.Name(), harnessKey)
+	default:
+		return "", fmt.Errorf("cannot find the %s session to resume for %s (%w); pass --resume=<session-id> to name one", adapter.Name(), harnessKey, err)
+	}
 }
 
 // resolveResumeSession decides which session `--resume` should continue.

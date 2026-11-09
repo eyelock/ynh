@@ -47,7 +47,7 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | Focuses, includes, sensors | Y | Y | Y | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | Y |
 | Workspace folders | Y | P [L10](#l10-codex-workspace-folders-on-resume) | Y | U [L11](#l11-cursor-workspace-folders) | Y |
 | `delegates_to` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L12](#l12-delegates-carry-only-part-of-a-harness) |
-| Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | Y | Y |
+| Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | U [L38](#l38-cursor-resume-and-interactive-trust-across-snapshots-not-shown-live) | Y |
 | Telemetry from `ynh run` | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) | N [L13](#l13-ynh-run-emits-no-telemetry) |
 
 ## ynh agent run
@@ -434,3 +434,12 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Tracking:** none.
 - **Workaround:** call the tool from an interactive session. An approval given there for the location carries over to later one-shot runs in the same Copilot home and folder (shown on Copilot CLI 1.0.106). Under `ynh run`, a harness's MCP servers reach Copilot with `--additional-mcp-config` instead ([Copilot Format](mcp.md#copilot-format)).
 - **Detail:** [Config File Locations](mcp.md#config-file-locations).
+
+### L38: Cursor resume and interactive trust across snapshots, not shown live
+
+- **What:** `ynh run -v cursor --resume` resumes the newest chat that started in any snapshot of the harness, by id, in the newest snapshot, and passes `--trust` for an accepted harness. Not shown live: that `cursor-agent --resume <id>` from a different directory continues the chat, and that `--trust` is honoured by an interactive session. The live check is deferred.
+- **Owner:** unknown until verified.
+- **Evidence:** checked: the chat store's format (`~/.cursor/chats/*/<chatId>/meta.json` with `cwd` and `updatedAtMs`, read on this machine, cursor-agent 2026.11.05-86047df) and tests on fixtures; one-shot trust live on 2026-11-09: a path-run harness was refused with `Workspace Trust Required`, an accepted harness passed that stage with `--trust` and `-p`. The model calls were refused by the account's Cursor usage limit, so no chat was started.
+- **Tracking:** [ynh #765](https://github.com/eyelock/ynh/issues/765), with [ynh #776](https://github.com/eyelock/ynh/pull/776).
+- **Workaround:** none verified; if an interactive session still asks for trust, accept it once for that snapshot.
+- **Detail:** [Vendors](vendors.md), [Delegate sessions](delegate-sessions.md).

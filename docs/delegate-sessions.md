@@ -137,7 +137,14 @@ A baked image's pre-assembled run dir is used as it is, as in v0.17.0.
 
 **Limit:** Codex and Cursor project symlinks point through the stable link, so they show the newest
 snapshot, not the session's. A session ynh launches reads its own snapshot through its working
-folder. Anything reading the project's links reads the newest.
+folder, Codex and Cursor included. Anything reading the project's links reads the newest.
+
+**Resume and trust on Codex and Cursor.** Both key state by the folder a session starts in, and that is
+a new snapshot whenever the harness changes. ynh carries it instead of giving them a stable folder:
+`--resume` finds the newest session that started in any snapshot of the harness and resumes it by id in
+the newest snapshot, and Cursor gets `--trust` for an accepted harness (see
+[vendors](vendors.md#vendor-notes)). Two runs of one harness do not share a folder unless their inputs
+are equal, when they share one sealed snapshot.
 
 ## What is removed
 

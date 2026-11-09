@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -107,17 +106,6 @@ func (c *Cursor) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []
 func (c *Cursor) SupportsInitialPrompt() bool { return true }
 
 func (c *Cursor) SupportsResume() bool { return true }
-
-// ResolveLastSession always reports no resumable session: Cursor keeps no local
-// session store to read. ~/.cursor/ holds configuration only and
-// ~/.local/share/cursor-agent/ holds nothing but installed versions — chats
-// appear to live server-side, reachable only through the CLI's own picker.
-//
-// Cursor can still resume (see LaunchResume); it just cannot be told *which*
-// session from here unless a caller supplies an id from elsewhere.
-func (c *Cursor) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
-	return "", ErrSessionLookupUnavailable
-}
 
 // LaunchResume continues a prior Cursor chat. An empty sessionID uses
 // --continue ("Continue previous session"). A bare --resume is never emitted:
