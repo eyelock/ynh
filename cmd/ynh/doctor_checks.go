@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
 )
 
@@ -272,4 +274,135 @@ func checkQuarantine() doctorCheck {
 	}
 	c.Status = c.worst()
 	return c
+}
+
+// ---- delegates -----------------------------------------------------------
+
+// checkDelegates resolves each installed harness's delegates_to the way
+// `ynh run` does, without fetching or writing anything: a delegate from the
+// harness's own repository is read from the committed tree, any other from
+// the cache. A harness can install and load and still fail every run because
+// a delegate stopped resolving (#806); nothing else in doctor looks.
+//
+// Only each harness's own entries are checked, not the delegates' delegates.
+//
+// This mirrors what `ynh run` does today: assembler.AssembleDelegates, then
+// resolver.FlattenDelegates, then ResolveSourceForRun. The delegates rewrite
+// adds resolveDelegate (cmd/ynh/delegate_resolve.go, ynw-op8n.2), which run
+// does not call yet. When ynw-op8n.3 or ynw-17g.26 wires it into run, this
+// check must move to it, or it will drift from what a run does. A note on
+// each of those beads records that.
+func checkDelegates() doctorCheck {
+	c := doctorCheck{Name: "delegates", Title: "delegates"}
+
+	list, err := harness.ListAll()
+	if err != nil {
+		// checkHarnesses reports the unlistable directory.
+		c.Status = c.worst()
+		return c
+	}
+	for _, e := range list {
+		id := canonicalIDForEntry(e)
+		h, err := harness.LoadByID(id)
+		if err != nil {
+			continue // checkHarnesses reports it
+		}
+		for _, d := range h.DelegatesTo {
+			if f, bad := checkDelegate(id, h.Dir, d); bad {
+				c.Findings = append(c.Findings, f)
+			}
+		}
+	}
+	c.Status = c.worst()
+	return c
+}
+
+// checkDelegate reports whether one delegates_to entry would fail a run.
+func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bool) {
+	gs := d.GitSource
+	label := gs.Path
+	if label == "" {
+		label = gs.Git
+		if gs.IsLocal() {
+			label = gs.Local
+		}
+	}
+	fail := func(sev, msg, remedy string) (doctorFinding, bool) {
+		return doctorFinding{Severity: sev, Subject: id, Message: msg, Remedy: remedy}, true
+	}
+
+	if gs.IsLocal() {
+		base := gs.Local
+		if !filepath.IsAbs(base) {
+			base = filepath.Join(harnessDir, base)
+		}
+		if _, err := os.Stat(filepath.Join(base, gs.Path)); err != nil {
+			return fail(sevError, fmt.Sprintf("delegate %q: local path %q does not exist", label, gs.Local),
+				fmt.Sprintf("restore it, or remove the entry from delegates_to of %s", id))
+		}
+		return doctorFinding{}, false
+	}
+
+	repo := resolver.GitSourceURL(gs.Git, harnessDir)
+
+	if resolver.IsOwnRepoSource(gs, harnessDir) {
+		// run clones this folder (EnsureRepo on GitSourceURL), and git can
+		// clone only a repository's root: a harness in a subfolder of its
+		// repository, with git ".", fails every run however its delegate is
+		// committed.
+		if !isRepoRoot(repo) {
+			return fail(sevError,
+				fmt.Sprintf("delegate %q: %s is a subfolder of its repository, and `ynh run` can clone only a repository's root", label, repo),
+				fmt.Sprintf("give the delegate a git URL in delegates_to of %s, or keep the harness at the root of its repository", id))
+		}
+		ref := gs.Ref
+		if ref == "" {
+			ref = "HEAD"
+		}
+		// "./" makes the path relative to repo (the harness's folder), as the
+		// stat and the remedy below are, not to the repository's top.
+		spec := ref + ":./" + filepath.ToSlash(filepath.Clean(gs.Path))
+		if gs.Path == "" {
+			spec = ref + "^{tree}"
+		}
+		if err := exec.Command("git", "-C", repo, "cat-file", "-e", spec).Run(); err == nil {
+			return doctorFinding{}, false
+		}
+		if gs.Path != "" {
+			if _, err := os.Stat(filepath.Join(repo, gs.Path)); err == nil {
+				return fail(sevError,
+					fmt.Sprintf("delegate %q is not in the committed tree of %s (it exists on disk but is not committed)", label, gs.Git),
+					fmt.Sprintf("git -C %s add %s && git -C %s commit", repo, gs.Path, repo))
+			}
+		}
+		return fail(sevError,
+			fmt.Sprintf("delegate %q is missing from the committed tree of %s (and not on disk)", label, gs.Git),
+			fmt.Sprintf("restore %s in %s and commit it, or remove the entry from delegates_to of %s", label, repo, id))
+	}
+
+	res, ok := resolver.LookupCache(repo, gs.Ref)
+	if !ok {
+		return fail(sevWarn,
+			fmt.Sprintf("delegate %q: %s is not cached, so the next run fetches it", label, gs.Git),
+			fmt.Sprintf("ynh update %s", id))
+	}
+	if gs.Path != "" {
+		if _, err := os.Stat(filepath.Join(res.Path, gs.Path)); err != nil {
+			return fail(sevError,
+				fmt.Sprintf("delegate %q is missing from the cached copy of %s", label, gs.Git),
+				fmt.Sprintf("ynh update %s", id))
+		}
+	}
+	return doctorFinding{}, false
+}
+
+// isRepoRoot reports whether dir is the top of a git working tree.
+func isRepoRoot(dir string) bool {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return false
+	}
+	top, err1 := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	here, err2 := filepath.EvalSymlinks(dir)
+	return err1 == nil && err2 == nil && top == here
 }
