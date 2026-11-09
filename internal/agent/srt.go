@@ -8,9 +8,45 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/eyelock/ynh/internal/config"
 )
+
+// srtTmpdir is the TMPDIR srt (0.0.81) sets for the sandboxed command. srt
+// makes it writable only when the folder already exists, so on a host where
+// nothing has created it the command fails with "EROFS: mkdir /tmp/claude"
+// (shown live with OpenCode on Linux, ynh #805).
+var srtTmpdir = "/tmp/claude"
+
+// ensureSrtTmpdir makes sure dir exists and is safe to hand to srt. /tmp is
+// shared, so a folder somebody else made there must never be used or
+// loosened: dir is created with mode 0700 when absent, and when present it
+// must be a real directory (not a link) owned by the current user that no
+// group or other user can write to. Anything else is one plain error.
+func ensureSrtTmpdir(dir string) error {
+	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("creating %s, the temporary directory srt needs: %w", dir, err)
+	}
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("checking %s, the temporary directory srt needs: %w", dir, err)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%s exists but is not a directory (or is a link), so --sandbox srt will not use it; remove it and run again", dir)
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("cannot check who owns %s, so --sandbox srt will not use it", dir)
+	}
+	if int(st.Uid) != os.Getuid() {
+		return fmt.Errorf("%s is owned by another user (uid %d); --sandbox srt will not use a temporary directory it does not own, so remove it or ask its owner to", dir, st.Uid)
+	}
+	if fi.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("%s can be written by other users (mode %04o); --sandbox srt will not use it, so run chmod go-w %s and run again", dir, fi.Mode().Perm(), dir)
+	}
+	return nil
+}
 
 // srt is Anthropic's sandbox runtime (github.com/anthropic-experimental/
 // sandbox-runtime, npm @anthropic-ai/sandbox-runtime). Its CLI reads its
@@ -222,6 +258,9 @@ func srtCommand(ctx context.Context, opts StartOptions, p srtPolicy, bin string,
 	srtBin, err := exec.LookPath("srt")
 	if err != nil {
 		return nil, nil, fmt.Errorf("srt not found on PATH: %w", err)
+	}
+	if err := ensureSrtTmpdir(srtTmpdir); err != nil {
+		return nil, nil, err
 	}
 	worktree := opts.WorktreeDir
 	if worktree == "" {

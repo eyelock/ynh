@@ -478,8 +478,8 @@ Flags:
   --no-plan                   Skip the planning phase
   --interactive               Stay in session
   --sandbox none|srt          Wrap the worker in srt with ynh's network and
-                              write allowlist (claude, codex, cursor; refused
-                              on opencode); none by default
+                              write allowlist (claude, codex, cursor; opencode
+                              on Linux only, refused on macOS); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor, opencode). Only for runs inside

@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -1908,11 +1909,14 @@ func validateSandbox(sandbox, backend string) error {
 			return nil
 		case "opencode":
 			// opencode run spawns /bin/ps, which srt's macOS profile refuses
-			// (see L18 in docs/vendor-parity.md); it is not shown to run on
-			// any platform, so it stays refused on all of them.
+			// (see L18 in docs/vendor-parity.md). On Linux it runs under srt
+			// (shown live, ynh #805), so only macOS stays refused.
+			if runtime.GOOS == "linux" {
+				return nil
+			}
 			return fmt.Errorf(
-				"--sandbox srt is not supported by the opencode backend (opencode run cannot start under srt: it spawns ps, which srt's macOS sandbox refuses); " +
-					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed")
+				"--sandbox srt is not supported by the opencode backend on %s (opencode run cannot start under srt: it spawns ps, which srt's macOS sandbox refuses; it is supported on Linux only); "+
+					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed", runtime.GOOS)
 		}
 		return fmt.Errorf(
 			"--sandbox srt is not supported by the %s backend; "+
