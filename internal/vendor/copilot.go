@@ -152,7 +152,7 @@ func (c *Copilot) ResolveLastSession(cwd string, notBefore time.Time) (string, e
 
 // readCopilotWorkspace extracts the id and cwd from a Copilot workspace.yaml.
 // Hand-parsed rather than pulled through a YAML library: the file is flat, only
-// two top-level scalars are needed, and ynh takes no external dependencies.
+// two top-level scalars are needed, so a YAML dependency is not worth adding.
 func readCopilotWorkspace(path string) (id string, cwd string, err error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
