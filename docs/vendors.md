@@ -218,7 +218,7 @@ Codex and Cursor key state by the directory they start in: Codex's `resume --las
 
 The limit is the one project symlinks already have: a Codex or Cursor session that is still running sees the newest snapshot through the links, not the one it started on. Two runs of one harness at once share the folder, so a later run's links replace the earlier run's.
 
-NOT YET VERIFIED, for want of a signed-in Codex and any Cursor login: that Codex keys a hook's trust by the unresolved `<folder>/.codex/hooks.json` rather than the link's target (if it resolves the link, the hooks ynh trusts are skipped, as before ynh #682, never run untrusted); that Codex reads `AGENTS.md`, skills, config and MCP servers through the links; that `codex resume --last` finds the session by this folder; and everything about Cursor above. Until they are shown live, treat these cells as unverified (see [Vendor Feature Parity](vendor-parity.md)).
+NOT YET VERIFIED, for want of a signed-in Codex and any Cursor login: that Codex keys a hook's trust by the unresolved `<folder>/.codex/hooks.json` rather than the link's target (if it resolves the link, the hooks ynh trusts are skipped, as before ynh #682, never run untrusted); that Codex reads `AGENTS.md`, skills, config and MCP servers through the links; that `codex resume --last` finds the session by this folder; and everything about Cursor above. Until they are shown live, treat the cells that depend on them as unverified; [L38 on the parity page](vendor-parity.md#l38-codex-and-cursor-start-in-a-stable-working-folder-not-shown-live) names them.
 
 ## Export Output by Vendor
 
