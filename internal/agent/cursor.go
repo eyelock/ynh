@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
@@ -95,7 +94,11 @@ func (s *cursorSession) Next() (Turn, error) {
 	args := buildCursorArgs(s.opts, s.chatID, s.firstTurn, msg)
 	s.firstTurn = false
 
-	cmd := exec.CommandContext(s.ctx, s.cursorBin, args...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, cursorSrtPolicy, s.cursorBin, args)
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir

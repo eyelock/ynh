@@ -30,6 +30,12 @@ const srtSettingsFile = "srt-settings.json"
 type srtSettings struct {
 	Network    srtNetwork    `json:"network"`
 	Filesystem srtFilesystem `json:"filesystem"`
+	// EnableWeakerNetworkIsolation lets the sandboxed process reach macOS's
+	// trustd, which a client that verifies TLS through the system trust store
+	// (Codex's) needs to connect at all. srt warns it opens a possible
+	// exfiltration path through trustd; it is set for the vendors that need it
+	// and left out of the file for the rest.
+	EnableWeakerNetworkIsolation bool `json:"enableWeakerNetworkIsolation,omitempty"`
 }
 
 // srtNetwork is allow-only: srt's proxy refuses every host not listed.
@@ -55,6 +61,9 @@ type srtPolicy struct {
 	domains []string
 	// state are the absolute paths the CLI writes its own state to.
 	state []string
+	// weakNetwork asks for srt's enableWeakerNetworkIsolation: the CLI cannot
+	// verify TLS under the sandbox without trustd.
+	weakNetwork bool
 }
 
 // claudeSrtPolicy is what Claude Code needs: its API, and the two hosts
@@ -115,6 +124,7 @@ func buildSrtSettings(worktree, settingsPath string, p srtPolicy) srtSettings {
 			AllowWrite: allow,
 			DenyWrite:  []string{realPath(settingsPath)},
 		},
+		EnableWeakerNetworkIsolation: p.weakNetwork,
 	}
 }
 
@@ -234,4 +244,80 @@ func srtCommand(ctx context.Context, opts StartOptions, p srtPolicy, bin string,
 	}
 	srtArgs := append([]string{"--settings", path, "--", bin}, args...)
 	return exec.CommandContext(ctx, srtBin, srtArgs...), cleanup, nil
+}
+
+// homeOf returns the HOME the worker will see, or the operator's.
+func homeOf(env []string) string {
+	home := lastEnv(env, "HOME")
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
+	return home
+}
+
+// codexSrtPolicy is what `codex exec` needs: the model endpoint for an API
+// key, and the ChatGPT sign-in and backend for a ChatGPT login. State is
+// CODEX_HOME, ~/.codex by default (its auth, config, sessions and logs).
+func codexSrtPolicy(env []string) srtPolicy {
+	// weakNetwork: codex (Rust) verifies TLS through the macOS trust store,
+	// and without trustd every request fails with "error sending request",
+	// allowed host or not (shown live, srt 0.0.81 on macOS).
+	p := srtPolicy{domains: []string{"api.openai.com", "auth.openai.com", "chatgpt.com"}, weakNetwork: true}
+	if dir := lastEnv(env, "CODEX_HOME"); dir != "" {
+		p.state = []string{dir}
+	} else {
+		p.state = []string{filepath.Join(homeOf(env), ".codex")}
+	}
+	return p
+}
+
+// cursorSrtPolicy is what Cursor's CLI needs: Cursor's own API hosts, all
+// under cursor.sh, and cursor.com for signing in. State is ~/.cursor and the
+// config directory beside it.
+func cursorSrtPolicy(env []string) srtPolicy {
+	home := homeOf(env)
+	return srtPolicy{
+		domains: []string{"*.cursor.sh", "cursor.com", "*.cursor.com"},
+		// Without trustd the CLI prints "failed to copy trust settings of
+		// system certificate" for every certificate in the store.
+		weakNetwork: true,
+		state: []string{
+			filepath.Join(home, ".cursor"),
+			filepath.Join(home, ".config", "cursor"),
+		},
+	}
+}
+
+// opencodeSrtPolicy is what `opencode run` needs: OpenCode's own hosts (its
+// Zen gateway and the model catalogue it reads), and its XDG state. The
+// host of a provider the operator configured is not known to ynh, so it is
+// not allowed: a run on such a model fails at the sandbox, which names the
+// host it refused.
+func opencodeSrtPolicy(env []string) srtPolicy {
+	home := homeOf(env)
+	dir := func(xdg, rel string) string {
+		if base := lastEnv(env, xdg); base != "" {
+			return filepath.Join(base, "opencode")
+		}
+		return filepath.Join(home, rel, "opencode")
+	}
+	return srtPolicy{
+		domains: []string{"opencode.ai", "*.opencode.ai", "models.dev"},
+		state: []string{
+			dir("XDG_DATA_HOME", ".local/share"),
+			dir("XDG_CONFIG_HOME", ".config"),
+			dir("XDG_CACHE_HOME", ".cache"),
+			dir("XDG_STATE_HOME", ".local/state"),
+		},
+	}
+}
+
+// workerCommand returns the command for one vendor process: bin itself, or
+// under --sandbox srt bin wrapped in srt with the vendor's policy. cleanup is
+// never nil and runs once the process has exited.
+func workerCommand(ctx context.Context, opts StartOptions, policy func([]string) srtPolicy, bin string, args []string) (*exec.Cmd, func(), error) {
+	if opts.Sandbox != "srt" {
+		return exec.CommandContext(ctx, bin, args...), func() {}, nil
+	}
+	return srtCommand(ctx, opts, policy(workerEnvFor(opts.Env)), bin, args)
 }

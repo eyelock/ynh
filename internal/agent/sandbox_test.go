@@ -15,8 +15,9 @@ func TestValidateSandbox(t *testing.T) {
 		{"", "claude", false, "unset means none"},
 		{"none", "codex", false, "explicitly unsandboxed is a choice, not a failure"},
 		{"srt", "claude", false, "claude implements srt"},
-		{"srt", "codex", true, "codex cannot honour srt and must not pretend to"},
-		{"srt", "cursor", true, "cursor cannot honour srt and must not pretend to"},
+		{"srt", "codex", false, "codex runs under srt"},
+		{"srt", "cursor", false, "cursor runs under srt"},
+		{"srt", "opencode", true, "opencode cannot start under srt and must not pretend to"},
 		{"docker", "claude", true, "an unknown sandbox is not silently ignored"},
 	}
 	for _, c := range cases {
@@ -32,11 +33,11 @@ func TestValidateSandbox(t *testing.T) {
 
 // The error has to tell the operator what to do instead, or it just blocks.
 func TestValidateSandbox_ErrorIsActionable(t *testing.T) {
-	err := validateSandbox("srt", "codex")
+	err := validateSandbox("srt", "opencode")
 	if err == nil {
 		t.Fatal("want an error")
 	}
-	for _, want := range []string{"codex", "container", "--sandbox none"} {
+	for _, want := range []string{"opencode", "container", "--sandbox none"} {
 		if !contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err, want)
 		}

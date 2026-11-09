@@ -64,7 +64,7 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 | Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
 | `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
 | `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| `--sandbox srt` | Y | N [L18](#l18-sandbox-srt) | – | N [L18](#l18-sandbox-srt) | N [L18](#l18-sandbox-srt) |
+| `--sandbox srt` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | X [L18](#l18-sandbox-srt) |
 | Telemetry (ynh's own spans and events) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | – | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
@@ -249,11 +249,11 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L18: sandbox srt
 
-- **What:** `--sandbox srt` is honoured by the `claude` backend only. On `codex`, `cursor` and `opencode` it is an error, not a warning.
-- **Owner:** not established.
-- **Evidence:** [Redaction](agent.md#redaction).
-- **Tracking:** [ynh #734](https://github.com/eyelock/ynh/issues/734), no milestone.
-- **Workaround:** run the worker inside containment you configure yourself.
+- **What:** `--sandbox srt` runs the worker inside [srt](https://github.com/anthropic-experimental/sandbox-runtime) on `claude`, `codex` and `cursor`, with the vendor's own network allowlist. On `opencode` it is an error, not a warning: `opencode run` starts a server of its own, and in doing so spawns `/bin/ps`, which macOS's sandbox profile refuses (`EPERM`) because `ps` is setuid, so the worker exits before its first turn. Not shown on Linux. On `cursor` the sandboxed worker reaches Cursor's servers, but a turn could not be run (no Cursor licence), so a blocked host is not shown refused there.
+- **Owner:** ynh for the wrapping, which srt does for any command: its documentation describes "arbitrary processes", and its settings file names no vendor. OpenCode's `ps` call is the vendor's.
+- **Evidence:** srt 0.0.81 on macOS, live through `ynh agent run --sandbox srt` at the branch of [ynh #734](https://github.com/eyelock/ynh/issues/734). Codex (codex-cli 0.166.0): a task that ran `curl` against two hosts got `CONNECT tunnel failed, response 403` for `https://example.com` and an HTTP response from `https://api.openai.com`. Codex needs srt's `enableWeakerNetworkIsolation` on macOS: without it every request, to an allowed host too, fails with `error sending request`, because Codex verifies TLS through the system trust store. Cursor (cursor-agent 2026.11.05-86047df): the sandboxed worker reached Cursor's API, which answered with its usage-limit error. OpenCode 2.2.3: `Error: EPERM: operation not permitted, posix_spawn 'ps'`, and `srt -- ps` alone fails the same way.
+- **Tracking:** [ynh #734](https://github.com/eyelock/ynh/issues/734), v0.20.0. The Cursor live check is deferred with [L36](#l36-the-cursor-backend-not-shown-live), [ynh #751](https://github.com/eyelock/ynh/issues/751).
+- **Workaround:** on `opencode`, run the worker inside containment you configure yourself.
 - **Detail:** [What `--sandbox srt` allows](agent.md#what-sandbox-srt-allows).
 
 ### L19: Vendor telemetry through the relay

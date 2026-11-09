@@ -116,8 +116,8 @@ func TestCmdAgentRun_RefusalExitCodeMatchesResult(t *testing.T) {
 	}{
 		{name: "unknown backend", args: []string{"--task", "t", "--backend", "gemini"},
 			wantCode: 1, wantSub: `unknown backend "gemini"`},
-		{name: "sandbox the backend cannot use", args: []string{"--task", "t", "--backend", "codex", "--sandbox", "srt"},
-			wantCode: 1, wantSub: "not supported by the codex backend"},
+		{name: "sandbox the backend cannot use", args: []string{"--task", "t", "--backend", "opencode", "--sandbox", "srt"},
+			wantCode: 1, wantSub: "not supported by the opencode backend"},
 		{name: "unknown auto-approve level", args: []string{"--task", "t", "--auto-approve", "sometimes"},
 			wantCode: 1, wantSub: "unknown --auto-approve level"},
 		{name: "auto-approve edits on codex", args: []string{"--task", "t", "--backend", "codex", "--auto-approve", "edits"},
