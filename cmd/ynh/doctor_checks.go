@@ -285,6 +285,13 @@ func checkQuarantine() doctorCheck {
 // a delegate stopped resolving (#806); nothing else in doctor looks.
 //
 // Only each harness's own entries are checked, not the delegates' delegates.
+//
+// This mirrors what `ynh run` does today: assembler.AssembleDelegates, then
+// resolver.FlattenDelegates, then ResolveSourceForRun. The delegates rewrite
+// adds resolveDelegate (cmd/ynh/delegate_resolve.go, ynw-op8n.2), which run
+// does not call yet. When ynw-op8n.3 or ynw-17g.26 wires it into run, this
+// check must move to it, or it will drift from what a run does. A note on
+// each of those beads records that.
 func checkDelegates() doctorCheck {
 	c := doctorCheck{Name: "delegates", Title: "delegates"}
 
@@ -343,7 +350,9 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 		if ref == "" {
 			ref = "HEAD"
 		}
-		spec := ref + ":" + filepath.ToSlash(filepath.Clean(gs.Path))
+		// "./" makes the path relative to repo (the harness's folder), as the
+		// stat and the remedy below are, not to the repository's top.
+		spec := ref + ":./" + filepath.ToSlash(filepath.Clean(gs.Path))
 		if gs.Path == "" {
 			spec = ref + "^{tree}"
 		}

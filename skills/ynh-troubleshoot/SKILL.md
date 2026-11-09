@@ -30,7 +30,9 @@ ynh doctor
 
 It checks the setup as a whole — vendor availability, installed-harness
 integrity, manifest validity of what is installed, symlink health, launcher and
-PATH, and anything sitting in quarantine — and reports findings with the command
+PATH, whether each harness's delegates still resolve (a delegate that is on disk
+but not committed fails every run while the harness still loads), and anything
+sitting in quarantine — and reports findings with the command
 that fixes each. It is read-only: it will tell you what is wrong and never
 change it.
 

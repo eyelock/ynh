@@ -430,3 +430,41 @@ func TestDoctor_DelegateCommittedIsSilent(t *testing.T) {
 		t.Errorf("a committed delegate must be silent, got %q:\n%s", c.Status, findingsOf(c))
 	}
 }
+
+func TestDoctor_DelegateOwnRepoInSubfolder(t *testing.T) {
+	fakeHome(t)
+	top := t.TempDir()
+	sub := filepath.Join(top, "sub")
+	if err := os.MkdirAll(filepath.Join(sub, "worker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "worker", "f"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, top, "init", "-q")
+	gitIn(t, top, "add", ".")
+	gitIn(t, top, "commit", "-qm", "x")
+
+	d := harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "worker"}}
+	if f, bad := checkDelegate("local/desk", sub, d); bad {
+		t.Errorf("a committed delegate under a subfolder must be silent: %+v", f)
+	}
+}
+
+func TestDoctor_DelegateLocalPathMissing(t *testing.T) {
+	fakeHome(t)
+	d := harness.Delegate{GitSource: harness.GitSource{Local: "nowhere"}}
+	f, bad := checkDelegate("local/desk", t.TempDir(), d)
+	if !bad || f.Severity != sevError || !strings.Contains(f.Message, "does not exist") {
+		t.Errorf("a missing local delegate must be an error: %+v", f)
+	}
+}
+
+func TestDoctor_DelegateNotCachedWarnsAndMissingInCacheErrors(t *testing.T) {
+	fakeHome(t)
+	d := harness.Delegate{GitSource: harness.GitSource{Git: "https://example.invalid/o/r.git", Path: "w"}}
+	f, bad := checkDelegate("local/desk", t.TempDir(), d)
+	if !bad || f.Severity != sevWarn || !strings.Contains(f.Message, "not cached") {
+		t.Errorf("an uncached source must warn: %+v", f)
+	}
+}
