@@ -40,6 +40,21 @@ reads the env file, replaces ${VAR} in the command's arguments and in its own
 environment values with the file's variables only (an unknown reference is an
 error), then becomes the command, so stdin and stdout are the server's.`,
 
+	"delegate-run": `ynh delegate-run <start|status|cancel|supervise> ...
+
+Internal. Run a delegates_to delegate as its own detached ynh session, and keep
+its delegation record under $YNH_HOME/delegations.
+
+  start --parent <id> --entry <n> --task <text> [--model <m>] [--folder <dir>]
+      Resolve entry n of the parent's delegates_to to its installed, trusted
+      harness and start it, then print its handle and record path as JSON.
+  status --record <path>   Print the record.
+  cancel --record <path>   Stop the delegate's process group and record it
+                           cancelled.
+  supervise <record-path>  What a started session runs as; never typed.
+
+The delegate server calls this; it is not meant to be typed.`,
+
 	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
 
 Internal. Print the headers of a remote MCP server as a JSON object, with
