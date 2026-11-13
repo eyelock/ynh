@@ -638,3 +638,33 @@ func TestDoctor_DelegateCycleWalkedOnce(t *testing.T) {
 		t.Errorf("a delegate cycle must end and stay silent, got %q:\n%s", c.Status, findingsOf(c))
 	}
 }
+
+// Two delegates that delegate to each other, reached from a desk: the walk
+// ends, and a cycle a run skips is no finding.
+func TestDoctor_TwoHarnessCycleEndsSilently(t *testing.T) {
+	fakeHome(t)
+	a, b := t.TempDir(), t.TempDir()
+	for _, r := range [][3]string{{a, "a", b}, {b, "b", a}} {
+		body := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":%q}]}`, r[1], r[2])
+		if err := writePluginJSONFile(r[0], []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+		gitIn(t, r[0], "init", "-q")
+		gitIn(t, r[0], "add", ".")
+		gitIn(t, r[0], "commit", "-qm", r[1])
+		if _, err := resolver.EnsureRepo(r[0], ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	desk := harness.InstalledDirByID("local/desk")
+	if err := os.MkdirAll(desk, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(desk, []byte(fmt.Sprintf(`{"name":"desk","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":%q}]}`, a))); err != nil {
+		t.Fatal(err)
+	}
+
+	if c := checkDelegates(); c.Status != sevOK {
+		t.Errorf("a two-harness cycle must end with no finding, got %q:\n%s", c.Status, findingsOf(c))
+	}
+}
