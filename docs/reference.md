@@ -15,6 +15,9 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `CI` | _(none)_ | `ynd compress/inspect` | (lowest priority skip-confirm) |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | `ynd compress` | — |
 | `YNR_SPOOL` | _(none)_ | `ynh agent run` | telemetry spool folder ([Telemetry](telemetry.md)) |
+| `YNH_DELEGATES` | _(none)_ | `ynh run` (set by ynh, not read) | — |
+| `YNH_DELEGATE_<NAME>_CARD`, `YNH_DELEGATE_<NAME>_AUTH` | _(none)_ | `ynh run` (set by ynh, not read) | — |
+| `A2ACLI_AGENT_CARD`, `A2ACLI_AUTH` | _(none)_ | `ynh run` (set by ynh, only with exactly one A2A delegate) | — |
 | `XDG_STATE_HOME` | `~/.local/state` | `ynh agent run` | telemetry goes to `$XDG_STATE_HOME/ynr/spool/local` when it exists |
 | `TRACEPARENT`, `TRACESTATE` | _(none)_ | `ynh agent run` | the trace a run joins |
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
@@ -22,6 +25,8 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `YNH_WORKSPACE_ROOTS` | _(none)_ | `ynh run`, `ynh agent run` | colon-separated allow-list of folders a harness may be granted; replaces `workspace_roots` in `config.json` for the run ([Workspace Folders](workspace.md)) |
 | `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh run`, `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
 | `YNH_LABELS` | _(none)_ | `ynh run`, `ynh agent run` | run [labels](telemetry.md#run-labels), comma-separated `key:value`; overridden per key by `--label`. ynh also **sets** it, to the merged set, for every process it starts (the vendor CLI, `ynh check`) |
+
+`ynh run` sets `YNH_DELEGATES` (the A2A delegates' names, comma-separated) and, per delegate, `YNH_DELEGATE_<NAME>_CARD` (the agent card URL) and `YNH_DELEGATE_<NAME>_AUTH` (`Bearer <token>`) when the harness has `delegates_to` entries whose transport is `a2a`. With exactly one A2A delegate it also sets `A2ACLI_AGENT_CARD` and `A2ACLI_AUTH` to the same values, which the `a2a` CLI reads by itself; with several it sets neither, so the CLI never silently picks one. These are set by ynh and never read as a fallback. A run clears any it inherited from an enclosing session first (`YNH_DELEGATES`, `YNH_DELEGATE_*`, `A2ACLI_AGENT_CARD`, `A2ACLI_AUTH`), and a delegate session never inherits the parent's `YNH_DELEGATES`, `YNH_DELEGATE_*` or `A2ACLI_*`. See [Reaching a delegate: the A2A endpoints](delegate-sessions.md#reaching-a-delegate-the-a2a-endpoints).
 
 **Note:** `YNH_VENDOR` is not used by `ynd diff` — diff always compares across multiple vendors and a single vendor value is not meaningful. Use `-v` with a comma-separated list instead.
 
