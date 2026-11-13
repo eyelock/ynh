@@ -555,6 +555,9 @@ func (c *Claude) AgentPluginLayout() AgentPluginLayout {
 
 func (c *Claude) SupportsExportDelegates() bool { return true }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (c *Claude) SupportsNativeSubagents() bool { return true }
+
 // ExportCarriesInstructions: a Claude Code plugin cannot carry instructions.
 // A plugin's AGENTS.md (and the CLAUDE.md that imports it) is installed with
 // it but never reaches the session: Claude Code reads CLAUDE.md only from the

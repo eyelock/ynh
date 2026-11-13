@@ -1186,6 +1186,9 @@ func (o *OpenCode) ExportArtifactDirs() map[string]string { return nil }
 
 func (o *OpenCode) SupportsExportDelegates() bool { return false }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (o *OpenCode) SupportsNativeSubagents() bool { return true }
+
 func (o *OpenCode) MarketplaceManifestDir() string { return "" }
 
 func (o *OpenCode) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {

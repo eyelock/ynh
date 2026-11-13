@@ -29,14 +29,15 @@ Both share `internal/config` for version injection. `ynd` is self-contained in `
 
 Follow the `add-vendor-adapter` skill: it is the checklist of every file a new vendor touches, and the adapter file is only one of them. The "Vendor Adapters" section in `.github/CONTRIBUTING.md` has the `Adapter` interface and the launch patterns. Key points:
 - The adapter is `internal/vendor/<name>.go`, but the vendor also goes into the per-vendor tables in `internal/vendor/` (hook events, hook timeouts, session-start context, workspace), the schema, the image, the parity checks, tests and docs
-- Implements the `Adapter` interface (**26 methods**; `adapter.go` is the authority), grouped: identity
+- Implements the `Adapter` interface (**28 methods**; `adapter.go` is the authority), grouped: identity
   (`Name`, `DisplayName`, `CLIName`), layout (`ConfigDir`, `ArtifactDirs`,
   `InstructionsFile`, `NeedsSymlinks`, `Install`, `Clean`), launch
   (`LaunchInteractive`, `LaunchNonInteractive`, `LaunchWithInitialPrompt`),
-  resume (`SupportsResume`, `ResolveLastSession`, `LaunchResume`), generation
+  resume (`SupportsResume`, `ResolveLastSession`, `LaunchResume`), MCP
+  isolation (`IsolateMCP`), generation
   (`GenerateSystemPrompt`, `ApplyRuntimeInstructions`, `GenerateHookConfig`,
   `GenerateMCPConfig`, `GeneratePluginManifest`, `PluginManifestDir`) and export
-  (`ExportArtifactDirs`, `SupportsExportDelegates`, `MarketplaceManifestDir`,
+  (`ExportArtifactDirs`, `SupportsExportDelegates`, `SupportsNativeSubagents`, `MarketplaceManifestDir`,
   `GenerateMarketplaceIndex`, `AgentPluginLayout`)
 - **Read the resume contract before implementing it.** `adapter.go` warns that
   an implementation must not emit a bare resume flag: it would hang an

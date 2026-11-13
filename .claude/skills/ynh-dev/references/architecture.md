@@ -86,6 +86,7 @@ type Adapter interface {
 	SupportsResume() bool
 	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
 	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
+	IsolateMCP(configPath string) (args []string, warning string)
 	GenerateSystemPrompt(content []byte) map[string][]byte
 	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
@@ -94,17 +95,19 @@ type Adapter interface {
 	PluginManifestDir() string
 	ExportArtifactDirs() map[string]string
 	SupportsExportDelegates() bool
+	SupportsNativeSubagents() bool
 	MarketplaceManifestDir() string
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
 	AgentPluginLayout() AgentPluginLayout
 }
 ```
 
-**26 methods.** Regenerated from `internal/vendor/adapter.go`; that
+**28 methods.** Regenerated from `internal/vendor/adapter.go`; that
 declaration is the only authority. This copy has drifted before: it read 10,
 11 and 18 methods in three different places while the interface had 24, which
 hid the entire resume subsystem from anyone writing a new adapter, and later
-read 25, without `AgentPluginLayout`, while the interface had 26.
+read 25, without `AgentPluginLayout`, while the interface had 26, and then 26
+without `IsolateMCP` while it had 27.
 
 One launch pattern: every vendor runs as a child process of ynh, supervised like every vendor, and ynh stays the parent until it exits. The deferred `snap.Release()` therefore holds the shared lock on the run snapshot for the child's whole life.
 - **Claude, Copilot** (`NeedsSymlinks() = false`): child process with `--plugin-dir`. **OpenCode** (also `false`): child process of `opencode --standalone` with `OPENCODE_CONFIG_DIR`.
