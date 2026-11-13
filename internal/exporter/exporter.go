@@ -208,22 +208,12 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// own ynh session and needs ynh at runtime, so it is left out of every
 	// vendor's export, with one warning.
 	var a2aLeftOut []harness.Delegate
-	walked := false
 	for _, v := range vendors {
 		if a, aerr := vendor.Get(v); aerr == nil && a.SupportsExportDelegates() {
 			if opts.delegates, a2aLeftOut, err = ResolveExportDelegatesBy(p.DelegatesTo, p.Dir, p.Name, p.Transport, true, opts.Config); err != nil {
 				return nil, err
 			}
-			walked = true
 			break
-		}
-	}
-	if !walked {
-		// No vendor walks the delegates; count the root's a2a entries.
-		for _, d := range p.DelegatesTo {
-			if p.TransportOf(d) == harness.TransportA2A {
-				a2aLeftOut = append(a2aLeftOut, d)
-			}
 		}
 	}
 

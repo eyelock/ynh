@@ -270,3 +270,26 @@ func TestExport_LeavesA2ADelegatesOutWithOneWarning(t *testing.T) {
 		t.Errorf("want one warning that the a2a delegate was left out, got %q", results[0].Warnings)
 	}
 }
+
+// A vendor that carries no delegates in an export already says it skipped
+// them; the a2a warning is not added on top when no selected vendor carries any.
+func TestExport_NoA2AWarningWhenNoVendorCarriesDelegates(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	a2aRepo := delegateRepo(t, "a2a-helper", nil)
+	src := t.TempDir()
+	manifest := `{"name":"root","version":"0.1.0","default_vendor":"opencode","delegates_to":[{"git":"` + a2aRepo + `"}]}`
+	if err := os.MkdirAll(filepath.Join(src, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, plugin.PluginDir, plugin.PluginFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Export(ExportOptions{SourceDir: src, OutputDir: t.TempDir(), Vendors: []string{"opencode"}, Mode: ModePerVendor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(results[0].Warnings, "\n")
+	if !strings.Contains(joined, "opencode: skipping 1 delegates") || strings.Contains(joined, "left out of the export") {
+		t.Errorf("want the vendor's skip warning alone, got %q", joined)
+	}
+}
