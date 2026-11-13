@@ -94,15 +94,20 @@ A question travels as an A2A task in state `input-required`:
    - **MCP route, elicitation but no Tasks** (the interactive UIs of Codex, Copilot CLI and
      OpenCode): during a call that waits (`wait` on the delegate's tool, `delegate_status`,
      `delegate_result` or `delegate_reply`) the server sends a server-initiated `elicitation/create`,
-     once for a question, and records the answer. A client that refuses the request, declines it or
+     once for a question, and records the answer against that question only. The client may
+     take longer than the call is held: the answer is then recorded whenever it comes, unless the
+     question was answered another way first (by `delegate_reply`, say), in which case it is dropped
+     and never lands on a later question. While the elicitation is outstanding, the result's note
+     says it is still waiting for its answer: wait, or answer with `delegate_reply`, and the
+     elicitation's answer is dropped. A client that refuses the request, declines it or
      cancels it has not answered: Cursor's CLI refuses without asking, and Copilot CLI's `-p`
      declines at once for want of a person. The question then stays open in the result, with a note
      that it was put to the client, for the next route.
    - **MCP route, headless** (`claude -p`, `codex exec`, `copilot -p`, `opencode run`, and anything
      above that gave no answer): the question is in the structured result of the delegate's tool or
      `delegate_status`, with state `input-required` and the question as `message`. The parent's
-     model answers it with `delegate_reply` on the same task. On the [parity page](vendor-parity.md)
-     this is the model answering, not the human.
+     model answers it with `delegate_reply` on the same task. This is the model
+     answering, not a person ([L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
    - **a2a CLI route:** `a2a task get` shows state `input-required` with the question as the status
      message, and the parent's model answers with `a2a send --task-id <id> "<answer>"` on the same
      task, as the `ynh-a2a-delegates` skill teaches.
