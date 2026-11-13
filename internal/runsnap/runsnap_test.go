@@ -3,8 +3,11 @@
 package runsnap
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -121,7 +124,7 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 				default:
 				}
 				if _, err := os.ReadFile(filepath.Join(root, "h", "f")); err != nil {
-					t.Errorf("reader saw a missing path: %v", err)
+					t.Errorf("reader saw a missing path: %v\n%s", err, missingPathDiagnostics(root))
 					return
 				}
 			}
@@ -135,6 +138,42 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 	}
 	close(stop)
 	wg.Wait()
+}
+
+// missingPathDiagnostics says what a reader that saw h/f missing can learn a
+// moment later, so a failure on a CI runner is evidence and not only a line:
+// the kernel and the temp dir's filesystem (the swap rests on rename over a
+// symlink being atomic there), whether the same path resolves again at once
+// (a transient lookup miss) or stays missing (the link or its target really
+// went), where the link points, and whether that target exists.
+func missingPathDiagnostics(root string) string {
+	var b strings.Builder
+	run := func(name string, args ...string) {
+		out, err := exec.Command(name, args...).CombinedOutput()
+		fmt.Fprintf(&b, "$ %s %s\n%s", name, strings.Join(args, " "), out)
+		if err != nil {
+			fmt.Fprintf(&b, "(%v)\n", err)
+		}
+	}
+	run("uname", "-a")
+	run("df", "-P", root)
+	if out, err := exec.Command("stat", "-f", "-c", "filesystem type: %T", root).CombinedOutput(); err == nil {
+		b.Write(out)
+	}
+	link := filepath.Join(root, "h")
+	_, err := os.ReadFile(filepath.Join(link, "f"))
+	fmt.Fprintf(&b, "read h/f again: %v\n", err)
+	target, err := os.Readlink(link)
+	fmt.Fprintf(&b, "readlink h: %q %v\n", target, err)
+	if err == nil {
+		_, err = os.Stat(filepath.Join(root, target))
+		fmt.Fprintf(&b, "stat target: %v\n", err)
+		_, err = os.Stat(filepath.Join(root, target, "f"))
+		fmt.Fprintf(&b, "stat target/f: %v\n", err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, SnapshotsDirName, "h"))
+	fmt.Fprintf(&b, "snapshots: %d\n", len(entries))
+	return b.String()
 }
 
 func TestSharedLockHeld(t *testing.T) {
