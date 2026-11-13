@@ -160,7 +160,25 @@ run. The server's entry carries the endpoints (the same `YNH_DELEGATE*` values a
 `YNH_HOME`, since Codex hands its MCP servers a trimmed environment), so it lives for the
 session: the endpoints open before the config is written, and a run of such a harness keeps its
 own snapshot, since the token in it is fresh. A run from a baked image has no such server: its
-config was written at build time, so use the `a2a` CLI there.
+config was written at build time, so use the `a2a` CLI there ([The a2a CLI route](#the-a2a-cli-route)).
+
+**Both routes, on a live run.** A live `ynh run` of a parent with A2A delegates gives it both
+routes to the same endpoints: these tools, and the `a2a-cli` and `ynh-a2a-delegates` skills with
+the `a2a` CLI. A baked image's run gets the skills only. Which route the parent uses is its own
+choice: ynh states no preference, and the companion skill does not either. They differ in what
+they need and how they speak:
+
+| | MCP tools (this section) | `a2a` CLI ([The a2a CLI route](#the-a2a-cli-route)) |
+|---|---|---|
+| Needs | the vendor's allow rule for `ynh-delegates` (none on OpenCode; Codex is approved by ynh) | the `a2a` binary (0.4.0 or newer) and a shell allow rule; on Codex, a sandbox that reaches localhost |
+| Results | structured, with a declared schema | the CLI's own output |
+| Handle | `task_id` is the delegation handle (`dlg-` and 16 hex digits) | the A2A task id the CLI prints |
+| Waiting | a bounded `wait` on the call, or poll | `send --async` and `task get` |
+
+Both reach the one delegation record, so `delegate_list` shows a task started with the CLI, but its
+id there is the handle, not the A2A task id the CLI used; use each route's own id with its own
+tools. A task started with the CLI can be answered with `delegate_reply` (the answer goes to the
+record), and one started with a tool can be inspected with `delegate_status`.
 
 **One tool per delegate, and five for every parent.** All of them return `structuredContent`
 with a declared `outputSchema`, and the same JSON as text. The fields are `task_id`, `context_id`,
@@ -234,7 +252,10 @@ tool is not built yet, see [Questions from a delegate](#questions-from-a-delegat
 
 A parent reaches its A2A delegates by shell with the official
 [a2a CLI](https://github.com/a2aproject/a2a-cli) (v0.4.0) and its skill. When a harness has an A2A
-delegate, `ynh run` writes two skills into the parent's vendor skill folder:
+delegate, `ynh run` writes two skills into the parent's vendor skill folder (a live run also gives
+the parent the same delegates as MCP tools, `delegate_to_<name>` and the handle tools; see [Reaching a
+delegate over MCP](#reaching-a-delegate-over-mcp) for when to use which, and for a baked image, which
+gets these skills and no tools):
 
 - `a2a-cli`, the official skill, vendored **unchanged** from a2a-cli commit
   `5c95123d1c8d50a1cd6dfc2f28a14f5533a383ae` (skill version 2026.09.22) with its Apache-2.0
@@ -250,7 +271,9 @@ delegate, `ynh run` writes two skills into the parent's vendor skill folder:
   print the credential.
 
 ynh does not install the `a2a` binary. `ynh doctor` warns (it never fails) for a harness with A2A
-delegates when:
+delegates when the CLI route would not work. These checks are about the CLI route only: a live
+run's MCP route needs none of them (its own allow rule is not checked yet). A parent that uses the
+tools can ignore these warnings:
 
 | Finding | Fix |
 |---|---|

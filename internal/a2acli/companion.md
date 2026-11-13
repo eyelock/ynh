@@ -4,8 +4,10 @@ description: >-
   How this session reaches its A2A delegates with the a2a CLI: which delegates
   it has, which environment variables carry each one's agent card and
   credential, and the rules for sending, polling and answering a task. Use
-  before sending any task to a delegate. ynh wrote this skill; the a2a-cli skill
-  beside it says how the CLI works.
+  when you send a task to a delegate with the a2a CLI. A live session may also
+  have the same delegates as MCP tools (delegate_to_<name>); this skill covers
+  the CLI. ynh wrote this skill; the a2a-cli skill beside it says how the CLI
+  works.
 ---
 
 # Reaching your A2A delegates
@@ -13,6 +15,15 @@ description: >-
 ynh opened one localhost A2A endpoint for each of this harness's delegates. The
 `a2a-cli` skill beside this one says how the `a2a` CLI works; this one says how
 to point it at *your* delegates.
+
+## The same delegates as MCP tools
+
+In a live session ynh may also have given you the same delegates as MCP tools,
+from the `ynh-delegates` server: `delegate_to_<name>` to start one, and
+`delegate_list`, `delegate_status`, `delegate_result`, `delegate_cancel` and
+`delegate_reply`. Both ways reach the same delegates; use either. If you start
+a task with the tools, follow them with the tools: their `task_id` is not the
+task id the CLI prints, and the rules below are the CLI's.
 
 ## Which delegates, and how to reach one
 
