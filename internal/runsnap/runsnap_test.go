@@ -3,8 +3,12 @@
 package runsnap
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -120,8 +124,13 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 					return
 				default:
 				}
+				// Where the link points just before the read. Every snapshot
+				// here has a distinct hash, so the same target afterwards means
+				// no swap happened in between.
+				before, beforeErr := os.Readlink(filepath.Join(root, "h"))
 				if _, err := os.ReadFile(filepath.Join(root, "h", "f")); err != nil {
-					t.Errorf("reader saw a missing path: %v", err)
+					obs := missingPathObservations(root, before, beforeErr, err)
+					t.Errorf("reader saw a missing path: %v\n%s", err, missingPathDiagnostics(root, obs))
 					return
 				}
 			}
@@ -135,6 +144,107 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 	}
 	close(stop)
 	wg.Wait()
+}
+
+// missingPathObservations is what a reader that saw h/f missing can learn at
+// once, before anything slow runs: the writer keeps swapping the whole time,
+// so a check made tens of milliseconds later says nothing about the moment of
+// the miss. before is where h pointed just before the failed read; it is read
+// again after the checks. The writer's every snapshot has its own hash, so an
+// unchanged target means no swap happened in between.
+func missingPathObservations(root, before string, beforeErr, readErr error) string {
+	var b strings.Builder
+	link := filepath.Join(root, "h")
+	fmt.Fprintf(&b, "failed read of h/f: %v\n", readErr)
+	fmt.Fprintf(&b, "readlink h just before the read: %q %v\n", before, beforeErr)
+	_, err := os.Lstat(link)
+	fmt.Fprintf(&b, "lstat h: %v\n", err)
+	_, err = os.Stat(filepath.Join(link, "f"))
+	fmt.Fprintf(&b, "stat h/f: %v\n", err)
+	after, afterErr := os.Readlink(link)
+	fmt.Fprintf(&b, "readlink h after: %q %v\n", after, afterErr)
+	if afterErr == nil {
+		_, err = os.Stat(filepath.Join(root, after))
+		fmt.Fprintf(&b, "stat target: %v\n", err)
+		_, err = os.Stat(filepath.Join(root, after, "f"))
+		fmt.Fprintf(&b, "stat target/f: %v\n", err)
+	}
+	_, reread := os.ReadFile(filepath.Join(link, "f"))
+	fmt.Fprintf(&b, "read h/f again: %v\n", reread)
+	fmt.Fprintf(&b, "verdict: %s\n", classifyMiss(before, beforeErr, after, afterErr, reread))
+	return b.String()
+}
+
+// classifyMiss says what a failed read most likely was, from where h pointed
+// before the read and after the checks, and whether a re-read worked. The
+// same target both times means no swap between them (every snapshot has a
+// distinct hash), so a clean re-read is the kernel's lookup and a path still
+// missing is a link or snapshot that is really gone.
+func classifyMiss(before string, beforeErr error, after string, afterErr, reread error) string {
+	switch {
+	case beforeErr != nil:
+		return "h was already missing before the read: the link itself was gone, a swapLink bug"
+	case afterErr != nil:
+		return "h is missing after the checks: the link itself was gone, a swapLink bug"
+	case before != after && reread == nil:
+		return "h moved to another snapshot between the read and the checks and reads clean now: not conclusive"
+	case before != after:
+		return "h moved to another snapshot in between and still fails: not conclusive, read the lines above"
+	case reread == nil:
+		return "same target before and after, and a clean re-read: a transient lookup miss in the kernel, not swapLink"
+	default:
+		return "same target before and after and still missing: the snapshot or its file is really gone, a swapLink or lock bug"
+	}
+}
+
+// missingPathDiagnostics adds the slow, environmental facts, after the
+// observations above were taken: the kernel and the temp dir's filesystem
+// (the swap rests on rename over a symlink being atomic there).
+func missingPathDiagnostics(root, observations string) string {
+	var b strings.Builder
+	b.WriteString(observations)
+	run := func(name string, args ...string) {
+		out, err := exec.Command(name, args...).CombinedOutput()
+		fmt.Fprintf(&b, "$ %s %s\n%s", name, strings.Join(args, " "), out)
+		if err != nil {
+			fmt.Fprintf(&b, "(%v)\n", err)
+		}
+	}
+	run("uname", "-a")
+	run("df", "-P", root)
+	if out, err := exec.Command("stat", "-f", "-c", "filesystem type: %T", root).CombinedOutput(); err == nil {
+		b.Write(out)
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, SnapshotsDirName, "h"))
+	fmt.Fprintf(&b, "snapshots: %d\n", len(entries))
+	return b.String()
+}
+
+func TestClassifyMiss(t *testing.T) {
+	gone := errors.New("no such file")
+	tests := []struct {
+		name          string
+		before, after string
+		beforeErr     error
+		afterErr      error
+		reread        error
+		want          string
+	}{
+		{name: "kernel miss", before: "s/a", after: "s/a", want: "transient lookup miss in the kernel"},
+		{name: "snapshot really gone", before: "s/a", after: "s/a", reread: gone, want: "really gone"},
+		{name: "swapped, clean now", before: "s/a", after: "s/b", want: "not conclusive"},
+		{name: "swapped, still failing", before: "s/a", after: "s/b", reread: gone, want: "not conclusive"},
+		{name: "link missing before", beforeErr: gone, after: "s/a", want: "already missing before the read"},
+		{name: "link missing after", before: "s/a", afterErr: gone, reread: gone, want: "missing after the checks"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyMiss(tt.before, tt.beforeErr, tt.after, tt.afterErr, tt.reread)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("classifyMiss = %q, want it to contain %q", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestSharedLockHeld(t *testing.T) {
