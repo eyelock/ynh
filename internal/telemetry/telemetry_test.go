@@ -237,12 +237,11 @@ func TestSetup_OTLPExports(t *testing.T) {
 	}
 }
 
-// A setting the exporter cannot honour is the operator's choice too: one
-// note naming it, never a header value, and nothing written anywhere.
+// A setting the exporter cannot honour (other than the protocol, below) is the
+// operator's choice too: one note naming it, never a header value, and nothing
+// written anywhere.
 func TestSetup_OTLPUnsupported(t *testing.T) {
 	for _, env := range []map[string]string{
-		{"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"},
-		{"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"},
 		{"OTEL_EXPORTER_OTLP_CERTIFICATE": "/ca.pem"},
 		{"OTEL_EXPORTER_OTLP_COMPRESSION": "gzip"},
 	} {
@@ -271,6 +270,63 @@ func TestSetup_OTLPUnsupported(t *testing.T) {
 		if recs := readSpool(t, spoolDir); len(recs) != 0 {
 			t.Errorf("%v: wrote %d records to the spool", env, len(recs))
 		}
+	}
+}
+
+// A protocol the exporter cannot speak (http/protobuf, grpc), general or
+// per-signal, is warned about once and the run goes to the spool, not nowhere
+// (ynw-46x9, ynh #784). The warning never prints a header value.
+func TestSetup_OTLPProtocolFallsBackToTheSpool(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"},
+		{"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"},
+		{"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "http/protobuf"},
+	} {
+		clearTelemetryEnv(t)
+		spoolDir := t.TempDir()
+		t.Setenv("YNR_SPOOL", spoolDir)
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+		t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer s3cret")
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		var stderr bytes.Buffer
+		tel := Setup("1.0.0", Options{}, &stderr)
+		run := tel.StartRun()
+		run.Finish("converged", true)
+		tel.Shutdown()
+		if !tel.Active() || tel.Destination() != DestinationSpool {
+			t.Errorf("%v: active=%v destination=%q, want active spool", env, tel.Active(), tel.Destination())
+		}
+		out := stderr.String()
+		if n := strings.Count(out, "\n"); n != 1 || !strings.Contains(out, "OTEL_EXPORTER_OTLP_") || !strings.Contains(out, "spool") {
+			t.Errorf("%v: stderr = %q, want one note naming the setting and the spool", env, out)
+		}
+		if strings.Contains(out, "s3cret") {
+			t.Errorf("%v: the note prints a header value: %q", env, out)
+		}
+		if recs := readSpool(t, spoolDir); len(recs) == 0 {
+			t.Errorf("%v: nothing reached the spool", env)
+		}
+	}
+}
+
+// With no spool either, the warning says nothing was recorded.
+func TestSetup_OTLPProtocolWithNoSpoolRecordsNothing(t *testing.T) {
+	clearTelemetryEnv(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	var stderr bytes.Buffer
+	tel := Setup("1.0.0", Options{}, &stderr)
+	tel.StartRun().Finish("converged", true)
+	tel.Shutdown()
+	if tel.Active() {
+		t.Error("with no spool the run must record nothing")
+	}
+	if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "nothing was recorded") {
+		t.Errorf("stderr = %q, want one note saying nothing was recorded", stderr.String())
 	}
 }
 

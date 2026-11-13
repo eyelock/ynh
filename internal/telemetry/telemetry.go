@@ -45,7 +45,8 @@ const (
 	DestinationSpool Destination = "spool"
 	// DestinationOTLP is an operator's OTEL_EXPORTER_OTLP_* endpoint, sent to
 	// over OTLP/HTTP with JSON bodies. A setting that exporter cannot honour
-	// (grpc, custom certificates, compression) writes nothing and says so.
+	// (custom certificates, compression) writes nothing and says so; a protocol it
+	// cannot speak (http/protobuf, grpc) goes to the spool instead.
 	DestinationOTLP Destination = "otlp"
 )
 
@@ -61,20 +62,41 @@ func ChooseDestination() (Destination, string) {
 	if _, configured, unsupported := spool.HTTPOptionsFromEnv(os.Getenv); configured || unsupported != "" {
 		return DestinationOTLP, ""
 	}
+	if dir := spoolFolder(); dir != "" {
+		return DestinationSpool, dir
+	}
+	return DestinationNone, ""
+}
+
+// spoolFolder is the spool folder a run writes to when the operator chose no
+// OTLP endpoint: YNR_SPOOL, made absolute (children are handed this folder and
+// run in other directories), else the laptop default if that folder exists,
+// else "".
+func spoolFolder() string {
 	if dir := os.Getenv("YNR_SPOOL"); dir != "" {
-		// Absolute, because children are handed this folder and run in
-		// other directories.
 		if abs, err := filepath.Abs(dir); err == nil {
 			dir = abs
 		}
-		return DestinationSpool, dir
+		return dir
 	}
 	if dir := defaultSpool(); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			return DestinationSpool, dir
+			return dir
 		}
 	}
-	return DestinationNone, ""
+	return ""
+}
+
+// protocolUnsupported reports whether the operator's OTLP protocol (general or
+// per-signal) is one the JSON exporter cannot speak, http/protobuf or grpc, and
+// names the first such variable.
+func protocolUnsupported(getenv func(string) string) (string, bool) {
+	for _, name := range []string{"OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"} {
+		if v := strings.TrimSpace(getenv(name)); v != "" && !strings.EqualFold(v, "http/json") {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // defaultSpool is $XDG_STATE_HOME/ynr/spool/local. The XDG specification
@@ -159,6 +181,21 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 		// The operator chose; ynh does not look for a spool behind them.
 		opts, _, unsupported := spool.HTTPOptionsFromEnv(os.Getenv)
 		if unsupported != "" {
+			// A protocol the exporter cannot speak (http/protobuf is what
+			// Claude Code's setup and ynh's own relay export) is not a reason
+			// to lose the run: it goes to the spool, as it would had the
+			// operator set nothing. The other unsupported settings
+			// (certificates, compression) still write nothing.
+			if name, ok := protocolUnsupported(os.Getenv); ok {
+				if dir := spoolFolder(); dir != "" {
+					_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json, and ynh sends only OTLP/HTTP with JSON bodies; writing this run to the spool instead\n", name)
+					t.dest = DestinationSpool
+					t.activate(dir, nil)
+					break
+				}
+				_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json, and ynh sends only OTLP/HTTP with JSON bodies; there is no spool (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local), so nothing was recorded for this run\n", name)
+				break
+			}
 			_, _ = fmt.Fprintf(stderr, "ynh: %s; no telemetry is written for this run\n", unsupported)
 		} else {
 			t.activate("", spool.NewHTTPSender(opts))
