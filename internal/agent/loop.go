@@ -1734,7 +1734,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
 		}
 	}
-	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name})
+	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name, RootTransport: h.Transport})
 	if delErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)

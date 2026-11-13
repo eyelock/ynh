@@ -1,6 +1,6 @@
 # Delegation
 
-Chain harnesses together. A parent harness can invoke other harnesses as subagents — each with their own instructions, rules, and skills.
+Chain harnesses together. A parent harness can invoke other harnesses as delegates — each with their own instructions, rules, and skills. By default a delegate runs as its own ynh session ([Delegate sessions](../delegate-sessions.md)); set `"transport": "native"` on an entry to run it as the vendor's own subagent, which is what the rest of this tutorial shows.
 
 ## Prerequisites
 
@@ -64,6 +64,7 @@ cat > /tmp/ynh-tutorial/team-lead/.agents/harness/plugin.json << 'EOF'
   "version": "0.1.0",
   "description": "Team lead harness with specialist delegates",
   "default_vendor": "claude",
+  "transport": "native",
   "delegates_to": [
     {"git": "/tmp/ynh-tutorial/specialist"},
     {"git": "github.com/eyelock/assistants", "path": "ynh/researcher"}
@@ -149,9 +150,9 @@ rm -rf /tmp/ynh-tutorial
 
 ## What you learned
 
-- `delegates_to` in .agents/harness/plugin.json references other harnesses as subagents
+- `delegates_to` in .agents/harness/plugin.json references other harnesses; with `"transport": "native"` they run as subagents, and by default (`a2a`) as their own sessions
 - Delegates must be Git repos (local or remote)
-- ynh generates vendor-native agent files from delegate harnesses at runtime
+- ynh generates vendor-native agent files from `native` delegate harnesses at runtime; an `a2a` delegate gets none
 - Agent files inline the delegate's own instructions, rules, and skill list, when it has them
 - Delegate repos are fetched at install time and cached — `ynh run` works offline
 - Use `ynh update` to refresh cached delegate repos (a delegate in the harness's own repo, `"git": "."`, is refreshed on every run)

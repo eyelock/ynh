@@ -109,7 +109,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 	}
 
 	delegates := []harness.Delegate{
-		{GitSource: harness.GitSource{Git: delegateDir}},
+		{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: delegateDir}},
 	}
 
 	if _, err := AssembleDelegates(workDir, adapter, delegates, "", DelegateOptions{}); err != nil {
@@ -155,7 +155,7 @@ func TestAssembleDelegates_RelativeSourceUsesHarnessDir(t *testing.T) {
 
 	workDir := t.TempDir()
 	adapter := &mockAdapter{}
-	delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: "./team"}}}
+	delegates := []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: "./team"}}}
 	if _, err := AssembleDelegates(workDir, adapter, delegates, harnessDir, DelegateOptions{}); err != nil {
 		t.Fatalf("AssembleDelegates failed: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestAssembleDelegates_OwnRepoDelegateAddedLater(t *testing.T) {
 	assemble := func(name string) error {
 		adapter := &mockAdapter{}
 		workDir := t.TempDir()
-		delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: ".", Path: "harnesses/" + name}}}
+		delegates := []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: ".", Path: "harnesses/" + name}}}
 		if _, err := AssembleDelegates(workDir, adapter, delegates, harnessDir, DelegateOptions{}); err != nil {
 			return err
 		}

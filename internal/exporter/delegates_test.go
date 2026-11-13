@@ -34,7 +34,7 @@ func TestWriteDelegates_NoneWritesNothing(t *testing.T) {
 // manifest promised.
 func TestResolveExportDelegates_UnresolvableIsAnError(t *testing.T) {
 	_, err := ResolveExportDelegates([]harness.Delegate{
-		{GitSource: harness.GitSource{Git: "example.invalid/nope/nothing-here"}},
+		{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: "example.invalid/nope/nothing-here"}},
 	}, "", "root", nil)
 	if err == nil {
 		t.Fatal("an unresolvable delegate must be an error, not a silent skip")
@@ -74,7 +74,7 @@ func delegateRepo(t *testing.T, name string, servers map[string]any) string {
 func exportDelegatesFor(t *testing.T, repo string) []ExportDelegate {
 	t.Helper()
 	t.Setenv("YNH_HOME", t.TempDir())
-	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", "root", nil)
+	ds, err := ResolveExportDelegates([]harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", "root", nil)
 	if err != nil {
 		t.Fatalf("ResolveExportDelegates: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestResolveExportDelegates_RefusesPathRelativeServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := delegateRepo(t, "local-helper", map[string]any{"local-srv": server})
 			t.Setenv("YNH_HOME", t.TempDir())
-			_, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", "root", nil)
+			_, err := ResolveExportDelegates([]harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", "root", nil)
 			if err == nil {
 				t.Fatal("a server inside the delegate's directory must not export")
 			}
@@ -208,7 +208,7 @@ func TestWriteDelegates_FocusApplies(t *testing.T) {
 		}
 	}
 	t.Setenv("YNH_HOME", t.TempDir())
-	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", "root", nil)
+	ds, err := ResolveExportDelegates([]harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", "root", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,5 +228,68 @@ func TestWriteDelegates_FocusApplies(t *testing.T) {
 		if !strings.Contains(string(agent), want) {
 			t.Errorf("agent lacks %q:\n%s", want, agent)
 		}
+	}
+}
+
+// An export carries native delegates and leaves a2a ones out, with one
+// warning: an a2a delegate is its own ynh session and needs ynh at runtime.
+func TestExport_LeavesA2ADelegatesOutWithOneWarning(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	nativeRepo := delegateRepo(t, "native-helper", nil)
+	a2aRepo := delegateRepo(t, "a2a-helper", nil)
+	src := t.TempDir()
+	manifest := `{"name":"root","version":"0.1.0","default_vendor":"claude","delegates_to":[` +
+		`{"git":"` + nativeRepo + `","transport":"native"},` +
+		`{"git":"` + a2aRepo + `"}]}`
+	if err := os.MkdirAll(filepath.Join(src, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, plugin.PluginDir, plugin.PluginFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	results, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"claude"}, Mode: ModePerVendor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents, _ := os.ReadDir(filepath.Join(out, "claude", "agents"))
+	var names []string
+	for _, a := range agents {
+		names = append(names, a.Name())
+	}
+	if len(names) != 1 || names[0] != "native-helper.md" {
+		t.Errorf("only the native delegate is exported, got %v", names)
+	}
+	var left []string
+	for _, w := range results[0].Warnings {
+		if strings.Contains(w, "left out of the export") {
+			left = append(left, w)
+		}
+	}
+	if len(left) != 1 || !strings.Contains(left[0], "needs ynh at runtime") {
+		t.Errorf("want one warning that the a2a delegate was left out, got %q", results[0].Warnings)
+	}
+}
+
+// A vendor that carries no delegates in an export already says it skipped
+// them; the a2a warning is not added on top when no selected vendor carries any.
+func TestExport_NoA2AWarningWhenNoVendorCarriesDelegates(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	a2aRepo := delegateRepo(t, "a2a-helper", nil)
+	src := t.TempDir()
+	manifest := `{"name":"root","version":"0.1.0","default_vendor":"opencode","delegates_to":[{"git":"` + a2aRepo + `"}]}`
+	if err := os.MkdirAll(filepath.Join(src, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, plugin.PluginDir, plugin.PluginFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Export(ExportOptions{SourceDir: src, OutputDir: t.TempDir(), Vendors: []string{"opencode"}, Mode: ModePerVendor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(results[0].Warnings, "\n")
+	if !strings.Contains(joined, "opencode: skipping 1 delegates") || strings.Contains(joined, "left out of the export") {
+		t.Errorf("want the vendor's skip warning alone, got %q", joined)
 	}
 }
