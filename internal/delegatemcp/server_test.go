@@ -16,6 +16,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/parentmcp"
 )
 
 // The delegate's session is this test binary in a helper mode: its "ynh run"
@@ -25,9 +26,18 @@ func TestMain(m *testing.M) {
 	switch os.Getenv("DELEGATEMCP_HELPER") {
 	case "supervise":
 		err := delegation.Supervise(os.Args[len(os.Args)-1], func(r *delegation.Record) *exec.Cmd {
-			if q, ok := strings.CutPrefix(r.Task, "ask:"); ok {
+			q, ok := strings.CutPrefix(r.Task, "ask:")
+			short := false
+			if !ok {
+				q, ok = strings.CutPrefix(r.Task, "askshort:")
+				short = ok
+			}
+			if ok {
 				c := exec.Command(os.Args[0])
 				c.Env = append(os.Environ(), "DELEGATEMCP_HELPER=ask", "DELEGATEMCP_RECORD="+delegation.RecordPath(r.Parent, r.Folder, r.Handle), "DELEGATEMCP_QUESTION="+q)
+				if short {
+					c.Env = append(c.Env, "DELEGATEMCP_WAIT=short")
+				}
 				return c
 			}
 			return exec.Command("sh", "-c", r.Task)
@@ -38,22 +48,24 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	case "ask":
+		// The delegate's own ask_parent tool, as the delegate's session calls it.
 		path := os.Getenv("DELEGATEMCP_RECORD")
-		_, err := delegation.Update(path, func(r *delegation.Record) {
-			r.Questions = append(r.Questions, delegation.Question{ID: "q1", Text: os.Getenv("DELEGATEMCP_QUESTION"), AskedAt: time.Now().UTC()})
-		})
+		wait := 20 * time.Second
+		if os.Getenv("DELEGATEMCP_WAIT") != "" {
+			wait = time.Second
+		}
+		o, err := parentmcp.Ask(context.Background(), path, os.Getenv("DELEGATEMCP_QUESTION"), "", false, wait, 20*time.Millisecond)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		for {
-			r, err := delegation.Load(path)
-			if err == nil && len(r.Questions) > 0 && r.Questions[0].Answer != nil {
-				fmt.Println("you said " + *r.Questions[0].Answer)
-				os.Exit(0)
-			}
-			time.Sleep(50 * time.Millisecond)
+		switch o.State {
+		case parentmcp.StateAnswered:
+			fmt.Println("you said " + o.Answer)
+		default:
+			fmt.Println("no answer: " + o.State)
 		}
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
@@ -477,5 +489,155 @@ func TestToolName(t *testing.T) {
 		if got := ToolName(in); got != want {
 			t.Errorf("ToolName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// ---- elicitation during a wait (a client with elicitation but no Tasks)
+
+// callServing is call for a client that answers the server's own requests: each
+// elicitation/create it reads before the call's response goes to onElicit,
+// whose result (or error message, when errMsg is set) is sent back.
+func (s *session) callServing(tool string, args map[string]any, onElicit func(message string) (result any, errMsg string)) (toolRes, int) {
+	s.t.Helper()
+	s.nextID++
+	id := s.nextID
+	b, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call",
+		"params": map[string]any{"name": tool, "arguments": args, "_meta": map[string]any{clientCapsMeta: map[string]any{"elicitation": map[string]any{}}}}})
+	if _, err := s.in.Write(append(b, '\n')); err != nil {
+		s.t.Fatal(err)
+	}
+	asked := 0
+	for s.lines.Scan() {
+		var m struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+			Params struct {
+				Message string `json:"message"`
+			} `json:"params"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(s.lines.Bytes(), &m); err != nil {
+			s.t.Fatalf("bad line %q: %v", s.lines.Text(), err)
+		}
+		if m.Method == "elicitation/create" {
+			asked++
+			res, errMsg := onElicit(m.Params.Message)
+			reply := map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(m.ID)}
+			if errMsg != "" {
+				reply["error"] = map[string]any{"code": -32601, "message": errMsg}
+			} else {
+				reply["result"] = res
+			}
+			rb, _ := json.Marshal(reply)
+			if _, err := s.in.Write(append(rb, '\n')); err != nil {
+				s.t.Fatal(err)
+			}
+			continue
+		}
+		var tr toolRes
+		if err := json.Unmarshal(m.Result, &tr); err != nil {
+			s.t.Fatal(err)
+		}
+		return tr, asked
+	}
+	s.t.Fatalf("no response to %s: %v", tool, s.lines.Err())
+	return toolRes{}, 0
+}
+
+func TestElicitationDuringAWaitAnswersTheQuestion(t *testing.T) {
+	s := newSession(t, setup(t), "", nil)
+	var got string
+	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 10}, func(m string) (any, string) {
+		got = m
+		return map[string]any{"action": "accept", "content": map[string]any{"answer": "main"}}, ""
+	})
+	if asked != 1 || !strings.Contains(got, "which branch?") {
+		t.Errorf("elicited %d times, message %q", asked, got)
+	}
+	if r.StructuredContent.State != "completed" || !strings.Contains(r.StructuredContent.Result, "you said main") {
+		t.Errorf("after the elicited answer = %+v", r.StructuredContent)
+	}
+}
+
+func TestADeclinedElicitationLeavesTheQuestionForTheModel(t *testing.T) {
+	// Copilot CLI's -p declines at once, with no one to ask. That is not the
+	// delegate's answer: the question stays open, and the parent's model
+	// answers it with delegate_reply.
+	s := newSession(t, setup(t), "", nil)
+	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 10}, func(string) (any, string) {
+		return map[string]any{"action": "decline"}, ""
+	})
+	sc := r.StructuredContent
+	if asked != 1 || sc.State != "input-required" || !strings.HasPrefix(sc.Message, "which branch?") || !strings.Contains(sc.Message, "delegate_reply") {
+		t.Fatalf("declined: asked %d, %+v", asked, sc)
+	}
+	done := s.call("delegate_reply", map[string]any{"task_id": sc.TaskID, "message": "main", "wait": 5}).StructuredContent
+	if done.State != "completed" || !strings.Contains(done.Result, "you said main") {
+		t.Errorf("after delegate_reply = %+v", done)
+	}
+}
+
+func TestARefusedElicitationLeavesTheQuestionForTheModel(t *testing.T) {
+	// Cursor's CLI declines elicitation without asking: the request comes back
+	// as an error. The question is not lost: it is in the result, and the
+	// parent's model answers it with delegate_reply on the same task.
+	s := newSession(t, setup(t), "", nil)
+	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 10}, func(string) (any, string) {
+		return nil, "elicitation is not supported"
+	})
+	if asked != 1 || r.StructuredContent.State != "input-required" || !strings.HasPrefix(r.StructuredContent.Message, "which branch?") {
+		t.Fatalf("refused: asked %d, %+v", asked, r.StructuredContent)
+	}
+	// Waiting again does not put the same question to the client twice.
+	again, asked := s.callServing("delegate_status", map[string]any{"task_id": r.StructuredContent.TaskID, "wait": 1}, func(string) (any, string) {
+		return nil, "elicitation is not supported"
+	})
+	if asked != 0 || again.StructuredContent.State != "input-required" {
+		t.Errorf("again: asked %d, %+v", asked, again.StructuredContent)
+	}
+	done := s.call("delegate_reply", map[string]any{"task_id": r.StructuredContent.TaskID, "message": "develop", "wait": 5}).StructuredContent
+	if done.State != "completed" || !strings.Contains(done.Result, "you said develop") {
+		t.Errorf("after delegate_reply = %+v", done)
+	}
+}
+
+func TestNoElicitationCapabilityMeansNoElicitation(t *testing.T) {
+	// A client that does not offer it (claude -p) is never sent the request:
+	// call() reads exactly one line per request, so an extra line would fail
+	// the next call.
+	s := newSession(t, setup(t), "", nil)
+	r := s.call("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 2}).StructuredContent
+	if r.State != "input-required" {
+		t.Fatalf("headless = %+v", r)
+	}
+	if again := s.call("delegate_status", map[string]any{"task_id": r.TaskID}).StructuredContent; again.State != "input-required" {
+		t.Errorf("status = %+v", again)
+	}
+}
+
+func TestAQuestionNobodyAnswersLapsesWithTheDelegatesWait(t *testing.T) {
+	// The delegate waits one second for its parent, then goes on: the parent,
+	// which never answered, finds the delegation completed and its question
+	// still on the record.
+	s := newSession(t, setup(t), "", nil)
+	r := s.call("delegate_to_reviewer", map[string]any{"task": "askshort:which branch?", "wait": 5}).StructuredContent
+	if r.State != "input-required" {
+		t.Fatalf("asking = %+v", r)
+	}
+	var done Result
+	for i := 0; i < 100; i++ {
+		done = s.call("delegate_status", map[string]any{"task_id": r.TaskID}).StructuredContent
+		if done.State == "completed" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if done.State != "completed" || !strings.Contains(done.Result, "no answer: unanswered") {
+		t.Errorf("after the delegate's wait ran out = %+v", done)
+	}
+	path, _ := delegation.FindHandle(r.TaskID)
+	rec, _ := delegation.Load(path)
+	if len(rec.Questions) != 1 || rec.Questions[0].Answer != nil {
+		t.Errorf("questions = %+v", rec.Questions)
 	}
 }

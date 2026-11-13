@@ -84,6 +84,13 @@ type Server struct {
 	initCap map[string]any
 	clients map[string]*a2aclient.Client
 	a2a     map[string]a2aTask // handle -> its A2A task, for this server's own starts
+
+	// Server-initiated requests (elicitation/create) wait here for the client's
+	// response, by request id; asked remembers which questions were put to the
+	// client, so one question is never elicited twice.
+	pending map[string]chan elicitReply
+	nextReq int
+	asked   map[string]bool
 }
 
 type a2aTask struct {
@@ -103,7 +110,7 @@ func New(cfg Config) *Server {
 	if cfg.Version == "" {
 		cfg.Version = "0"
 	}
-	return &Server{cfg: cfg, clients: map[string]*a2aclient.Client{}, a2a: map[string]a2aTask{}}
+	return &Server{cfg: cfg, clients: map[string]*a2aclient.Client{}, a2a: map[string]a2aTask{}, pending: map[string]chan elicitReply{}, asked: map[string]bool{}}
 }
 
 // ToolName is the name of the tool for the delegate called name: the name
@@ -137,8 +144,15 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 	defer wg.Wait()
 	for sc.Scan() {
 		var req rpc
-		if json.Unmarshal(sc.Bytes(), &req) != nil || req.Method == "" || len(req.ID) == 0 {
-			// Not JSON, a response to nothing we asked, or a notification.
+		if json.Unmarshal(sc.Bytes(), &req) != nil {
+			continue
+		}
+		if req.Method == "" && len(req.ID) > 0 {
+			s.deliver(sc.Bytes())
+			continue
+		}
+		if req.Method == "" || len(req.ID) == 0 {
+			// Not a request, or a notification.
 			continue
 		}
 		wg.Add(1)
@@ -442,7 +456,7 @@ func (s *Server) callTool(ctx context.Context, req rpc) {
 			s.reply(req.ID, toolError(err.Error()))
 			return
 		}
-		r, err := s.waitFor(ctx, path, wait)
+		r, err := s.waitAsking(ctx, a.TaskID, path, wait, s.clientCaps(req.Params))
 		if err != nil {
 			s.reply(req.ID, toolError(err.Error()))
 			return
@@ -461,7 +475,7 @@ func (s *Server) callTool(ctx context.Context, req rpc) {
 		}
 		s.reply(req.ID, toolResult(s.resultOf(rec), false))
 	case "delegate_reply":
-		r, err := s.replyTo(ctx, a.TaskID, a.Message, wait)
+		r, err := s.replyTo(ctx, a.TaskID, a.Message, wait, s.clientCaps(req.Params))
 		if err != nil {
 			s.reply(req.ID, toolError(err.Error()))
 			return
@@ -631,7 +645,7 @@ func (s *Server) startTool(ctx context.Context, req rpc, d Delegate, a toolArgs,
 		s.reply(req.ID, v)
 		return
 	}
-	r, err := s.waitFor(ctx, path, wait)
+	r, err := s.waitAsking(ctx, handleOfPath(path), path, wait, caps)
 	if err != nil {
 		s.reply(req.ID, toolError(err.Error()))
 		return
@@ -643,7 +657,7 @@ func (s *Server) startTool(ctx context.Context, req rpc, d Delegate, a toolArgs,
 // through the A2A endpoint when this server started the task, and on the
 // record directly when it did not (a parent that restarted: the new endpoint
 // has no memory of the old task, but the record does).
-func (s *Server) replyTo(ctx context.Context, handle, message string, wait time.Duration) (Result, error) {
+func (s *Server) replyTo(ctx context.Context, handle, message string, wait time.Duration, caps map[string]any) (Result, error) {
 	path, err := s.find(handle)
 	if err != nil {
 		return Result{}, err
@@ -685,7 +699,7 @@ func (s *Server) replyTo(ctx context.Context, handle, message string, wait time.
 			return Result{}, err
 		}
 	}
-	return s.waitFor(ctx, path, wait)
+	return s.waitAsking(ctx, handle, path, wait, caps)
 }
 
 // ---- MCP Tasks
@@ -726,7 +740,7 @@ func (s *Server) taskMethod(ctx context.Context, req rpc) {
 		for _, raw := range p.InputResponses {
 			answer = elicitedAnswer(raw)
 		}
-		if _, err := s.replyTo(ctx, p.TaskID, answer, 0); err != nil {
+		if _, err := s.replyTo(ctx, p.TaskID, answer, 0, nil); err != nil {
 			s.fail(req.ID, -32602, err.Error())
 			return
 		}
@@ -774,7 +788,7 @@ func elicitedAnswer(raw json.RawMessage) string {
 	}
 	if json.Unmarshal(raw, &e) == nil {
 		if e.Action == "decline" || e.Action == "cancel" {
-			return "(the parent declined to answer)"
+			return delegation.DeclinedAnswer
 		}
 		if a, ok := e.Content["answer"].(string); ok {
 			return a

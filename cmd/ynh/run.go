@@ -19,6 +19,7 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/parentmcp"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/runsnap"
@@ -410,6 +411,23 @@ func cmdRun(args []string) error {
 				servers[delegateMCPServerName] = *entry
 			}
 		}
+		// A delegate session gets ynh's one tool for asking its parent a
+		// question (docs/delegate-sessions.md, "Questions from a delegate").
+		if action != "install" && action != "clean" {
+			pentry, pErr := parentMCPEntry()
+			if pErr != nil {
+				return pErr
+			}
+			if pentry != nil {
+				if _, taken := servers[parentmcp.ServerName]; taken {
+					return fmt.Errorf("the harness declares an MCP server named %q, which ynh uses for a delegate's questions to its parent\n  Fix: rename the server", parentmcp.ServerName)
+				}
+				if servers == nil {
+					servers = map[string]plugin.MCPServer{}
+				}
+				servers[parentmcp.ServerName] = *pentry
+			}
+		}
 		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
 				return fmt.Errorf("creating plugin data dir: %w", err)
@@ -621,6 +639,15 @@ func cmdRun(args []string) error {
 		// unless the harness opts out (mcp_manual_approval).
 		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
 			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		}
+
+		// A delegate's one-shot session has no one to approve ask_parent
+		// either (docs/delegate-sessions.md, "Questions from a delegate").
+		// Codex approves it with the harness's own servers above, Copilot's
+		// --allow-all-tools covers it and OpenCode needs no rule; Claude Code
+		// needs an allow rule for the server.
+		if adapter.Name() == "claude" && os.Getenv(delegationRecordEnv) != "" && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+			vendorArgs = append([]string{parentAllowRule(p.Name)}, vendorArgs...)
 		}
 
 		// Workspace folders the harness requested and the operator granted,

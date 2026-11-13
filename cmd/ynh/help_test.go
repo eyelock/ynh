@@ -272,7 +272,7 @@ func captureUsage(t *testing.T) string {
 
 // internalCommands are dispatched and have help, but ynh writes the calls to
 // them: they are not for a person to type, so `ynh help` leaves them out.
-var internalCommands = map[string]bool{"mcp-exec": true, "mcp-headers": true, "delegate-run": true, "delegate-mcp": true}
+var internalCommands = map[string]bool{"mcp-exec": true, "mcp-headers": true, "delegate-run": true, "delegate-mcp": true, "parent-mcp": true}
 
 func TestInternalCommandsAreNotInUsage(t *testing.T) {
 	usage := captureUsage(t)
