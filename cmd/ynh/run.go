@@ -351,6 +351,12 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
+		// A parent with A2A delegates reaches them with the a2a CLI: its skill
+		// and ynh's companion skill go in the vendor's skill folder.
+		if err := writeA2ACLISkills(p, adapter, runDir); err != nil {
+			return fmt.Errorf("assembling delegates: %w", err)
+		}
+
 		// Generate vendor-native hook config files, and copy in the scripts
 		// those hooks run from the harness. The hooks are the root's and
 		// those of the included harnesses that consented to them.

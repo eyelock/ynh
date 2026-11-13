@@ -151,6 +151,41 @@ is a detached session and goes on.
   with delegates of its own gets its own when it runs.
 - A delegate that is not installed or not trusted refuses the run, with the command to fix it.
 
+## The a2a CLI route
+
+A parent reaches its A2A delegates by shell with the official
+[a2a CLI](https://github.com/a2aproject/a2a-cli) (v0.4.0) and its skill. When a harness has an A2A
+delegate, `ynh run` writes two skills into the parent's vendor skill folder:
+
+- `a2a-cli`, the official skill, vendored **unchanged** from a2a-cli commit
+  `5c95123d1c8d50a1cd6dfc2f28a14f5533a383ae` (skill version 2026.09.22) with its Apache-2.0
+  licence. The official installs take no commit, so ynh keeps its own copy in
+  `internal/a2acli/vendored/a2a-cli/`, with the commit recorded beside it. Updating it is a
+  deliberate change.
+- `ynh-a2a-delegates`, ynh's own short companion: which environment variables name each
+  delegate's card and credential, and how to prefix a command with them
+  (`A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" A2ACLI_AUTH="$YNH_DELEGATE_<NAME>_AUTH" a2a send --async ...`);
+  to start with `send --async` and poll with `task get`; never to invent a task id when a command is
+  refused or fails; to pass a task as a plain prompt, not a long inline script; and to answer an
+  `input-required` question with `send --task-id <id>` on the same task. It tells the parent never to
+  print the credential.
+
+ynh does not install the `a2a` binary. `ynh doctor` warns (it never fails) for a harness with A2A
+delegates when:
+
+| Finding | Fix |
+|---|---|
+| `a2a` is not on PATH, or older than 0.4.0 | `curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh \| A2A_VERSION=0.4.0 sh`, or `brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli && brew install a2a` |
+| the vendored skill is missing from the run dir's skill folder or differs from the pin | `ynh run <harness>` writes the pinned copy |
+| Codex: the sandbox is not `workspace-write` with `network_access = true` | in `~/.codex/config.toml`, `sandbox_mode = "workspace-write"` and `[sandbox_workspace_write]` `network_access = true` |
+| Claude Code: no `Bash(a2a:*)` allow rule | add it to `permissions.allow` in a settings file, or pass `--allowedTools 'Bash(a2a:*)'` |
+| Copilot CLI: no `shell(a2a:*)` allow rule | add it to the allowed tools, or pass `--allow-tool 'shell(a2a:*)'` |
+
+Two of these have a cost worth knowing. With Codex's default sandbox the `a2a` CLI cannot reach
+`127.0.0.1` (`connect: operation not permitted`); turning `network_access` on means the shell is no
+longer sandboxed from localhost generally. And without an allow rule a headless run denies every
+`a2a` call. OpenCode needs no allow rule. Cursor's shell route has not been tested.
+
 ## One run dir, many live sessions
 
 Several live sessions of one harness are now the normal case: two reviews by the same delegate, say.

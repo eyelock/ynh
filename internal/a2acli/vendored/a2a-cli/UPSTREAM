@@ -1,0 +1,9 @@
+source: https://github.com/a2aproject/a2a-cli
+path: skills/a2a-cli/SKILL.md
+commit: 5c95123d1c8d50a1cd6dfc2f28a14f5533a383ae
+skill-version: 2026.09.22
+cli-version: 0.4.0
+license: Apache-2.0 (LICENSE, copied unchanged)
+
+SKILL.md is vendored unchanged. Updating it is a deliberate change: replace
+the file, this record and the constants in a2acli.go together.
