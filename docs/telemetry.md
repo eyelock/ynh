@@ -381,8 +381,8 @@ too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
 folder. Under `ynh agent run` that is beside ynh's own records and in the same
-trace; under `ynh run` ynh writes no records of its own, and Copilot CLI starts
-its own trace (see below).
+trace; under `ynh run` ynh's own record is the `ynh.session` span, and whether
+Copilot CLI's spans join its trace has not been checked (see below).
 
 ### Turning it on
 
@@ -633,8 +633,10 @@ environment, which Copilot inherits (`copilot help monitoring`, Copilot CLI 1.0.
 
 `COPILOT_OTEL_FILE_EXPORTER_PATH` is removed, since it would send the telemetry to a file.
 An `OTEL_EXPORTER_OTLP_*` already in the environment means the telemetry is the operator's,
-so no relay starts. `ynh run` writes no run span, so Copilot is given no `TRACEPARENT`; it
-does not join one anyway, and its spans start their own trace.
+so no relay starts. When telemetry has a destination, `ynh run` puts a `TRACEPARENT` naming its
+`ynh.session` span into the environment Copilot inherits ([What a launch emits](#what-a-launch-emits)).
+The verification below predates that record, when there was no `TRACEPARENT` and Copilot's spans
+started their own trace; whether Copilot now joins the `ynh.session` trace has not been checked.
 
 Verified on 2026-11-07 with Copilot CLI 1.0.106 against a real `ynr relay`: `ynh run
 --telemetry-relay -v copilot` with a one-shot prompt wrote `invoke_agent` and `chat` spans and
