@@ -287,6 +287,7 @@ func cmdRun(args []string) error {
 	var wsGranted []string
 	wsDecided := false
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
+	var endpoints *openedEndpoints
 	decideWorkspace := func() error {
 		if wsDecided {
 			return nil
@@ -374,6 +375,34 @@ func cmdRun(args []string) error {
 		servers, _, expErr := harness.ComposeMCPServers(p, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
 		if expErr != nil {
 			return expErr
+		}
+
+		// A parent with A2A delegates gets ynh's own MCP server for them
+		// (docs/delegate-sessions.md). It needs the endpoints, which a launch
+		// opens, so they open here, before the config that names them is
+		// written; the snapshot of such a run is its own, since the token in
+		// it is fresh.
+		if action != "install" && action != "clean" {
+			endpointFolder, _ := os.Getwd()
+			opened, epErr := openEndpointsWith(p, harnessID, endpointFolder, nil, os.Stderr)
+			if epErr != nil {
+				return epErr
+			}
+			endpoints = opened
+			defer opened.close()
+			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder)
+			if eErr != nil {
+				return eErr
+			}
+			if entry != nil {
+				if _, taken := servers[delegateMCPServerName]; taken {
+					return fmt.Errorf("the harness declares an MCP server named %q, which ynh uses for its A2A delegates\n  Fix: rename the server", delegateMCPServerName)
+				}
+				if servers == nil {
+					servers = map[string]plugin.MCPServer{}
+				}
+				servers[delegateMCPServerName] = *entry
+			}
 		}
 		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -608,12 +637,17 @@ func cmdRun(args []string) error {
 
 		// The A2A endpoints of the delegates whose transport is a2a, open for
 		// as long as the session runs (docs/delegate-sessions.md).
-		endpointFolder, _ := os.Getwd()
-		closeEndpoints, epErr := openDelegateEndpoints(p, harnessID, endpointFolder, os.Stderr)
-		if epErr != nil {
-			return epErr
+		// A host run opened them above, to write the delegates' MCP server
+		// into the config; a baked image's run opens them here, and the image
+		// has no such server (its config was written at build time).
+		if endpoints == nil {
+			endpointFolder, _ := os.Getwd()
+			closeEndpoints, epErr := openDelegateEndpoints(p, harnessID, endpointFolder, os.Stderr)
+			if epErr != nil {
+				return epErr
+			}
+			defer closeEndpoints()
 		}
-		defer closeEndpoints()
 
 		// Launch
 		if launch.Bare {

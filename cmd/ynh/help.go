@@ -55,6 +55,20 @@ its delegation record under $YNH_HOME/delegations.
 
 The delegate server calls this; it is not meant to be typed.`,
 
+	"delegate-mcp": `ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>]
+
+Internal. The MCP server a vendor starts over stdio for a parent with A2A
+delegates: one delegate_to_<name> tool per delegate, and delegate_list,
+delegate_status, delegate_result, delegate_cancel and delegate_reply. It reaches
+each delegate through the endpoint named in its environment (YNH_DELEGATES,
+YNH_DELEGATE_<NAME>_CARD and _AUTH).
+
+  --parent <id>        The parent's id; only its delegations are visible.
+  --folder <dir>       The parent's working folder.
+  --max-wait <seconds> The longest a call may be held (30, or YNH_DELEGATE_MAX_WAIT).
+
+ynh run writes the entry that calls this; it is not meant to be typed.`,
+
 	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
 
 Internal. Print the headers of a remote MCP server as a JSON object, with

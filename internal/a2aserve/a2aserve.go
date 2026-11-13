@@ -31,6 +31,11 @@ import (
 	"github.com/eyelock/ynh/internal/delegation"
 )
 
+// MetaHandle is the key under which a task's metadata carries the delegation
+// handle (dlg- and 16 hex digits) of the session behind it. The handle is what
+// outlives this endpoint: a parent that comes back reads the record by it.
+const MetaHandle = "ynh.handle"
+
 // LogTailLines is how much of a failed run's log goes into the task's status
 // message, so a delegate that wrote nothing to its output still says why.
 const LogTailLines = 40
@@ -163,13 +168,20 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 	return func(yield func(a2a.Event, error) bool) {
 		var path string
 		if ec.StoredTask == nil {
-			if !yield(a2a.NewSubmittedTask(ec, ec.Message), nil) {
-				return
-			}
-			_, p, err := delegation.Start(delegation.StartOptions{
+			// The session starts first, so the task the client first sees
+			// already carries the delegation's handle (MetaHandle). A start
+			// that fails still ends in a task, failed, with the reason.
+			rec, p, err := delegation.Start(delegation.StartOptions{
 				Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
 				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
 			})
+			sub := a2a.NewSubmittedTask(ec, ec.Message)
+			if err == nil {
+				sub.Metadata = map[string]any{MetaHandle: rec.Handle}
+			}
+			if !yield(sub, nil) {
+				return
+			}
 			if err != nil {
 				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateFailed, agentMessage(ec, err.Error())), nil)
 				return
@@ -184,7 +196,7 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				yield(nil, errors.New("this endpoint has no record of that task"))
 				return
 			}
-			if err := answer(path, messageText(ec.Message)); err != nil {
+			if err := Answer(path, messageText(ec.Message)); err != nil {
 				yield(nil, err)
 				return
 			}
@@ -211,13 +223,13 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateCompleted, nil), nil)
 				return
 			case delegation.StatusFailed:
-				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateFailed, agentMessage(ec, failureText(rec))), nil)
+				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateFailed, agentMessage(ec, FailureText(rec))), nil)
 				return
 			case delegation.StatusCancelled:
 				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateCanceled, nil), nil)
 				return
 			}
-			if q := openQuestion(rec); q != nil {
+			if q := OpenQuestion(rec); q != nil {
 				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateInputRequired, agentMessage(ec, q.Text)), nil)
 				return
 			}
@@ -238,8 +250,8 @@ func (x *executor) Cancel(_ context.Context, ec *a2asrv.ExecutorContext) iter.Se
 	}
 }
 
-// openQuestion is the first question the delegate asked that has no answer.
-func openQuestion(rec *delegation.Record) *delegation.Question {
+// OpenQuestion is the first question the delegate asked that has no answer.
+func OpenQuestion(rec *delegation.Record) *delegation.Question {
 	for i := range rec.Questions {
 		if rec.Questions[i].Answer == nil {
 			return &rec.Questions[i]
@@ -248,8 +260,8 @@ func openQuestion(rec *delegation.Record) *delegation.Question {
 	return nil
 }
 
-// answer records text as the answer to the open question.
-func answer(path, text string) error {
+// Answer records text as the answer to the open question.
+func Answer(path, text string) error {
 	var found bool
 	_, err := delegation.Update(path, func(r *delegation.Record) {
 		for i := range r.Questions {
@@ -270,9 +282,9 @@ func answer(path, text string) error {
 	return nil
 }
 
-// failureText is why a task failed: the record's error, then the tail of the
+// FailureText is why a task failed: the record's error, then the tail of the
 // run's log, so a delegate that wrote nothing to its output still says why.
-func failureText(rec *delegation.Record) string {
+func FailureText(rec *delegation.Record) string {
 	var parts []string
 	if rec.Error != "" {
 		parts = append(parts, rec.Error)
@@ -280,7 +292,7 @@ func failureText(rec *delegation.Record) string {
 	if rec.ExitCode != nil {
 		parts = append(parts, fmt.Sprintf("exit code %d", *rec.ExitCode))
 	}
-	if tail := logTail(rec.Log, LogTailLines); tail != "" {
+	if tail := LogTail(rec.Log, LogTailLines); tail != "" {
 		parts = append(parts, "log tail:\n"+tail)
 	}
 	if len(parts) == 0 {
@@ -289,8 +301,8 @@ func failureText(rec *delegation.Record) string {
 	return strings.Join(parts, "\n")
 }
 
-// logTail is the last n lines of the file at path, or "" when it cannot be read.
-func logTail(path string, n int) string {
+// LogTail is the last n lines of the file at path, or "" when it cannot be read.
+func LogTail(path string, n int) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
