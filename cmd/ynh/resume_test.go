@@ -127,7 +127,7 @@ func TestResolveResumeSession(t *testing.T) {
 			wantResume: true,
 		},
 		{
-			// Codex and Cursor: no readable store, but continue-last still works.
+			// OpenCode: no readable store, but continue-last still works.
 			name:       "lookup unavailable still resumes with an empty id",
 			adapter:    stubAdapter{err: vendor.ErrSessionLookupUnavailable},
 			wantID:     "",

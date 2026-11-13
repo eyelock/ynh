@@ -123,8 +123,11 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
   come from the vendor's on-disk store, never from terminal output, and a bare
   resume flag is never emitted (it opens a picker and hangs an unattended
   relaunch). Return `ErrNoResumableSession` and
-  `ErrSessionLookupUnavailable` for the two different cases; callers fall back
-  differently.
+  `ErrSessionLookupUnavailable` for the two different cases. The second is for
+  a vendor with no readable store at all (OpenCode, SQLite), which then resumes
+  with its continue-last form. A vendor with a readable store (Codex, Cursor)
+  returns the first when it finds nothing, and `ynh run --resume` refuses
+  rather than falling back to continue-last.
 - [ ] `LaunchResume(configPath, sessionID, prompt, interactive, extraArgs)`:
   an empty prompt resumes interactively; a prompt is sent into the resumed
   session, which stays open when `interactive` is true and is a one-shot run
