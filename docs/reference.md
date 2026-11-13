@@ -103,7 +103,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh telemetry registry` | `--format <text\|json>`. See [Telemetry: The registry](telemetry.md#the-registry) |
 | `ynh status` | |
 | `ynh prune` | |
-| `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, delegates that no longer resolve, quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
+| `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, delegates that no longer resolve (every depth: a delegate's own `delegates_to` are walked too, each finding naming the chain that reached it, such as `desk > worker > reviewer`; a harness reached twice is checked once, so a cycle ends; it checks what a run of the harness would need, read from disk and the cache without fetching), quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
 
 ## ynd Commands
 

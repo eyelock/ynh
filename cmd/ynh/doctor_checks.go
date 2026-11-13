@@ -284,14 +284,21 @@ func checkQuarantine() doctorCheck {
 // the cache. A harness can install and load and still fail every run because
 // a delegate stopped resolving (#806); nothing else in doctor looks.
 //
-// Only each harness's own entries are checked, not the delegates' delegates.
+// Every depth is checked: a delegate's own delegates_to are walked too, as a
+// run's flattening reaches them, each finding naming the chain that reached it
+// ("desk > worker > reviewer"). A harness reached twice is read once, so a
+// cycle is walked once and a delegate broken for two routes is reported once,
+// by the first. A cycle is not itself a finding: a run skips the edge back to
+// a harness already reached rather than failing on it.
 //
-// This mirrors what `ynh run` does today: assembler.AssembleDelegates, then
+// This follows what `ynh run` does today: assembler.AssembleDelegates, then
 // resolver.FlattenDelegates, then ResolveSourceForRun. The delegates rewrite
-// adds resolveDelegate (cmd/ynh/delegate_resolve.go, ynw-op8n.2), which run
-// does not call yet. When ynw-op8n.3 or ynw-17g.26 wires it into run, this
-// check must move to it, or it will drift from what a run does. A note on
-// each of those beads records that.
+// adds resolveDelegate (cmd/ynh/delegate_resolve.go), which only
+// `ynh delegate-run start` calls, one entry at a time, as a delegate's own
+// session begins. A delegate's delegates are resolved when that session
+// starts, so this check walks what a run of the harness would need, as one
+// walk, whichever session resolves each edge. When the rewrite wires
+// resolveDelegate into `ynh run`, this check must move to it.
 func checkDelegates() doctorCheck {
 	c := doctorCheck{Name: "delegates", Title: "delegates"}
 
@@ -307,28 +314,76 @@ func checkDelegates() doctorCheck {
 		if err != nil {
 			continue // checkHarnesses reports it
 		}
-		for _, d := range h.DelegatesTo {
-			if f, bad := checkDelegate(id, h.Dir, d); bad {
-				c.Findings = append(c.Findings, f)
-			}
-		}
+		c.Findings = append(c.Findings, walkDelegates(id, h)...)
 	}
 	c.Status = c.worst()
 	return c
 }
 
-// checkDelegate reports whether one delegates_to entry would fail a run.
-func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bool) {
-	gs := d.GitSource
-	label := gs.Path
-	if label == "" {
-		label = gs.Git
-		if gs.IsLocal() {
-			label = gs.Local
+// walkDelegates checks every delegate a run of the installed harness id
+// reaches, breadth first, and returns what would fail it.
+func walkDelegates(id string, root *harness.Harness) []doctorFinding {
+	type step struct {
+		entry harness.Delegate
+		dir   string   // the declaring harness's folder
+		owner string   // the declaring harness's name
+		chain []string // names from the root down to the declaring harness
+	}
+	var out []doctorFinding
+	seen := map[string]bool{realDir(root.Dir): true}
+	var queue []step
+	for _, d := range root.DelegatesTo {
+		queue = append(queue, step{d, root.Dir, id, []string{root.Name}})
+	}
+	for len(queue) > 0 {
+		st := queue[0]
+		queue = queue[1:]
+		f, bad, dir := checkDelegate(id, st.owner, st.dir, st.entry)
+		if bad {
+			if len(st.chain) > 1 {
+				f.Message += " (reached by " + strings.Join(st.chain, " > ") + " > " + delegateLabel(st.entry.GitSource) + ")"
+			}
+			out = append(out, f)
+			continue
+		}
+		if dir == "" || seen[realDir(dir)] {
+			continue
+		}
+		seen[realDir(dir)] = true
+		h, err := harness.LoadDir(dir)
+		if err != nil {
+			out = append(out, doctorFinding{Severity: sevError, Subject: id,
+				Message: fmt.Sprintf("delegate %q cannot be loaded (reached by %s): %v", delegateLabel(st.entry.GitSource), strings.Join(st.chain, " > "), err),
+				Remedy:  fmt.Sprintf("fix its manifest, or remove the entry from delegates_to of %s", st.owner)})
+			continue
+		}
+		chain := append(append([]string{}, st.chain...), h.Name)
+		for _, d := range h.DelegatesTo {
+			queue = append(queue, step{d, dir, h.Name, chain})
 		}
 	}
-	fail := func(sev, msg, remedy string) (doctorFinding, bool) {
-		return doctorFinding{Severity: sev, Subject: id, Message: msg, Remedy: remedy}, true
+	return out
+}
+
+func delegateLabel(gs harness.GitSource) string {
+	if gs.Path != "" {
+		return gs.Path
+	}
+	if gs.IsLocal() {
+		return gs.Local
+	}
+	return gs.Git
+}
+
+// checkDelegate reports whether one delegates_to entry, declared by the
+// harness named owner living in harnessDir, would fail a run. When it would
+// not, it returns the folder the delegate resolves to, read without fetching,
+// so the walk can go on into the delegate's own entries; "" when it cannot say.
+func checkDelegate(id, owner, harnessDir string, d harness.Delegate) (doctorFinding, bool, string) {
+	gs := d.GitSource
+	label := delegateLabel(gs)
+	fail := func(sev, msg, remedy string) (doctorFinding, bool, string) {
+		return doctorFinding{Severity: sev, Subject: id, Message: msg, Remedy: remedy}, true, ""
 	}
 
 	if gs.IsLocal() {
@@ -336,11 +391,12 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 		if !filepath.IsAbs(base) {
 			base = filepath.Join(harnessDir, base)
 		}
-		if _, err := os.Stat(filepath.Join(base, gs.Path)); err != nil {
+		dir := filepath.Join(base, gs.Path)
+		if _, err := os.Stat(dir); err != nil {
 			return fail(sevError, fmt.Sprintf("delegate %q: local path %q does not exist", label, gs.Local),
-				fmt.Sprintf("restore it, or remove the entry from delegates_to of %s", id))
+				fmt.Sprintf("restore it, or remove the entry from delegates_to of %s", owner))
 		}
-		return doctorFinding{}, false
+		return doctorFinding{}, false, dir
 	}
 
 	repo := resolver.GitSourceURL(gs.Git, harnessDir)
@@ -353,7 +409,7 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 		if !isRepoRoot(repo) {
 			return fail(sevError,
 				fmt.Sprintf("delegate %q: %s is a subfolder of its repository, and `ynh run` can clone only a repository's root", label, repo),
-				fmt.Sprintf("give the delegate a git URL in delegates_to of %s, or keep the harness at the root of its repository", id))
+				fmt.Sprintf("give the delegate a git URL in delegates_to of %s, or keep the harness at the root of its repository", owner))
 		}
 		ref := gs.Ref
 		if ref == "" {
@@ -366,7 +422,10 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 			spec = ref + "^{tree}"
 		}
 		if err := exec.Command("git", "-C", repo, "cat-file", "-e", spec).Run(); err == nil {
-			return doctorFinding{}, false
+			// Committed. Read its own entries from the working tree: the
+			// walk fetches nothing, and a run's clone holds the same files
+			// unless they changed since the commit.
+			return doctorFinding{}, false, filepath.Join(repo, gs.Path)
 		}
 		if gs.Path != "" {
 			if _, err := os.Stat(filepath.Join(repo, gs.Path)); err == nil {
@@ -377,7 +436,7 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 		}
 		return fail(sevError,
 			fmt.Sprintf("delegate %q is missing from the committed tree of %s (and not on disk)", label, gs.Git),
-			fmt.Sprintf("restore %s in %s and commit it, or remove the entry from delegates_to of %s", label, repo, id))
+			fmt.Sprintf("restore %s in %s and commit it, or remove the entry from delegates_to of %s", label, repo, owner))
 	}
 
 	res, ok := resolver.LookupCache(repo, gs.Ref)
@@ -386,14 +445,15 @@ func checkDelegate(id, harnessDir string, d harness.Delegate) (doctorFinding, bo
 			fmt.Sprintf("delegate %q: %s is not cached, so the next run fetches it", label, gs.Git),
 			fmt.Sprintf("ynh update %s", id))
 	}
+	dir := filepath.Join(res.Path, gs.Path)
 	if gs.Path != "" {
-		if _, err := os.Stat(filepath.Join(res.Path, gs.Path)); err != nil {
+		if _, err := os.Stat(dir); err != nil {
 			return fail(sevError,
 				fmt.Sprintf("delegate %q is missing from the cached copy of %s", label, gs.Git),
 				fmt.Sprintf("ynh update %s", id))
 		}
 	}
-	return doctorFinding{}, false
+	return doctorFinding{}, false, dir
 }
 
 // isRepoRoot reports whether dir is the top of a git working tree.

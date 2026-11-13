@@ -476,7 +476,7 @@ func TestDoctor_OwnRepoVerdictAgreesWithRun(t *testing.T) {
 			dir := build(t, tc.inSubfolder, tc.commitWorker)
 			d := harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "worker"}}
 
-			_, doctorBad := checkDelegate("local/desk", dir, d)
+			_, doctorBad, _ := checkDelegate("local/desk", "local/desk", dir, d)
 			_, _, runErr := resolver.ResolveSourceForRun(d.GitSource, dir)
 
 			if doctorBad != (runErr != nil) {
@@ -492,7 +492,7 @@ func TestDoctor_OwnRepoVerdictAgreesWithRun(t *testing.T) {
 func TestDoctor_DelegateLocalPathMissing(t *testing.T) {
 	fakeHome(t)
 	d := harness.Delegate{GitSource: harness.GitSource{Local: "nowhere"}}
-	f, bad := checkDelegate("local/desk", t.TempDir(), d)
+	f, bad, _ := checkDelegate("local/desk", "local/desk", t.TempDir(), d)
 	if !bad || f.Severity != sevError || !strings.Contains(f.Message, "does not exist") {
 		t.Errorf("a missing local delegate must be an error: %+v", f)
 	}
@@ -501,8 +501,140 @@ func TestDoctor_DelegateLocalPathMissing(t *testing.T) {
 func TestDoctor_DelegateNotCachedWarnsAndMissingInCacheErrors(t *testing.T) {
 	fakeHome(t)
 	d := harness.Delegate{GitSource: harness.GitSource{Git: "https://example.invalid/o/r.git", Path: "w"}}
-	f, bad := checkDelegate("local/desk", t.TempDir(), d)
+	f, bad, _ := checkDelegate("local/desk", "local/desk", t.TempDir(), d)
 	if !bad || f.Severity != sevWarn || !strings.Contains(f.Message, "not cached") {
 		t.Errorf("an uncached source must warn: %+v", f)
+	}
+}
+
+// nestedRepo makes a git repository holding a harness "mid" at its root that
+// delegates to harnesses/leaf in its own repository, caches it the way a run
+// does, and installs "desk", which delegates to it by its git source. It
+// returns mid's source, its cached copy and a writer for harnesses. leaf is
+// committed in the source when commitLeaf is set.
+func nestedRepo(t *testing.T, commitLeaf bool, midDelegates string) (src, cached string) {
+	t.Helper()
+	fakeHome(t)
+	write := func(dir, body string) {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	src = t.TempDir()
+	write(src, `{"name":"mid","version":"0.1.0","default_vendor":"claude","delegates_to":`+midDelegates+`}`)
+	if commitLeaf {
+		write(filepath.Join(src, "harnesses", "leaf"), `{"name":"leaf","version":"0.1.0","default_vendor":"claude"}`)
+	}
+	gitIn(t, src, "init", "-q")
+	gitIn(t, src, "add", ".")
+	gitIn(t, src, "commit", "-qm", "mid")
+	res, err := resolver.EnsureRepo(src, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	desk := harness.InstalledDirByID("local/desk")
+	write(desk, fmt.Sprintf(`{"name":"desk","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":%q}]}`, src))
+	return src, res.Path
+}
+
+const midToLeaf = `[{"git":".","path":"harnesses/leaf"}]`
+
+// A delegate's delegate that is missing from the committed tree fails every
+// run, and doctor names the chain that reached it.
+func TestDoctor_NestedDelegateMissingNamesChain(t *testing.T) {
+	nestedRepo(t, false, midToLeaf)
+
+	c := checkDelegates()
+	if c.Status != sevError {
+		t.Fatalf("a missing nested delegate must be an error, got %q:\n%s", c.Status, findingsOf(c))
+	}
+	got := findingsOf(c)
+	for _, want := range []string{"local/desk", "harnesses/leaf", "missing from the committed tree", "reached by desk > mid > harnesses/leaf", "delegates_to of mid"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("finding should contain %q:\n%s", want, got)
+		}
+	}
+}
+
+// A nested delegate on disk but not committed: the second level of the #806
+// case.
+func TestDoctor_NestedDelegateUncommitted(t *testing.T) {
+	_, cached := nestedRepo(t, false, midToLeaf)
+	leaf := filepath.Join(cached, "harnesses", "leaf")
+	if err := os.MkdirAll(leaf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(leaf, []byte(`{"name":"leaf","version":"0.1.0","default_vendor":"claude"}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	c := checkDelegates()
+	if c.Status != sevError {
+		t.Fatalf("an uncommitted nested delegate must be an error, got %q:\n%s", c.Status, findingsOf(c))
+	}
+	got := findingsOf(c)
+	for _, want := range []string{"on disk but is not committed", "reached by desk > mid > harnesses/leaf", "add harnesses/leaf"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("finding should contain %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestDoctor_NestedDelegatesCleanIsSilent(t *testing.T) {
+	nestedRepo(t, true, midToLeaf)
+
+	if c := checkDelegates(); c.Status != sevOK {
+		t.Errorf("a clean nested tree must be silent, got %q:\n%s", c.Status, findingsOf(c))
+	}
+}
+
+// Doctor's verdict on a nested delegate is the one a run's flattening
+// reaches: both fail on the missing leaf.
+func TestDoctor_NestedVerdictAgreesWithRun(t *testing.T) {
+	for _, commit := range []bool{false, true} {
+		src, _ := nestedRepo(t, commit, midToLeaf)
+		desk, err := harness.LoadByID("local/desk")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, runErr := resolver.FlattenDelegates(desk.DelegatesTo, desk.Dir, desk.Name, func(gs harness.GitSource, dir string) (string, error) {
+			base, _, err := resolver.ResolveSourceForRun(gs, dir)
+			return base, err
+		})
+		doctorBad := checkDelegates().Status == sevError
+		if doctorBad != (runErr != nil) {
+			t.Errorf("leaf committed=%v (%s): doctor error = %v, run failed = %v (%v)", commit, src, doctorBad, runErr != nil, runErr)
+		}
+	}
+}
+
+// A delegate that delegates to itself is walked once: no loop, no finding, as
+// a run skips an edge back to a harness it has reached.
+func TestDoctor_DelegateCycleWalkedOnce(t *testing.T) {
+	fakeHome(t)
+	src := t.TempDir()
+	if err := writePluginJSONFile(src, []byte(fmt.Sprintf(`{"name":"mid","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":%q}]}`, src))); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, src, "init", "-q")
+	gitIn(t, src, "add", ".")
+	gitIn(t, src, "commit", "-qm", "mid")
+	if _, err := resolver.EnsureRepo(src, ""); err != nil {
+		t.Fatal(err)
+	}
+	desk := harness.InstalledDirByID("local/desk")
+	if err := os.MkdirAll(desk, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(desk, []byte(fmt.Sprintf(`{"name":"desk","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":%q}]}`, src))); err != nil {
+		t.Fatal(err)
+	}
+
+	if c := checkDelegates(); c.Status != sevOK {
+		t.Errorf("a delegate cycle must end and stay silent, got %q:\n%s", c.Status, findingsOf(c))
 	}
 }
