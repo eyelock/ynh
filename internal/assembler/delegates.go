@@ -91,6 +91,9 @@ type DelegateOptions struct {
 	// delegate that reaches it is skipped, as the root is no agent of its
 	// own (see resolver.FlattenDelegates).
 	RootName string
+	// RootTransport is the harness's own transport default, which a
+	// delegates_to entry without one of its own takes ("" means a2a).
+	RootTransport string
 }
 
 // DelegateMCPWarning is the warning for a delegate whose MCP servers a
@@ -243,7 +246,7 @@ func writeEnvFile(workDir, delegate string, secrets map[string]string) (string, 
 //
 // The returned list names every server each delegate declares, for preview.
 func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate, harnessDir string, opts DelegateOptions) ([]DelegateMCP, error) {
-	if len(delegates) == 0 {
+	if !anyNativeEntry(delegates, opts.RootTransport) {
 		return nil, nil
 	}
 
@@ -272,12 +275,18 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 
 	var declared []DelegateMCP
 	var launch []vendor.DelegateLaunchAgent
-	flat, err := resolver.FlattenDelegates(delegates, harnessDir, opts.RootName, func(gs harness.GitSource, dir string) (string, error) {
+	// Only a native delegate is a subagent of this session. An a2a delegate
+	// (the default) is its own ynh session, so it gets no agent file and no
+	// launch entry, and its own delegates are its session's business.
+	flat, _, err := resolver.FlattenDelegatesBy(delegates, harnessDir, opts.RootName, opts.RootTransport, true, func(gs harness.GitSource, dir string) (string, error) {
 		base, _, err := resolver.ResolveSourceForRun(gs, dir)
 		return base, err
 	})
 	if err != nil {
 		return nil, err
+	}
+	if len(flat) == 0 {
+		return nil, nil
 	}
 	for _, fd := range flat {
 		for _, n := range fd.Notes {
@@ -355,6 +364,19 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	}
 
 	return declared, nil
+}
+
+// anyNativeEntry reports whether one of the root's delegates_to entries runs
+// as a native subagent. An a2a entry's own delegates are never reached from
+// here, so with none native there is nothing to assemble.
+func anyNativeEntry(entries []harness.Delegate, rootTransport string) bool {
+	h := &harness.Harness{Transport: rootTransport}
+	for _, e := range entries {
+		if h.TransportOf(e) == harness.TransportNative {
+			return true
+		}
+	}
+	return false
 }
 
 func delegateDescription(p *harness.Harness) string {

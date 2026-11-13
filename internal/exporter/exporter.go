@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
@@ -202,12 +203,27 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Each delegate is resolved as a harness, so that a delegate that cannot
 	// be exported is an error before anything is written. A vendor that
 	// carries no delegates in an export leaves them out, with a warning.
+	//
+	// Only native delegates are carried: an a2a delegate (the default) is its
+	// own ynh session and needs ynh at runtime, so it is left out of every
+	// vendor's export, with one warning.
+	var a2aLeftOut []harness.Delegate
+	walked := false
 	for _, v := range vendors {
 		if a, aerr := vendor.Get(v); aerr == nil && a.SupportsExportDelegates() {
-			if opts.delegates, err = ResolveExportDelegates(p.DelegatesTo, p.Dir, p.Name, opts.Config); err != nil {
+			if opts.delegates, a2aLeftOut, err = ResolveExportDelegatesBy(p.DelegatesTo, p.Dir, p.Name, p.Transport, true, opts.Config); err != nil {
 				return nil, err
 			}
+			walked = true
 			break
+		}
+	}
+	if !walked {
+		// No vendor walks the delegates; count the root's a2a entries.
+		for _, d := range p.DelegatesTo {
+			if p.TransportOf(d) == harness.TransportA2A {
+				a2aLeftOut = append(a2aLeftOut, d)
+			}
 		}
 	}
 
@@ -232,8 +248,26 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Said once, whatever the number of vendors exported.
 	if len(results) > 0 {
 		results[0].Warnings = append(slices.Clone(hs.Inactive), results[0].Warnings...)
+		if w := a2aLeftOutWarning(a2aLeftOut); w != "" {
+			results[0].Warnings = append(results[0].Warnings, w)
+		}
 	}
 	return results, nil
+}
+
+// a2aLeftOutWarning is the one warning for the delegates an export leaves out
+// because their transport is a2a, which runs the delegate as its own ynh
+// session and so needs ynh at runtime.
+func a2aLeftOutWarning(left []harness.Delegate) string {
+	if len(left) == 0 {
+		return ""
+	}
+	labels := make([]string, 0, len(left))
+	for _, d := range left {
+		labels = append(labels, d.Label())
+	}
+	return fmt.Sprintf("%d delegate(s) left out of the export (%s): transport a2a runs a delegate as its own ynh session, which needs ynh at runtime; set transport: native on an entry to carry it as a subagent",
+		len(left), strings.Join(labels, ", "))
 }
 
 func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
