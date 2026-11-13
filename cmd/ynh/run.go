@@ -187,6 +187,9 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := p.CheckDelegateTransports(vendorName); err != nil {
+		return err
+	}
 
 	// A vendor that cannot take a first message starts bare, and says so.
 	if launch.Bare && !launchFocusPromptSupported(adapter) {
@@ -609,7 +612,9 @@ func cmdRun(args []string) error {
 		}
 		// The vendor's own telemetry, through a relay that lives as long as
 		// the session (the child ynh supervises).
-		defer startRunRelay(adapter.Name(), ra.Relay, os.Stderr)()
+		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, os.Stderr)
+		defer stopRelay()
+		vendorArgs = append(relayArgs, vendorArgs...)
 
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch only reads the run dir: every file a vendor writes at

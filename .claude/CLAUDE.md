@@ -16,7 +16,7 @@ Both built by `make build`, released together via goreleaser (single `v*` tag).
 **Always use Make targets, not raw `go`/`golangci-lint` commands.** The Makefile wraps them with correct flags (race detection, coverage, ldflags, version injection).
 
 ```bash
-make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity, check-marketplace
+make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, check-go-pin, test, build, check-artifacts, check-vendor-parity, check-marketplace
 make build              # build both binaries to bin/
 make test               # all tests with race detection and coverage
 make test FILE=./cmd/ynd  # test specific package
@@ -54,7 +54,11 @@ queries a live vulnerability database, so an unchanged tree can pass today and
 fail tomorrow, and a non-deterministic step does not belong in the check people
 run before pushing. `.github/workflows/vulncheck.yml` gates every PR and runs
 nightly. A standard-library advisory is fixed by the `toolchain` directive in
-`go.mod`, not by a dependency bump.
+`go.mod`, not by a dependency bump. The Docker image does not read that
+directive (the golang images set `GOTOOLCHAIN=local`): its Go is the
+Dockerfile's `ARG GO_VERSION`, so a toolchain bump moves `GO_VERSION` with it,
+and `make check-go-pin` (part of `make check`, and a CI step) fails when they
+differ.
 
 `make conformance` is outside `make check` too: it needs `ynr` and
 `ynr-stub-vendor` on your PATH, which CI downloads from a pinned,
@@ -125,7 +129,8 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 - Go 1.26+, standard library by default. A few direct dependencies, each
   deliberate: `santhosh-tekuri/jsonschema/v6` (JSON Schema draft 2020-12 is
   not in the standard library and hand-rolling a validator for the published
-  schemas would be worse), `golang.org/x/text`, and the OpenTelemetry Go SDK
+  schemas would be worse), `golang.org/x/text`, `golang.org/x/term` (terminal-width detection for
+  `ynh ls`: the standard library has no portable way to ask), and the OpenTelemetry Go SDK
   with ynr's spool exporter, `github.com/eyelock/ynr/spoolexporter` (ynr's
   instrumentation contract requires both for `ynh agent run` telemetry; not
   the SDK's OTLP exporters, which bring in gRPC). **Do not add
@@ -174,4 +179,4 @@ Any change that bumps capabilities MUST also update goldens under `test/golden/<
 | `TRACEPARENT` / `TRACESTATE` | _(none)_ | ynh agent run: the trace the run joins |
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | ynh agent run: an OTLP endpoint wins over the spool; not exported yet, so it turns telemetry off with a note |
 | `YNH_WORKSPACE_ROOTS` | _(none)_ | ynh run, ynh agent run: colon-separated allow-list of folders a harness may be granted as workspace folders; replaces `workspace_roots` in config.json for the run; see `docs/workspace.md` |
-| `YNH_TELEMETRY_RELAY` | _(off)_ | ynh run, ynh agent run: fallback for `--telemetry-relay`, over `telemetry_relay` in config.json; starts `ynr relay` for the vendor's own telemetry (Copilot CLI under `ynh run`; Claude Code and Codex under `ynh agent run`); see `docs/telemetry.md` |
+| `YNH_TELEMETRY_RELAY` | _(off)_ | ynh run, ynh agent run: fallback for `--telemetry-relay`, over `telemetry_relay` in config.json; starts `ynr relay` for the vendor's own telemetry (Copilot CLI and Codex under `ynh run`; Claude Code and Codex under `ynh agent run`); see `docs/telemetry.md` |

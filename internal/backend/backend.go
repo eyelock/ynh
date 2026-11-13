@@ -217,7 +217,7 @@ var tomlSectionHeader = regexp.MustCompile(`^\[(.+)\]$`)
 // into ~/.codex/config.toml, replacing any existing section with the same
 // name and leaving all other content untouched. Codex has no config.toml
 // writer of its own in ynh today, so this is a minimal section-level
-// read/replace/write rather than a general TOML library (zero external deps).
+// read/replace/write rather than a general TOML library (no TOML dependency).
 func ensureCodexProvider(name string, conn config.BackendConnection) error {
 	path, err := codexConfigPath()
 	if err != nil {

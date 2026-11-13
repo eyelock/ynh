@@ -49,7 +49,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
-| `ynh ls` | `--format <text\|json>`, `--label <key:value>` (repeatable; only harnesses whose manifest labels include every one) |
+| `ynh ls` | `--format <text\|json>`, `--label <key:value>` (repeatable; only harnesses whose manifest labels include every one), `--source <repo>` (installed from that repository), `--includes <repo>` (includes or delegates to it), `--columns <a,b,...>` (text only). Repeat `--source` or `--includes` for either; different filters must all match. On a terminal, a wide row is cut to fit (INCLUDES and DELEGATES TO, then SOURCE, then LABELS; a cut list ends `… (+N)`); piped output is never cut. A repo is `owner/repo`, `github.com/owner/repo` or an https URL (all the same repository); a subpath narrows it; a local path matches by prefix; never a substring or glob. Empty INCLUDES and DELEGATES TO cells show `-`. JSON output is filtered by all three filters but never cut, and its shape is unchanged |
 | `ynh info <harness>` | `--format <text\|json>`, `--check-updates` (with `--format json`), `--profile` (repeatable, as on `ynh run`), `--focus` (`name` or `namespace:name`; not with `--profile`). The hooks and MCP servers shown are what a run carries, included harnesses' with their source (an included harness's hooks only where its include says `"hooks": true`; the rest are listed as not active). With a profile or focus selected, they are what a run with that selection carries. Profiles and focuses are still listed as declared. A bare run's [`launch_focus`](focus.md#launch-focus) is not applied: pass it as `--focus` to see what a bare run wakes with |
 | `ynh installed <harness>` | `--format <text\|json>` |
 | `ynh schema <name>` | (or `ynh schema --all --format json`) — print embedded JSON schemas |
@@ -103,7 +103,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh telemetry registry` | `--format <text\|json>`. See [Telemetry: The registry](telemetry.md#the-registry) |
 | `ynh status` | |
 | `ynh prune` | |
-| `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
+| `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, delegates that no longer resolve (every depth: a delegate's own `delegates_to` are walked too, each finding naming the chain that reached it, such as `desk > worker > reviewer`; a harness reached by two routes is walked once, so a cycle ends and each broken `delegates_to` entry is reported once, by the harness that declares it (two entries naming one missing harness are two findings); the root, reached again through its own source or by its name, is skipped as a run skips it; it checks what a run of the harness would need, read from disk and the cache without fetching), quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
 
 ## ynd Commands
 

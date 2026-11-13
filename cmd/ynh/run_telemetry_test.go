@@ -26,6 +26,7 @@ func TestStartRunRelay(t *testing.T) {
 		{name: "copilot with the flag", backend: "copilot", flag: true, spool: "spool", started: true},
 		{name: "copilot with the variable", backend: "copilot", env: "1", spool: "spool", started: true},
 		{name: "off", backend: "copilot", spool: "spool"},
+		{name: "codex with the flag", backend: "codex", flag: true, spool: "spool", started: true},
 		{name: "claude is not configured under ynh run", backend: "claude", flag: true, spool: "spool", note: "does not configure claude's telemetry"},
 		{name: "operator's OTLP", backend: "copilot", flag: true, spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
 	}
@@ -48,11 +49,30 @@ func TestStartRunRelay(t *testing.T) {
 			}
 
 			var stderr bytes.Buffer
-			stop := startRunRelay(tt.backend, tt.flag, &stderr)
+			stop, args := startRunRelay(tt.backend, tt.flag, &stderr)
 			if got := stub.started(); got != tt.started {
 				t.Fatalf("relay started = %v, want %v (stderr %q)", got, tt.started, stderr.String())
 			}
-			if tt.started {
+			if tt.started && tt.backend == "codex" {
+				// Codex takes its settings as -c overrides and nothing in the environment.
+				joined := strings.Join(args, " ")
+				for _, w := range []string{relayStubEndpoint + "/v1/traces", relayStubEndpoint + "/v1/metrics", `otel.exporter="none"`, "otel.log_user_prompt=false"} {
+					if !strings.Contains(joined, w) {
+						t.Errorf("codex args %q lack %q", joined, w)
+					}
+				}
+				if got := os.Getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT"); got != "SPAN_ONLY" {
+					t.Errorf("environment changed for codex: %q", got)
+				}
+				pid := stub.pidValue(t)
+				stop()
+				if !gone(pid, 3*time.Second) {
+					t.Error("the relay outlived stop")
+				}
+			} else if tt.started {
+				if len(args) != 0 {
+					t.Errorf("copilot got arguments %q", args)
+				}
 				want := map[string]string{
 					"COPILOT_OTEL_ENABLED":                       "true",
 					"OTEL_EXPORTER_OTLP_ENDPOINT":                relayStubEndpoint,
@@ -73,6 +93,9 @@ func TestStartRunRelay(t *testing.T) {
 				}
 			} else {
 				stop()
+				if len(args) != 0 {
+					t.Errorf("arguments without a relay: %q", args)
+				}
 				if got := os.Getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT"); got != "SPAN_ONLY" {
 					t.Errorf("environment changed without a relay: %q", got)
 				}

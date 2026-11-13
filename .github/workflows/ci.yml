@@ -159,6 +159,12 @@ jobs:
       - name: go.mod is tidy
         run: go mod tidy -diff
 
+      # The Docker image builds with the Dockerfile's GO_VERSION, not go.mod's
+      # toolchain (the golang images set GOTOOLCHAIN=local); this keeps the two
+      # equal so govulncheck scans the Go the image ships.
+      - name: Dockerfile Go matches go.mod toolchain
+        run: make check-go-pin
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -247,7 +253,7 @@ jobs:
       - name: Upload SARIF to code scanning
         if: always() && steps.scan.outputs.sarif != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: skillspector

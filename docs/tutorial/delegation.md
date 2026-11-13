@@ -97,8 +97,8 @@ ynh ls
 
 Expected:
 ```
-ID               KIND   VENDOR  SOURCE                       ARTIFACTS  INCLUDES  DELEGATES TO
-local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
+ID               KIND   VENDOR  SOURCE                       ARTIFACTS  INCLUDES  DELEGATES TO                                                     LABELS
+local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          -         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher  -
 ```
 
 ## Inspect delegate agent files

@@ -6,7 +6,7 @@
 //
 // It used to inspect Claude hook wiring and nothing else, so a user with a
 // missing vendor CLI, a dangling harness pointer or a bin directory off PATH
-// was told everything was fine (#279). Hook wiring is now one check of six.
+// was told everything was fine (#279). Hook wiring is now one check of several.
 
 package main
 
@@ -96,6 +96,7 @@ func runDoctor() doctorReport {
 		checkHarnesses(),
 		checkSymlinks(),
 		checkLauncher(),
+		checkDelegates(),
 		checkQuarantine(),
 		checkHooks(),
 	}

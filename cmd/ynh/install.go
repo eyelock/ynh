@@ -210,6 +210,18 @@ func cmdInstall(args []string) error {
 		fmt.Printf("  note: %s\n", d)
 	}
 
+	// A delegate set to transport: native needs a vendor with subagents; the
+	// vendor checked is the one a plain run would use. This runs before
+	// anything is removed or written, so a refused install leaves an existing
+	// install exactly as it was and a fresh one not installed.
+	installVendor := p.DefaultVendor
+	if installVendor == "" {
+		installVendor = cfg.DefaultVendor
+	}
+	if err := p.CheckDelegateTransports(installVendor); err != nil {
+		return err
+	}
+
 	// Reserved name: "ynh" can be installed but gets no launcher script
 	// (it would overwrite the ynh binary in ~/.ynh/bin/).
 	// Users invoke it with: ynh run ynh
