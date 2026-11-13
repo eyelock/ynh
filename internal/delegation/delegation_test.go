@@ -152,13 +152,22 @@ func TestSessionOutlivesTheStartingProcess(t *testing.T) {
 	gate := folder + "/go"
 	cmd := exec.Command(os.Args[0])
 	cmd.Env = append(os.Environ(), "DELEGATION_HELPER=start", "DELEGATION_FOLDER="+folder,
-		"DELEGATION_TASK=while [ ! -e "+gate+" ]; do sleep 0.02; done; echo finished > "+marker+"; exit 3")
+		"DELEGATION_TASK=n=0; while [ ! -e "+gate+" ] && [ $n -lt 1500 ]; do sleep 0.02; n=$((n+1)); done; echo finished > "+marker+"; exit 3")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("starter: %v", err)
 	}
 	// The starter has exited. The session was not stopped with it.
 	path := strings.TrimSpace(string(out))
+	// However the test ends, the delegate cannot be left running: its wait is
+	// bounded (about 30s), and on the way out the gate is opened and its
+	// process group killed, as the other tests here do.
+	t.Cleanup(func() {
+		_ = os.WriteFile(gate, nil, 0o644)
+		if r, err := Load(path); err == nil && r.Pgid > 1 {
+			_ = syscall.Kill(-r.Pgid, syscall.SIGKILL)
+		}
+	})
 	r, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
