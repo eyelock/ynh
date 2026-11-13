@@ -12,7 +12,9 @@ import (
 func TestStartRunRelay(t *testing.T) {
 	saved := [2]time.Duration{relayReadyTimeout, relayStopTimeout}
 	t.Cleanup(func() { relayReadyTimeout, relayStopTimeout = saved[0], saved[1] })
-	relayReadyTimeout, relayStopTimeout = 500*time.Millisecond, 500*time.Millisecond
+	// The stub prints its endpoint at once; the bounds only keep a hung run
+	// from hanging the suite, so they are generous for a loaded machine.
+	relayReadyTimeout, relayStopTimeout = 30*time.Second, 30*time.Second
 
 	tests := []struct {
 		name    string

@@ -215,11 +215,20 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 	}
 	saved := [2]time.Duration{relayReadyTimeout, relayStopTimeout}
 	t.Cleanup(func() { relayReadyTimeout, relayStopTimeout = saved[0], saved[1] })
-	relayReadyTimeout, relayStopTimeout = 500*time.Millisecond, 500*time.Millisecond
 
 	var baseline map[string]any
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// A stub that prints its endpoint is waited for as long as a
+			// loaded machine needs: a short bound there is a flake, not a
+			// test. Only the two stubs that exercise a bound get a short one.
+			relayReadyTimeout, relayStopTimeout = 30*time.Second, 30*time.Second
+			switch tt.relay {
+			case "silent":
+				relayReadyTimeout = 500 * time.Millisecond
+			case "stubborn":
+				relayStopTimeout = 500 * time.Millisecond
+			}
 			home := t.TempDir()
 			t.Setenv("YNH_HOME", home)
 			t.Setenv("YNH_AGENT_SESSION", "")
