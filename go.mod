@@ -2,7 +2,7 @@ module github.com/eyelock/ynh
 
 go 1.26.0
 
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/eyelock/ynr/spoolexporter v0.4.0
