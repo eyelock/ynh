@@ -615,7 +615,7 @@ func TestNoElicitationCapabilityMeansNoElicitation(t *testing.T) {
 	}
 }
 
-func TestAQuestionNobodyAnswersLapsesWithTheDelegatesWait(t *testing.T) {
+func TestAQuestionNobodyAnswersStaysOpenAfterTheDelegatesWait(t *testing.T) {
 	// The delegate waits one second for its parent, then goes on: the parent,
 	// which never answered, finds the delegation completed and its question
 	// still on the record.

@@ -27,7 +27,7 @@ import (
 )
 
 // ServerName is the name of the MCP server in the delegate's config. The
-// vendors prefix the tool with it (mcp__ynh-parent__ask_parent on Claude Code).
+// vendors prefix the tool with it (on Claude Code, whose config is the plugin's, mcp__plugin_<harness>_ynh-parent__ask_parent).
 const ServerName = "ynh-parent"
 
 // ToolName is the tool's name.
