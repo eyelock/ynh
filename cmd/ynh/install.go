@@ -321,6 +321,16 @@ func cmdInstall(args []string) error {
 		Format:       p.Format,
 	}
 
+	// A delegate set to transport: native needs a vendor with subagents; the
+	// vendor checked is the one a plain run would use.
+	installVendor := p.DefaultVendor
+	if installVendor == "" {
+		installVendor = cfg.DefaultVendor
+	}
+	if err := p.CheckDelegateTransports(installVendor); err != nil {
+		return err
+	}
+
 	// Pre-fetch includes and delegates so ynh run works offline.
 	// Capture each resolved SHA into ins.Resolved so floating-ref entries
 	// have a recorded commit for later update detection.
