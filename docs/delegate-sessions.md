@@ -233,6 +233,24 @@ exception:
 
 The MCP server runs outside Codex's sandbox, so this route needs no sandbox network.
 
+`ynh doctor` checks these rules for a harness with A2A delegates (none for a harness with only
+`transport: native` delegates), as warnings that never fail a run. What it reads is the vendor's
+settings on disk, so it **cannot confirm** a rule given on a command line (`--allowedTools`,
+`--allow-tool`, `-c`) and warns anyway; a parent that passes the rule that way can ignore it.
+For Claude Code it reads the three settings files as JSON, `permissions.allow` and
+`permissions.deny` apart, and warns when a deny rule names the server or one of its tools even if an
+allow rule is also there, since deny wins. A file that is not valid JSON gets a note, and its rules
+are not counted. For Copilot CLI it only looks for the allow entry's text: its settings schema is
+unconfirmed, and no deny list is known, so a denied entry there is not seen.
+
+| Finding | Fix |
+|---|---|
+| Claude Code: a `permissions.deny` rule for `mcp__plugin_<harness>_ynh-delegates` (or one of its tools), or no allow rule for it in `~/.claude/settings.json`, `.claude/settings.json` or `.claude/settings.local.json` | remove the deny rule; add the allow rule to `permissions.allow`, or pass `--allowedTools` |
+| Copilot CLI: no `ynh-delegates` entry in `~/.copilot/config.json`, `~/.copilot/settings.json` or `.copilot/settings.json` | add it to the allowed tools, or pass `--allow-tool=ynh-delegates` |
+| Codex: `~/.codex/config.toml` sets `mcp_servers.ynh-delegates.default_tools_approval_mode` to something other than `approve`, or the harness sets `mcp_manual_approval` and the config does not approve it | remove the line or set it to `"approve"`; drop `mcp_manual_approval` |
+| Cursor | not checked, and said so: the route has not been run there |
+| OpenCode | nothing to check |
+
 ### Evidence
 
 Live, 2026-11-13, a parent `boss` with one delegate `reviewer` (a Claude Code session answering
@@ -272,7 +290,8 @@ gets these skills and no tools):
 
 ynh does not install the `a2a` binary. `ynh doctor` warns (it never fails) for a harness with A2A
 delegates when the CLI route would not work. These checks are about the CLI route only: a live
-run's MCP route needs none of them (its own allow rule is not checked yet). A parent that uses the
+run's MCP route needs none of them (its own allow rule has its own check, under
+[Allowing the tools](#allowing-the-tools)). A parent that uses the
 tools can ignore these warnings:
 
 | Finding | Fix |
