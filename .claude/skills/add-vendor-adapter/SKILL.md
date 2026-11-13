@@ -278,6 +278,10 @@ both in the same PR since they share research.
     an **N** needs a linked issue. The Hooks, Session context and Workspace
     folders cells must match what the adapter declares. The page is the only
     copy of the table: do not repeat it on another page.
+  - I: `scripts/subagent-parity.sh`: `internal/vendor/<vendor>.go` declares
+    `SupportsNativeSubagents` exactly once, returning a bare `true` or `false`
+    (not a computed value). `false` means a delegate set to `transport: native`
+    is refused on that vendor.
 
 ### Documentation
 

@@ -365,6 +365,7 @@ type Adapter interface {
 	SupportsResume() bool
 	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
 	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
+	IsolateMCP(configPath string) (args []string, warning string)
 	GenerateSystemPrompt(content []byte) map[string][]byte
 	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
@@ -373,18 +374,20 @@ type Adapter interface {
 	PluginManifestDir() string
 	ExportArtifactDirs() map[string]string
 	SupportsExportDelegates() bool
+	SupportsNativeSubagents() bool
 	MarketplaceManifestDir() string
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
 	AgentPluginLayout() AgentPluginLayout
 }
 ```
 
-**26 methods.** Regenerated from `internal/vendor/adapter.go`; that
+**28 methods.** Regenerated from `internal/vendor/adapter.go`; that
 declaration is the only authority. This copy has drifted before: it read 10,
 11 and 18 methods in three different places while the interface had 24, which
 hid the entire resume subsystem from anyone writing a new adapter, and later
 read 25, without `AgentPluginLayout` and with an old `LaunchResume`
-signature, while the interface had 26.
+signature, while the interface had 26, and then 26 without `IsolateMCP` while
+it had 27.
 
 **Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
 
