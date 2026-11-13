@@ -139,7 +139,7 @@ func writeJSON(w io.Writer, v any) error {
 // before any migration decision).
 func needsAutoMigrate(cmd string) bool {
 	switch cmd {
-	case "migrate", "quarantine", "mcp-exec", "mcp-headers", "delegate-run", "version", "--version", "help", "--help", "-h", "paths", "telemetry":
+	case "migrate", "quarantine", "mcp-exec", "mcp-headers", "delegate-run", "delegate-mcp", "version", "--version", "help", "--help", "-h", "paths", "telemetry":
 		return false
 	}
 	return true

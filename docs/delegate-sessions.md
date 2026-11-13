@@ -68,8 +68,8 @@ The server reads each request's client capabilities: for 2026-07-28 clients, fro
 
 The bounded wait is shorter than the vendor's own tool-call timeout, so a long delegate never times
 out the call. It is a setting, with a default below the shortest timeout measured per vendor. Every
-parent also gets four handle tools: `delegate_list`, `delegate_status`, `delegate_result` and
-`delegate_cancel`. A blocking parent uses them to wait in turns, and any parent uses them to come
+parent also gets five handle tools: `delegate_list`, `delegate_status`, `delegate_result`,
+`delegate_cancel` and `delegate_reply` ([Reaching a delegate over MCP](#reaching-a-delegate-over-mcp)). A blocking parent uses them to wait in turns, and any parent uses them to come
 back to its delegates.
 
 ## Questions from a delegate
@@ -151,11 +151,111 @@ is a detached session and goes on.
   with delegates of its own gets its own when it runs.
 - A delegate that is not installed or not trusted refuses the run, with the command to fix it.
 
+## Reaching a delegate over MCP
+
+A parent whose delegates run over A2A reaches them through one MCP server, ynh itself. `ynh run`
+adds it to the parent's MCP config on every vendor, under the name `ynh-delegates`, as
+`ynh delegate-mcp` over stdio. A harness that declares an MCP server of that name is refused at
+run. The server's entry carries the endpoints (the same `YNH_DELEGATE*` values as above, with
+`YNH_HOME`, since Codex hands its MCP servers a trimmed environment), so it lives for the
+session: the endpoints open before the config is written, and a run of such a harness keeps its
+own snapshot, since the token in it is fresh. A run from a baked image has no such server: its
+config was written at build time, so use the `a2a` CLI there ([The a2a CLI route](#the-a2a-cli-route)).
+
+**Both routes, on a live run.** A live `ynh run` of a parent with A2A delegates gives it both
+routes to the same endpoints: these tools, and the `a2a-cli` and `ynh-a2a-delegates` skills with
+the `a2a` CLI. A baked image's run gets the skills only. Which route the parent uses is its own
+choice: ynh states no preference, and the companion skill does not either. They differ in what
+they need and how they speak:
+
+| | MCP tools (this section) | `a2a` CLI ([The a2a CLI route](#the-a2a-cli-route)) |
+|---|---|---|
+| Needs | the vendor's allow rule for `ynh-delegates` (none on OpenCode; Codex is approved by ynh) | the `a2a` binary (0.4.0 or newer) and a shell allow rule; on Codex, a sandbox that reaches localhost |
+| Results | structured, with a declared schema | the CLI's own output |
+| Handle | `task_id` is the delegation handle (`dlg-` and 16 hex digits) | the A2A task id the CLI prints |
+| Waiting | a bounded `wait` on the call, or poll | `send --async` and `task get` |
+
+Both reach the one delegation record, so `delegate_list` shows a task started with the CLI, but its
+id there is the handle, not the A2A task id the CLI used; use each route's own id with its own
+tools. A task started with the CLI can be answered with `delegate_reply` (the answer goes to the
+record), and one started with a tool can be inspected with `delegate_status`.
+
+**One tool per delegate, and five for every parent.** All of them return `structuredContent`
+with a declared `outputSchema`, and the same JSON as text. The fields are `task_id`, `context_id`,
+`state` (`working`, `input-required`, `completed`, `failed` or `canceled`), `message`, and
+`result` once completed or `log_tail` once failed. `task_id` is the delegation's handle: the one
+thing to pass back.
+
+| Tool | Does |
+|---|---|
+| `delegate_to_<name>` (`task`, optional `wait`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle at once with state `working`. A wrong or missing token's 401 comes back as a tool error. |
+| `delegate_list` | The session's delegations and their states. |
+| `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is the delegate's question. |
+| `delegate_result` (`task_id`, optional `wait`) | The result once completed; the state for one still going. |
+| `delegate_cancel` (`task_id`) | Cancels and stops the run's process group. |
+| `delegate_reply` (`task_id`, `message`, optional `wait`) | A message on the same task: the answer to a question, which is how a parent answers `input-required` without elicitation. |
+
+`<name>` is the delegate's harness name, lower-cased, each character outside a-z and 0-9 turned
+into `_`. The server has no tool that takes a harness name or a path: a handle is checked against
+`dlg-` and 16 hex digits, and must belong to this parent.
+
+**Start and poll.** A call returns at once. `wait` (seconds) holds it until the delegate finishes
+or asks a question, and past the wait it returns the handle with state `working` and says so.
+The longest wait is a setting, `YNH_DELEGATE_MAX_WAIT` in seconds (30 when unset), and a larger `wait` is cut to
+it. 30 sits under the shortest tool-call timeout known to apply by default, Codex's 60 seconds
+(`tool_timeout_sec`). A parent that sets its own timeout lower than a wait it asks for loses the
+call, not the delegate (see the evidence below): the handle is in the record, and `delegate_list`
+finds it again.
+
+**MCP Tasks.** A client that offers the Tasks extension (`io.modelcontextprotocol/tasks`; from
+`params._meta["io.modelcontextprotocol/clientCapabilities"]` for 2026-07-28 clients, from
+`initialize` for older ones) gets a task at once from a delegate's tool, and `tasks/get`,
+`tasks/update` (an elicitation response, the answer) and `tasks/cancel` map onto the delegation.
+The task id is the handle.
+
+**No state of its own.** The handle tools read the delegation record by handle, so a parent that
+restarted, with a new server and new endpoints, answers for the old handles. `delegate_reply`
+goes through the A2A endpoint when this server started the task, and straight to the record when
+it did not, or when the endpoint is still following the question's own message.
+
+### Allowing the tools
+
+A headless vendor denies MCP tools until they are allowed, and the delegates' tools are no
+exception:
+
+| Parent | Allow rule |
+|---|---|
+| Claude Code | `--allowedTools mcp__plugin_<harness>_ynh-delegates` (so `mcp__plugin_boss_ynh-delegates__delegate_to_reviewer` for the harness `boss`), or an `allow` entry in the settings |
+| Codex | none: ynh sets `mcp_servers.ynh-delegates.default_tools_approval_mode="approve"` for a one-shot run, as it does for the harness's other servers, unless your config or `-c` sets it |
+| Copilot CLI | `--allow-tool=ynh-delegates` |
+| OpenCode | none |
+| Cursor | not run (no licence), so not known |
+
+The MCP server runs outside Codex's sandbox, so this route needs no sandbox network.
+
+### Evidence
+
+Live, 2026-11-13, a parent `boss` with one delegate `reviewer` (a Claude Code session answering
+`REVIEWED-OK`), on a build of this change run by path, with `wait` 25: a delegate started, held
+and finished in one call on Claude Code (`claude -p`), Codex (`codex exec`), Copilot CLI
+and OpenCode (which calls it through `tools["ynh-delegates"].delegate_to_reviewer(...)` and read
+the fields off the structured result). On Claude Code, start with no wait, `delegate_status`,
+`delegate_cancel` and `delegate_list` each worked. Timeouts driven past: Claude Code with
+`MCP_TOOL_TIMEOUT=5000` and a `wait` of 25 failed with `tool "delegate_to_reviewer" timed out
+after 5s`; Codex with `tool_timeout_sec=5` failed with `timed out awaiting tools/call after
+5s`. Neither parent got the handle, and the delegate kept running. **Not shown live:** Cursor (usage limit), the timeouts of OpenCode and Copilot CLI, MCP Tasks on a
+real client, and `delegate_reply` answering a live `input-required` (a delegate's own question
+tool is not built yet, see [Questions from a delegate](#questions-from-a-delegate)). Tasks and
+`delegate_reply` are covered by tests only.
+
 ## The a2a CLI route
 
 A parent reaches its A2A delegates by shell with the official
 [a2a CLI](https://github.com/a2aproject/a2a-cli) (v0.4.0) and its skill. When a harness has an A2A
-delegate, `ynh run` writes two skills into the parent's vendor skill folder:
+delegate, `ynh run` writes two skills into the parent's vendor skill folder (a live run also gives
+the parent the same delegates as MCP tools, `delegate_to_<name>` and the handle tools; see [Reaching a
+delegate over MCP](#reaching-a-delegate-over-mcp) for when to use which, and for a baked image, which
+gets these skills and no tools):
 
 - `a2a-cli`, the official skill, vendored **unchanged** from a2a-cli commit
   `5c95123d1c8d50a1cd6dfc2f28a14f5533a383ae` (skill version 2026.09.22) with its Apache-2.0
@@ -171,7 +271,9 @@ delegate, `ynh run` writes two skills into the parent's vendor skill folder:
   print the credential.
 
 ynh does not install the `a2a` binary. `ynh doctor` warns (it never fails) for a harness with A2A
-delegates when:
+delegates when the CLI route would not work. These checks are about the CLI route only: a live
+run's MCP route needs none of them (its own allow rule is not checked yet). A parent that uses the
+tools can ignore these warnings:
 
 | Finding | Fix |
 |---|---|
