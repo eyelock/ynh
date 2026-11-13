@@ -97,15 +97,15 @@ func openDelegateEndpointsWith(p *harness.Harness, parentID, folder string, stor
 }
 
 // scrubParentEndpoints removes the endpoint settings this process inherited
-// that a run itself sets: YNH_DELEGATES, YNH_DELEGATE_* and the two a2a CLI
-// variables that pick an agent. It leaves every other A2ACLI_* alone, since
+// from an enclosing session, so a run never offers its vendor another
+// session's delegates, or lets the a2a CLI pick one of them by default. It
+// clears only what a run itself sets: YNH_DELEGATES, YNH_DELEGATE_* and the two
+// a2a CLI variables that pick an agent. It leaves every other A2ACLI_* alone, since
 // those are the user's own settings for the CLI (a timeout, say) and the
 // parent should keep them; a delegate session, by contrast, drops all of
 // A2ACLI_* (delegation.ParentOnlyEnv), because it is a separate agent that must
 // not carry the parent's CLI configuration, a credential helper that names
 // the parent's endpoints for one.
-// // from an enclosing session, so a run never offers its vendor another
-// session's delegates, or lets the a2a CLI pick one of them by default.
 func scrubParentEndpoints() {
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
