@@ -237,6 +237,9 @@ The MCP server runs outside Codex's sandbox, so this route needs no sandbox netw
 `transport: native` delegates), as warnings that never fail a run. What it reads is the vendor's
 settings on disk, so it **cannot confirm** a rule given on a command line (`--allowedTools`,
 `--allow-tool`, `-c`) and warns anyway; a parent that passes the rule that way can ignore it.
+It matches the rule's text anywhere in a settings file, so a rule listed under `permissions.deny`
+also silences the warning, though the vendor would deny the tools: a quiet doctor is not proof that
+the tools are allowed.
 
 | Finding | Fix |
 |---|---|
