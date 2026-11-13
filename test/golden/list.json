@@ -22,7 +22,7 @@
         {"git": "", "local": "extras", "is_pinned": false}
       ],
       "delegates_to": [
-        {"git": "github.com/eyelock/reviewer", "is_pinned": false, "path": "harnesses/strict", "profile": "strict"}
+        {"git": "github.com/eyelock/reviewer", "is_pinned": false, "path": "harnesses/strict", "profile": "strict", "transport": "a2a", "transport_from": "default"}
       ]
     }
   ]

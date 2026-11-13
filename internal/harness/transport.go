@@ -26,6 +26,25 @@ func (h *Harness) TransportOf(d Delegate) string {
 	return TransportA2A
 }
 
+// The places a resolved transport can come from (TransportOrigin).
+const (
+	TransportFromEntry   = "entry"
+	TransportFromHarness = "harness"
+	TransportFromDefault = "default"
+)
+
+// TransportOrigin says where TransportOf(d) got its value: the entry's own
+// transport, the harness's default, or the built-in default (a2a).
+func (h *Harness) TransportOrigin(d Delegate) string {
+	switch {
+	case d.Transport != "":
+		return TransportFromEntry
+	case h.Transport != "":
+		return TransportFromHarness
+	}
+	return TransportFromDefault
+}
+
 // CheckTransports reports a transport that is not a2a or native, on the
 // harness or on a delegates_to entry.
 func (h *Harness) CheckTransports() error {
