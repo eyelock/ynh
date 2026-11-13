@@ -27,21 +27,48 @@ func TestDoctorMCPAllow_Claude(t *testing.T) {
 	fakeHome(t)
 	installA2AHarness(t, "desk", "claude")
 	p := probeFor(t)
-	got := findingsOf(checkMCPAllowWith(p))
-	if !strings.Contains(got, "mcp__plugin_desk_ynh-delegates") || !strings.Contains(got, "not seen") {
-		t.Errorf("want an allow-rule warning naming the rule:\n%s", got)
+	settings := filepath.Join(p.cwd, ".claude", "settings.json")
+	const rule = "mcp__plugin_desk_ynh-delegates"
+	cases := []struct {
+		name, body string
+		want       string // "" is quiet
+	}{
+		{"neither", `{}`, "no allow rule"},
+		{"another harness's allow", `{"permissions":{"allow":["mcp__plugin_other_ynh-delegates"]}}`, "no allow rule"},
+		{"allow only", `{"permissions":{"allow":["` + rule + `"]}}`, ""},
+		{"per-tool allow", `{"permissions":{"allow":["` + rule + `__delegate_list"]}}`, ""},
+		{"deny only", `{"permissions":{"deny":["` + rule + `"]}}`, "deny wins"},
+		{"both", `{"permissions":{"allow":["` + rule + `"],"deny":["` + rule + `__delegate_list"]}}`, "deny wins"},
+		{"another harness's deny", `{"permissions":{"allow":["` + rule + `"],"deny":["mcp__plugin_other_ynh-delegates"]}}`, ""},
 	}
-	write(t, filepath.Join(p.cwd, ".claude", "settings.json"), `{"permissions":{"allow":["mcp__plugin_other_ynh-delegates"]}}`)
-	if len(checkMCPAllowWith(p).Findings) == 0 {
-		t.Error("another harness's rule must not silence it")
+	for _, tc := range cases {
+		write(t, settings, tc.body)
+		got := findingsOf(checkMCPAllowWith(p))
+		if tc.want == "" && got != "" && !strings.Contains(got, "no findings") {
+			// findingsOf prints nothing for a clean check
+			t.Errorf("%s: want quiet:\n%s", tc.name, got)
+		}
+		if tc.want != "" && !strings.Contains(got, tc.want) {
+			t.Errorf("%s: want %q:\n%s", tc.name, tc.want, got)
+		}
 	}
-	write(t, filepath.Join(p.cwd, ".claude", "settings.json"), `{"permissions":{"allow":["mcp__plugin_desk_ynh-delegates"]}}`)
-	if c := checkMCPAllowWith(p); len(c.Findings) != 0 {
-		t.Errorf("the rule silences it:\n%s", findingsOf(c))
+	// Allow in one file, deny in another: deny still wins.
+	write(t, settings, `{"permissions":{"allow":["`+rule+`"]}}`)
+	write(t, filepath.Join(p.cwd, ".claude", "settings.local.json"), `{"permissions":{"deny":["`+rule+`"]}}`)
+	if got := findingsOf(checkMCPAllowWith(p)); !strings.Contains(got, "deny wins") {
+		t.Errorf("deny in another file wins:\n%s", got)
 	}
-	write(t, filepath.Join(p.cwd, ".claude", "settings.json"), `{"permissions":{"allow":["mcp__plugin_desk_ynh-delegates__delegate_list"]}}`)
-	if c := checkMCPAllowWith(p); len(c.Findings) != 0 {
-		t.Errorf("a per-tool rule silences it:\n%s", findingsOf(c))
+}
+
+func TestDoctorMCPAllow_ClaudeMalformedSettings(t *testing.T) {
+	fakeHome(t)
+	installA2AHarness(t, "desk", "claude")
+	p := probeFor(t)
+	write(t, filepath.Join(p.cwd, ".claude", "settings.json"), `{"permissions": {`)
+	c := checkMCPAllowWith(p)
+	got := findingsOf(c)
+	if !strings.Contains(got, "could not read Claude Code's settings as JSON") || !strings.Contains(got, "no allow rule") {
+		t.Errorf("want a note about the file and the missing-rule warning:\n%s", got)
 	}
 }
 

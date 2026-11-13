@@ -237,13 +237,15 @@ The MCP server runs outside Codex's sandbox, so this route needs no sandbox netw
 `transport: native` delegates), as warnings that never fail a run. What it reads is the vendor's
 settings on disk, so it **cannot confirm** a rule given on a command line (`--allowedTools`,
 `--allow-tool`, `-c`) and warns anyway; a parent that passes the rule that way can ignore it.
-It matches the rule's text anywhere in a settings file, so a rule listed under `permissions.deny`
-also silences the warning, though the vendor would deny the tools: a quiet doctor is not proof that
-the tools are allowed.
+For Claude Code it reads the three settings files as JSON, `permissions.allow` and
+`permissions.deny` apart, and warns when a deny rule names the server or one of its tools even if an
+allow rule is also there, since deny wins. A file that is not valid JSON gets a note, and its rules
+are not counted. For Copilot CLI it only looks for the allow entry's text: its settings schema is
+unconfirmed, and no deny list is known, so a denied entry there is not seen.
 
 | Finding | Fix |
 |---|---|
-| Claude Code: no `mcp__plugin_<harness>_ynh-delegates` rule in `~/.claude/settings.json`, `.claude/settings.json` or `.claude/settings.local.json` | add it to `permissions.allow`, or pass `--allowedTools` |
+| Claude Code: a `permissions.deny` rule for `mcp__plugin_<harness>_ynh-delegates` (or one of its tools), or no allow rule for it in `~/.claude/settings.json`, `.claude/settings.json` or `.claude/settings.local.json` | remove the deny rule; add the allow rule to `permissions.allow`, or pass `--allowedTools` |
 | Copilot CLI: no `ynh-delegates` entry in `~/.copilot/config.json`, `~/.copilot/settings.json` or `.copilot/settings.json` | add it to the allowed tools, or pass `--allow-tool=ynh-delegates` |
 | Codex: `~/.codex/config.toml` sets `mcp_servers.ynh-delegates.default_tools_approval_mode` to something other than `approve`, or the harness sets `mcp_manual_approval` and the config does not approve it | remove the line or set it to `"approve"`; drop `mcp_manual_approval` |
 | Cursor | not checked, and said so: the route has not been run there |

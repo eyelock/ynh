@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,11 +57,19 @@ func mcpAllowFindings(id string, h *harness.Harness, adapter vendor.Adapter, pro
 	switch adapter.Name() {
 	case "claude":
 		prefix := "mcp__plugin_" + h.Name + "_" + server
-		if !settingsAllowPrefix(a2aAllowSources("claude", probe), prefix) {
-			return []doctorFinding{{Severity: sevWarn, Subject: id,
+		allowed, denied, notes := claudeMCPRules(a2aAllowSources("claude", probe), prefix)
+		out := notes
+		switch {
+		case denied:
+			out = append(out, doctorFinding{Severity: sevWarn, Subject: id,
+				Message: "a permissions.deny rule in Claude Code's settings denies the ynh-delegates MCP tools, and deny wins over any allow rule, so the parent's delegate_* calls are denied",
+				Remedy:  fmt.Sprintf(`remove the rule naming %s from permissions.deny in the settings file that holds it`, prefix)})
+		case !allowed:
+			out = append(out, doctorFinding{Severity: sevWarn, Subject: id,
 				Message: "no allow rule for the ynh-delegates MCP tools in Claude Code's settings, so a headless run's delegate_* calls are denied. Read from the settings files only: a rule passed as --allowedTools is not seen",
-				Remedy:  fmt.Sprintf(`add "%s" to permissions.allow in .claude/settings.json (or ~/.claude/settings.json), or pass --allowedTools %s`, prefix, prefix)}}
+				Remedy:  fmt.Sprintf(`add "%s" to permissions.allow in .claude/settings.json (or ~/.claude/settings.json), or pass --allowedTools %s`, prefix, prefix)})
 		}
+		return out
 	case "copilot":
 		if !settingsAllowPrefix(a2aAllowSources("copilot", probe), server) {
 			return []doctorFinding{{Severity: sevWarn, Subject: id,
@@ -87,9 +96,46 @@ func mcpAllowFindings(id string, h *harness.Harness, adapter vendor.Adapter, pro
 	return nil
 }
 
+// claudeMCPRules reads Claude Code's settings files as JSON and reports
+// whether permissions.allow and permissions.deny each hold a rule for the
+// server (prefix) or one of its tools (prefix__tool). A file that is not valid
+// JSON, or whose permissions are not lists of strings, comes back as an info
+// note: its rules could not be read, so none are counted from it.
+func claudeMCPRules(paths []string, prefix string) (allowed, denied bool, notes []doctorFinding) {
+	matches := func(rule string) bool {
+		return rule == prefix || strings.HasPrefix(rule, prefix+"__")
+	}
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var doc struct {
+			Permissions struct {
+				Allow []string `json:"allow"`
+				Deny  []string `json:"deny"`
+			} `json:"permissions"`
+		}
+		if err := json.Unmarshal(b, &doc); err != nil {
+			notes = append(notes, doctorFinding{Severity: sevInfo, Subject: p,
+				Message: fmt.Sprintf("could not read Claude Code's settings as JSON (%v), so its allow and deny rules for ynh-delegates were not counted from it", err),
+				Remedy:  "fix the file's JSON"})
+			continue
+		}
+		for _, r := range doc.Permissions.Allow {
+			allowed = allowed || matches(r)
+		}
+		for _, r := range doc.Permissions.Deny {
+			denied = denied || matches(r)
+		}
+	}
+	return allowed, denied, notes
+}
+
 // settingsAllowPrefix reports whether any of the files holds a quoted rule
 // that starts with prefix: the server's rule alone, or one naming a tool of it.
-// Like settingsAllow it reads text, not each vendor's schema.
+// It reads text, not the vendor's schema (Copilot's is unconfirmed, and its
+// settings are not known to have a deny list, so one is not read).
 func settingsAllowPrefix(paths []string, prefix string) bool {
 	for _, p := range paths {
 		b, err := os.ReadFile(p)
