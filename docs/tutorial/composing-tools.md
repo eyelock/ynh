@@ -869,7 +869,7 @@ The hook ran when the session started, from the copy in the run directory, and l
 
 ## Give a delegate its own tools
 
-A delegate (`delegates_to`) is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
+A delegate (`delegates_to`) with `transport: native` is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
 
 ```bash
 mkdir -p ops/.agents/harness
@@ -912,7 +912,7 @@ cat > my-team/.agents/harness/plugin.json << 'EOF'
     { "local": "/tmp/ynh-tutorial/composing-tools/github-lite", "hooks": true }
   ],
   "delegates_to": [
-    { "git": "/tmp/ynh-tutorial/composing-tools/ops" }
+    { "git": "/tmp/ynh-tutorial/composing-tools/ops", "transport": "native" }
   ],
   "mcp_servers": {
     "team": {

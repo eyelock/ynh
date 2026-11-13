@@ -20,7 +20,7 @@ func delegateGit(t *testing.T, dir, name string, to ...string) {
 	t.Helper()
 	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0"}
 	for _, d := range to {
-		hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: d})
+		hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: d, Transport: "native"})
 	}
 	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestFetchNestedDelegates_FetchesTheWholeGraph(t *testing.T) {
 	if _, err := resolver.EnsureRepo(a, ""); err != nil {
 		t.Fatal(err)
 	}
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 
 	got, err := fetchNestedDelegates(root, &config.Config{})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestFetchNestedDelegates_FetchesTheWholeGraph(t *testing.T) {
 		t.Errorf("fetched = %v, want [b c]", fetched)
 	}
 	// Nothing needs the network now: trust reads from the cache alone.
-	views, err := delegateViews(root)
+	views, _, err := delegateViews(root)
 	if err != nil {
 		t.Fatalf("trust cannot read the graph after the fetch: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestFetchNestedDelegates_HonoursAllowList(t *testing.T) {
 	if _, err := resolver.EnsureRepo(a, ""); err != nil {
 		t.Fatal(err)
 	}
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 
 	_, err := fetchNestedDelegates(root, &config.Config{AllowedRemoteSources: []string{a}})
 	if err == nil || !strings.Contains(err.Error(), "not in the allowed sources list") {
@@ -104,7 +104,7 @@ func TestFetchNestedDelegates_RecordsAnchoredSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	delegateGit(t, sib, "b")
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 	got, err := fetchNestedDelegates(root, &config.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestFetchNestedDelegates_RefusalIsTyped(t *testing.T) {
 	if _, err := resolver.EnsureRepo(a, ""); err != nil {
 		t.Fatal(err)
 	}
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 	_, err := fetchNestedDelegates(root, &config.Config{AllowedRemoteSources: []string{a}})
 	if !isNestedRefusal(err) {
 		t.Fatalf("want a refusal, got %v", err)
