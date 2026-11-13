@@ -668,3 +668,92 @@ func TestDoctor_TwoHarnessCycleEndsSilently(t *testing.T) {
 		t.Errorf("a two-harness cycle must end with no finding, got %q:\n%s", c.Status, findingsOf(c))
 	}
 }
+
+// cachedHarnessRepo makes a git repository holding the harness name at its
+// root with the given delegates_to JSON, and caches it as a run does.
+func cachedHarnessRepo(t *testing.T, name, delegates string) string {
+	t.Helper()
+	src := t.TempDir()
+	body := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude","delegates_to":%s}`, name, delegates)
+	if err := writePluginJSONFile(src, []byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, src, "init", "-q")
+	gitIn(t, src, "add", ".")
+	gitIn(t, src, "commit", "-qm", name)
+	if _, err := resolver.EnsureRepo(src, ""); err != nil {
+		t.Fatal(err)
+	}
+	return src
+}
+
+// installDesk installs "desk" with the given delegates_to JSON.
+func installDesk(t *testing.T, delegates string) {
+	t.Helper()
+	dir := harness.InstalledDirByID("local/desk")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"name":"desk","version":"0.1.0","default_vendor":"claude","delegates_to":%s}`, delegates)
+	if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The root reached again through its own source (a delegate that delegates
+// back to it) is skipped, as a run's flattening skips it, so its broken entry
+// is reported once, not again under "desk > mid > desk".
+func TestDoctor_RootReachedThroughItsSourceIsSkipped(t *testing.T) {
+	fakeHome(t)
+	mid := cachedHarnessRepo(t, "mid", "[]")
+	// mid's manifest is rewritten below once the desk's source exists.
+	deskDelegates := fmt.Sprintf(`[{"git":%q},{"git":%q,"path":"gone"}]`, mid, mid)
+	deskSrc := cachedHarnessRepo(t, "desk", deskDelegates)
+	midBack := cachedHarnessRepo(t, "mid", fmt.Sprintf(`[{"git":%q}]`, deskSrc))
+	installDesk(t, fmt.Sprintf(`[{"git":%q},{"git":%q,"path":"gone"}]`, midBack, midBack))
+
+	c := checkDelegates()
+	got := findingsOf(c)
+	if n := strings.Count(got, `"gone"`); n != 1 {
+		t.Errorf("the root's broken entry must be reported once, got %d:\n%s", n, got)
+	}
+	if strings.Contains(got, "desk > mid > desk") {
+		t.Errorf("the root must not be walked again through its source:\n%s", got)
+	}
+}
+
+// A harness reached by two routes is walked once: its broken entry gives one
+// finding, naming the first route.
+func TestDoctor_HarnessReachedByTwoRoutesReportedOnce(t *testing.T) {
+	fakeHome(t)
+	leaf := cachedHarnessRepo(t, "leaf", `[{"git":".","path":"gone"}]`)
+	a := cachedHarnessRepo(t, "a", fmt.Sprintf(`[{"git":%q}]`, leaf))
+	b := cachedHarnessRepo(t, "b", fmt.Sprintf(`[{"git":%q}]`, leaf))
+	installDesk(t, fmt.Sprintf(`[{"git":%q},{"git":%q}]`, a, b))
+
+	c := checkDelegates()
+	got := findingsOf(c)
+	if len(c.Findings) != 1 {
+		t.Fatalf("one broken entry must give one finding, got %d:\n%s", len(c.Findings), got)
+	}
+	if !strings.Contains(got, "desk > a > leaf") {
+		t.Errorf("the finding should name the first route:\n%s", got)
+	}
+}
+
+// Two entries that name one missing harness are two edits in two harnesses:
+// each is reported, once, by the entry that names it.
+func TestDoctor_TwoEntriesNamingOneMissingHarnessGiveTwoFindings(t *testing.T) {
+	fakeHome(t)
+	mid := cachedHarnessRepo(t, "mid", `[{"git":".","path":"gone"}]`)
+	installDesk(t, fmt.Sprintf(`[{"git":%q},{"git":%q,"path":"gone"}]`, mid, mid))
+
+	c := checkDelegates()
+	got := findingsOf(c)
+	if len(c.Findings) != 2 {
+		t.Fatalf("want one finding per entry (desk's and mid's), got %d:\n%s", len(c.Findings), got)
+	}
+	if !strings.Contains(got, "missing from the cached copy") || !strings.Contains(got, "missing from the committed tree") {
+		t.Errorf("each entry's finding should say what its owner must edit:\n%s", got)
+	}
+}

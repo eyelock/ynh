@@ -286,19 +286,25 @@ func checkQuarantine() doctorCheck {
 //
 // Every depth is checked: a delegate's own delegates_to are walked too, as a
 // run's flattening reaches them, each finding naming the chain that reached it
-// ("desk > worker > reviewer"). A harness reached twice is read once, so a
-// cycle is walked once and a delegate broken for two routes is reported once,
-// by the first. A cycle is not itself a finding: a run skips the edge back to
-// a harness already reached rather than failing on it.
+// ("desk > worker > reviewer"). A finding belongs to the delegates_to entry
+// that names the broken delegate, and is reported once: a harness is walked
+// once however many routes reach it, so its entries are checked once, and the
+// root, reached again through its own source or by its name, is skipped as a
+// run skips it. Two entries that name one missing harness are two edits, in
+// two harnesses, and give two findings. A cycle is not itself a finding: a run
+// skips the edge back to a harness already reached rather than failing on it.
 //
 // This follows what `ynh run` does today: assembler.AssembleDelegates, then
-// resolver.FlattenDelegates, then ResolveSourceForRun. The delegates rewrite
-// adds resolveDelegate (cmd/ynh/delegate_resolve.go), which only
-// `ynh delegate-run start` calls, one entry at a time, as a delegate's own
-// session begins. A delegate's delegates are resolved when that session
-// starts, so this check walks what a run of the harness would need, as one
-// walk, whichever session resolves each edge. When the rewrite wires
-// resolveDelegate into `ynh run`, this check must move to it.
+// resolver.FlattenDelegates, then ResolveSourceForRun. resolveDelegate
+// (cmd/ynh/delegate_resolve.go) is called only by `ynh delegate-run start`,
+// one entry at a time, as a delegate's own session begins. After ynw-golo,
+// `transport: native` keeps this flattening in `ynh run`, and an a2a
+// delegate's session is started lazily by `ynh delegate-run`, which resolves
+// it with resolveDelegate (installed and trusted). So the check is not
+// expected to move wholesale to resolveDelegate: once the transport setting
+// lands (ynw-op8n.8, ynh #825) it has to follow each entry's transport,
+// flattening for a native entry and resolveDelegate for an a2a one. Until
+// then it walks every entry as the flattening does.
 func checkDelegates() doctorCheck {
 	c := doctorCheck{Name: "delegates", Title: "delegates"}
 
@@ -331,6 +337,9 @@ func walkDelegates(id string, root *harness.Harness) []doctorFinding {
 	}
 	var out []doctorFinding
 	seen := map[string]bool{realDir(root.Dir): true}
+	// The root is recognised the way a run's flattening recognises it: by
+	// its folder, or by its name, so reaching it through its source's cached
+	// clone does not walk it again.
 	var queue []step
 	for _, d := range root.DelegatesTo {
 		queue = append(queue, step{d, root.Dir, id, []string{root.Name}})
@@ -351,6 +360,9 @@ func walkDelegates(id string, root *harness.Harness) []doctorFinding {
 		}
 		seen[realDir(dir)] = true
 		h, err := harness.LoadDir(dir)
+		if err == nil && h.Name == root.Name {
+			continue
+		}
 		if err != nil {
 			out = append(out, doctorFinding{Severity: sevError, Subject: id,
 				Message: fmt.Sprintf("delegate %q cannot be loaded (reached by %s): %v", delegateLabel(st.entry.GitSource), strings.Join(st.chain, " > "), err),
