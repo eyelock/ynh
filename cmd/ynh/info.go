@@ -440,6 +440,7 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 			if del.Focus != "" {
 				line += "  focus=" + del.Focus
 			}
+			line += "  transport=" + p.TransportOf(del) + " (" + p.TransportOrigin(del) + ")"
 			_, _ = fmt.Fprintln(w, line)
 		}
 	}

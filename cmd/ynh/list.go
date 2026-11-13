@@ -152,6 +152,11 @@ type listDelegate struct {
 	// profile or focus, when it names one (at most one of the two).
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// Transport is how the parent reaches the delegate (a2a or native), as
+	// resolved; TransportFrom is where it came from: the entry, the harness's
+	// default, or the built-in default.
+	Transport     string `json:"transport"`
+	TransportFrom string `json:"transport_from"`
 }
 
 func cmdList(args []string) error {
@@ -494,7 +499,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 		Path:             p.Dir,
 		Artifacts:        scanArtifactCounts(p.Dir),
 		Includes:         buildIncludes(p.Includes),
-		DelegatesTo:      buildDelegates(p.DelegatesTo),
+		DelegatesTo:      buildDelegates(p),
 		Labels:           p.Labels,
 	}
 
@@ -573,9 +578,9 @@ func buildIncludes(includes []harness.Include) []listInclude {
 	return result
 }
 
-func buildDelegates(delegates []harness.Delegate) []listDelegate {
-	result := make([]listDelegate, 0, len(delegates))
-	for _, del := range delegates {
+func buildDelegates(p *harness.Harness) []listDelegate {
+	result := make([]listDelegate, 0, len(p.DelegatesTo))
+	for _, del := range p.DelegatesTo {
 		refInstalled := del.SHA
 		if refInstalled == "" {
 			refInstalled = del.Ref
@@ -585,13 +590,15 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 			probeRef = del.Ref
 		}
 		result = append(result, listDelegate{
-			Git:          del.Git,
-			Ref:          probeRef,
-			RefInstalled: refInstalled,
-			IsPinned:     harness.IsPinnedRef(del.Ref),
-			Path:         del.Path,
-			Profile:      del.Profile,
-			Focus:        del.Focus,
+			Git:           del.Git,
+			Ref:           probeRef,
+			RefInstalled:  refInstalled,
+			IsPinned:      harness.IsPinnedRef(del.Ref),
+			Path:          del.Path,
+			Profile:       del.Profile,
+			Focus:         del.Focus,
+			Transport:     p.TransportOf(del),
+			TransportFrom: p.TransportOrigin(del),
 		})
 	}
 	return result
