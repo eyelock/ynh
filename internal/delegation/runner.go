@@ -91,7 +91,7 @@ func Start(o StartOptions) (*Record, string, error) {
 	go func() { _ = cmd.Wait() }()
 	r, err := Update(path, func(r *Record) {
 		if r.Pid == 0 {
-			r.Pid = pid
+			r.Pid, r.PidStart = pid, procStart(pid)
 		}
 	})
 	if err != nil {
@@ -153,7 +153,8 @@ func Supervise(path string, launch Launcher) error {
 
 	var cancelledEarly bool
 	if _, err := Update(path, func(r *Record) {
-		r.Pid, r.Pgid = os.Getpid(), pgid
+		r.Pid, r.PidStart = os.Getpid(), procStart(os.Getpid())
+		r.Pgid, r.PgidStart = pgid, procStart(pgid)
 		if r.Status.Final() { // cancelled between the check above and now
 			cancelledEarly = true
 			return
@@ -262,13 +263,15 @@ func groupAlive(pgid int) bool {
 // cannot turn it into a failure. A delegation already final is left as it is.
 func Cancel(path string) (*Record, error) {
 	var pgid int
-	var already bool
+	var already, safe bool
 	rec, err := Update(path, func(r *Record) {
 		if r.Status.Final() {
 			already = true
 			return
 		}
-		pgid = r.Pgid
+		// The group is signalled only while its leader is still the run this
+		// record was written for; after that the id may be anyone's.
+		pgid, safe = r.Pgid, runAlive(r)
 		r.Status = StatusCancelled
 	})
 	if err != nil || already {
@@ -276,7 +279,7 @@ func Cancel(path string) (*Record, error) {
 	}
 	// With no group yet, the session has not started the run; it sees the final
 	// status when it does and stops the run itself.
-	if pgid > 1 {
+	if pgid > 1 && safe {
 		stopGroup(pgid)
 	}
 	return rec, nil

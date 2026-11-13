@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -303,5 +304,106 @@ func TestUpdateKeepsConcurrentChanges(t *testing.T) {
 	r, _ := Load(path)
 	if len(r.Questions) != 20 {
 		t.Errorf("%d questions kept of 20: updates overwrote one another", len(r.Questions))
+	}
+}
+
+// killSupervisor kills the running record's session process outright and waits for it to go.
+func killSupervisor(t *testing.T, path string) *Record {
+	t.Helper()
+	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	if err := syscall.Kill(rec.Pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for sameProc(rec.Pid, rec.PidStart) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	return rec
+}
+
+func TestReconcileFailsARecordWhoseSupervisorWasKilled(t *testing.T) {
+	folder := setup(t)
+	_, path := start(t, folder, "sleep 30")
+	rec := killSupervisor(t, path)
+	defer func() { _ = syscall.Kill(-rec.Pgid, syscall.SIGKILL) }()
+
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusFailed || !strings.Contains(got.Error, "ended without recording") {
+		t.Fatalf("want failed with an error saying the session ended, got %s %q", got.Status, got.Error)
+	}
+	// The orphaned run was still ours, so it was stopped.
+	deadline := time.Now().Add(5 * time.Second)
+	for groupAlive(rec.Pgid) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if groupAlive(rec.Pgid) {
+		t.Fatal("the orphaned run was left going")
+	}
+}
+
+func TestReconcileLeavesALiveSessionAlone(t *testing.T) {
+	folder := setup(t)
+	_, path := start(t, folder, "sleep 30")
+	waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusRunning {
+		t.Fatalf("want running, got %s", got.Status)
+	}
+	if _, err := Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCancelDoesNotSignalAGroupThatIsNotTheRecordedRun(t *testing.T) {
+	folder := setup(t)
+	// A bystander in a process group of its own, standing in for an unrelated
+	// process that got the recorded group id.
+	by := exec.Command("sleep", "30")
+	by.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := by.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = by.Process.Kill(); _ = by.Wait() }()
+	// Start times are read to the second, so the run must start in a later one.
+	time.Sleep(1100 * time.Millisecond)
+
+	_, path := start(t, folder, "sleep 30")
+	rec := killSupervisor(t, path)
+	defer func() { _ = syscall.Kill(-rec.Pgid, syscall.SIGKILL) }()
+	// The record's group id now names the bystander, whose start differs from
+	// the one recorded.
+	if _, err := Update(path, func(r *Record) { r.Pgid = by.Process.Pid }); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Cancel(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusCancelled {
+		t.Fatalf("want cancelled, got %s", got.Status)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if !groupAlive(by.Process.Pid) {
+		t.Fatal("cancel signalled a group that was not the recorded run")
+	}
+}
+
+func TestFindHandleTakesAHandleNotAPath(t *testing.T) {
+	folder := setup(t)
+	rec, path := start(t, folder, "true")
+	got, err := FindHandle(rec.Handle)
+	if err != nil || got != path {
+		t.Fatalf("FindHandle = %q, %v; want %q", got, err, path)
+	}
+	for _, bad := range []string{path, "../../etc/passwd", "dlg-../x", "dlg-0000000000000000", ""} {
+		if _, err := FindHandle(bad); err == nil {
+			t.Errorf("FindHandle(%q) succeeded", bad)
+		}
 	}
 }

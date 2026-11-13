@@ -99,6 +99,11 @@ type Record struct {
 	// the delegate's ynh run and its vendor CLI run in, the group cancel stops.
 	Pid  int `json:"pid,omitempty"`
 	Pgid int `json:"pgid,omitempty"`
+	// PidStart and PgidStart are when those two processes started. A pid alone
+	// may be reused once its process is gone, so nothing is signalled or
+	// reported alive unless the process at the pid started when this says.
+	PidStart  string `json:"pid_start,omitempty"`
+	PgidStart string `json:"pgid_start,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

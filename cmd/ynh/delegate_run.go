@@ -18,8 +18,8 @@ import (
 // `supervise` is what a started session runs as.
 //
 //	ynh delegate-run start --parent <id> --entry <n> --task <text> [--model <m>] [--folder <dir>]
-//	ynh delegate-run status --record <path>
-//	ynh delegate-run cancel --record <path>
+//	ynh delegate-run status --handle <handle>
+//	ynh delegate-run cancel --handle <handle>
 //	ynh delegate-run supervise <record-path>
 func cmdDelegateRun(args []string) error {
 	return cmdDelegateRunTo(args, os.Stdout)
@@ -119,19 +119,31 @@ func delegateRunStart(args []string, stdout io.Writer) error {
 }
 
 // delegateRunRecord prints the record, after cancelling it when cancel is set.
+// A delegation is named by its handle, which is looked up under the delegations
+// folder; --record, a path, is for tests and the supervisor, and is not what a
+// model-facing caller uses. A record whose session process is gone is settled
+// to failed before it is shown or cancelled.
 func delegateRunRecord(args []string, stdout io.Writer, cancel bool) error {
-	if len(args) != 2 || args[0] != "--record" {
-		return fmt.Errorf("usage: ynh delegate-run status|cancel --record <path>")
+	if len(args) != 2 || (args[0] != "--handle" && args[0] != "--record") {
+		return fmt.Errorf("usage: ynh delegate-run status|cancel --handle <handle>")
 	}
-	var rec *delegation.Record
-	var err error
-	if cancel {
-		rec, err = delegation.Cancel(args[1])
-	} else {
-		rec, err = delegation.Load(args[1])
+	path := args[1]
+	if args[0] == "--handle" {
+		p, err := delegation.FindHandle(args[1])
+		if err != nil {
+			return err
+		}
+		path = p
 	}
+	rec, err := delegation.Reconcile(path)
 	if err != nil {
 		return err
+	}
+	if cancel {
+		rec, err = delegation.Cancel(path)
+		if err != nil {
+			return err
+		}
 	}
 	return writeJSON(stdout, rec)
 }

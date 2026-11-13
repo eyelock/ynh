@@ -104,6 +104,13 @@ back.
   from the record (`tasks/get`, or the handle tools), so the parent can reattach to a running
   delegate or collect a finished one. The record is also what says what happened while the parent
   was away.
+- If the session process is killed outright, nothing is left to record how the run ended. The next
+  status or cancel notices that the recorded session process (its id and start time) is gone,
+  marks the delegation `failed` with an error saying so, and stops the delegate's run if it is
+  still the recorded process. Cancel signals the run's process group only while its leader is
+  still the process the record names, since a group id can be reused by an unrelated process.
+- The handle tools take a **handle**, never a path: the handle is checked against `dlg-` and 16 hex
+  digits and looked up under `$YNH_HOME/delegations/`.
 
 ## One run dir, many live sessions
 
