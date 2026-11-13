@@ -1,123 +1,245 @@
+//go:build unix
+
 package main
 
 import (
-	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
-	"time"
+
+	"github.com/eyelock/ynh/internal/telemetry"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
-func TestStartRunRelay(t *testing.T) {
-	saved := [2]time.Duration{relayReadyTimeout, relayStopTimeout}
-	t.Cleanup(func() { relayReadyTimeout, relayStopTimeout = saved[0], saved[1] })
-	relayReadyTimeout, relayStopTimeout = 500*time.Millisecond, 500*time.Millisecond
-
-	tests := []struct {
-		name    string
-		backend string
-		flag    bool
-		env     string // YNH_TELEMETRY_RELAY
-		spool   string // "spool", "otlp"
-		started bool
-		note    string
-	}{
-		{name: "copilot with the flag", backend: "copilot", flag: true, spool: "spool", started: true},
-		{name: "copilot with the variable", backend: "copilot", env: "1", spool: "spool", started: true},
-		{name: "off", backend: "copilot", spool: "spool"},
-		{name: "codex with the flag", backend: "codex", flag: true, spool: "spool", started: true},
-		{name: "claude is not configured under ynh run", backend: "claude", flag: true, spool: "spool", note: "does not configure claude's telemetry"},
-		{name: "operator's OTLP", backend: "copilot", flag: true, spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
+// launchTelemetryEnv makes the process's telemetry environment empty, then
+// gives the test a spool folder when spool is true.
+func launchTelemetryEnv(t *testing.T, spool bool) string {
+	t.Helper()
+	isolateRun(t)
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, "OTEL_") {
+			t.Setenv(name, "")
+			_ = os.Unsetenv(name)
+		}
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("YNH_HOME", t.TempDir())
-			t.Setenv("XDG_STATE_HOME", t.TempDir())
-			t.Setenv("YNH_TELEMETRY_RELAY", tt.env)
-			// Set in the operator's environment: the relay's settings win.
-			t.Setenv("COPILOT_OTEL_FILE_EXPORTER_PATH", "/tmp/elsewhere.jsonl")
-			t.Setenv("COPILOT_OTEL_ENABLED", "")
-			t.Setenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT", "SPAN_ONLY")
-			t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
-			stub := installStubYnr(t, "serve")
-			switch tt.spool {
-			case "spool":
-				t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
-			case "otlp":
-				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
-			}
+	for _, name := range []string{"YNR_SPOOL", "TRACEPARENT", "TRACESTATE", "YNH_LABELS"} {
+		t.Setenv(name, "")
+		_ = os.Unsetenv(name)
+	}
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if !spool {
+		return ""
+	}
+	dir := filepath.Join(t.TempDir(), "spool")
+	t.Setenv("YNR_SPOOL", dir)
+	return dir
+}
 
-			var stderr bytes.Buffer
-			stop, args := startRunRelay(tt.backend, tt.flag, &stderr)
-			if got := stub.started(); got != tt.started {
-				t.Fatalf("relay started = %v, want %v (stderr %q)", got, tt.started, stderr.String())
+// launchWith runs `ynh run` on a throwaway harness with the vendor launch
+// replaced by fn, and returns what cmdRun returned.
+func launchWith(t *testing.T, vendorName string, fn func() error, extra ...string) error {
+	t.Helper()
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "h")
+	writeSkillHarness(t, harnessDir, "h")
+	t.Chdir(work)
+	// A vendor that needs project symlinks asks before planting them; give the
+	// consent once, as a user would. It is not a launch and records nothing.
+	if vendorName == "codex" || vendorName == "cursor" {
+		if err := cmdRun([]string{harnessDir, "-v", vendorName, "--install"}); err != nil {
+			t.Fatalf("--install: %v", err)
+		}
+	}
+	stubLaunch(t, func(string, runArgs) error { return fn() })
+	return cmdRun(append([]string{harnessDir, "-v", vendorName}, extra...))
+}
+
+func TestLaunchRecord_Outcomes(t *testing.T) {
+	cases := []struct {
+		name    string
+		launch  error
+		outcome string
+		code    int64
+		signal  string
+		ok      bool
+	}{
+		{"exits 0", nil, telemetry.SessionOutcomeExited, 0, "", true},
+		{"exits non-zero", &vendor.ExitError{Code: 3}, telemetry.SessionOutcomeFailed, 3, "", false},
+		{"exits 130 by itself", &vendor.ExitError{Code: 130}, telemetry.SessionOutcomeFailed, 130, "", false},
+		{"killed by a signal", &vendor.ExitError{Code: 128 + int(syscall.SIGTERM), Signal: syscall.SIGTERM}, telemetry.SessionOutcomeSignalled, 143, "SIGTERM", false},
+		{"refused before the vendor starts", errors.New("resume: not supported"), telemetry.SessionOutcomeRefused, 1, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := launchTelemetryEnv(t, true)
+			_ = launchWith(t, "claude", func() error { return tc.launch })
+			recs := readSpoolRecords(t, dir)
+			var started, finished, span *spoolRecord
+			for i := range recs {
+				switch {
+				case recs[i].name == telemetry.EventSessionStarted:
+					started = &recs[i]
+				case recs[i].name == telemetry.EventSessionFinished:
+					finished = &recs[i]
+				case recs[i].name == telemetry.SpanSession:
+					span = &recs[i]
+				case strings.HasPrefix(recs[i].name, "ynh.run"):
+					t.Errorf("ynh run wrote %s, which is agent run's alone", recs[i].name)
+				}
 			}
-			if tt.started && tt.backend == "codex" {
-				// Codex takes its settings as -c overrides and nothing in the environment.
-				joined := strings.Join(args, " ")
-				for _, w := range []string{relayStubEndpoint + "/v1/traces", relayStubEndpoint + "/v1/metrics", `otel.exporter="none"`, "otel.log_user_prompt=false"} {
-					if !strings.Contains(joined, w) {
-						t.Errorf("codex args %q lack %q", joined, w)
+			if started == nil || finished == nil || span == nil {
+				t.Fatalf("started %v, finished %v, span %v in %+v", started != nil, finished != nil, span != nil, recs)
+			}
+			id, _ := started.attrs[string(telemetry.AttrSessionID)].(string)
+			if len(id) != 32 {
+				t.Errorf("ynh.session.id = %q", id)
+			}
+			for _, r := range []*spoolRecord{finished, span} {
+				if r.attrs[string(telemetry.AttrSessionID)] != id {
+					t.Errorf("%s: session id %v, want %s", r.name, r.attrs[string(telemetry.AttrSessionID)], id)
+				}
+				if r.attrs[string(telemetry.AttrSessionOutcome)] != tc.outcome {
+					t.Errorf("%s: outcome %v, want %s", r.name, r.attrs[string(telemetry.AttrSessionOutcome)], tc.outcome)
+				}
+				if got, _ := r.attrs[string(telemetry.AttrProcessExitCode)].(string); got != strconv.FormatInt(tc.code, 10) {
+					t.Errorf("%s: exit code %v, want %d", r.name, r.attrs[string(telemetry.AttrProcessExitCode)], tc.code)
+				}
+				sig, _ := r.attrs[string(telemetry.AttrSessionSignal)].(string)
+				if sig != tc.signal {
+					t.Errorf("%s: signal %q, want %q", r.name, sig, tc.signal)
+				}
+				if r.attrs[string(telemetry.AttrSessionVendor)] != "claude" {
+					t.Errorf("%s: vendor %v", r.name, r.attrs[string(telemetry.AttrSessionVendor)])
+				}
+			}
+			if started.attrs[string(telemetry.AttrSessionOutcome)] != nil {
+				t.Error("the started event carries an outcome")
+			}
+			for _, r := range recs {
+				for k := range r.attrs {
+					if strings.Contains(k, "token") || strings.Contains(k, "cost") || strings.Contains(k, "path") {
+						t.Errorf("%s carries %s: no tokens, cost or paths on a launch", r.name, k)
 					}
 				}
-				if got := os.Getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT"); got != "SPAN_ONLY" {
-					t.Errorf("environment changed for codex: %q", got)
-				}
-				pid := stub.pidValue(t)
-				stop()
-				if !gone(pid, 3*time.Second) {
-					t.Error("the relay outlived stop")
-				}
-			} else if tt.started {
-				if len(args) != 0 {
-					t.Errorf("copilot got arguments %q", args)
-				}
-				want := map[string]string{
-					"COPILOT_OTEL_ENABLED":                       "true",
-					"OTEL_EXPORTER_OTLP_ENDPOINT":                relayStubEndpoint,
-					"OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT": "NO_CONTENT",
-				}
-				for k, v := range want {
-					if got := os.Getenv(k); got != v {
-						t.Errorf("%s = %q, want %q", k, got, v)
-					}
-				}
-				if _, set := os.LookupEnv("COPILOT_OTEL_FILE_EXPORTER_PATH"); set {
-					t.Error("COPILOT_OTEL_FILE_EXPORTER_PATH survived")
-				}
-				pid := stub.pidValue(t)
-				stop()
-				if !gone(pid, 3*time.Second) {
-					t.Error("the relay outlived stop")
-				}
-			} else {
-				stop()
-				if len(args) != 0 {
-					t.Errorf("arguments without a relay: %q", args)
-				}
-				if got := os.Getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT"); got != "SPAN_ONLY" {
-					t.Errorf("environment changed without a relay: %q", got)
-				}
-			}
-			if tt.note != "" && !strings.Contains(stderr.String(), tt.note) {
-				t.Errorf("stderr %q lacks %q", stderr.String(), tt.note)
-			}
-			if tt.note == "" && stderr.Len() != 0 {
-				t.Errorf("unexpected stderr %q", stderr.String())
 			}
 		})
 	}
 }
 
-func TestParseRunArgs_TelemetryRelay(t *testing.T) {
-	ra := parseRunArgs([]string{"h", "--telemetry-relay", "-v", "copilot", "--", "go"})
-	if !ra.Relay {
-		t.Error("--telemetry-relay not parsed")
+func TestLaunchRecord_VendorEnvironment(t *testing.T) {
+	dir := launchTelemetryEnv(t, true)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=dev")
+	var traceparent, resource, tracestate string
+	if err := launchWith(t, "claude", func() error {
+		traceparent, resource, tracestate = os.Getenv("TRACEPARENT"), os.Getenv("OTEL_RESOURCE_ATTRIBUTES"), os.Getenv("TRACESTATE")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
-	for _, a := range ra.VendorArgs {
-		if a == "--telemetry-relay" {
-			t.Error("--telemetry-relay was forwarded to the vendor")
+	recs := readSpoolRecords(t, dir)
+	var span *spoolRecord
+	for i := range recs {
+		if recs[i].name == telemetry.SpanSession {
+			span = &recs[i]
 		}
+	}
+	if span == nil {
+		t.Fatal("no ynh.session span")
+	}
+	id, _ := span.attrs[string(telemetry.AttrSessionID)].(string)
+	// 00-<trace id>-<span id>-<flags>: the span id is the session span's.
+	parts := strings.Split(traceparent, "-")
+	if len(parts) != 4 || parts[1] != span.traceID || parts[2] != span.spanID {
+		t.Errorf("TRACEPARENT = %q, want trace %s span %s", traceparent, span.traceID, span.spanID)
+	}
+	if tracestate != "" {
+		t.Errorf("TRACESTATE = %q, want none", tracestate)
+	}
+	if want := "deployment.environment.name=dev,ynh.session.id=" + id; resource != want {
+		t.Errorf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q", resource, want)
+	}
+}
+
+func TestLaunchRecord_JoinsTheTraceItIsGiven(t *testing.T) {
+	dir := launchTelemetryEnv(t, true)
+	t.Setenv("TRACEPARENT", testTraceParent)
+	if err := launchWith(t, "claude", func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range readSpoolRecords(t, dir) {
+		if r.name == telemetry.SpanSession {
+			if r.traceID != "4bf92f3577b34da6a3ce929d0e0e4736" || r.parentID != "00f067aa0ba902b7" {
+				t.Errorf("session span trace %s parent %s", r.traceID, r.parentID)
+			}
+			return
+		}
+	}
+	t.Fatal("no ynh.session span")
+}
+
+func TestLaunchRecord_EveryVendorIsRecorded(t *testing.T) {
+	for _, v := range []string{"claude", "codex", "cursor", "copilot", "opencode"} {
+		t.Run(v, func(t *testing.T) {
+			dir := launchTelemetryEnv(t, true)
+			if err := launchWith(t, v, func() error { return nil }); err != nil {
+				t.Fatal(err)
+			}
+			for _, r := range readSpoolRecords(t, dir) {
+				if r.name == telemetry.SpanSession {
+					if r.attrs[string(telemetry.AttrSessionVendor)] != v {
+						t.Errorf("vendor %v, want %s", r.attrs[string(telemetry.AttrSessionVendor)], v)
+					}
+					return
+				}
+			}
+			t.Fatal("no ynh.session span")
+		})
+	}
+}
+
+// With no destination, ynh run writes nothing and the vendor's environment is
+// exactly what it was, an operator's ynh.label.* in OTEL_RESOURCE_ATTRIBUTES
+// included.
+func TestLaunchRecord_NoDestinationLeavesTheEnvironmentAlone(t *testing.T) {
+	launchTelemetryEnv(t, false)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.site=lab,deployment.environment.name=dev")
+	before := os.Environ()
+	var during []string
+	if err := launchWith(t, "claude", func() error {
+		during = os.Environ()
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(before)
+	slices.Sort(during)
+	// The run's own variables are not telemetry's; compare without them.
+	drop := func(env []string) []string {
+		var out []string
+		for _, kv := range env {
+			if strings.HasPrefix(kv, "YNH_") || strings.HasPrefix(kv, "PWD=") {
+				continue
+			}
+			out = append(out, kv)
+		}
+		return out
+	}
+	if !slices.Equal(drop(before), drop(during)) {
+		t.Errorf("the vendor's environment changed:\nbefore %v\nduring %v", drop(before), drop(during))
+	}
+}
+
+func TestLaunchOutcome(t *testing.T) {
+	if o, c, _ := launchOutcome(errors.New("x"), true); o != telemetry.SessionOutcomeFailed || c != 1 {
+		t.Errorf("an error after the vendor started = %s %d", o, c)
+	}
+	if o, c, _ := launchOutcome(errors.New("x"), false); o != telemetry.SessionOutcomeRefused || c != 1 {
+		t.Errorf("an error before it started = %s %d", o, c)
 	}
 }

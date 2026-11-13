@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -27,7 +28,7 @@ import (
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
-func cmdRun(args []string) error {
+func cmdRun(args []string) (runErr error) {
 	if err := config.EnsureDirs(); err != nil {
 		return fmt.Errorf("ensuring directories: %w", err)
 	}
@@ -165,10 +166,12 @@ func cmdRun(args []string) error {
 	// precedence chain, so a local model backend is just another vendor
 	// spec, not a separate flag.
 	// The run's labels, refused here when they break the rule. They go to
-	// every process this run starts as YNH_LABELS. `ynh run` writes no record
-	// of its own yet, so nothing else carries them (docs/telemetry.md).
+	// every process this run starts as YNH_LABELS, and the launch's own
+	// record (docs/telemetry.md) carries them as resource attributes.
+	var runLabels labels.Set
 	if action == "" {
-		if _, err := resolveRunLabels(ra.Labels, loaded); err != nil {
+		var err error
+		if runLabels, err = resolveRunLabels(ra.Labels, loaded); err != nil {
 			return err
 		}
 	}
@@ -189,6 +192,16 @@ func cmdRun(args []string) error {
 	}
 	if err := p.CheckDelegateTransports(vendorName); err != nil {
 		return err
+	}
+
+	// The launch's own record, for every vendor: ynh.session.started now, and
+	// ynh.session.finished however the launch ends. With no destination this
+	// writes nothing and the vendor's environment is untouched. A launch ynh
+	// refuses from here on still shows, as refused.
+	var launchRec *launchRecord
+	if action == "" {
+		launchRec = startLaunchRecord(adapter.Name(), loaded, harnessID, ra.FocusFlag, profileName, ra.Resume, runLabels, os.Stderr)
+		defer func() { launchRec.end(runErr) }()
 	}
 
 	// A vendor that cannot take a first message starts bare, and says so.
@@ -636,7 +649,10 @@ func cmdRun(args []string) error {
 		// releases it. Every vendor runs as a child of ynh, and the deferred
 		// snap.Release holds the shared lock on the snapshot until the child
 		// has exited.
-		removeHook := vendor.OnChildStart(unlockRun)
+		removeHook := vendor.OnChildStart(func() {
+			unlockRun()
+			launchRec.markStarted()
+		})
 		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
