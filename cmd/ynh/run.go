@@ -187,6 +187,9 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := p.CheckDelegateTransports(vendorName); err != nil {
+		return err
+	}
 
 	// A vendor that cannot take a first message starts bare, and says so.
 	if launch.Bare && !launchFocusPromptSupported(adapter) {

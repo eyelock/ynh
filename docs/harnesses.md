@@ -312,6 +312,27 @@ Other harnesses this one can invoke as subagents.
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
+| `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
+
+#### Transport
+
+`transport` says how the parent reaches a delegate, and takes `a2a` or `native`. Set it on a `delegates_to` entry, and as a harness-level default of the same name at the top of the manifest:
+
+```json
+{
+  "transport": "a2a",
+  "delegates_to": [
+    {"git": "github.com/eyelock/team-dev-harness", "transport": "native"},
+    {"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
+  ]
+}
+```
+
+An entry's own value wins over the harness default; `a2a` applies when neither says. One harness may mix the two, as above: the first delegate is `native`, the second `a2a` from the default.
+
+A delegate set to `native` on a vendor with no native subagents (today only Cursor, whose subagents are unverified: limit L35 on [vendor parity](vendor-parity.md)) is refused by `ynh install`, `ynh run` and `ynd validate`, with this fix: set `transport: a2a` on this delegate, or run on a vendor with subagents. There is no silent fallback. `ynh install` and `ynd validate` check the harness's `default_vendor` (`ynh install` then the global default); `ynh run` checks the vendor it launches.
+
+This setting only records each delegate's transport; what a run does with it is described in [Delegate sessions](delegate-sessions.md).
 
 When running as `david`, you can ask it to delegate a task to `team-dev`. The delegation happens through the vendor's native subagent system.
 
