@@ -112,7 +112,18 @@ func stopAll(t *testing.T) {
 	for time.Now().Before(deadline) {
 		busy := false
 		for _, p := range paths {
-			if r, err := delegation.Reconcile(p); err == nil && r.Pgid > 1 && syscall.Kill(-r.Pgid, 0) == nil {
+			// The supervisor outlives the run it supervises: after the run's
+			// group is gone it still writes the final record, so wait for
+			// the supervisor process too, or the temp folder's removal races
+			// that write.
+			r, err := delegation.Load(p)
+			if err != nil {
+				continue
+			}
+			if r.Pgid > 1 && syscall.Kill(-r.Pgid, 0) == nil {
+				busy = true
+			}
+			if r.Pid > 1 && syscall.Kill(r.Pid, 0) == nil {
 				busy = true
 			}
 		}
