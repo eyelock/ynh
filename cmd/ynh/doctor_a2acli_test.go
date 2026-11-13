@@ -16,7 +16,12 @@ import (
 // transport) and the given default vendor.
 func installA2AHarness(t *testing.T, name, vendorName string) {
 	t.Helper()
-	body := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":%q,"delegates_to":[{"git":"github.com/example/reviewer"}]}`, name, vendorName)
+	installRaw(t, name, fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":%q,"delegates_to":[{"git":"github.com/example/reviewer"}]}`, name, vendorName))
+}
+
+// installRaw installs a harness from its plugin.json text.
+func installRaw(t *testing.T, name, body string) {
+	t.Helper()
 	for _, dir := range []string{harness.InstalledDir(name), harness.InstalledDirByID("local/" + name)} {
 		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
 			t.Fatal(err)
