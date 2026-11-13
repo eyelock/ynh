@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pincheck-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pin check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
