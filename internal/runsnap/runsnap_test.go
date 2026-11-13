@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 )
@@ -111,6 +112,9 @@ func TestSwapReplacesPreexistingRealDirOnce(t *testing.T) {
 func TestSwapIsAtomicUnderReaders(t *testing.T) {
 	root := t.TempDir()
 	build(t, root, "h", map[string]string{"f": "v0"})
+	// The writer bumps swaps before and after each build, so an odd value
+	// means one is under way and a changed value means one began or ended.
+	var swaps atomic.Int64
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 	for range 4 {
@@ -123,8 +127,10 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 					return
 				default:
 				}
+				atRead := swaps.Load()
 				if _, err := os.ReadFile(filepath.Join(root, "h", "f")); err != nil {
-					t.Errorf("reader saw a missing path: %v\n%s", err, missingPathDiagnostics(root))
+					obs := missingPathObservations(root, &swaps, atRead, err)
+					t.Errorf("reader saw a missing path: %v\n%s", err, missingPathDiagnostics(root, obs))
 					return
 				}
 			}
@@ -134,20 +140,63 @@ func TestSwapIsAtomicUnderReaders(t *testing.T) {
 		// Each snapshot stays held until the test ends: this test is about the
 		// link swap, and a reader resolving the link is not a session, so it
 		// holds no lock and an unheld old snapshot may be pruned under it.
+		swaps.Add(1)
 		build(t, root, "h", map[string]string{"f": "v" + string(rune('a'+i%26)) + string(rune('A'+i/26))})
+		swaps.Add(1)
 	}
 	close(stop)
 	wg.Wait()
 }
 
-// missingPathDiagnostics says what a reader that saw h/f missing can learn a
-// moment later, so a failure on a CI runner is evidence and not only a line:
-// the kernel and the temp dir's filesystem (the swap rests on rename over a
-// symlink being atomic there), whether the same path resolves again at once
-// (a transient lookup miss) or stays missing (the link or its target really
-// went), where the link points, and whether that target exists.
-func missingPathDiagnostics(root string) string {
+// missingPathObservations is what a reader that saw h/f missing can learn at
+// once, before anything slow runs: the writer keeps swapping the whole time,
+// so a check made tens of milliseconds later says nothing about the moment of
+// the miss. swapsAtRead is the swap counter read just before the failed read;
+// it is read again after the checks. Equal counters mean no swap began or
+// ended in between, so a clean re-read then points at the kernel's lookup, and
+// a missing link or target points at swapLink.
+func missingPathObservations(root string, swaps *atomic.Int64, swapsAtRead int64, readErr error) string {
 	var b strings.Builder
+	link := filepath.Join(root, "h")
+	fmt.Fprintf(&b, "failed read of h/f: %v\n", readErr)
+	_, err := os.Lstat(link)
+	fmt.Fprintf(&b, "lstat h: %v\n", err)
+	_, err = os.Stat(filepath.Join(link, "f"))
+	fmt.Fprintf(&b, "stat h/f: %v\n", err)
+	target, rlErr := os.Readlink(link)
+	fmt.Fprintf(&b, "readlink h: %q %v\n", target, rlErr)
+	if rlErr == nil {
+		_, err = os.Stat(filepath.Join(root, target))
+		fmt.Fprintf(&b, "stat target: %v\n", err)
+		_, err = os.Stat(filepath.Join(root, target, "f"))
+		fmt.Fprintf(&b, "stat target/f: %v\n", err)
+	}
+	_, reread := os.ReadFile(filepath.Join(link, "f"))
+	fmt.Fprintf(&b, "read h/f again: %v\n", reread)
+	after := swaps.Load()
+	fmt.Fprintf(&b, "swap counter (odd means a build is under way): %d at the read, %d after these checks\n", swapsAtRead, after)
+	// The counter moves when a build starts and when it ends, and a swap
+	// happens inside one. An odd value at the read means a build (so
+	// possibly a swap) was already under way, which the verdicts cannot rule out.
+	switch {
+	case reread == nil && after == swapsAtRead && swapsAtRead%2 == 0:
+		b.WriteString("verdict: no swap between the failed read and a clean re-read: the kernel's lookup, not swapLink\n")
+	case reread == nil:
+		b.WriteString("verdict: the re-read is clean but a build was under way or began or ended in between: not conclusive\n")
+	case after == swapsAtRead && swapsAtRead%2 == 0:
+		b.WriteString("verdict: still missing with no swap in between: the link or its target is really gone, a swapLink or lock bug\n")
+	default:
+		b.WriteString("verdict: still missing and a build was under way or began or ended in between: look at the link and target lines\n")
+	}
+	return b.String()
+}
+
+// missingPathDiagnostics adds the slow, environmental facts, after the
+// observations above were taken: the kernel and the temp dir's filesystem
+// (the swap rests on rename over a symlink being atomic there).
+func missingPathDiagnostics(root, observations string) string {
+	var b strings.Builder
+	b.WriteString(observations)
 	run := func(name string, args ...string) {
 		out, err := exec.Command(name, args...).CombinedOutput()
 		fmt.Fprintf(&b, "$ %s %s\n%s", name, strings.Join(args, " "), out)
@@ -159,17 +208,6 @@ func missingPathDiagnostics(root string) string {
 	run("df", "-P", root)
 	if out, err := exec.Command("stat", "-f", "-c", "filesystem type: %T", root).CombinedOutput(); err == nil {
 		b.Write(out)
-	}
-	link := filepath.Join(root, "h")
-	_, err := os.ReadFile(filepath.Join(link, "f"))
-	fmt.Fprintf(&b, "read h/f again: %v\n", err)
-	target, err := os.Readlink(link)
-	fmt.Fprintf(&b, "readlink h: %q %v\n", target, err)
-	if err == nil {
-		_, err = os.Stat(filepath.Join(root, target))
-		fmt.Fprintf(&b, "stat target: %v\n", err)
-		_, err = os.Stat(filepath.Join(root, target, "f"))
-		fmt.Fprintf(&b, "stat target/f: %v\n", err)
 	}
 	entries, _ := os.ReadDir(filepath.Join(root, SnapshotsDirName, "h"))
 	fmt.Fprintf(&b, "snapshots: %d\n", len(entries))
