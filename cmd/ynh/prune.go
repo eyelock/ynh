@@ -14,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/runsnap"
 	"github.com/eyelock/ynh/internal/symlink"
 )
 
@@ -118,7 +119,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if installedNames[name] {
+			if runsnap.IsSnapshotsDir(name) || installedNames[name] {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)

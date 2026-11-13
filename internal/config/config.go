@@ -123,7 +123,7 @@ type Config struct {
 	Sources        []Source              `json:"sources,omitempty"`
 	Backends       map[string]BackendDef `json:"backends,omitempty"`
 	// TelemetryRelay turns on the telemetry relay for every `ynh agent run`
-	// and every `ynh run` (docs/telemetry.md); a Copilot `ynh run` starts one,
+	// and every `ynh run` (docs/telemetry.md); a Copilot or Codex `ynh run` starts one,
 	// interactive sessions included. --telemetry-relay and YNH_TELEMETRY_RELAY come
 	// first.
 	TelemetryRelay bool `json:"telemetry_relay,omitempty"`

@@ -52,11 +52,15 @@ func cmdInstall(args []string) error {
 	originalSource := source
 
 	// Determine source type using disambiguation rules:
-	// 1. Starts with . or / → local path
+	// 1. Starts with . or /, or is an existing relative path such as
+	//    harnesses/x (isLocalPath stats it) → local path
 	// 2. Starts with git@ → Git SSH URL
 	// 3. Starts with https:// or http:// → Git HTTPS URL
 	// 4. Contains @ (not matching 2/3) → registry lookup name@registry-name
-	// 5. Contains / → Git URL shorthand
+	// 5. Contains / → Git URL shorthand when host-qualified; a host-less
+	//    shorthand that isn't on disk is reported as a missing local path
+	//    (use ./ or a host-qualified form, or git@alias:org/repo.git for an
+	//    SSH alias)
 	// 6. Plain word → registry search
 	var srcDir string
 
@@ -204,6 +208,18 @@ func cmdInstall(args []string) error {
 	// ignore, once, here, rather than on every later load.
 	for _, d := range p.Diagnostics {
 		fmt.Printf("  note: %s\n", d)
+	}
+
+	// A delegate set to transport: native needs a vendor with subagents; the
+	// vendor checked is the one a plain run would use. This runs before
+	// anything is removed or written, so a refused install leaves an existing
+	// install exactly as it was and a fresh one not installed.
+	installVendor := p.DefaultVendor
+	if installVendor == "" {
+		installVendor = cfg.DefaultVendor
+	}
+	if err := p.CheckDelegateTransports(installVendor); err != nil {
+		return err
 	}
 
 	// Reserved name: "ynh" can be installed but gets no launcher script

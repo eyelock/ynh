@@ -114,6 +114,11 @@ type composeDelegate struct {
 	// profile or focus; MCPServers are composed with it applied.
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// Transport is how the parent reaches the delegate (a2a or native), as
+	// resolved; TransportFrom is where it came from: the entry, the harness's
+	// default, or the built-in default.
+	Transport     string `json:"transport"`
+	TransportFrom string `json:"transport_from"`
 	// MCPServers are the servers the delegate carries for its own subagent,
 	// not the session's: those of the harnesses its includes reach, then its
 	// own ("root" is the delegate itself), composed as a run composes them.
@@ -431,11 +436,13 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	delegates := make([]composeDelegate, 0, len(h.DelegatesTo))
 	for _, del := range h.DelegatesTo {
 		cd := composeDelegate{
-			Git:     del.Git,
-			Ref:     del.Ref,
-			Path:    del.Path,
-			Profile: del.Profile,
-			Focus:   del.Focus,
+			Git:           del.Git,
+			Ref:           del.Ref,
+			Path:          del.Path,
+			Profile:       del.Profile,
+			Focus:         del.Focus,
+			Transport:     h.TransportOf(del),
+			TransportFrom: h.TransportOrigin(del),
 		}
 		if servers, provenance, err := delegateMCPServers(del, h.Dir); err != nil {
 			cd.MCPServersError = err.Error()
@@ -728,6 +735,7 @@ func printComposeText(w io.Writer, out composeOutput) error {
 			if del.Focus != "" {
 				line += "  focus=" + del.Focus
 			}
+			line += "  transport=" + del.Transport + " (" + del.TransportFrom + ")"
 			_, _ = fmt.Fprintln(w, line)
 			// The delegate's own subagent's servers, not the session's.
 			for _, name := range slices.Sorted(maps.Keys(del.MCPServers)) {

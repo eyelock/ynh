@@ -1242,8 +1242,17 @@ func PrepareOpenCode(configPath, bin string) error {
 	if configPath == "" {
 		return nil
 	}
-	runOpencodeSessionStart(configPath)
-	return composeOpencodeAgents(configPath)
+	return (&OpenCode{}).PrepareLaunch(configPath)
+}
+
+// PrepareLaunch writes the files OpenCode reads at start-up into runDir: the
+// output of the harness's on_session_start hooks, and the composed
+// .opencode/AGENTS.md. It is the vendor's LaunchPreparer step, which `ynh run`
+// calls on the staged tree before the snapshot is sealed, so that a launch only
+// reads the run dir and a snapshot is never written to under a live session.
+func (o *OpenCode) PrepareLaunch(runDir string) error {
+	runOpencodeSessionStart(runDir)
+	return composeOpencodeAgents(runDir)
 }
 
 // opencodeEnviron returns env with OPENCODE_CONFIG_DIR set to dir. Any earlier
@@ -1268,7 +1277,9 @@ func launchOpencodeArgs(configPath string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := PrepareOpenCode(configPath, bin); err != nil {
+	// The launch only reads the run dir: the session-start output and the
+	// composed AGENTS.md were written by PrepareLaunch before the seal.
+	if err := checkOpencodeVersion(bin); err != nil {
 		return err
 	}
 	dir := filepath.Join(configPath, ".opencode")

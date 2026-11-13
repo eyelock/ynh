@@ -203,7 +203,7 @@ echo "== C. eval stubs =="
 EVALS="$ROOT/.claude/agents/evals.md"
 # Programs an eval may run for real: none of them is a vendor CLI or needs a
 # network or Docker.
-EVAL_LOCAL_TOOLS="git sh bash /bin/sh"
+EVAL_LOCAL_TOOLS="git sh bash /bin/sh ps"
 stub_lines=$(grep -c '^STUBS="' "$EVALS" || true)
 if [ "$stub_lines" -ne 1 ]; then
 	echo "  FAIL     $(basename "$EVALS") must have exactly one STUBS=\"...\" line, found $stub_lines"

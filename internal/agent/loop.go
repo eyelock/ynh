@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -1734,7 +1735,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
 		}
 	}
-	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name})
+	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name, RootTransport: h.Transport})
 	if delErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)
@@ -1892,7 +1893,7 @@ func resumeTaskConflict(focus, task string, cp *Checkpoint) string {
 // callers get a useful message instead of "unknown vendor" from deeper in.
 // validateSandbox rejects a sandbox request the chosen backend cannot honour.
 //
-// `--sandbox srt` was read only by the Claude backend; codex and cursor
+// `--sandbox srt` was once read only by the Claude backend; codex and cursor
 // contained no reference to it, so `--sandbox srt --backend codex` ran
 // completely unsandboxed and said nothing. A declared containment control that
 // silently does not apply is worse than an absent one, because it gets relied
@@ -1904,13 +1905,24 @@ func validateSandbox(sandbox, backend string) error {
 	case "", "none":
 		return nil
 	case "srt":
-		if backend != "claude" {
+		switch backend {
+		case "claude", "codex", "cursor":
+			return nil
+		case "opencode":
+			// opencode run spawns /bin/ps, which srt's macOS profile refuses
+			// (see L18 in docs/vendor-parity.md). On Linux it runs under srt
+			// (shown live, ynh #805), so only macOS stays refused.
+			if runtime.GOOS == "linux" {
+				return nil
+			}
 			return fmt.Errorf(
-				"--sandbox srt is not supported by the %s backend (only claude implements it); "+
-					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
-				backend)
+				"--sandbox srt is not supported by the opencode backend on %s (opencode run cannot start under srt: it spawns ps, which srt's macOS sandbox refuses; it is supported on Linux only); "+
+					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed", runtime.GOOS)
 		}
-		return nil
+		return fmt.Errorf(
+			"--sandbox srt is not supported by the %s backend; "+
+				"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
+			backend)
 	default:
 		return fmt.Errorf("unknown sandbox %q (supported: none, srt)", sandbox)
 	}

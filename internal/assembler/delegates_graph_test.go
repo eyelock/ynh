@@ -23,7 +23,7 @@ func graph(t *testing.T, edges map[string][]string) map[string]string {
 	for name, to := range edges {
 		var dels []any
 		for _, d := range to {
-			dels = append(dels, map[string]any{"git": dirs[d]})
+			dels = append(dels, map[string]any{"git": dirs[d], "transport": "native"})
 		}
 		delegateRepo(t, dirs[name], map[string]any{
 			"name": name, "version": "0.1.0", "description": name + " agent",
@@ -44,7 +44,7 @@ func assembleGraph(t *testing.T, dirs map[string]string, root string, entries ..
 	}
 	var dels []harness.Delegate
 	for _, e := range entries {
-		dels = append(dels, harness.Delegate{GitSource: harness.GitSource{Git: dirs[e]}})
+		dels = append(dels, harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: dirs[e]}})
 	}
 	workDir := t.TempDir()
 	var warn strings.Builder
@@ -175,7 +175,7 @@ func TestAssembleDelegates_RootByNameWhenElsewhere(t *testing.T) {
 	workDir := t.TempDir()
 	var warn strings.Builder
 	_, err := AssembleDelegates(workDir, adapter,
-		[]harness.Delegate{{GitSource: harness.GitSource{Git: dirs["a"]}}}, t.TempDir(), DelegateOptions{Warn: &warn, RootName: "root"})
+		[]harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: dirs["a"]}}}, t.TempDir(), DelegateOptions{Warn: &warn, RootName: "root"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,8 +196,8 @@ func TestAssembleDelegates_TwoSelectionsClash(t *testing.T) {
 	adapter, _ := vendor.Get("claude")
 	src := harness.GitSource{Git: dirs["a"]}
 	_, err := AssembleDelegates(t.TempDir(), adapter, []harness.Delegate{
-		{GitSource: src},
-		{GitSource: src, Profile: "p"},
+		{Transport: harness.TransportNative, GitSource: src},
+		{Transport: harness.TransportNative, GitSource: src, Profile: "p"},
 	}, dirs["root"], DelegateOptions{RootName: "root"})
 	if err == nil || !strings.Contains(err.Error(), "reached with two selections") {
 		t.Fatalf("want a two-selections error, got %v", err)
@@ -213,7 +213,7 @@ func TestAssembleDelegates_FocusKeptInGraph(t *testing.T) {
 	mid := t.TempDir()
 	delegateRepo(t, mid, map[string]any{
 		"name": "mid", "version": "0.1.0", "description": "mid",
-		"delegates_to": []any{map[string]any{"git": leaf}},
+		"delegates_to": []any{map[string]any{"git": leaf, "transport": "native"}},
 		"focuses":      map[string]any{"triage": map[string]any{"prompt": "Triage first."}},
 	})
 	root := t.TempDir()
@@ -221,7 +221,7 @@ func TestAssembleDelegates_FocusKeptInGraph(t *testing.T) {
 	adapter, _ := vendor.Get("claude")
 	workDir := t.TempDir()
 	_, err := AssembleDelegates(workDir, adapter,
-		[]harness.Delegate{{GitSource: harness.GitSource{Git: mid}, Focus: "triage"}}, root, DelegateOptions{RootName: "root"})
+		[]harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: mid}, Focus: "triage"}}, root, DelegateOptions{RootName: "root"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestAssembleDelegates_RelativeGitSourceFromCachedClone(t *testing.T) {
 		}
 	}
 	write("a", `{"name":"a","version":"0.1.0"}`)
-	write("b", `{"name":"b","version":"0.1.0","delegates_to":[{"git":"../..","path":"harnesses/a"}]}`)
+	write("b", `{"name":"b","version":"0.1.0","delegates_to":[{"transport":"native","git":"../..","path":"harnesses/a"}]}`)
 	runGit(t, repo, "init")
 	runGit(t, repo, "config", "user.email", "test@test.com")
 	runGit(t, repo, "config", "user.name", "Test")
@@ -264,8 +264,8 @@ func TestAssembleDelegates_RelativeGitSourceFromCachedClone(t *testing.T) {
 		t.Fatal(err)
 	}
 	dels := []harness.Delegate{
-		{GitSource: harness.GitSource{Git: ".", Path: "harnesses/a"}},
-		{GitSource: harness.GitSource{Git: ".", Path: "harnesses/b"}},
+		{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: ".", Path: "harnesses/a"}},
+		{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: ".", Path: "harnesses/b"}},
 	}
 	workDir := t.TempDir()
 	if _, err := AssembleDelegates(workDir, adapter, dels, repo, DelegateOptions{Warn: &strings.Builder{}, RootName: "root"}); err != nil {
@@ -323,8 +323,8 @@ func TestAssembleDelegates_TwoReposSameNameClash(t *testing.T) {
 		delegateRepo(t, d, map[string]any{"name": "a", "version": "0.1.0", "description": "a"})
 	}
 	_, err := assembleEntries(t, t.TempDir(), "root",
-		harness.Delegate{GitSource: harness.GitSource{Git: one}},
-		harness.Delegate{GitSource: harness.GitSource{Git: two}})
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: one}},
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: two}})
 	if err == nil || !strings.Contains(err.Error(), "two delegates are both named a") {
 		t.Fatalf("want a name clash, got %v", err)
 	}
@@ -342,8 +342,8 @@ func TestAssembleDelegates_SameRepoTwoCommitsClash(t *testing.T) {
 	runGit(t, repo, "commit", "-am", "second")
 	runGit(t, repo, "tag", "v2")
 	_, err := assembleEntries(t, t.TempDir(), "root",
-		harness.Delegate{GitSource: harness.GitSource{Git: repo, Ref: "v1"}},
-		harness.Delegate{GitSource: harness.GitSource{Git: repo, Ref: "v2"}})
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo, Ref: "v1"}},
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo, Ref: "v2"}})
 	if err == nil || !strings.Contains(err.Error(), "two delegates are both named a") {
 		t.Fatalf("want a name clash across two commits, got %v", err)
 	}
@@ -354,11 +354,11 @@ func TestAssembleDelegates_SameRepoTwoCommitsClash(t *testing.T) {
 func TestAssembleDelegates_TwoSelectionsClashViaRelativeSource(t *testing.T) {
 	repo := monorepo(t, map[string]string{
 		"a": `{"name":"a","version":"0.1.0","profiles":{"p":{}}}`,
-		"b": `{"name":"b","version":"0.1.0","delegates_to":[{"git":"../..","path":"harnesses/a","profile":"p"}]}`,
+		"b": `{"name":"b","version":"0.1.0","delegates_to":[{"transport":"native","git":"../..","path":"harnesses/a","profile":"p"}]}`,
 	})
 	_, err := assembleEntries(t, repo, "root",
-		harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "harnesses/a"}},
-		harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "harnesses/b"}})
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: ".", Path: "harnesses/a"}},
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: ".", Path: "harnesses/b"}})
 	if err == nil || !strings.Contains(err.Error(), "reached with two selections") {
 		t.Fatalf("want a two-selections error, got %v", err)
 	}
@@ -370,11 +370,11 @@ func TestAssembleDelegates_TwoSelectionsClashViaRelativeSource(t *testing.T) {
 func TestAssembleDelegates_RootRecognisedBySource(t *testing.T) {
 	repo := monorepo(t, map[string]string{
 		"rootseat": `{"name":"rootseat","version":"0.1.0"}`,
-		"a":        `{"name":"a","version":"0.1.0","delegates_to":[{"git":"../..","path":"harnesses/rootseat"}]}`,
+		"a":        `{"name":"a","version":"0.1.0","delegates_to":[{"transport":"native","git":"../..","path":"harnesses/rootseat"}]}`,
 	})
 	rootDir := filepath.Join(repo, "harnesses", "rootseat")
 	warn, err := assembleEntries(t, rootDir, "",
-		harness.Delegate{GitSource: harness.GitSource{Git: "../..", Path: "harnesses/a"}})
+		harness.Delegate{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: "../..", Path: "harnesses/a"}})
 	if err != nil {
 		t.Fatal(err)
 	}

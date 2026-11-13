@@ -46,6 +46,20 @@ type FlatDelegate struct {
 // resolve turns an entry's source into a directory; a relative source is
 // resolved against the directory of the harness that declares it.
 func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, resolve func(gs harness.GitSource, harnessDir string) (string, error)) ([]FlatDelegate, error) {
+	out, _, err := FlattenDelegatesBy(entries, rootDir, rootName, "", false, resolve)
+	return out, err
+}
+
+// FlattenDelegatesBy is FlattenDelegates for the delegates a parent runs as
+// native subagents. Each entry's transport is settled first: its own, else its
+// declaring harness's default (rootTransport for the root's entries), else a2a.
+// With nativeOnly, an entry whose transport is a2a is not resolved or walked:
+// that delegate is its own ynh session, which resolves its own delegates, and
+// it is no agent of this session. Those entries come back as skipped, in the
+// order met, with their transport settled, so a caller that must still see
+// every entry (the trust digest) can. Without nativeOnly nothing is skipped and
+// each entry's Transport is settled all the same.
+func FlattenDelegatesBy(entries []harness.Delegate, rootDir, rootName, rootTransport string, nativeOnly bool, resolve func(gs harness.GitSource, harnessDir string) (string, error)) (out []FlatDelegate, skipped []harness.Delegate, err error) {
 	type pending struct {
 		entry  harness.Delegate
 		parent int // index into out, -1 for the root
@@ -59,12 +73,17 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 	// hold, differs in source, and is still caught by its name.
 	rootID := ids.of(rootDir)
 
-	var out []FlatDelegate
 	routes := []string{}
 	byID := map[string]int{}
 	byName := map[string]int{}
 	var queue []pending
 	for _, e := range entries {
+		if e.Transport == "" {
+			e.Transport = rootTransport
+		}
+		if e.Transport == "" {
+			e.Transport = harness.TransportA2A
+		}
 		queue = append(queue, pending{entry: e, parent: -1, dir: rootDir, route: "the root"})
 	}
 
@@ -88,14 +107,18 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 	for len(queue) > 0 {
 		p := queue[0]
 		queue = queue[1:]
+		if nativeOnly && p.entry.Transport == harness.TransportA2A {
+			skipped = append(skipped, p.entry)
+			continue
+		}
 		base, err := resolve(p.entry.GitSource, p.dir)
 		if err != nil {
-			return nil, fmt.Errorf("delegate: %w", err)
+			return nil, nil, fmt.Errorf("delegate: %w", err)
 		}
 		id := ids.of(base)
 		loaded, err := harness.LoadDir(base)
 		if err != nil {
-			return nil, fmt.Errorf("loading delegate harness %s: %w", p.entry.Git, err)
+			return nil, nil, fmt.Errorf("loading delegate harness %s: %w", p.entry.Git, err)
 		}
 
 		if id == rootID || (rootName != "" && loaded.Name == rootName) {
@@ -109,20 +132,20 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 
 		selected, focus, err := p.entry.Select(loaded)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		sel := p.entry.Profile + "|" + p.entry.Focus
 
 		if at, seen := byID[id]; seen {
 			if out[at].sel != sel {
-				return nil, fmt.Errorf("delegate %s is reached with two selections: %s by %s, and %s by %s; select it one way",
+				return nil, nil, fmt.Errorf("delegate %s is reached with two selections: %s by %s, and %s by %s; select it one way",
 					loaded.Name, describeSelection(out[at].sel), routes[at], describeSelection(sel), p.route)
 			}
 			declare(p.parent, loaded.Name)
 			continue
 		}
 		if at, clash := byName[loaded.Name]; clash {
-			return nil, fmt.Errorf("two delegates are both named %s: %s by %s, and %s by %s; an agent carries one name",
+			return nil, nil, fmt.Errorf("two delegates are both named %s: %s by %s, and %s by %s; an agent carries one name",
 				loaded.Name, out[at].BasePath, routes[at], base, p.route)
 		}
 
@@ -132,10 +155,11 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 		routes = append(routes, p.route)
 		declare(p.parent, loaded.Name)
 		for _, e := range selected.DelegatesTo {
+			e.Transport = selected.TransportOf(e)
 			queue = append(queue, pending{entry: e, parent: idx, dir: base, route: p.route + " > " + loaded.Name})
 		}
 	}
-	return out, nil
+	return out, skipped, nil
 }
 
 // identities names harness directories by source (see sourceIdentity),

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -90,8 +91,18 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 		return resolvedSource{sourceType: "git", gitURL: cloneURL, path: path, nameHint: nameHint}, nil
 	}
 
-	// Rule 5b: Contains / → Git URL shorthand
+	// Rule 5b: Contains / → Git URL shorthand, unless the first segment is
+	// not host-like (no dot, no colon): "harnesses/x" is a path that is not
+	// on disk, and reading it as git@harnesses:x.git fails with a baffling
+	// SSH error. Report the missing path instead.
 	if strings.Contains(source, "/") {
+		if first, _, _ := strings.Cut(source, "/"); !strings.ContainsAny(first, ".:") {
+			return resolvedSource{}, fmt.Errorf(
+				"%q does not exist as a local path (relative to %s); "+
+					"for a local harness pass a path that exists, e.g. './%s', "+
+					"or for a Git repository give a host, e.g. 'github.com/<org>/<repo>'",
+				source, cwdForMessage(), source)
+		}
 		return resolvedSource{sourceType: "git"}, nil
 	}
 
@@ -238,4 +249,13 @@ func canonicalIDToClone(source string) (cloneURL, withinRepoPath string, isCanon
 	// segment is the harness name.
 	withinRepoPath = strings.Join(parts[3:], "/")
 	return cloneURL, withinRepoPath, true
+}
+
+// cwdForMessage returns the working directory for an error message, or "."
+// when it cannot be determined.
+func cwdForMessage() string {
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return "."
 }

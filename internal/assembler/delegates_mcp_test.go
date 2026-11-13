@@ -50,7 +50,7 @@ func assembleFor(t *testing.T, vendorName, repo string, lookup func(string) (str
 	}
 	workDir = t.TempDir()
 	var warn strings.Builder
-	declared, err = AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup, Warn: &warn, Launch: true})
+	declared, err = AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup, Warn: &warn, Launch: true})
 	warnings = warn.String()
 	if err != nil {
 		return
@@ -236,7 +236,7 @@ func TestAssembleDelegates_NoLaunchWritesNoSecrets(t *testing.T) {
 	}
 	workDir := t.TempDir()
 	lookup := func(string) (string, bool) { return secretValue, true }
-	declared, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup})
+	declared, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup})
 	if err != nil || len(declared) != 1 {
 		t.Fatalf("declared %v err %v", declared, err)
 	}
@@ -376,7 +376,7 @@ func TestAssembleDelegates_EnvFilePerDelegateRegenerated(t *testing.T) {
 		t.Fatal(err)
 	}
 	lookup := func(k string) (string, bool) { return "val-" + k, true }
-	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup, Launch: true}); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup, Launch: true}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(envFile)

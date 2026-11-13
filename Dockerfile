@@ -5,8 +5,15 @@
 # ynr changes. Stages that use it redeclare `ARG YNR_VERSION` to inherit it.
 ARG YNR_VERSION=0.2.0
 
+# The Go the image's binaries are built with. It is go.mod's `toolchain` line,
+# and `make check-go-pin` (part of `make check`) fails when the two differ, so
+# the image ships the Go that govulncheck scans. The official golang images set
+# GOTOOLCHAIN=local, so go.mod's line cannot select the compiler here: this tag
+# does. Move both together.
+ARG GO_VERSION=1.26.11
+
 # Stage 1: Build ynh and ynd
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
 
 RUN apk add --no-cache git
 

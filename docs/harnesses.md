@@ -237,10 +237,16 @@ checks the same absolute path, and the clone is cached under it, so two
 harnesses that each name `./inc` get their own repos. The same applies to
 `delegates_to`.
 
-An include or delegate whose source is the harness's own repo (`"git": "."`,
-or `./sub` of it) is refreshed from that repo on every run, so one committed
-after the first run is found without `ynh update`. Uncommitted work is not
-picked up. Every other source, including another repo on disk, is served from
+An include or delegate whose source is the harness's own repo (`"git": "."`)
+is refreshed from that repo on every run, so one committed after the first run
+is found without `ynh update`. Uncommitted work is not picked up: a `path` that
+is on disk but not committed fails the run, and `ynh doctor` says so. This works
+only when the harness sits at the root of its repository. A run clones the
+source, and git clones only a repository's root, so a harness in a subfolder of
+its repo, with `"git": "."` (or `"./sub"`), fails every run; the same holds for
+includes and delegates alike. Give such a source a Git URL, or keep the harness
+at the repo's root. `ynh doctor` reports the delegate case; it does not check
+includes yet. Every other source, including another repo on disk, is served from
 the cache until `ynh update`; if a delegate or include `path` is missing from
 it, the error says the cached copy may be out of date and suggests `ynh update`.
 
@@ -306,10 +312,31 @@ Other harnesses this one can invoke as subagents.
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
+| `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
 
-When running as `david`, you can ask it to delegate a task to `team-dev`. The delegation happens through the vendor's native subagent system.
+#### Transport
 
-At runtime, ynh generates a vendor-native agent file for each delegate containing:
+`transport` says how the parent reaches a delegate, and takes `a2a` or `native`. Set it on a `delegates_to` entry, and as a harness-level default of the same name at the top of the manifest:
+
+```json
+{
+  "transport": "a2a",
+  "delegates_to": [
+    {"git": "github.com/eyelock/team-dev-harness", "transport": "native"},
+    {"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
+  ]
+}
+```
+
+An entry's own value wins over the harness default; `a2a` applies when neither says. One harness may mix the two, as above: the first delegate is `native`, the second `a2a` from the default.
+
+A delegate set to `native` on a vendor with no native subagents (today only Cursor, whose subagents are unverified: limit L35 on [vendor parity](vendor-parity.md)) is refused by `ynh install`, `ynh run` and `ynd validate`, with this fix: set `transport: a2a` on this delegate, or run on a vendor with subagents. There is no silent fallback. `ynh install` and `ynd validate` check the harness's `default_vendor` (`ynh install` then the global default); `ynh run` checks the vendor it launches.
+
+`ynh run`, `ynd preview` and `ynh image` assemble a subagent only for a `native` delegate (and for the `native` delegates it reaches, each by its own entry's transport); `ynd export` does the same, and leaves an `a2a` delegate out with one warning, since it needs ynh at runtime. An `a2a` delegate's own `delegates_to` are its session's business, and are not walked from the parent. See [Delegate sessions](delegate-sessions.md) for how an `a2a` delegate runs.
+
+When running as `david`, you can ask it to delegate a task to `team-dev`. How the delegation happens depends on the entry's [transport](#transport). By default (`a2a`) the delegate is its own ynh session, started when the parent asks; see [Delegate sessions](delegate-sessions.md). Only with `transport: native` does it happen through the vendor's own subagent system, and ynh assembles a subagent for the delegate. An `a2a` delegate gets no agent file and no `--agents` entry.
+
+For a `native` delegate, ynh generates a vendor-native agent file at runtime containing:
 
 - **Description** from the delegate's `.agents/harness/plugin.json` (helps the AI route to the right delegate)
 - **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
@@ -331,7 +358,7 @@ Delegates form a graph too, and ynh flattens it: starting from the root's `deleg
 - **Each agent's prompt lists the delegates it declares itself**, under "Delegates", and tells it to hand back to the main session: it reports to the session that invoked it. It does not list the root or itself.
 - **One harness, one selection.** A [profile or focus](#profile-or-focus-of-a-delegate) is per entry. The same harness reached with two different selections (or one with a selection and one without) is an error naming both routes, as one agent cannot be both. Two different harnesses with the same `name` are an error too.
 
-A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every delegate reached this way. For a delegate that carries MCP servers or a focus, the trust digest also covers the entry's source as written (git URL, local folder, path, ref) and its selection (profile, focus), so repointing such an entry at another harness changes the digest even when that harness has the same name and servers. A delegate that carries neither brings nothing the digest reviews, so repointing it leaves the digest as it was. A parent accepted before v0.18.0 reads `changed` once if it has a delegate that carries servers or a focus. `ynh install` and `ynh update` fetch the whole graph, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
+A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every `native` delegate reached this way. The parent's trust digest covers what runs inside the parent's process. A `native` delegate is a subagent of the parent's session, so its MCP servers and its selected focus prompt are in the digest. An `a2a` delegate is its own ynh session under its own trust grant, so its servers and focus prompt are reviewed there, not in the parent's digest. For every delegate, of either transport, the digest covers the entry as written (git URL, local folder, path, ref), its selection (profile, focus) and its settled transport, so repointing an entry, or flipping it between `a2a` and `native`, changes the digest, since it changes what the parent may start or run. A parent accepted before v0.18.0 that has delegates reads `changed` once. `ynh install` and `ynh update` fetch the whole graph, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
 
 #### Profile or focus of a delegate
 
