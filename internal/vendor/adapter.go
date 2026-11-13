@@ -265,6 +265,14 @@ type Adapter interface {
 	// harnesses in exported plugins. Codex does not support delegates.
 	SupportsExportDelegates() bool
 
+	// SupportsNativeSubagents reports whether this vendor has subagents a
+	// delegate can run as when its transport is native (a delegates_to entry
+	// or harness "transport": "native"). A vendor without them has a native
+	// delegate refused by ynh install, ynh run and ynd validate
+	// (harness.CheckDelegateTransports). Each adapter declares it as a bare
+	// true or false, which scripts/subagent-parity.sh holds every vendor to.
+	SupportsNativeSubagents() bool
+
 	// MarketplaceManifestDir returns the directory name for marketplace index
 	// files (e.g. ".claude-plugin", ".agents/plugins"). It can differ from
 	// PluginManifestDir, so it never locates a plugin manifest. Returns empty

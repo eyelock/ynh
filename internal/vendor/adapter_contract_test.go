@@ -411,6 +411,12 @@ func TestVendorDeclarativeContract(t *testing.T) {
 		if got := a.NeedsSymlinks(); got != w.needsSymlinks {
 			t.Errorf("%s NeedsSymlinks = %v, want %v", name, got, w.needsSymlinks)
 		}
+		// Native subagents: Cursor's are unverified (limit L35), so a native
+		// delegate is refused there; the other four have them (limit L12).
+		wantSub := name != "cursor"
+		if got := a.SupportsNativeSubagents(); got != wantSub {
+			t.Errorf("%s SupportsNativeSubagents = %v, want %v", name, got, wantSub)
+		}
 		if got := a.SupportsExportDelegates(); got != w.exportDelegates {
 			t.Errorf("%s SupportsExportDelegates = %v, want %v", name, got, w.exportDelegates)
 		}

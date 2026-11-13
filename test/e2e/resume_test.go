@@ -268,30 +268,82 @@ func TestResume_ExplicitIDBypassesTheStore(t *testing.T) {
 	}
 }
 
-// Codex and Cursor cannot resolve ids locally, but must still resume via their
-// continue-last form rather than falling back to a cold launch.
-func TestResume_LookupUnavailableVendorsUseContinueLast(t *testing.T) {
+// runExpectingFailure is run for a launch ynh must refuse: it returns ynh's
+// stderr and fails the test if ynh succeeded or the vendor was launched.
+func (e *resumeEnv) runExpectingFailure(t *testing.T, args ...string) string {
+	t.Helper()
+
+	_ = os.Remove(e.argvFile)
+	cmd := exec.Command(ynhBinary(t), append([]string{"run", "local/resume-test"}, args...)...)
+	cmd.Dir = e.project
+	for _, kv := range os.Environ() {
+		switch {
+		case strings.HasPrefix(kv, "HOME="), strings.HasPrefix(kv, "PATH="),
+			strings.HasPrefix(kv, "YNH_HOME="), strings.HasPrefix(kv, "ARGV_OUT="):
+			continue
+		}
+		cmd.Env = append(cmd.Env, kv)
+	}
+	cmd.Env = append(cmd.Env,
+		"HOME="+e.home,
+		"PATH="+e.shimDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"YNH_HOME="+e.sandbox.home,
+		"ARGV_OUT="+e.argvFile,
+		"PWD="+e.project,
+	)
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err == nil {
+		t.Fatalf("ynh run %s succeeded, want a refusal", strings.Join(args, " "))
+	}
+	if _, err := os.Stat(e.argvFile); err == nil {
+		t.Errorf("the vendor was launched despite the refusal")
+	}
+	return errBuf.String()
+}
+
+// Codex and Cursor key their sessions by the directory they started in, and a
+// harness starts in a new snapshot folder whenever it changes (ynh #776), so a
+// bare --resume finds the newest session that started in any snapshot of the
+// harness. It has no continue-last fallback: a vendor's own "last session"
+// could be another project's. With no such session, ynh stops and says so,
+// never launches the vendor, and never emits a bare resume flag, which would
+// open a picker and hang.
+func TestResume_SnapshotVendorsWithNoSessionRefuse(t *testing.T) {
+	for _, vendorName := range []string{"codex", "cursor"} {
+		t.Run(vendorName, func(t *testing.T) {
+			env := newResumeEnv(t)
+
+			stderr := env.runExpectingFailure(t, "-v", vendorName, "--resume")
+
+			for _, want := range []string{"no " + vendorName + " session to resume", "none started in a snapshot of this harness", "--resume=<session-id>"} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("stderr should contain %q:\n%s", want, stderr)
+				}
+			}
+		})
+	}
+}
+
+// Naming the session sidesteps the lookup: the id goes to the vendor as given.
+func TestResume_SnapshotVendorsResumeAnExplicitID(t *testing.T) {
 	tests := []struct {
 		vendor   string
 		wantArgv []string
 	}{
-		{vendor: "codex", wantArgv: []string{"resume", "--last"}},
-		{vendor: "cursor", wantArgv: []string{"--continue"}},
+		{vendor: "codex", wantArgv: []string{"resume", "named-session"}},
+		{vendor: "cursor", wantArgv: []string{"--resume", "named-session"}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.vendor, func(t *testing.T) {
 			env := newResumeEnv(t)
 
-			argv, _ := env.run(t, "-v", tt.vendor, "--resume")
+			argv, _ := env.run(t, "-v", tt.vendor, "--resume=named-session")
 
 			for _, want := range tt.wantArgv {
 				if !contains(argv, want) {
 					t.Errorf("expected %q in argv, got %v", want, argv)
 				}
-			}
-			if contains(argv, "--resume") {
-				t.Errorf("bare --resume would open a picker and hang: argv %v", argv)
 			}
 		})
 	}

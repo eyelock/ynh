@@ -507,7 +507,8 @@ Flags:
   --profile <name>            Apply a named profile overlay
   --backend <name>            Worker backend: claude (default), codex, cursor,
                               opencode.
-                              On --resume, the session's backend
+                              On --resume, the session's own backend is
+                              used; naming a different one is refused.
   --model <name>              Model override
   --effort low|medium|high    Reasoning effort, mapped to the backend's own
                               setting (claude, codex; refused on cursor and

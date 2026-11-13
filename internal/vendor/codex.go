@@ -411,6 +411,9 @@ func (c *Codex) ExportArtifactDirs() map[string]string {
 
 func (c *Codex) SupportsExportDelegates() bool { return false }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (c *Codex) SupportsNativeSubagents() bool { return true }
+
 // ExportCarriesInstructions: a Codex plugin cannot carry instructions. A
 // plugin's AGENTS.md is installed with it but never reaches the session: Codex
 // reads AGENTS.md only from the working directory's project and the user's
