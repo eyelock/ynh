@@ -218,6 +218,29 @@ func TestFirstMessageStartsTheSessionAndStatusFollowsIt(t *testing.T) {
 	}
 }
 
+func TestTaskCarriesTheDelegationHandle(t *testing.T) {
+	folder := setup(t)
+	e := open(t, folder, "reviewer")
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "sleep 30", true)
+	handle, _ := task.Metadata[MetaHandle].(string)
+	recs := records(t)
+	if len(recs) != 1 || handle == "" || !strings.HasSuffix(recs[0], handle+".json") {
+		t.Fatalf("the first task's metadata handle %q does not name the record %v", handle, recs)
+	}
+	// And a later read of the task still carries it.
+	if got := waitState(t, c, ctx, task.ID, a2a.TaskStateWorking); got.Metadata[MetaHandle] != handle {
+		t.Errorf("a read of the task lost the handle: %v", got.Metadata)
+	}
+	path, err := delegation.FindHandle(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := delegation.Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInputRequiredIsAnsweredOnTheSameTask(t *testing.T) {
 	folder := setup(t)
 	e := open(t, folder, "reviewer")
@@ -297,7 +320,7 @@ func TestLogTailKeepsOnlyTheLastLines(t *testing.T) {
 		fmt.Fprintf(&b, "line %d\n", i)
 	}
 	_ = os.WriteFile(p, []byte(b.String()), 0o600)
-	got := logTail(p, LogTailLines)
+	got := LogTail(p, LogTailLines)
 	lines := strings.Split(got, "\n")
 	if len(lines) != LogTailLines || lines[0] != "line 61" || lines[len(lines)-1] != "line 100" {
 		t.Fatalf("got %d lines, %q ... %q", len(lines), lines[0], lines[len(lines)-1])

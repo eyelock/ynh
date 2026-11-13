@@ -29,6 +29,31 @@ func openDelegateEndpoints(p *harness.Harness, parentID, folder string, stderr i
 // openDelegateEndpointsWith is openDelegateEndpoints with the trust store given
 // (nil reads the user's), for tests.
 func openDelegateEndpointsWith(p *harness.Harness, parentID, folder string, store *trustStore, stderr io.Writer) (func(), error) {
+	o, err := openEndpointsWith(p, parentID, folder, store, stderr)
+	if err != nil {
+		return nil, err
+	}
+	return o.close, nil
+}
+
+// openedEndpoints is what a run holds of its open endpoints: the endpoints,
+// which the MCP server for the delegates is given, and how to close them.
+type openedEndpoints struct {
+	eps   []*a2aserve.Endpoint
+	close func()
+}
+
+// parentIDOf is the id a run's delegations are recorded under: the harness's
+// canonical id, or local/<name> for one run from a folder.
+func parentIDOf(p *harness.Harness, parentID string) string {
+	if parentID == "" {
+		return "local/" + p.Name
+	}
+	return parentID
+}
+
+// openEndpointsWith is openDelegateEndpointsWith, also returning the endpoints.
+func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trustStore, stderr io.Writer) (*openedEndpoints, error) {
 	scrubParentEndpoints()
 	var entries []harness.Delegate
 	for _, d := range p.DelegatesTo {
@@ -37,7 +62,7 @@ func openDelegateEndpointsWith(p *harness.Harness, parentID, folder string, stor
 		}
 	}
 	if len(entries) == 0 {
-		return func() {}, nil
+		return &openedEndpoints{close: func() {}}, nil
 	}
 	if store == nil {
 		s, err := loadTrustStore()
@@ -50,9 +75,7 @@ func openDelegateEndpointsWith(p *harness.Harness, parentID, folder string, stor
 	if err != nil {
 		return nil, fmt.Errorf("finding the ynh binary: %w", err)
 	}
-	if parentID == "" {
-		parentID = "local/" + p.Name
-	}
+	parentID = parentIDOf(p, parentID)
 	var eps []*a2aserve.Endpoint
 	closeAll := func() {
 		for _, e := range eps {
@@ -93,7 +116,7 @@ func openDelegateEndpointsWith(p *harness.Harness, parentID, folder string, stor
 		}
 	}
 	_, _ = fmt.Fprintf(stderr, "Opened %d A2A delegate endpoint(s): %s\n", len(eps), os.Getenv("YNH_DELEGATES"))
-	return closeAll, nil
+	return &openedEndpoints{eps: eps, close: closeAll}, nil
 }
 
 // scrubParentEndpoints removes the endpoint settings this process inherited

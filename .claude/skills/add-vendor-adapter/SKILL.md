@@ -58,6 +58,7 @@ surface; "not supported" is a valid answer if documented (see pitfalls).
 | MCP in a plugin | `mcpPluginRootVar` | A variable the plugin loader expands to the plugin's install path in an MCP server's command and cwd |
 | MCP isolation | `IsolateMCP` (+ `MCPEnvIsolator` when the switch is an environment variable) | A flag that runs with only the given MCP config (full isolation: Claude's `--strict-mcp-config`). Without one, look for the vendor listing the servers it would load and turning one off per launch, and turn off every listed server the harness does not compose (Codex: `codex mcp list --json` and `-c mcp_servers.<name>.enabled=false`; Copilot: `copilot mcp list --json` and `--disable-mcp-server`; OpenCode: `opencode debug config` and a disabled placeholder per server in `OPENCODE_CONFIG_CONTENT`, via `MCPEnvIsolator`; see `internal/vendor/mcp_isolation.go`). Never copy a listed server's command, url, environment or headers into a launch: a listing can show `{env:NAME}` values substituted. "Not supported" is valid with a one-line warning when the vendor has neither (Cursor). Record the vendor in the isolation table in `docs/mcp.md`
 | Artifact rewrite | `ArtifactTransformer` (optional) | Does it need a different file name or frontmatter (Cursor's `.mdc`)? |
+| Native subagents | `SupportsNativeSubagents` | `true` if a delegate can run as one of the vendor's own subagents (`transport: native`), else `false`: a native delegate is then refused. A bare `true` or `false`; `scripts/subagent-parity.sh` checks it |
 | Export / plugin | `GeneratePluginManifest`, `PluginManifestDir`, `ExportArtifactDirs`, `SupportsExportDelegates` (+ `ExportManifestGenerator`) | A plugin manifest format? Which artifact types a plugin may carry |
 | Marketplace | `MarketplaceManifestDir`, `GenerateMarketplaceIndex` | A marketplace index format, or none |
 | Agent Plugins | `AgentPluginLayout` | Does it read agent-plugins.org packages? Its namespace |
@@ -122,8 +123,11 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
   come from the vendor's on-disk store, never from terminal output, and a bare
   resume flag is never emitted (it opens a picker and hangs an unattended
   relaunch). Return `ErrNoResumableSession` and
-  `ErrSessionLookupUnavailable` for the two different cases; callers fall back
-  differently.
+  `ErrSessionLookupUnavailable` for the two different cases. The second is for
+  a vendor with no readable store at all (OpenCode, SQLite), which then resumes
+  with its continue-last form. A vendor with a readable store (Codex, Cursor)
+  returns the first when it finds nothing, and `ynh run --resume` refuses
+  rather than falling back to continue-last.
 - [ ] `LaunchResume(configPath, sessionID, prompt, interactive, extraArgs)`:
   an empty prompt resumes interactively; a prompt is sent into the resumed
   session, which stays open when `interactive` is true and is a one-shot run
@@ -277,6 +281,10 @@ both in the same PR since they share research.
     an **N** needs a linked issue. The Hooks, Session context and Workspace
     folders cells must match what the adapter declares. The page is the only
     copy of the table: do not repeat it on another page.
+  - I: `scripts/subagent-parity.sh`: `internal/vendor/<vendor>.go` declares
+    `SupportsNativeSubagents` exactly once, returning a bare `true` or `false`
+    (not a computed value). `false` means a delegate set to `transport: native`
+    is refused on that vendor.
 
 ### Documentation
 

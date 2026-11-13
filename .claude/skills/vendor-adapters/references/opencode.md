@@ -322,7 +322,9 @@ opencode run [--standalone] [--print-logs] [-c] [-s <id>] [--fork] [-m provider/
   `sessionID` (types `step_start`, `text`, `tool_use`, `tool`, `step_finish`,
   `error`).
 - The store is SQLite (`~/.local/share/opencode/opencode.db`), so
-  `ResolveLastSession` returns `ErrSessionLookupUnavailable`, as Codex does.
+  `ResolveLastSession` returns `ErrSessionLookupUnavailable`. OpenCode is the only
+  vendor that does: Codex and Cursor read their own stores, and `ynh run --resume`
+  on them refuses when no snapshot holds a session. `--resume` here resumes with `-c`.
 
 ## Plugin distribution and marketplace
 

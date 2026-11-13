@@ -332,6 +332,9 @@ func (c *Cursor) ExportArtifactDirs() map[string]string { return nil }
 
 func (c *Cursor) SupportsExportDelegates() bool { return true }
 
+// Cursor's subagents are unverified (limit L35 on docs/vendor-parity.md), so a native delegate is refused.
+func (c *Cursor) SupportsNativeSubagents() bool { return false }
+
 func (c *Cursor) PluginManifestDir() string { return ".cursor-plugin" }
 
 // AgentPluginLayout: Cursor loads the portable core and has published no

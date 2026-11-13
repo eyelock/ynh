@@ -488,6 +488,9 @@ func (c *Copilot) ExportArtifactDirs() map[string]string {
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (c *Copilot) SupportsNativeSubagents() bool { return true }
+
 // ExportCarriesInstructions: a Copilot plugin cannot carry instructions. A
 // plugin's AGENTS.md is installed with it but never reaches the session
 // (OBSERVED live on Copilot CLI 1.0.105, 2026-11-05: `copilot -p --plugin-dir`

@@ -75,7 +75,13 @@ func (h *Harness) CheckDelegateTransports(vendorName string) error {
 	if err := h.CheckTransports(); err != nil {
 		return fmt.Errorf("%s: %w", h.Name, err)
 	}
-	if vendorName == "" || vendor.HasNativeSubagents(vendorName) {
+	if vendorName == "" {
+		return nil
+	}
+	// A vendor ynh does not know is left to the command that launches it,
+	// which refuses it by name.
+	a, err := vendor.Get(vendorName)
+	if err != nil || a.SupportsNativeSubagents() {
 		return nil
 	}
 	for i, d := range h.DelegatesTo {

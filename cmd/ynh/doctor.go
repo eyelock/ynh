@@ -97,6 +97,8 @@ func runDoctor() doctorReport {
 		checkSymlinks(),
 		checkLauncher(),
 		checkDelegates(),
+		checkA2ACLI(),
+		checkMCPAllow(),
 		checkQuarantine(),
 		checkHooks(),
 	}
