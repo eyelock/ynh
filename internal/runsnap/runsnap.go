@@ -10,10 +10,11 @@
 //
 // Every function here that changes <run>/<name> or .snapshots/<name> must be
 // called under the caller's assembly lock (assembler.LockRunDir) for that
-// name. This package never deletes a snapshot: until a session carries its
-// snapshot's lock for its whole life, a deletion could remove a snapshot a live
-// session is reading. Only stale staging folders, which no one else can hold
-// under the assembly lock, are cleared.
+// name. Seal ends by deleting every snapshot that is neither the one it just
+// made current nor held: a session holds its snapshot's shared lock for the
+// child vendor's whole life, so a snapshot that can be locked exclusively
+// without waiting has no live session. Stale staging folders, which no one
+// else can hold under the assembly lock, are cleared too.
 package runsnap
 
 import (
@@ -165,7 +166,35 @@ func Seal(runRoot, name, staging string, lockPath func(hash string) string) (*Sn
 		release()
 		return nil, err
 	}
+	Prune(runRoot, name, hash, lockPath)
 	return &Snapshot{Name: name, Hash: hash, Dir: dest, Link: link, Reused: reused, release: release}, nil
+}
+
+// Prune deletes every snapshot of name except current that no session holds:
+// one whose lock can be taken exclusively without waiting. Its lock file goes
+// with it. A snapshot it cannot lock, or cannot remove, is left for the next
+// run. The caller must hold the assembly lock for name, which is what stops a
+// run from taking a shared lock between the check and the removal.
+func Prune(runRoot, name, current string, lockPath func(hash string) string) {
+	base := filepath.Join(runRoot, SnapshotsDirName, name)
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		hash := e.Name()
+		if hash == current || strings.HasPrefix(hash, stagingPrefix) || !e.IsDir() {
+			continue
+		}
+		unlock, ok := tryLockExclusive(lockPath(hash))
+		if !ok {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(base, hash)); err == nil {
+			_ = os.Remove(lockPath(hash))
+		}
+		unlock()
+	}
 }
 
 // swapLink makes link a symlink to target (relative to link's folder) such

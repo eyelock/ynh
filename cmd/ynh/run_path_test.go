@@ -254,8 +254,9 @@ func TestCmdRun_NoTerminalRefusesSymlinkInstall(t *testing.T) {
 
 // Each run seals its assembled tree as a snapshot behind the stable
 // <run>/<name> link: an unchanged rebuild reuses the snapshot, changed inputs
-// make a new one, and the earlier snapshot is left as it was (ynh #765).
-func TestCmdRun_SnapshotsReusedAndKept(t *testing.T) {
+// make a new one, and the earlier snapshot, its session over, is deleted by
+// that next run (ynh #765).
+func TestCmdRun_SnapshotsReusedAndPruned(t *testing.T) {
 	isolateRun(t)
 	work := t.TempDir()
 	harnessDir := filepath.Join(work, "my-dev")
@@ -296,19 +297,15 @@ func TestCmdRun_SnapshotsReusedAndKept(t *testing.T) {
 		t.Fatal(err)
 	}
 	run()
-	if got := snaps(); len(got) != 2 {
-		t.Fatalf("changed input should add a snapshot: %v", got)
-	}
-	old, err := os.ReadFile(filepath.Join(first[0], ".cursor", "skills", "hello", "SKILL.md"))
-	if err != nil || !strings.Contains(string(old), "A trivial skill.") {
-		t.Fatalf("the first snapshot changed under a later run: %q %v", old, err)
+	if got := snaps(); len(got) != 1 || got[0] == first[0] {
+		t.Fatalf("changed input should replace the finished session's snapshot: %v (was %v)", got, first)
 	}
 }
 
 // Cursor and Codex project symlinks are planted through the stable link
-// <run>/<name>, not at the snapshot's real path: a snapshot is never deleted,
-// so a link at a snapshot path would stay intact and show the first snapshot
-// for good. After an input changes, the next run shows the new content through
+// <run>/<name>, not at the snapshot's real path: a link at a snapshot
+// path would show that snapshot for good, and the snapshot is deleted once no
+// session holds it. After an input changes, the next run shows the new content through
 // the project's own link (ynh #765).
 func TestCmdRun_ProjectSymlinksFollowTheStableLink(t *testing.T) {
 	isolateRun(t)
@@ -390,6 +387,9 @@ func TestCmdRun_OpenCodeWorkspaceGrantDoesNotOutliveItsRun(t *testing.T) {
 	var launchedDirs []string
 	stubLaunch(t, func(runDir string, _ runArgs) error {
 		launchedDirs = append(launchedDirs, runDir)
+		// Every run is a live session, so no snapshot is pruned under the
+		// checks below.
+		t.Cleanup(holdSnapshot(t, runDir))
 		return nil
 	})
 	agentIn := func(runDir string) string {
