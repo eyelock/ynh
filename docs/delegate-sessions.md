@@ -123,6 +123,34 @@ back.
 - The handle tools take a **handle**, never a path: the handle is checked against `dlg-` and 16 hex
   digits and looked up under `$YNH_HOME/delegations/`.
 
+## Reaching a delegate: the A2A endpoints
+
+`ynh run` of a harness opens one localhost A2A endpoint for each `delegates_to` entry whose
+transport is `a2a` (the default), and closes them when the run ends. A delegation already running
+is a detached session and goes on.
+
+- Each endpoint listens on `127.0.0.1` on a free port, serves JSON-RPC with
+  [a2a-go](https://github.com/a2aproject/a2a-go) v2, and has its own random bearer token. Every
+  request but the agent card needs `Authorization: Bearer <token>`; a wrong or missing token is
+  HTTP 401. The token is what keeps a parent to its own delegates.
+- The delegate's session starts on the endpoint's **first message**, never on a card fetch or a
+  refused call. The task maps onto the delegation record: `working` while it runs,
+  `input-required` while the delegate has asked a question (answered by a message on the same
+  task), `completed` with the result as an artifact, `canceled` by cancel (which stops the run's
+  process group), `failed` with the error, the exit code and the last 40 lines of the run's log,
+  so a delegate that wrote nothing to its output still says why. Every result carries the task and
+  context ids. A non-blocking send returns at once and the task goes on.
+- The parent's environment names each endpoint: `YNH_DELEGATES` (the delegates' names,
+  comma-separated) and, per delegate, `YNH_DELEGATE_<NAME>_CARD` (the agent card URL) and
+  `YNH_DELEGATE_<NAME>_AUTH` (`Bearer <token>`). `<NAME>` is the delegate's harness name
+  upper-cased, every character outside A-Z and 0-9 turned into `_`. Two entries that map to the
+  same `<NAME>` are refused at run, naming both. With exactly one A2A delegate, `A2ACLI_AGENT_CARD`
+  and `A2ACLI_AUTH` carry the same values, which the `a2a` CLI reads by itself; with several, they
+  are not set, so the CLI never silently picks one.
+- A delegate session never inherits its parent's `YNH_DELEGATE*` or `A2ACLI_*` values; a delegate
+  with delegates of its own gets its own when it runs.
+- A delegate that is not installed or not trusted refuses the run, with the command to fix it.
+
 ## One run dir, many live sessions
 
 Several live sessions of one harness are now the normal case: two reviews by the same delegate, say.

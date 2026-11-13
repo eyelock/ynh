@@ -76,7 +76,13 @@ func Start(o StartOptions) (*Record, string, error) {
 	argv := append(append([]string{}, o.Supervisor...), path)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = folder
-	cmd.Env = os.Environ()
+	// The session never inherits its parent's A2A endpoints or their tokens:
+	// those are the parent's, and a delegate with delegates of its own gets its own.
+	for _, kv := range os.Environ() {
+		if !ParentOnlyEnv(kv) {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
 	// Setsid makes the session its own session and process group leader, so a
 	// signal to the caller's group, or the caller's terminal closing, never
 	// reaches it.
@@ -309,4 +315,12 @@ func (t *tailBuffer) String() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.buf.String()
+}
+
+// ParentOnlyEnv reports whether the environment entry kv belongs to the parent
+// session: its A2A delegate endpoints (YNH_DELEGATES, YNH_DELEGATE_*) and the
+// a2a CLI's own settings (A2ACLI_*).
+func ParentOnlyEnv(kv string) bool {
+	k, _, _ := strings.Cut(kv, "=")
+	return k == "YNH_DELEGATES" || strings.HasPrefix(k, "YNH_DELEGATE_") || strings.HasPrefix(k, "A2ACLI_")
 }
