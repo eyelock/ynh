@@ -878,12 +878,16 @@ func resolveSnapshotSession(adapter vendor.Adapter, harnessKey string, _ io.Writ
 //
 // It returns the session id to resume and whether to resume at all. An empty id
 // with resume==true means "use the vendor's continue-last form" — which is a
-// real, working resume, not a fallback to nothing.
+// real, working resume, not a fallback to nothing. Only a vendor that cannot
+// look up ids at all (OpenCode) reaches that case: Codex and Cursor are
+// resolved by resolveSnapshotSession, which refuses when no snapshot holds a
+// session, and never use continue-last.
 //
 // The three outcomes:
 //
 //   - explicit id given            → resume that session
-//   - vendor cannot look up ids    → resume with an empty id (continue-last)
+//   - vendor cannot look up ids    → resume with an empty id (continue-last;
+//     OpenCode only)
 //   - store readable, nothing here → do not resume; the caller launches cold
 //
 // The last case is deliberately not an error. Relaunching a terminal whose

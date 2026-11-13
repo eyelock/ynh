@@ -615,8 +615,8 @@ func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
 func (o *OpenCode) SupportsResume() bool { return true }
 
 // ResolveLastSession cannot resolve an id: OpenCode's session store is SQLite
-// (~/.local/share/opencode/opencode.db) and ynh takes no driver, the same
-// reason Codex gives. Callers resume with an empty id, which LaunchResume turns
+// (~/.local/share/opencode/opencode.db) and ynh takes no driver. Codex and
+// Cursor read their own stores and do not return this. Callers resume with an empty id, which LaunchResume turns
 // into -c.
 func (o *OpenCode) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	return "", ErrSessionLookupUnavailable
