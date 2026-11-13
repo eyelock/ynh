@@ -111,10 +111,15 @@ back.
   still the process the record names, since a group id can be reused by an unrelated process.
 - The start time is read from `/proc/<pid>/stat` where there is a `/proc` (Linux, including
   BusyBox images such as ynh's own, which have no `ps -o lstart`), and from `ps -o lstart=` on
-  macOS. When it cannot be read, ynh does not take that as a dead process: a session process that
-  still exists is treated as alive, and cancel then signals the run's group only while that
-  session process, its parent, is alive, so the group id cannot have been reused. Only a process
-  that is gone, or verifiably another one, counts as dead.
+  macOS. When it cannot be read (now, or when the record was written), ynh does not take that as
+  a dead process: a session process that still exists is treated as alive, so status leaves the
+  delegation running. But nothing is then verified, so nothing is signalled: cancel signals the
+  run's group only when the run, or its parent session process, is verifiably the recorded
+  process (same start time). Otherwise cancel still marks the delegation `cancelled`, records in
+  its `error` that the run was not signalled and may still be running, and leaves the process
+  alone, because an id that merely exists may belong to something unrelated. The same rule holds
+  for the orphan stop when a session is found dead. Only a process that is gone, or verifiably
+  another one, counts as dead.
 - The handle tools take a **handle**, never a path: the handle is checked against `dlg-` and 16 hex
   digits and looked up under `$YNH_HOME/delegations/`.
 

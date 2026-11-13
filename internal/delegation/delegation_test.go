@@ -436,9 +436,10 @@ func TestProcStartIsReadableHere(t *testing.T) {
 	}
 }
 
-// Where the start time cannot be read (BusyBox ps has no lstart; no /proc), a
-// live delegation must not read as dead, and cancel must still stop it.
-func TestStartTimeUnreadableIsNotADeadSupervisor(t *testing.T) {
+// Where the start time cannot be read at all, a live delegation must not read
+// as dead; and since nothing can then be verified, cancel marks it cancelled,
+// says why, and signals nothing.
+func TestStartTimeUnreadableIsNotADeadSupervisorAndCancelSignalsNothing(t *testing.T) {
 	folder := setup(t)
 	t.Setenv("DELEGATION_NO_START_TIME", "1") // the session process in this mode too
 	old := procStartFunc
@@ -447,6 +448,13 @@ func TestStartTimeUnreadableIsNotADeadSupervisor(t *testing.T) {
 
 	_, path := start(t, folder, "sleep 30")
 	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	defer func() {
+		// Stop the run, then let the session finish writing before the temp dir goes.
+		_ = syscall.Kill(-rec.Pgid, syscall.SIGKILL)
+		for i := 0; i < 250 && procState(rec.Pid, "") != procGone; i++ {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
 	if rec.PidStart != "" || rec.PgidStart != "" {
 		t.Fatalf("want no start tokens, got %q %q", rec.PidStart, rec.PgidStart)
 	}
@@ -457,15 +465,85 @@ func TestStartTimeUnreadableIsNotADeadSupervisor(t *testing.T) {
 	if got.Status != StatusRunning {
 		t.Fatalf("a live supervisor was read as dead: %s %q", got.Status, got.Error)
 	}
+	got, err = Cancel(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusCancelled || !strings.Contains(got.Error, "not signalled") {
+		t.Fatalf("want cancelled with the reason, got %s %q", got.Status, got.Error)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if !groupAlive(rec.Pgid) {
+		t.Fatal("cancel signalled a run it could not verify")
+	}
+}
+
+// Both start tokens missing and both ids now held by unrelated processes: a
+// Reconcile then Cancel must signal neither.
+func TestNoTokensAndReusedIdsSignalsNothing(t *testing.T) {
+	folder := setup(t)
+	mk := func() *exec.Cmd {
+		c := exec.Command("sleep", "30")
+		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if err := c.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Process.Kill(); _ = c.Wait() })
+		return c
+	}
+	sup, run := mk(), mk()
+	_, path := start(t, folder, "true")
+	waitFor(t, path, func(r *Record) bool { return r.Status.Final() })
+	// Rewrite it as a live record whose ids now belong to the bystanders.
+	if _, err := Update(path, func(r *Record) {
+		r.Status = StatusRunning
+		r.Pid, r.PidStart = sup.Process.Pid, ""
+		r.Pgid, r.PgidStart = run.Process.Pid, ""
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Reconcile(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update(path, func(r *Record) { r.Status = StatusRunning }); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := Cancel(path); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for groupAlive(rec.Pgid) && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
+	for name, c := range map[string]*exec.Cmd{"supervisor": sup, "run": run} {
+		if !groupAlive(c.Process.Pid) {
+			t.Errorf("the unrelated %s process group was signalled", name)
+		}
 	}
-	if groupAlive(rec.Pgid) {
-		t.Fatal("cancel did not stop the run")
+}
+
+// With a start token recorded but a different one now at the pid, nothing is
+// signalled either.
+func TestMismatchedTokensSignalNothing(t *testing.T) {
+	folder := setup(t)
+	by := exec.Command("sleep", "30")
+	by.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := by.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = by.Process.Kill(); _ = by.Wait() }()
+	_, path := start(t, folder, "true")
+	waitFor(t, path, func(r *Record) bool { return r.Status.Final() })
+	if _, err := Update(path, func(r *Record) {
+		r.Status = StatusRunning
+		r.Pid, r.PidStart = by.Process.Pid, "proc:1"
+		r.Pgid, r.PgidStart = by.Process.Pid, "proc:1"
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if !groupAlive(by.Process.Pid) {
+		t.Fatal("a mismatched start time was signalled")
 	}
 }
 

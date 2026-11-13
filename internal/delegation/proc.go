@@ -137,10 +137,12 @@ func supervisorAlive(r *Record) bool {
 	return st == procSame || st == procUnknown
 }
 
-// runAlive reports whether the group of r.Pgid is safe to signal: its leader,
-// the delegate's run, is verifiably the recorded process, or, where start times
-// cannot be compared, the supervisor that is its parent is still alive, so the
-// id cannot have been reused (the supervisor reaps the run before it ends).
+// runAlive reports whether the group of r.Pgid is safe to signal: only when
+// something is verified. Either the group's leader, the delegate's run, is
+// verifiably the recorded process (same start token), or the supervisor, its
+// parent, is (same start token), which means the run is its child and its id
+// has not been reused. Where neither start time can be compared, nothing is
+// verified, so nothing is signalled: a pid that merely exists proves nothing.
 func runAlive(r *Record) bool {
 	if r.Pgid <= 1 {
 		return false
@@ -149,9 +151,16 @@ func runAlive(r *Record) bool {
 	case procSame:
 		return true
 	case procUnknown:
-		return r.Pid > 1 && supervisorAlive(r) && procState(r.Pid, r.PidStart) != procGone
+		return r.Pid > 1 && procState(r.Pid, r.PidStart) == procSame
 	}
 	return false
+}
+
+// runUnverified reports whether the run may still exist but cannot be verified
+// as the recorded one, so a signal was withheld (as opposed to the run being
+// gone or another process's).
+func runUnverified(r *Record) bool {
+	return r.Pgid > 1 && !runAlive(r) && procState(r.Pgid, r.PgidStart) == procUnknown
 }
 
 var handleRE = regexp.MustCompile(`^dlg-[0-9a-f]{16}$`)

@@ -272,6 +272,9 @@ func Cancel(path string) (*Record, error) {
 		// The group is signalled only while its leader is still the run this
 		// record was written for; after that the id may be anyone's.
 		pgid, safe = r.Pgid, runAlive(r)
+		if runUnverified(r) {
+			r.Error = "cancelled, but the run was not signalled: its process could not be verified as the one recorded (no start time to compare), so it may still be running"
+		}
 		r.Status = StatusCancelled
 	})
 	if err != nil || already {
