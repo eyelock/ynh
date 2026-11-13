@@ -159,6 +159,12 @@ jobs:
       - name: go.mod is tidy
         run: go mod tidy -diff
 
+      # The Docker image builds with the Dockerfile's GO_VERSION, not go.mod's
+      # toolchain (the golang images set GOTOOLCHAIN=local); this keeps the two
+      # equal so govulncheck scans the Go the image ships.
+      - name: Dockerfile Go matches go.mod toolchain
+        run: make check-go-pin
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

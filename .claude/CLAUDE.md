@@ -16,7 +16,7 @@ Both built by `make build`, released together via goreleaser (single `v*` tag).
 **Always use Make targets, not raw `go`/`golangci-lint` commands.** The Makefile wraps them with correct flags (race detection, coverage, ldflags, version injection).
 
 ```bash
-make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity, check-marketplace
+make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, check-go-pin, test, build, check-artifacts, check-vendor-parity, check-marketplace
 make build              # build both binaries to bin/
 make test               # all tests with race detection and coverage
 make test FILE=./cmd/ynd  # test specific package
@@ -54,7 +54,11 @@ queries a live vulnerability database, so an unchanged tree can pass today and
 fail tomorrow, and a non-deterministic step does not belong in the check people
 run before pushing. `.github/workflows/vulncheck.yml` gates every PR and runs
 nightly. A standard-library advisory is fixed by the `toolchain` directive in
-`go.mod`, not by a dependency bump.
+`go.mod`, not by a dependency bump. The Docker image does not read that
+directive (the golang images set `GOTOOLCHAIN=local`): its Go is the
+Dockerfile's `ARG GO_VERSION`, so a toolchain bump moves `GO_VERSION` with it,
+and `make check-go-pin` (part of `make check`, and a CI step) fails when they
+differ.
 
 `make conformance` is outside `make check` too: it needs `ynr` and
 `ynr-stub-vendor` on your PATH, which CI downloads from a pinned,

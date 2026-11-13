@@ -20,7 +20,12 @@
 # It gates: govulncheck is symbol-level, so it reports only vulnerabilities the
 # code actually reaches, and that precision is what makes failing the build
 # reasonable rather than noisy. The fix for a standard-library finding is the
-# `toolchain` directive in go.mod, which is what setup-go resolves here.
+# `toolchain` directive in go.mod, which is what setup-go resolves here. That
+# covers this scan and the release binaries (GoReleaser builds with setup-go).
+# It does not select the Go of the Docker image: the official golang images set
+# GOTOOLCHAIN=local, so the Dockerfile's `ARG GO_VERSION` does, and
+# `make check-go-pin` fails when it differs from go.mod's toolchain line. Move
+# the two together.
 
 name: Vulnerability Scan
 
