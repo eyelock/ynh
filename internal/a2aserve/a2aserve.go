@@ -297,6 +297,25 @@ func Answer(path, text string) error {
 	return nil
 }
 
+// AnswerQuestion records text as the answer to the question with the given id,
+// and only that one: it reports false, recording nothing, when that question is
+// not open (answered another way, lapsed or not on the record), so a late
+// answer never lands on the next question asked.
+func AnswerQuestion(path, id, text string) (bool, error) {
+	var found bool
+	_, err := delegation.Update(path, func(r *delegation.Record) {
+		for i := range r.Questions {
+			if r.Questions[i].ID == id && r.Questions[i].Open() {
+				now := time.Now().UTC()
+				r.Questions[i].Answer, r.Questions[i].AnsweredAt = &text, &now
+				found = true
+				return
+			}
+		}
+	})
+	return found, err
+}
+
 // FailureText is why a task failed: the record's error, then the tail of the
 // run's log, so a delegate that wrote nothing to its output still says why.
 func FailureText(rec *delegation.Record) string {

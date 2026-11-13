@@ -91,6 +91,9 @@ type Server struct {
 	pending map[string]chan elicitReply
 	nextReq int
 	asked   map[string]bool
+	// outstanding holds the questions whose elicitation the client has not yet
+	// answered, refused or declined.
+	outstanding map[string]bool
 }
 
 type a2aTask struct {
@@ -110,7 +113,7 @@ func New(cfg Config) *Server {
 	if cfg.Version == "" {
 		cfg.Version = "0"
 	}
-	return &Server{cfg: cfg, clients: map[string]*a2aclient.Client{}, a2a: map[string]a2aTask{}, pending: map[string]chan elicitReply{}, asked: map[string]bool{}}
+	return &Server{cfg: cfg, clients: map[string]*a2aclient.Client{}, a2a: map[string]a2aTask{}, pending: map[string]chan elicitReply{}, asked: map[string]bool{}, outstanding: map[string]bool{}}
 }
 
 // ToolName is the name of the tool for the delegate called name: the name

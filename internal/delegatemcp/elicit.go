@@ -123,10 +123,14 @@ func (s *Server) waitAsking(ctx context.Context, handle, path string, wait time.
 			// declined it. The parent's model answers it.
 			return s.noteElicited(handle, path, r), nil
 		}
+		s.mu.Lock()
+		s.outstanding[key] = true
+		s.mu.Unlock()
 		ch := s.elicit(q.Text)
 		select {
 		case rep := <-ch:
-			if !s.applyElicited(ctx, handle, rep) {
+			s.settle(key)
+			if !s.applyElicited(path, q.ID, rep) {
 				r, err := s.waitFor(ctx, path, 0)
 				return s.noteElicited(handle, path, r), err
 			}
@@ -134,17 +138,27 @@ func (s *Server) waitAsking(ctx context.Context, handle, path string, wait time.
 			return r, nil
 		case <-time.After(time.Until(deadline)):
 			// The client may take longer than the call is held. The answer is
-			// recorded whenever it comes.
+			// recorded whenever it comes, against this question only: when the
+			// question was answered another way by then, the answer is dropped.
+			qid := q.ID
 			go func() {
 				select {
 				case rep := <-ch:
-					s.applyElicited(ctx, handle, rep)
+					s.settle(key)
+					s.applyElicited(path, qid, rep)
 				case <-ctx.Done():
 				}
 			}()
 			return s.waitFor(ctx, path, 0)
 		}
 	}
+}
+
+// settle marks the question's elicitation as no longer outstanding.
+func (s *Server) settle(key string) {
+	s.mu.Lock()
+	delete(s.outstanding, key)
+	s.mu.Unlock()
 }
 
 // noteElicited says, on a result that is still input-required, that the
@@ -163,16 +177,23 @@ func (s *Server) noteElicited(handle, path string, r Result) Result {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.asked[handle+"/"+q.ID] {
+	key := handle + "/" + q.ID
+	switch {
+	case s.outstanding[key]:
+		r.Message += " (put to your client as an elicitation that is still waiting for its answer: wait for it, or answer it yourself with delegate_reply and the elicitation's answer is then dropped)"
+	case s.asked[key]:
 		r.Message += " (put to your client as an elicitation and not answered there: answer it yourself with delegate_reply)"
 	}
 	return r
 }
 
-// applyElicited records the client's response as the answer. It reports false
-// when the client gave none: it refused the request (an error response),
-// declined or cancelled it. The question then stays open.
-func (s *Server) applyElicited(ctx context.Context, handle string, rep elicitReply) bool {
+// applyElicited records the client's response as the answer to the question
+// with id qid, and to no other: it goes on the record directly, by id, because
+// a message on the task answers whichever question is open then, and the
+// question this was put for may be closed by now. It reports false when the
+// client gave no answer (it refused the request, declined or cancelled it), or
+// when the question is no longer open: it stays open, or stays as it was.
+func (s *Server) applyElicited(path, qid string, rep elicitReply) bool {
 	if rep.errMsg != "" {
 		return false
 	}
@@ -187,6 +208,6 @@ func (s *Server) applyElicited(ctx context.Context, handle string, rep elicitRep
 	if strings.TrimSpace(answer) == "" {
 		return false
 	}
-	_, err := s.replyTo(ctx, handle, answer, 0, nil)
-	return err == nil
+	ok, err := a2aserve.AnswerQuestion(path, qid, answer)
+	return err == nil && ok
 }
