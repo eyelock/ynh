@@ -179,7 +179,7 @@ zero.
 | `ynh.run.bound_by` | span, finished | the cap that ended the run: `turns`, `tokens` or `wall_clock` |
 | `ynh.run.turns` | span, finished | turns taken |
 | `ynh.run.session_id` | span, finished | the run's session id, as in the run result |
-| `ynh.run.vendor` | all | the backend: `claude`, `codex` or `cursor` |
+| `ynh.run.vendor` | all | the backend: `claude`, `codex`, `copilot`, `cursor` or `opencode` |
 | `gen_ai.request.model` | all | the model asked for with `--model` |
 | `gen_ai.response.model` | span, finished | the model the backend reported running |
 | `ynh.run.effort.requested` | all | the effort asked for |

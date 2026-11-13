@@ -37,6 +37,7 @@ const (
 	vendorCodex    = "codex"
 	vendorCursor   = "cursor"
 	vendorOpenCode = "opencode"
+	vendorCopilot  = "copilot"
 )
 
 // workspaceArgs renders granted workspace folders as the vendor's own flag.
@@ -120,7 +121,7 @@ type StartOptions struct {
 	UsageBase *Usage
 	// IsolatedMCP restricts the worker to the MCP servers the harness composes
 	// (its own and its included harnesses'), leaving out the operator's.
-	// The claude, codex and opencode backends honour it; cursor cannot (L6).
+	// The claude, codex, opencode and copilot backends honour it; cursor cannot (L6).
 	IsolatedMCP bool
 	// MCPManualApproval leaves approval of the harness's MCP tools to the
 	// vendor (mcp_manual_approval). Without it the codex backend approves them,
@@ -184,7 +185,7 @@ type Usage struct {
 // the loop ends the run as a worker error on that turn rather than feeding the
 // message back and later calling the repetition stuck.
 type WorkerError struct {
-	// Backend names the worker backend ("claude", "codex", "cursor", "opencode").
+	// Backend names the worker backend ("claude", "codex", "cursor", "opencode", "copilot").
 	Backend string
 	// Message is the vendor's own words for the failure.
 	Message string

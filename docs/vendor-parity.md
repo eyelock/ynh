@@ -57,16 +57,16 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 
 | Feature | Claude Code | Codex | Copilot CLI | Cursor | OpenCode |
 |---|---|---|---|---|---|
-| Backend (`--backend`) | Y | Y | N [L14](#l14-copilot-is-not-a-backend) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Hooks | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
-| Session context (`on_session_start` output) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| MCP isolation (`mcp_isolation`) | Y | Y | – | X [L6](#l6-mcp-isolation) | Y |
-| Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
-| `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
-| `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| `--sandbox srt` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L18](#l18-sandbox-srt) |
-| Telemetry (ynh's own spans and events) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
-| Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | – | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
+| Backend (`--backend`) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Hooks | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L9](#l9-opencode-has-no-session-end-event) |
+| Session context (`on_session_start` output) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| MCP isolation (`mcp_isolation`) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | X [L6](#l6-mcp-isolation) | Y |
+| Effort (`--effort`, `agent.effort`) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
+| `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
+| `--auto-approve all` | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| `--sandbox srt` | Y | Y | N [L18](#l18-sandbox-srt) | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L18](#l18-sandbox-srt) |
+| Telemetry (ynh's own spans and events) | Y | Y | U [L14](#l14-the-copilot-backend-not-shown-live) | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
+| Vendor telemetry through the relay (`--telemetry-relay`) | Y | Y | N [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynd export
 
@@ -211,12 +211,12 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Workaround:** run the harness with `ynh agent run`.
 - **Detail:** [Telemetry](telemetry.md).
 
-### L14: Copilot is not a backend
+### L14: The Copilot backend, not shown live
 
-- **What:** `ynh agent run --backend` accepts `claude`, `codex`, `cursor` and `opencode`. There is no Copilot backend, so the rest of the Copilot column does not apply.
-- **Owner:** ynh.
-- **Evidence:** [Flags](agent.md#flags).
-- **Tracking:** [ynh #425](https://github.com/eyelock/ynh/issues/425), no milestone.
+- **What:** `ynh agent run --backend copilot` runs the worker with Copilot CLI's `copilot -p`, one process per turn, resumed by session id. Whether it runs a whole loop, and whether hooks, session context, MCP isolation, effort, `--auto-approve all` and ynh's own telemetry work on it, is unverified. The live check is deferred.
+- **Owner:** unknown until verified.
+- **Evidence:** checked, by code and tests rather than a live loop: the output shapes (`--output-format json`) were captured from Copilot CLI 1.0.107 and are the fixtures of [ynh #789](https://github.com/eyelock/ynh/pull/789); a signed-out run was captured and is an authentication failure (exit 20); `--allow-all-tools`, `--reasoning-effort` and `--resume` were checked against `copilot help`. Token usage assumes the session's totals carry across `--resume`, which a signed-in two-process probe has yet to confirm.
+- **Tracking:** [ynh #790](https://github.com/eyelock/ynh/issues/790), v0.19.0: the backend ships announced in v0.19.0.
 - **Workaround:** run the harness on Copilot with `ynh run`.
 - **Detail:** [The Agent Loop](agent.md).
 
@@ -240,8 +240,8 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L17: auto-approve edits
 
-- **What:** `--auto-approve edits` is an error on `codex`, `cursor` and `opencode`.
-- **Owner:** the vendor: none of them has a mode that approves file edits while still asking before commands.
+- **What:** `--auto-approve edits` is an error on `codex`, `cursor`, `opencode` and `copilot`.
+- **Owner:** the vendor: none of them has a mode that approves file edits while still asking before commands. Copilot's nearest is `--allow-tool='write'`, which also approves a shell command's output redirection into a file (for example `cat a > b`), so it is wider than file edits.
 - **Evidence:** [Permissions and `--auto-approve`](agent.md#permissions-and-auto-approve).
 - **Tracking:** none.
 - **Workaround:** `--auto-approve all`, inside containment you own.
@@ -249,7 +249,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L18: sandbox srt
 
-- **What:** `--sandbox srt` runs the worker inside [srt](https://github.com/anthropic-experimental/sandbox-runtime) on `claude`, `codex` and `cursor`, with the vendor's own network allowlist. On `opencode` it runs on Linux and is an error, not a warning, on macOS: `opencode run` starts a server of its own, and in doing so spawns `/bin/ps`, which macOS's sandbox profile refuses (`EPERM`) because `ps` is setuid, so the worker exits before its first turn. On Linux it runs under srt (ynh creates srt's `/tmp/claude` first; see [srt's temporary directory](agent.md#srt-s-temporary-directory)); the proof was a container on arm64 needing `--security-opt systempaths=unconfined`, and hosts that restrict user namespaces were not tested.  On `cursor` the sandboxed worker reaches Cursor's servers, but a turn could not be run (no Cursor licence), so a blocked host is not shown refused there.
+- **What:** `--sandbox srt` runs the worker inside [srt](https://github.com/anthropic-experimental/sandbox-runtime) on `claude`, `codex` and `cursor`, with the vendor's own network allowlist. On `opencode` it runs on Linux and is an error, not a warning, on macOS: `opencode run` starts a server of its own, and in doing so spawns `/bin/ps`, which macOS's sandbox profile refuses (`EPERM`) because `ps` is setuid, so the worker exits before its first turn. On Linux it runs under srt (ynh creates srt's `/tmp/claude` first; see [srt's temporary directory](agent.md#srt-s-temporary-directory)); the proof was a container on arm64 needing `--security-opt systempaths=unconfined`, and hosts that restrict user namespaces were not tested.  On `cursor` the sandboxed worker reaches Cursor's servers, but a turn could not be run (no Cursor licence), so a blocked host is not shown refused there. On `copilot` it is an error, not a warning: the Copilot worker backend does not wrap Copilot CLI in srt, and has not been shown to run under it.
 - **Owner:** ynh for the wrapping, which srt does for any command: its documentation describes "arbitrary processes", and its settings file names no vendor. OpenCode's `ps` call is the vendor's.
 - **Evidence:** OpenCode on Linux, live in Docker, the run recorded in [ynh #805](https://github.com/eyelock/ynh/issues/805) (Debian bookworm, node 22, srt 0.0.81 with bubblewrap, OpenCode 2.2.3 on linux-arm64, `--security-opt systempaths=unconfined`), on a build of [ynh #804](https://github.com/eyelock/ynh/pull/804) with the Linux refusal lifted): a turn wrote the task's file in the worktree; writes outside the allowed paths and hosts off the list (`CONNECT tunnel failed`) were refused, from the process ynh launches and from the model's own bash tool, and the same commands succeeded under `--sandbox none`; on a host with no `/tmp/claude` the run failed with `EROFS: mkdir /tmp/claude` until the folder existed. srt 0.0.81 on macOS, live through `ynh agent run --sandbox srt` at the branch of [ynh #734](https://github.com/eyelock/ynh/issues/734). Codex (codex-cli 0.166.0): a task that ran `curl` against two hosts got `CONNECT tunnel failed, response 403` for `https://example.com` and an HTTP response from `https://api.openai.com`. Codex needs srt's `enableWeakerNetworkIsolation` on macOS: without it every request, to an allowed host too, fails with `error sending request`, because Codex verifies TLS through the system trust store. Cursor (cursor-agent 2026.11.05-86047df): the sandboxed worker reached Cursor's API, which answered with its usage-limit error. OpenCode 2.2.3: `Error: EPERM: operation not permitted, posix_spawn 'ps'`, and `srt -- ps` alone fails the same way.
 - **Tracking:** [ynh #734](https://github.com/eyelock/ynh/issues/734), v0.20.0. The Cursor live check is deferred with [L36](#l36-the-cursor-backend-not-shown-live), [ynh #751](https://github.com/eyelock/ynh/issues/751).

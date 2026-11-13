@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -63,7 +64,7 @@ type RunOptions struct {
 	// `ynh run --focus`. "namespace:name" names a focus of an included
 	// harness. Mutually exclusive with Task and Profile.
 	Focus string
-	// Backend selects the worker backend ("claude", "codex", "cursor" or "opencode").
+	// Backend selects the worker backend ("claude", "codex", "cursor", "opencode" or "copilot").
 	// Defaults to "claude", or on a resume to the checkpoint's backend, which
 	// it may repeat but not change.
 	Backend string
@@ -733,10 +734,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 
 	isolatedMCP := harnessObj != nil && harnessObj.MCPIsolation
-	// The claude, codex and opencode backends isolate (each says so itself if it
+	// The claude, codex, opencode and copilot backends isolate (each says so itself if it
 	// cannot do it fully); any other cannot.
 	switch wb.Name() {
-	case "claude", "codex", "opencode":
+	case "claude", "codex", "opencode", "copilot":
 	default:
 		if isolatedMCP {
 			_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is not supported by the %s backend: it will load your own MCP servers\n", wb.Name())
@@ -1846,7 +1847,7 @@ func gitAutoCommit(dir string, turnN int) error {
 
 // resumeBackend picks the backend a resume drives: the checkpoint's, which a
 // --backend flag may repeat but not change. The resume token belongs to that
-// backend (a codex thread id, a claude, cursor or opencode session id) and is meaningless
+// backend (a codex thread id, a claude, cursor, opencode or copilot session id) and is meaningless
 // to any other. A checkpoint without a backend predates recording it and was
 // claude's, the only backend then.
 func resumeBackend(flag, recorded string) (string, error) {
@@ -1927,17 +1928,36 @@ func validateSandbox(sandbox, backend string) error {
 	}
 }
 
-func validateBackend(name string) (string, error) {
-	switch name {
-	case "":
-		return "claude", nil
-	case "claude", "codex", "cursor", "opencode":
-		return name, nil
-	case "claude-code":
-		return "", fmt.Errorf("unknown backend %q (did you mean \"claude\"?)", name)
-	default:
-		return "", fmt.Errorf("unknown backend %q (supported: claude, codex, cursor, opencode)", name)
+// copilotWorkerSelectable makes the copilot worker backend selectable. It is
+// the one switch that keeps the backend dark: false, and `--backend copilot`
+// is refused as an unknown backend, is absent from every list of backends, and
+// no code path reaches CopilotBackend. The backend's code ships either way.
+const copilotWorkerSelectable = true
+
+// workerBackends are the selectable worker backends, in the order they are
+// listed to the operator.
+func workerBackends() []string {
+	names := []string{"claude", "codex", "cursor", "opencode"}
+	if copilotWorkerSelectable {
+		names = append(names, "copilot")
 	}
+	return names
+}
+
+// supportedBackends is workerBackends as the list an error message gives.
+func supportedBackends() string { return strings.Join(workerBackends(), ", ") }
+
+func validateBackend(name string) (string, error) {
+	if name == "" {
+		return "claude", nil
+	}
+	if slices.Contains(workerBackends(), name) {
+		return name, nil
+	}
+	if name == "claude-code" {
+		return "", fmt.Errorf("unknown backend %q (did you mean \"claude\"?)", name)
+	}
+	return "", fmt.Errorf("unknown backend %q (supported: %s)", name, supportedBackends())
 }
 
 // selectBackend returns the WorkerBackend for the given canonical name.
@@ -1952,9 +1972,13 @@ func selectBackend(name string) (WorkerBackend, error) {
 		return &CursorBackend{}, nil
 	case "opencode":
 		return &OpenCodeBackend{}, nil
-	default:
-		return nil, fmt.Errorf("unknown backend %q (supported: claude, codex, cursor, opencode)", name)
+	case "copilot":
+		if !copilotWorkerSelectable {
+			break
+		}
+		return &CopilotBackend{}, nil
 	}
+	return nil, fmt.Errorf("unknown backend %q (supported: %s)", name, supportedBackends())
 }
 
 // workerTurnExit is the exit for a turn the worker could not complete. A
