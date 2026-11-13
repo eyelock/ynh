@@ -216,7 +216,7 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **What:** `ynh agent run --backend copilot` runs the worker with Copilot CLI's `copilot -p`, one process per turn, resumed by session id. Whether it runs a whole loop, and whether hooks, session context, MCP isolation, effort, `--auto-approve all` and ynh's own telemetry work on it, is unverified. The live check is deferred.
 - **Owner:** unknown until verified.
 - **Evidence:** checked, by code and tests rather than a live loop: the output shapes (`--output-format json`) were captured from Copilot CLI 1.0.107 and are the fixtures of [ynh #789](https://github.com/eyelock/ynh/pull/789); a signed-out run was captured and is an authentication failure (exit 20); `--allow-all-tools`, `--reasoning-effort` and `--resume` were checked against `copilot help`. Token usage assumes the session's totals carry across `--resume`, which a signed-in two-process probe has yet to confirm.
-- **Tracking:** [ynh #790](https://github.com/eyelock/ynh/issues/790), milestone v0.20.0.
+- **Tracking:** [ynh #790](https://github.com/eyelock/ynh/issues/790), v0.19.0: the backend ships announced in v0.19.0.
 - **Workaround:** run the harness on Copilot with `ynh run`.
 - **Detail:** [The Agent Loop](agent.md).
 
