@@ -606,6 +606,15 @@ func cmdRun(args []string) error {
 		// folder.
 		vendorArgs = append(cursorTrustLaunchArgs(loaded, harnessID, adapter.Name()), vendorArgs...)
 
+		// The A2A endpoints of the delegates whose transport is a2a, open for
+		// as long as the session runs (docs/delegate-sessions.md).
+		endpointFolder, _ := os.Getwd()
+		closeEndpoints, epErr := openDelegateEndpoints(p, harnessID, endpointFolder, os.Stderr)
+		if epErr != nil {
+			return epErr
+		}
+		defer closeEndpoints()
+
 		// Launch
 		if launch.Bare {
 			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)
