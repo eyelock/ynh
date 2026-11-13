@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -89,5 +90,46 @@ func TestValidateHarness_DelegateBothFailsValidation(t *testing.T) {
 	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(head+`"focus":"triage"}]}`))
 	if err := validateHarness(hr); err != nil {
 		t.Fatalf("a valid focus must pass: %v", err)
+	}
+}
+
+// A delegate set to transport: native on a vendor with no native subagents
+// fails validation with the fix; the schema takes the setting on an entry and
+// on the harness, and refuses any other value.
+func TestValidateHarnessTransport(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	tests := []struct {
+		name, manifest, wantIssue string
+	}{
+		{"neither: a2a", `{"name":"h","version":"0.1.0","default_vendor":"cursor","delegates_to":[{"git":"github.com/o/a"}]}`, ""},
+		{"native on claude", `{"name":"h","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":"github.com/o/a","transport":"native"}]}`, ""},
+		{"entry native on cursor", `{"name":"h","version":"0.1.0","default_vendor":"cursor","delegates_to":[{"git":"github.com/o/a","transport":"native"}]}`,
+			"Fix: set transport: a2a on this delegate, or run on a vendor with subagents"},
+		{"harness default native on cursor", `{"name":"h","version":"0.1.0","default_vendor":"cursor","transport":"native","delegates_to":[{"git":"github.com/o/a"}]}`,
+			"Fix: set transport: a2a on this delegate"},
+		{"mix on cursor, the a2a entry alone is fine", `{"name":"h","version":"0.1.0","default_vendor":"cursor","transport":"native","delegates_to":[{"git":"github.com/o/a","transport":"a2a"}]}`, ""},
+		{"unknown value", `{"name":"h","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":"github.com/o/a","transport":"pigeon"}]}`, "transport"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(tc.manifest))
+			var err error
+			var buf bytes.Buffer
+			withStdout(t, &buf, func() { err = validateHarness(dir) })
+			got := buf.String()
+			if err != nil {
+				got += err.Error()
+			}
+			if tc.wantIssue == "" {
+				if strings.Contains(got, "transport") {
+					t.Errorf("no transport issue expected:\n%s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.wantIssue) {
+				t.Errorf("want %q in:\n%s", tc.wantIssue, got)
+			}
+		})
 	}
 }

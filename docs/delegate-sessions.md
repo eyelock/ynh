@@ -104,6 +104,52 @@ back.
   from the record (`tasks/get`, or the handle tools), so the parent can reattach to a running
   delegate or collect a finished one. The record is also what says what happened while the parent
   was away.
+- If the session process is killed outright, nothing is left to record how the run ended. The next
+  status or cancel notices that the recorded session process (its id and start time) is gone,
+  marks the delegation `failed` with an error saying so, and stops the delegate's run if it is
+  still the recorded process. Cancel signals the run's process group only while its leader is
+  still the process the record names, since a group id can be reused by an unrelated process.
+- The start time is read from `/proc/<pid>/stat` where there is a `/proc` (Linux, including
+  BusyBox images such as ynh's own, which have no `ps -o lstart`), and from `ps -o lstart=` on
+  macOS. When it cannot be read (now, or when the record was written), ynh does not take that as
+  a dead process: a session process that still exists is treated as alive, so status leaves the
+  delegation running. But nothing is then verified, so nothing is signalled: cancel signals the
+  run's group only when the run, or its parent session process, is verifiably the recorded
+  process (same start time). Otherwise cancel still marks the delegation `cancelled`, records in
+  its `error` that the run was not signalled and may still be running, and leaves the process
+  alone, because an id that merely exists may belong to something unrelated. The same rule holds
+  for the orphan stop when a session is found dead. Only a process that is gone, or verifiably
+  another one, counts as dead.
+- The handle tools take a **handle**, never a path: the handle is checked against `dlg-` and 16 hex
+  digits and looked up under `$YNH_HOME/delegations/`.
+
+## Reaching a delegate: the A2A endpoints
+
+`ynh run` of a harness opens one localhost A2A endpoint for each `delegates_to` entry whose
+transport is `a2a` (the default), and closes them when the run ends. A delegation already running
+is a detached session and goes on.
+
+- Each endpoint listens on `127.0.0.1` on a free port, serves JSON-RPC with
+  [a2a-go](https://github.com/a2aproject/a2a-go) v2, and has its own random bearer token. Every
+  request but the agent card needs `Authorization: Bearer <token>`; a wrong or missing token is
+  HTTP 401. The token is what keeps a parent to its own delegates.
+- The delegate's session starts on the endpoint's **first message**, never on a card fetch or a
+  refused call. The task maps onto the delegation record: `working` while it runs,
+  `input-required` while the delegate has asked a question (answered by a message on the same
+  task), `completed` with the result as an artifact, `canceled` by cancel (which stops the run's
+  process group), `failed` with the error, the exit code and the last 40 lines of the run's log,
+  so a delegate that wrote nothing to its output still says why. Every result carries the task and
+  context ids. A non-blocking send returns at once and the task goes on.
+- The parent's environment names each endpoint: `YNH_DELEGATES` (the delegates' names,
+  comma-separated) and, per delegate, `YNH_DELEGATE_<NAME>_CARD` (the agent card URL) and
+  `YNH_DELEGATE_<NAME>_AUTH` (`Bearer <token>`). `<NAME>` is the delegate's harness name
+  upper-cased, every character outside A-Z and 0-9 turned into `_`. Two entries that map to the
+  same `<NAME>` are refused at run, naming both. With exactly one A2A delegate, `A2ACLI_AGENT_CARD`
+  and `A2ACLI_AUTH` carry the same values, which the `a2a` CLI reads by itself; with several, they
+  are not set, so the CLI never silently picks one.
+- A delegate session never inherits its parent's `YNH_DELEGATE*` or `A2ACLI_*` values; a delegate
+  with delegates of its own gets its own when it runs.
+- A delegate that is not installed or not trusted refuses the run, with the command to fix it.
 
 ## One run dir, many live sessions
 
@@ -137,7 +183,14 @@ A baked image's pre-assembled run dir is used as it is, as in v0.17.0.
 
 **Limit:** Codex and Cursor project symlinks point through the stable link, so they show the newest
 snapshot, not the session's. A session ynh launches reads its own snapshot through its working
-folder. Anything reading the project's links reads the newest.
+folder, Codex and Cursor included. Anything reading the project's links reads the newest.
+
+**Resume and trust on Codex and Cursor.** Both key state by the folder a session starts in, and that is
+a new snapshot whenever the harness changes. ynh carries it instead of giving them a stable folder:
+`--resume` finds the newest session that started in any snapshot of the harness and resumes it by id in
+the newest snapshot, and Cursor gets `--trust` for an accepted harness (see
+[vendors](vendors.md#vendor-notes)). Two runs of one harness do not share a folder unless their inputs
+are equal, when they share one sealed snapshot.
 
 ## What is removed
 

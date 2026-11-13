@@ -60,6 +60,23 @@ jobs:
               - 'telemetry/**'
               # .ynr/ — the ynr conformance scenarios the Conformance job runs.
               - '.ynr/**'
+              # scripts/ — Go tests run scripts from it (internal/vendor's
+              #              TestHookEventParityScript runs hook-event-parity.sh),
+              #              so a scripts-only PR must run Test.
+              - 'scripts/**'
+              # .golangci.yml — the Lint job's config; a change to it alters
+              #              what Lint accepts.
+              - '.golangci.yml'
+              # **/*.md — internal/docs TestRepoMarkdownLinksResolve checks every
+              #              relative link and anchor in markdown outside docs/
+              #              (README.md, AGENTS.md, .github/, skills/, .claude/).
+              - '**/*.md'
+              # skills/ — cmd/ynd and internal/plugin starter_sets_test read
+              #              skills/ynh-sensors/references/starter-sets.md.
+              - 'skills/**'
+              # **/*.schema.json — internal/clischema TestSingleSchemaTree walks the
+              #              whole repo for a schema outside docs/schema.
+              - '**/*.schema.json'
             # ynh's telemetry registry, an OpenTelemetry Weaver registry
             # (ynr ADR-007), which Weaver itself checks.
             registry:
@@ -141,6 +158,12 @@ jobs:
       # only check that sees it.
       - name: go.mod is tidy
         run: go mod tidy -diff
+
+      # The Docker image builds with the Dockerfile's GO_VERSION, not go.mod's
+      # toolchain (the golang images set GOTOOLCHAIN=local); this keeps the two
+      # equal so govulncheck scans the Go the image ships.
+      - name: Dockerfile Go matches go.mod toolchain
+        run: make check-go-pin
 
   lint:
     name: Lint
@@ -230,7 +253,7 @@ jobs:
       - name: Upload SARIF to code scanning
         if: always() && steps.scan.outputs.sarif != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: skillspector

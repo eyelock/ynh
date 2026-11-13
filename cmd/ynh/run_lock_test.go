@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -148,4 +150,103 @@ exit 0
 			t.Fatalf("%s run did not finish: the run dir lock is held while the vendor runs", name)
 		}
 	}
+}
+
+// A session's snapshot is held for as long as its vendor runs, and a later run
+// deletes it only once the session is over (ynh #765). The stand-in launch
+// checks that ynh holds the snapshot's lock while the vendor would run, then
+// keeps a lock of its own past cmdRun's return, as a vendor that outlives the
+// run would: a second run on other inputs must leave that snapshot alone, and
+// a third, after the lock is dropped, must delete it. The current snapshot is
+// never deleted.
+func TestCmdRun_SnapshotLifetimeFollowsTheSession(t *testing.T) {
+	for _, vendorName := range []string{"claude", "codex", "cursor", "opencode", "copilot"} {
+		t.Run(vendorName, func(t *testing.T) {
+			isolateRun(t)
+			work := t.TempDir()
+			harnessDir := filepath.Join(work, "h")
+			writeSkillHarness(t, harnessDir, "h")
+			t.Chdir(work)
+			if vendorName == "cursor" || vendorName == "codex" {
+				if err := cmdRun([]string{harnessDir, "-v", vendorName, "--install"}); err != nil {
+					t.Fatalf("--install: %v", err)
+				}
+			}
+
+			var dirs []string
+			var held []func()
+			stubLaunch(t, func(runDir string, _ runArgs) error {
+				dirs = append(dirs, runDir)
+				lock := filepath.Join(config.CacheDir(), "run-locks", filepath.Base(filepath.Dir(runDir)), filepath.Base(runDir)+".lock")
+				f, err := os.OpenFile(lock, os.O_RDWR, 0)
+				if err != nil {
+					return fmt.Errorf("the snapshot's lock file: %w", err)
+				}
+				defer func() { _ = f.Close() }()
+				if syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil {
+					return fmt.Errorf("ynh did not hold the snapshot's lock while the vendor ran")
+				}
+				// The session that outlives the run.
+				own, err := os.OpenFile(lock, os.O_RDWR, 0)
+				if err != nil {
+					return err
+				}
+				if err := syscall.Flock(int(own.Fd()), syscall.LOCK_SH); err != nil {
+					return err
+				}
+				held = append(held, func() { _ = own.Close() })
+				return nil
+			})
+			run := func(label string) {
+				t.Helper()
+				// A changed skill is a changed snapshot on every vendor.
+				skill := "---\nname: hello\ndescription: " + label + ".\n---\n\n# hello\n"
+				if err := os.WriteFile(filepath.Join(harnessDir, "skills", "hello", "SKILL.md"), []byte(skill), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := cmdRun([]string{harnessDir, "-v", vendorName}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+
+			run("one")
+			run("two")
+			run("three")
+			if len(dirs) != 3 || dirs[0] == dirs[1] || dirs[1] == dirs[2] {
+				t.Fatalf("want three distinct snapshots, got %v", dirs)
+			}
+			for _, d := range dirs {
+				if !exists(d) {
+					t.Fatalf("a live session's snapshot was deleted: %s", d)
+				}
+			}
+			held[0]() // the first session ends
+			run("three")
+			if exists(dirs[0]) {
+				t.Errorf("a finished session's non-current snapshot was kept: %s", dirs[0])
+			}
+			if !exists(dirs[1]) {
+				t.Errorf("a live session's snapshot was deleted: %s", dirs[1])
+			}
+			if !exists(dirs[2]) {
+				t.Errorf("the current snapshot was deleted: %s", dirs[2])
+			}
+		})
+	}
+}
+
+// holdSnapshot takes a shared lock on runDir's snapshot, as a live session of
+// it would, and returns the function that ends that session.
+func holdSnapshot(t *testing.T, runDir string) func() {
+	t.Helper()
+	lock := filepath.Join(config.CacheDir(), "run-locks", filepath.Base(filepath.Dir(runDir)), filepath.Base(runDir)+".lock")
+	f, err := os.OpenFile(lock, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("the snapshot's lock file: %v", err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH); err != nil {
+		t.Fatal(err)
+	}
+	return func() { _ = f.Close() }
 }

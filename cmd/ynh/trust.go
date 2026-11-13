@@ -200,11 +200,12 @@ type trustSet struct {
 	// that subagent as launch_focus steers a session, and the digest covers
 	// it. delegates_to is not changed by a profile, so they are read once.
 	DelegateFocuses []delegateFocusReport
-	// DelegateSources are the sources the delegates_to entries name (git URL,
-	// path, ref or local folder), in entry order, with the delegate's name.
-	// Repointing an entry at another harness that happens to carry the same
-	// name and commands must still change the digest, so the entry itself is
-	// covered, not only what it resolves to.
+	// DelegateSources are the delegates_to entries the parent may start or
+	// run, of either transport (git URL, path, ref or local folder, selection,
+	// and the settled transport), sorted. Repointing an entry at another
+	// harness that happens to carry the same name and commands, or flipping it
+	// between a2a and native, must still change the digest, so the entry itself
+	// is covered, not only what it resolves to.
 	DelegateSources []string
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
@@ -288,6 +289,10 @@ type runView struct {
 	// own, which are not the session's: they are connected only while that
 	// delegate runs.
 	Delegates []delegateView
+	// DelegateEntries is every delegates_to entry the parent may start or run,
+	// of either transport, as written plus its settled transport: what the
+	// digest covers of an entry whatever it carries (see entryKey).
+	DelegateEntries []string
 	// HookSources maps each event of H.Hooks to the include chain that
 	// supplied each entry, "" for the harness's own.
 	HookSources map[string][]string
@@ -322,6 +327,7 @@ type runSources struct {
 	mcp       map[string]string
 	hooks     map[string][]string
 	delegates []delegateView
+	entries   []string
 }
 
 func runViews(p *harness.Harness) (views []runView, problems []string) {
@@ -330,11 +336,12 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 	// with their sources. h itself is not changed.
 	fold := func(h *harness.Harness, sel harness.Selection) (*harness.Harness, runSources, []resolver.ResolveResult, error) {
 		src := runSources{mcp: map[string]string{}}
-		delegates, err := delegateViews(h)
+		delegates, entries, err := delegateViews(h)
 		if err != nil {
 			return nil, src, nil, err
 		}
 		src.delegates = delegates
+		src.entries = entries
 		if len(h.Includes) == 0 {
 			return h, src, nil, nil
 		}
@@ -379,7 +386,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, HookSources: src.hooks, Delegates: src.delegates})
+		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, HookSources: src.hooks, Delegates: src.delegates, DelegateEntries: src.entries})
 		if profile != "" {
 			return
 		}
@@ -409,7 +416,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 					problems = append(problems, fmt.Sprintf("profile %s: %v", qualified, err))
 					continue
 				}
-				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, HookSources: vSrc.hooks, Delegates: vSrc.delegates})
+				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, HookSources: vSrc.hooks, Delegates: vSrc.delegates, DelegateEntries: vSrc.entries})
 			}
 		}
 	}
@@ -425,16 +432,35 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 	return views, problems
 }
 
-// delegateViews reads the MCP servers each delegate of h carries on its own,
-// the way a run composes them: the delegate's includes (resolved against its
-// own directory, from the cache), then its own servers. A delegate's own
-// delegates are among them, as a run flattens them. Anything unreadable is
-// an error, so the set is never reported complete without it.
-func delegateViews(h *harness.Harness) ([]delegateView, error) {
-	flat, err := resolver.FlattenDelegates(h.DelegatesTo, h.Dir, h.Name, resolver.ResolveDelegateLocal)
+// delegateViews reads the MCP servers each native delegate of h carries on its
+// own, the way a run composes them: the delegate's includes (resolved against
+// its own directory, from the cache), then its own servers. A native
+// delegate's own delegates are among them, as a run flattens them.
+//
+// The digest covers what runs inside the parent's process. A native delegate
+// is a subagent of the parent's session, so its servers and focus prompt are
+// reviewed here. An a2a delegate (the default) is its own ynh session under
+// its own trust grant, so its servers and focus prompt are reviewed there,
+// and it is neither resolved nor walked. Every entry, of either transport,
+// still counts: it is returned among the entries, as written with its
+// settled transport, because repointing it, or flipping it between a2a and
+// native, changes what the parent may start or run.
+//
+// Anything unreadable is an error, so the set is never reported complete
+// without it.
+func delegateViews(h *harness.Harness) ([]delegateView, []string, error) {
+	flat, skipped, err := resolver.FlattenDelegatesBy(h.DelegatesTo, h.Dir, h.Name, h.Transport, true, resolver.ResolveDelegateLocal)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var entries []string
+	for _, fd := range flat {
+		entries = append(entries, entryKey(fd.Entry))
+	}
+	for _, e := range skipped {
+		entries = append(entries, entryKey(e))
+	}
+	slices.Sort(entries)
 	var out []delegateView
 	for _, fd := range flat {
 		dh, focus := fd.Harness, fd.Focus
@@ -442,13 +468,13 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 		if len(dh.Includes) > 0 {
 			resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})
 			if err != nil {
-				return nil, fmt.Errorf("delegate %s: includes: %w", dh.Name, err)
+				return nil, nil, fmt.Errorf("delegate %s: includes: %w", dh.Name, err)
 			}
 			included = resolver.IncludedHarnesses(resolved)
 		}
 		servers, provenance, err := harness.ComposeMCPServersRaw(dh, included)
 		if err != nil {
-			return nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
+			return nil, nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
 		}
 		dv := delegateView{Name: dh.Name, Source: entrySourceKey(fd.Entry), Servers: servers, Sources: map[string]string{}, Focus: focus}
 		for _, pr := range provenance {
@@ -456,13 +482,18 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 		}
 		out = append(out, dv)
 	}
-	return out, nil
+	return out, entries, nil
 }
 
 // entrySourceKey is a delegates_to entry's source and selection as written,
 // for the digest: where it points, at which ref, and which profile or focus.
 func entrySourceKey(e harness.Delegate) string {
 	return strings.Join([]string{e.Git, e.Local, e.Path, e.Ref, e.Profile, e.Focus}, "\x00")
+}
+
+// entryKey is entrySourceKey with the entry's settled transport.
+func entryKey(e harness.Delegate) string {
+	return entrySourceKey(e) + "\x00" + e.Transport
 }
 
 func sensorKey(e executable) string {
@@ -605,13 +636,8 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		if v.Profile != "" {
 			continue
 		}
+		set.DelegateSources = append(set.DelegateSources, v.DelegateEntries...)
 		for _, d := range v.Delegates {
-			// Only a delegate that brings something to review (servers or a
-			// focus) adds its entry to the digest, so a harness whose
-			// delegates carry nothing keeps the digest it had.
-			if len(d.Servers) > 0 || d.Focus != nil {
-				set.DelegateSources = append(set.DelegateSources, d.Name+"\x00"+d.Source)
-			}
 			if d.Focus != nil {
 				set.DelegateFocuses = append(set.DelegateFocuses, delegateFocusReport{
 					Delegate: d.Name, Name: d.Focus.Name, Profile: d.Focus.Profile, Prompt: d.Focus.Prompt,

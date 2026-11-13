@@ -347,7 +347,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	// Assemble delegates
-	delegateMCP, err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, RootName: h.Name})
+	delegateMCP, err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, RootName: h.Name, RootTransport: h.Transport})
 	if err != nil {
 		return "", previewReport{}, fmt.Errorf("assembling delegates: %w", err)
 	}

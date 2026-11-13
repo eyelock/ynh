@@ -112,6 +112,7 @@ type Options struct {
 type Telemetry struct {
 	version string
 	opts    Options
+	stderr  io.Writer // for the one note about dropped operator labels; may be nil
 	errors  atomic.Int64
 	// abandoned is set once a flush has run out of time: the destination is
 	// stuck, so later flushes give up at once rather than wait again, and the
@@ -145,9 +146,15 @@ type Telemetry struct {
 // minute). An agent run can last an hour; a `ynr serve` started after it
 // still receives it. Shutdown stops the search.
 func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
-	stripOperatorLabels(stderr)
 	dest, dir := ChooseDestination()
+	if dest != DestinationNone {
+		// With no destination the process's environment is left exactly as
+		// it was. A spool that appears later is handled in activate, which
+		// filters the resource instead.
+		stripOperatorLabels(stderr)
+	}
 	t := &Telemetry{
+		stderr:  stderr,
 		version: version,
 		opts:    opts,
 		dest:    dest,
@@ -262,6 +269,7 @@ func (t *Telemetry) recheck(interval time.Duration) {
 // them. They write to the spool folder dir, or, when sender is not nil, post
 // to the operator's OTLP endpoint and write no spool.
 func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
+	stripOperatorLabels(t.stderr)
 	instanceID := newInstanceID()
 	// The operator's OTEL_RESOURCE_ATTRIBUTES are honoured, but ynh's own
 	// identity wins: service.name and service.version say which registry
@@ -271,8 +279,14 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 		semconv.ServiceVersion(t.version),
 		semconv.ServiceInstanceID(instanceID),
 	}
-	// The labels are ynh's too. Only these were validated; Setup already
-	// removed every operator ynh.label.* from OTEL_RESOURCE_ATTRIBUTES.
+	// The labels are ynh's too. Only these were validated. The SDK merges
+	// the process environment into every provider's resource, so every
+	// operator ynh.label.* must be out of OTEL_RESOURCE_ATTRIBUTES before the
+	// providers are built. Setup did that when it started with a
+	// destination; a spool that appeared mid-launch has not, so it is done
+	// here (a no-op when already done). It happens once, at the moment
+	// telemetry starts, which is also when ynh puts the trace context into
+	// the environment, so it never changes under a process already started.
 	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),

@@ -328,11 +328,12 @@ ynh resolves install arguments in this order:
 
 | Argument form | Resolution |
 |---|---|
-| Starts with `.` or `/` | Local path |
+| Starts with `.` or `/`, or a relative path that exists on disk | Local path |
 | Starts with `git@` | Git SSH URL |
 | Starts with `https://` or `http://` | Git HTTPS URL |
 | Contains `@` (not SSH) | Registry lookup as `name@registry-name` |
-| Contains `/` | Git URL shorthand (e.g., `github.com/user/repo`) |
+| Contains `/`, first segment has a `.` or `:` (a host) | Git URL shorthand (e.g., `github.com/user/repo`) |
+| Contains `/`, first segment has no `.` or `:`, not on disk | Error: reported as a missing local path (e.g. `harnesses/x`, or a bare `org/repo`). Pass `./harnesses/x`, a host-qualified `github.com/org/repo`, or `git@alias:org/repo.git` for an SSH alias |
 | Plain word | Exact name search across all registries |
 
 Plain word matches: single match installs directly; multiple matches errors with disambiguation guidance; no exact match searches descriptions and suggests similar results.

@@ -30,7 +30,7 @@ func TestAssembleDelegates_CodexWritesTOMLAgent(t *testing.T) {
 	}
 	workDir := t.TempDir()
 	var warn strings.Builder
-	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Warn: &warn, Launch: true}); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Warn: &warn, Launch: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,7 +78,7 @@ func TestAssembleDelegates_OpenCodeAgentRunsAsSubagent(t *testing.T) {
 		t.Fatal(err)
 	}
 	workDir := t.TempDir()
-	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Warn: &strings.Builder{}, Launch: true}); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Warn: &strings.Builder{}, Launch: true}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(workDir, ".opencode", "agents", "probe.md"))

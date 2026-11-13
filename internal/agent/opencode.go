@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -92,7 +91,11 @@ func (s *openCodeSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending, s.hasMsg = "", false
 
-	cmd := exec.CommandContext(s.ctx, s.bin, buildOpenCodeArgs(s.opts, s.sessionID, msg)...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, opencodeSrtPolicy, s.bin, buildOpenCodeArgs(s.opts, s.sessionID, msg))
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir

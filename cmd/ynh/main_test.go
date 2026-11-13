@@ -1204,7 +1204,7 @@ func TestFormatIncludes(t *testing.T) {
 		includes []harness.Include
 		want     string
 	}{
-		{"empty", nil, "0"},
+		{"empty", nil, "-"},
 		{"single no pick", []harness.Include{
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}},
 		}, "example/skills/dev"},
@@ -1254,7 +1254,7 @@ func TestFormatDelegates(t *testing.T) {
 		delegates []harness.Delegate
 		want      string
 	}{
-		{"empty", nil, "0"},
+		{"empty", nil, "-"},
 		{"single", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/team"}},
 		}, "example/team"},

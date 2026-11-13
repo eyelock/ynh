@@ -1336,9 +1336,9 @@ func TestCmdInfo_DelegateSelection(t *testing.T) {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 	want := []string{
-		"  github.com/eyelock/reviewer  profile=strict",
-		"  github.com/eyelock/triager  path=h  focus=ci-failures",
-		"  github.com/eyelock/helper",
+		"  github.com/eyelock/reviewer  profile=strict  transport=a2a (default)",
+		"  github.com/eyelock/triager  path=h  focus=ci-failures  transport=a2a (default)",
+		"  github.com/eyelock/helper  transport=a2a (default)",
 	}
 	if got := infoSection(stdout.String(), "Delegates to"); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("Delegates to section:\ngot  %q\nwant %q", got, want)
@@ -1388,5 +1388,62 @@ func TestCmdInfo_DelegateSelection(t *testing.T) {
 				t.Errorf("an entry with no selection must omit the fields: %v", d2)
 			}
 		})
+	}
+}
+
+// ynh info and ynh ls show each delegate's resolved transport and where it came
+// from: the entry, the harness's default, or the built-in default.
+func TestCmdInfo_DelegateTransport(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "tr", `{"name": "tr", "version": "0.1.0", "transport": "native", "delegates_to": [
+		{"git": "github.com/eyelock/a", "transport": "a2a"},
+		{"git": "github.com/eyelock/b"},
+		{"git": "github.com/eyelock/c", "transport": "native"}
+	]}`)
+	installListTestHarness(t, home, "plain", `{"name": "plain", "version": "0.1.0", "delegates_to": [{"git": "github.com/eyelock/d"}]}`)
+
+	var out bytes.Buffer
+	if err := cmdInfoTo([]string{"local/tr"}, &out, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"  github.com/eyelock/a  transport=a2a (entry)",
+		"  github.com/eyelock/b  transport=native (harness)",
+		"  github.com/eyelock/c  transport=native (entry)",
+	}
+	if got := infoSection(out.String(), "Delegates to"); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("text:\ngot  %q\nwant %q", got, want)
+	}
+
+	for id, wantPairs := range map[string][][2]string{
+		"local/tr":    {{"a2a", "entry"}, {"native", "harness"}, {"native", "entry"}},
+		"local/plain": {{"a2a", "default"}},
+	} {
+		out.Reset()
+		if err := cmdInfoTo([]string{id, "--format", "json"}, &out, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		var v map[string]any
+		if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+			t.Fatal(err)
+		}
+		schema, err := clischema.Get("info")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := schema.Validate(any(v)); err != nil {
+			t.Errorf("%s does not validate: %v", id, err)
+		}
+		dels := v["harness"].(map[string]any)["delegates_to"].([]any)
+		if len(dels) != len(wantPairs) {
+			t.Fatalf("%s: delegates_to = %v", id, dels)
+		}
+		for i, w := range wantPairs {
+			d := dels[i].(map[string]any)
+			if d["transport"] != w[0] || d["transport_from"] != w[1] {
+				t.Errorf("%s delegate %d: transport %v from %v, want %s from %s", id, i, d["transport"], d["transport_from"], w[0], w[1])
+			}
+		}
 	}
 }

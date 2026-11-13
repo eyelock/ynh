@@ -526,14 +526,14 @@ By default a harness's servers load alongside everything you have already config
 
 Without the flag, this is what ynh hands Claude Code:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p list your MCP servers`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... -p list your MCP servers`
 ```bash
 ynh run ./my-team "list your MCP servers"
 ```
 
 With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` pointing at the file ynh generated with the harness's composed servers:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/_inline-.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
 ynh run ./my-team --isolated-mcp "list your MCP servers"
 ```
@@ -613,7 +613,7 @@ tracker -> tracker-readonly
 
 A focus brings its prompt and its profile. `triage` binds the `readonly` profile to a prompt, so `--focus github-lite:triage` is a non-interactive run with both. The run's prompt comes from the focus; the profile is applied to `github-lite`:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
 ```bash
 ynh run ./my-team --focus github-lite:triage
 ```
@@ -869,7 +869,7 @@ The hook ran when the session started, from the copy in the run directory, and l
 
 ## Give a delegate its own tools
 
-A delegate (`delegates_to`) is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
+A delegate (`delegates_to`) with `transport: native` is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
 
 ```bash
 mkdir -p ops/.agents/harness
@@ -912,7 +912,7 @@ cat > my-team/.agents/harness/plugin.json << 'EOF'
     { "local": "/tmp/ynh-tutorial/composing-tools/github-lite", "hooks": true }
   ],
   "delegates_to": [
-    { "git": "/tmp/ynh-tutorial/composing-tools/ops" }
+    { "git": "/tmp/ynh-tutorial/composing-tools/ops", "transport": "native" }
   ],
   "mcp_servers": {
     "team": {
@@ -1003,7 +1003,7 @@ Expected output:
 
 Now launch it. Claude Code ignores `mcpServers` in a plugin's agents, so `ynh run` hands the delegate to Claude with `--agents`. A command line is visible to every process on the machine, and Claude does not expand `${VAR}` inside `--agents`, so the token cannot go there. The server is wrapped in `ynh mcp-exec`, which reads the variables from a file in the run directory and starts the real server. The `...` below stands for text that varies between runs or is too long to show:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/_inline-.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/_inline-.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/.snapshots/_inline-.../.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
 ynh run ./my-team --isolated-mcp "Ask the ops agent to call its whoami tool"
 ```

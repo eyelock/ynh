@@ -339,6 +339,8 @@ Declare that server in the root harness, or set it to `null` in the root. An inc
 
 ## MCP Servers of Delegates
 
+This section is about a delegate with `transport: native`, which runs as a subagent of the parent's session. An `a2a` delegate (the default) is its own ynh session: it connects to its servers itself, and the parent's run assembles nothing for it (see [Delegate sessions](delegate-sessions.md)).
+
 A delegate (`delegates_to`) is a harness, and the MCP servers it declares are its own. They are not the session's: the parent harness's run does not list them, and the delegate's subagent is the only one that connects to them. ynh resolves the delegate the way it resolves any harness. Its `includes` are followed (transitively, with `pick`, the cycle guard and the allow-list, against the delegate's own directory), and its servers are composed from its included harnesses' and its own under the rules of [Servers from Included Harnesses](#servers-from-included-harnesses). Each server expands in its own harness's context, so `${VAR}` references resolve against the delegate's `env_passthrough`, not the parent's. The skills of the delegate's includes are listed in its agent file with its own. A delegate's own delegates are followed and flattened (see [Cycles and shared delegates](harnesses.md#cycles-and-shared-delegates)); each is another agent that carries its own servers. When the `delegates_to` entry names a `profile` or a `focus` of the delegate, that profile (or the focus's) is applied first, so its `mcp_servers`, `null` removals and `includes` decide what the delegate carries (see [delegates_to](harnesses.md#profile-or-focus-of-a-delegate)).
 
 ```

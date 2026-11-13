@@ -177,13 +177,24 @@ func telemetryRelaySetting(flag bool, stderr io.Writer) bool {
 	return err == nil && cfg.TelemetryRelay
 }
 
+// relayDestination is where the run's telemetry goes: a *telemetry.Telemetry
+// for `ynh agent run`, or the chosen destination for `ynh run`, which writes
+// no records of its own.
+type relayDestination interface {
+	Destination() telemetry.Destination
+	SpoolDir() string
+}
+
 // runRelay is the `ynr relay` for one run. It starts when the loop is about
 // to start the worker, only if the conditions hold, and is stopped once the
 // worker has exited. When a condition fails, or the relay cannot start,
 // the run carries on without the vendor's own telemetry, after one note.
 type runRelay struct {
-	tel    *telemetry.Telemetry
+	tel    relayDestination
 	stderr io.Writer
+	// supported reports whether ynh configures backend's telemetry for this
+	// kind of run; nil means agent.SupportsTelemetryRelay (`ynh agent run`).
+	supported func(backend string) bool
 	// sandbox is the run's --sandbox. Under srt the worker cannot reach a
 	// loopback relay, so none is started.
 	sandbox string
@@ -213,7 +224,11 @@ func (r *runRelay) start(backend string) {
 	skip := func(why string) {
 		_, _ = fmt.Fprintf(r.stderr, "ynh: the telemetry relay is on, but %s; the run continues without %s's own telemetry\n", why, backend)
 	}
-	if !agent.SupportsTelemetryRelay(backend) {
+	supported := r.supported
+	if supported == nil {
+		supported = agent.SupportsTelemetryRelay
+	}
+	if !supported(backend) {
 		skip("ynh does not configure " + backend + "'s telemetry yet")
 		return
 	}

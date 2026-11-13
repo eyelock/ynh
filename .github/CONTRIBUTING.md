@@ -314,7 +314,7 @@ The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and 
 
 The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `.agents/harness/marketplace.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
 
-The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
+The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand (host-qualified only; a host-less `a/b` not on disk is a missing-local-path error) → plain name registry search. See `cmd/ynh/install_resolve.go`.
 
 ### Migration Chain
 
@@ -432,7 +432,7 @@ The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directo
 
 ### Assembler
 
-The assembler builds a deterministic run directory (`~/.ynh/run/<idfsname>/`, e.g. `run/local--foo/`) with the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. The run directory is cleaned and repopulated on each run. Two modes:
+The assembler builds the vendor's layout in a staging folder, which `ynh run` seals as a content-addressed snapshot (`~/.ynh/run/.snapshots/<idfsname>/<hash>/`); `~/.ynh/run/<idfsname>` (e.g. `run/local--foo`) is a symlink to the newest one. The layout has the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. A snapshot is reused when its inputs hash the same and is never rewritten once sealed (a session running on it is not disturbed); a run deletes every snapshot that is neither current nor held by a live session (the session holds a shared lock for the vendor's life). Two modes:
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied

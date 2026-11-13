@@ -732,46 +732,25 @@ func TestLabelAttributes(t *testing.T) {
 	}
 }
 
-// The operator's ynh.label.* are removed from the process environment once,
-// at Setup, before the recheck goroutine exists, and stay removed: a spool
-// that appears mid-run activates telemetry without touching the variable, so
-// a child started in that window never sees it change, and no child ever
-// inherits an unvalidated label.
-func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
+// With no destination, Setup leaves OTEL_RESOURCE_ATTRIBUTES exactly as the
+// operator set it, operator ynh.label.* included, and prints nothing. A spool
+// that appears mid-run removes the operator's ynh.label.* when telemetry
+// starts, so it never reaches the spool.
+func TestOperatorLabelsKeptWithNoDestinationAndFilteredWhenSpoolAppearsMidRun(t *testing.T) {
 	clearTelemetryEnv(t)
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	const operator = "ynh.label.other=/home/me/secret,deployment.environment.name=lab"
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", operator)
 	laptop := filepath.Join(os.Getenv("XDG_STATE_HOME"), "ynr", "spool", "local")
 
 	var note bytes.Buffer
 	tel := Setup("1.0.0", Options{RecheckInterval: 5 * time.Millisecond, Labels: map[string]string{"wheelhouse": "ynw"}}, &note)
-	const stripped = "deployment.environment.name=lab"
+	const stripped = operator
 	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
-		t.Fatalf("after Setup, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+		t.Fatalf("after Setup with no destination, OTEL_RESOURCE_ATTRIBUTES = %q, want it unchanged: %q", got, stripped)
 	}
-	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
-		t.Errorf("note = %q, want the dropped key and no value", n)
+	if n := note.String(); n != "" {
+		t.Errorf("note = %q, want nothing with no destination", n)
 	}
-
-	// Poll the variable from a "child" while the spool appears and
-	// telemetry activates: it never changes.
-	stop := make(chan struct{})
-	changed := make(chan string, 1)
-	go func() {
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
-				select {
-				case changed <- got:
-				default:
-				}
-				return
-			}
-		}
-	}()
 
 	run := tel.StartRun()
 	if err := os.MkdirAll(laptop, 0o755); err != nil {
@@ -786,15 +765,9 @@ func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
 	}
 	run.Finish("converged", true)
 	tel.Shutdown()
-	close(stop)
 
-	select {
-	case got := <-changed:
-		t.Errorf("OTEL_RESOURCE_ATTRIBUTES changed to %q while telemetry started", got)
-	default:
-	}
-	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
-		t.Errorf("after the run, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != "deployment.environment.name=lab" {
+		t.Errorf("after telemetry started, OTEL_RESOURCE_ATTRIBUTES = %q, want the operator label removed", got)
 	}
 
 	seen := 0
@@ -816,5 +789,8 @@ func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Fatal("nothing written to the spool")
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want the dropped key and no value once the spool appeared", n)
 	}
 }

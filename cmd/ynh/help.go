@@ -40,6 +40,21 @@ reads the env file, replaces ${VAR} in the command's arguments and in its own
 environment values with the file's variables only (an unknown reference is an
 error), then becomes the command, so stdin and stdout are the server's.`,
 
+	"delegate-run": `ynh delegate-run <start|status|cancel|supervise> ...
+
+Internal. Run a delegates_to delegate as its own detached ynh session, and keep
+its delegation record under $YNH_HOME/delegations.
+
+  start --parent <id> --entry <n> --task <text> [--model <m>] [--folder <dir>]
+      Resolve entry n of the parent's delegates_to to its installed, trusted
+      harness and start it, then print its handle and record path as JSON.
+  status --record <path>   Print the record.
+  cancel --record <path>   Stop the delegate's process group and record it
+                           cancelled.
+  supervise <record-path>  What a started session runs as; never typed.
+
+The delegate server calls this; it is not meant to be typed.`,
+
 	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
 
 Internal. Print the headers of a remote MCP server as a JSON object, with
@@ -119,6 +134,11 @@ Flags:
   --label key:value        A label for the run (repeatable; key: removes one).
                            Merged over config.json, the harness manifest and
                            YNH_LABELS; see docs/telemetry.md
+  --telemetry-relay        Start ynr relay for the session and send the vendor's
+                           own telemetry to the spool (copilot,
+                           codex). Also
+                           YNH_TELEMETRY_RELAY, or "telemetry_relay": true in
+                           config.json
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
@@ -150,7 +170,21 @@ Flags:
   --format text|json   Output format (default text)
   --check-updates      Check each harness's source for newer content
   --label key:value    Only harnesses whose own manifest labels include this
-                       (repeatable; every one must match)`,
+                       (repeatable; every one must match)
+  --source repo        Only harnesses installed from this repository
+                       (repeatable; any one may match)
+  --includes repo      Only harnesses that include or delegate to this
+                       repository (repeatable; any one may match)
+  --columns a,b,...    Columns to show: id, kind, vendor, source, artifacts,
+                       includes, delegates, labels (text only)
+
+A repo is owner/repo, host/owner/repo or a URL (all the same repository), a
+subpath narrows it, and a local path matches by prefix. Different filters must
+all match.
+
+On a terminal, a row wider than the terminal is cut to fit: INCLUDES and
+DELEGATES TO first (ending "… (+N)"), then SOURCE, then LABELS. Piped output is
+never cut. An empty INCLUDES or DELEGATES TO shows "-".`,
 
 	"info": `ynh info <name> [flags]
 
@@ -474,7 +508,8 @@ Flags:
   --no-plan                   Skip the planning phase
   --interactive               Stay in session
   --sandbox none|srt          Wrap the worker in srt with ynh's network and
-                              write allowlist (claude only); none by default
+                              write allowlist (claude, codex, cursor; opencode
+                              on Linux only, refused on macOS); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor, opencode). Only for runs inside

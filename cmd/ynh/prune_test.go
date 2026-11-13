@@ -139,3 +139,20 @@ func readOnly(t *testing.T, dir string) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 }
+
+// The snapshot store sits in the run dir beside the stable links; prune must
+// not take it for a stale harness (ynh #765).
+func TestCmdPrune_KeepsSnapshotStore(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	store := filepath.Join(home, "run", ".snapshots", "x", "abc")
+	if err := os.MkdirAll(store, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPrune(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(store); err != nil {
+		t.Fatalf("prune removed the snapshot store: %v", err)
+	}
+}
