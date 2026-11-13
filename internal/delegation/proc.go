@@ -11,15 +11,31 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
-// procStart is a token for when process pid started, or "" when pid is not a
-// live process (or its start cannot be read). A pid alone cannot say whether it
-// is still the process a record was written for, since ids are reused; the pid
-// with its start time can.
+// procStartFunc reads when process pid started; a variable so tests can stand
+// in for a platform where it cannot be read.
+var procStartFunc = readProcStart
+
+// procStart is a token for when process pid started, or "" when it cannot be
+// read: the process is gone, or this platform will not say. A pid alone cannot
+// say whether it is still the process a record was written for, since ids are
+// reused; the pid with its start time can. "" means "cannot tell", never "gone":
+// use procState to learn whether the process exists.
 func procStart(pid int) string {
 	if pid <= 1 {
 		return ""
+	}
+	return procStartFunc(pid)
+}
+
+// readProcStart reads the start time from /proc/<pid>/stat where there is a
+// /proc (Linux, including BusyBox images with no procps), and falls back to
+// `ps -o lstart=` (macOS and other BSDs).
+func readProcStart(pid int) string {
+	if data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat"); err == nil {
+		return parseStatStart(string(data))
 	}
 	cmd := exec.Command("ps", "-o", "lstart=", "-p", strconv.Itoa(pid))
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
@@ -30,14 +46,50 @@ func procStart(pid int) string {
 	return strings.Join(strings.Fields(string(out)), " ")
 }
 
-// sameProc reports whether pid is still the process whose start token is
-// start. An empty token (a record written without one) is never the same
-// process: nothing signals on a guess.
-func sameProc(pid int, start string) bool {
-	if start == "" {
-		return false
+// parseStatStart returns the start-time field (22nd, in clock ticks since boot)
+// of a /proc/<pid>/stat line as a token, or "" if the line is not that shape.
+// The command name, field 2, sits in parentheses and may hold spaces and
+// parentheses, so the fields are counted from the last ")".
+func parseStatStart(line string) string {
+	i := strings.LastIndexByte(line, ')')
+	if i < 0 {
+		return ""
 	}
-	return procStart(pid) == start
+	f := strings.Fields(line[i+1:])
+	// f[0] is field 3 (state), so field 22 is f[19].
+	if len(f) < 20 {
+		return ""
+	}
+	return "proc:" + f[19]
+}
+
+type procStatus int
+
+const (
+	procGone    procStatus = iota // no such process
+	procSame                      // the process the record names
+	procOther                     // a different process now holds the pid
+	procUnknown                   // it exists, but whether it is the same cannot be told
+)
+
+// procState says what pid is now, given the start token recorded for it. A
+// start time that cannot be read, now or when the record was written, is
+// procUnknown: not a reason to call the process dead.
+func procState(pid int, recorded string) procStatus {
+	if pid <= 1 {
+		return procGone
+	}
+	if err := syscall.Kill(pid, 0); err != nil && !errors.Is(err, syscall.EPERM) {
+		return procGone
+	}
+	cur := procStart(pid)
+	if recorded == "" || cur == "" {
+		return procUnknown
+	}
+	if cur == recorded {
+		return procSame
+	}
+	return procOther
 }
 
 // Reconcile settles a record whose session is gone. A delegation not final
@@ -73,20 +125,33 @@ func Reconcile(path string) (*Record, error) {
 	return rec, err
 }
 
-// supervisorAlive reports whether the session process r names is still that
-// process. A record with no session process yet (Start has not recorded one) is
-// treated as alive: it is about to have one.
+// supervisorAlive reports whether the session process r names may still be
+// running: it is, or it exists and its start cannot be compared. Only a process
+// that is gone, or is verifiably another one, is dead. A record with no session
+// process yet (Start has not recorded one) is about to have one.
 func supervisorAlive(r *Record) bool {
 	if r.Pid == 0 {
 		return true
 	}
-	return sameProc(r.Pid, r.PidStart)
+	st := procState(r.Pid, r.PidStart)
+	return st == procSame || st == procUnknown
 }
 
-// runAlive reports whether the delegate's run, the leader of r.Pgid, is still
-// the recorded process, so that signalling its group cannot reach another.
+// runAlive reports whether the group of r.Pgid is safe to signal: its leader,
+// the delegate's run, is verifiably the recorded process, or, where start times
+// cannot be compared, the supervisor that is its parent is still alive, so the
+// id cannot have been reused (the supervisor reaps the run before it ends).
 func runAlive(r *Record) bool {
-	return r.Pgid > 1 && sameProc(r.Pgid, r.PgidStart)
+	if r.Pgid <= 1 {
+		return false
+	}
+	switch procState(r.Pgid, r.PgidStart) {
+	case procSame:
+		return true
+	case procUnknown:
+		return r.Pid > 1 && supervisorAlive(r) && procState(r.Pid, r.PidStart) != procGone
+	}
+	return false
 }
 
 var handleRE = regexp.MustCompile(`^dlg-[0-9a-f]{16}$`)

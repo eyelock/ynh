@@ -16,6 +16,9 @@ import (
 func TestMain(m *testing.M) {
 	switch os.Getenv("DELEGATION_HELPER") {
 	case "supervise":
+		if os.Getenv("DELEGATION_NO_START_TIME") != "" {
+			procStartFunc = func(int) string { return "" }
+		}
 		err := Supervise(os.Args[len(os.Args)-1], func(r *Record) *exec.Cmd {
 			return exec.Command("sh", "-c", r.Task)
 		})
@@ -315,7 +318,7 @@ func killSupervisor(t *testing.T, path string) *Record {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for sameProc(rec.Pid, rec.PidStart) && time.Now().Before(deadline) {
+	for procState(rec.Pid, rec.PidStart) == procSame && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	return rec
@@ -397,6 +400,9 @@ func TestCancelDoesNotSignalAGroupThatIsNotTheRecordedRun(t *testing.T) {
 func TestFindHandleTakesAHandleNotAPath(t *testing.T) {
 	folder := setup(t)
 	rec, path := start(t, folder, "true")
+	// Let the session finish before the temp dir goes, or it writes into a
+	// folder being removed.
+	waitFor(t, path, func(r *Record) bool { return r.Status.Final() })
 	got, err := FindHandle(rec.Handle)
 	if err != nil || got != path {
 		t.Fatalf("FindHandle = %q, %v; want %q", got, err, path)
@@ -405,5 +411,84 @@ func TestFindHandleTakesAHandleNotAPath(t *testing.T) {
 		if _, err := FindHandle(bad); err == nil {
 			t.Errorf("FindHandle(%q) succeeded", bad)
 		}
+	}
+}
+
+func TestParseStatStartCountsFromTheLastParenthesis(t *testing.T) {
+	// Field 2 is the command name, which may hold spaces and parentheses.
+	line := "123 (a b) c) S 1 123 123 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 98765 1000 50 18446744073709551615"
+	if got := parseStatStart(line); got != "proc:98765" {
+		t.Fatalf("got %q", got)
+	}
+	for _, bad := range []string{"", "no parens", "1 (x) S 1 2"} {
+		if got := parseStatStart(bad); got != "" {
+			t.Errorf("parseStatStart(%q) = %q, want empty", bad, got)
+		}
+	}
+}
+
+func TestProcStartIsReadableHere(t *testing.T) {
+	if procStart(os.Getpid()) == "" {
+		t.Skip("this platform will not say when a process started")
+	}
+	if procState(os.Getpid(), procStart(os.Getpid())) != procSame {
+		t.Fatal("this process is not the same as itself")
+	}
+}
+
+// Where the start time cannot be read (BusyBox ps has no lstart; no /proc), a
+// live delegation must not read as dead, and cancel must still stop it.
+func TestStartTimeUnreadableIsNotADeadSupervisor(t *testing.T) {
+	folder := setup(t)
+	t.Setenv("DELEGATION_NO_START_TIME", "1") // the session process in this mode too
+	old := procStartFunc
+	procStartFunc = func(int) string { return "" }
+	defer func() { procStartFunc = old }()
+
+	_, path := start(t, folder, "sleep 30")
+	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	if rec.PidStart != "" || rec.PgidStart != "" {
+		t.Fatalf("want no start tokens, got %q %q", rec.PidStart, rec.PgidStart)
+	}
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusRunning {
+		t.Fatalf("a live supervisor was read as dead: %s %q", got.Status, got.Error)
+	}
+	if _, err := Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for groupAlive(rec.Pgid) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if groupAlive(rec.Pgid) {
+		t.Fatal("cancel did not stop the run")
+	}
+}
+
+func TestStartTimeUnreadableStillSettlesAKilledSupervisor(t *testing.T) {
+	folder := setup(t)
+	t.Setenv("DELEGATION_NO_START_TIME", "1") // the session process in this mode too
+	old := procStartFunc
+	procStartFunc = func(int) string { return "" }
+	defer func() { procStartFunc = old }()
+
+	_, path := start(t, folder, "sleep 30")
+	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	defer func() { _ = syscall.Kill(-rec.Pgid, syscall.SIGKILL) }()
+	_ = syscall.Kill(rec.Pid, syscall.SIGKILL)
+	deadline := time.Now().Add(5 * time.Second)
+	for procState(rec.Pid, "") != procGone && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusFailed {
+		t.Fatalf("want failed, got %s", got.Status)
 	}
 }
