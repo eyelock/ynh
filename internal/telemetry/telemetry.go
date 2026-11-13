@@ -143,15 +143,20 @@ type Telemetry struct {
 	mu       sync.Mutex
 	dest     Destination
 	spoolDir string
-	tracer   trace.Tracer
-	logger   otellog.Logger
-	tp       *sdktrace.TracerProvider
-	lp       *sdklog.LoggerProvider
-	writer   *spool.Writer
-	sender   *spool.HTTPSender
-	run      *Run
-	stop     chan struct{}
-	stopped  bool
+	// operatorOTLP is set when the operator's environment names an OTLP
+	// destination (OTEL_EXPORTER_OTLP_*), whatever ynh itself does with the
+	// run's record: a protocol the exporter cannot speak sends the record to
+	// the spool, but the vendor's telemetry stays the operator's to direct.
+	operatorOTLP bool
+	tracer       trace.Tracer
+	logger       otellog.Logger
+	tp           *sdktrace.TracerProvider
+	lp           *sdklog.LoggerProvider
+	writer       *spool.Writer
+	sender       *spool.HTTPSender
+	run          *Run
+	stop         chan struct{}
+	stopped      bool
 }
 
 // Setup chooses a destination and builds the providers for it. It never
@@ -170,11 +175,12 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 	stripOperatorLabels(stderr)
 	dest, dir := ChooseDestination()
 	t := &Telemetry{
-		version: version,
-		opts:    opts,
-		dest:    dest,
-		tracer:  tracenoop.NewTracerProvider().Tracer(ScopeName),
-		logger:  lognoop.NewLoggerProvider().Logger(ScopeName),
+		version:      version,
+		opts:         opts,
+		dest:         dest,
+		operatorOTLP: dest == DestinationOTLP,
+		tracer:       tracenoop.NewTracerProvider().Tracer(ScopeName),
+		logger:       lognoop.NewLoggerProvider().Logger(ScopeName),
 	}
 	switch dest {
 	case DestinationOTLP:
@@ -383,6 +389,16 @@ func (t *Telemetry) Destination() Destination {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.dest
+}
+
+// OperatorOTLP reports whether the operator's environment names an OTLP
+// destination (OTEL_EXPORTER_OTLP_*), even when ynh's own record goes to the
+// spool because the protocol is one its exporter cannot speak. The relay
+// leaves the vendor's telemetry alone then.
+func (t *Telemetry) OperatorOTLP() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.operatorOTLP
 }
 
 // SpoolDir is the spool folder telemetry writes to, absolute, or "" when

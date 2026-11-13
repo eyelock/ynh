@@ -183,6 +183,10 @@ func telemetryRelaySetting(flag bool, stderr io.Writer) bool {
 type relayDestination interface {
 	Destination() telemetry.Destination
 	SpoolDir() string
+	// OperatorOTLP is true when the operator set OTEL_EXPORTER_OTLP_*, even
+	// when ynh's own record goes to the spool (an http/protobuf or grpc
+	// protocol its exporter cannot speak).
+	OperatorOTLP() bool
 }
 
 // runRelay is the `ynr relay` for one run. It starts when the loop is about
@@ -245,11 +249,14 @@ func (r *runRelay) start(backend string) {
 		return
 	}
 	// Only into the spool. An operator's OTEL_EXPORTER_OTLP_* is their
-	// choice, and the vendor reads it for itself (contract rule 1).
-	switch r.tel.Destination() {
-	case telemetry.DestinationOTLP:
+	// choice, and the vendor reads it for itself (contract rule 1), whatever
+	// protocol it names: ynh's own record may go to the spool for http/protobuf
+	// or grpc, but the vendor's telemetry stays the operator's.
+	if r.tel.OperatorOTLP() {
 		skip("OTEL_EXPORTER_OTLP_* is set, so the vendor's telemetry is left to it")
 		return
+	}
+	switch r.tel.Destination() {
 	case telemetry.DestinationNone:
 		skip("there is no spool folder (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local)")
 		return

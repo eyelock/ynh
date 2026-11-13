@@ -347,7 +347,10 @@ before the worker starts:
   `ynh run` (see [Other vendors](#other-vendors))
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
-  and with no spool there is nowhere to write
+  and with no spool there is nowhere to write. This holds whatever protocol
+  the operator names: with `http/protobuf` or `grpc`, ynh's own record of the
+  run still goes to the spool (see above), but the relay does not start, under
+  `ynh run` and `ynh agent run` alike
 - `ynr` is on `PATH`
 - the run is not under `--sandbox srt`. srt's settings can allow the relay's
   `127.0.0.1:<port>`, but that entry governs only what goes through srt's

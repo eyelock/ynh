@@ -19,7 +19,7 @@ func TestStartRunRelay(t *testing.T) {
 		backend string
 		flag    bool
 		env     string // YNH_TELEMETRY_RELAY
-		spool   string // "spool", "otlp"
+		spool   string // "spool", "otlp", "otlp-protobuf"
 		started bool
 		note    string
 	}{
@@ -29,6 +29,7 @@ func TestStartRunRelay(t *testing.T) {
 		{name: "codex with the flag", backend: "codex", flag: true, spool: "spool", started: true},
 		{name: "claude is not configured under ynh run", backend: "claude", flag: true, spool: "spool", note: "does not configure claude's telemetry"},
 		{name: "operator's OTLP", backend: "copilot", flag: true, spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
+		{name: "operator's OTLP over http/protobuf", backend: "copilot", flag: true, spool: "otlp-protobuf", note: "OTEL_EXPORTER_OTLP_* is set"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -46,6 +47,10 @@ func TestStartRunRelay(t *testing.T) {
 				t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 			case "otlp":
 				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
+			case "otlp-protobuf":
+				t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
+				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
+				t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
 			}
 
 			var stderr bytes.Buffer

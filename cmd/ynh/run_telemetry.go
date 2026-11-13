@@ -17,6 +17,7 @@ type runDestination struct {
 
 func (d runDestination) Destination() telemetry.Destination { return d.dest }
 func (d runDestination) SpoolDir() string                   { return d.dir }
+func (d runDestination) OperatorOTLP() bool                 { return d.dest == telemetry.DestinationOTLP }
 
 // startRunRelay starts the telemetry relay for a `ynh run` when the setting is
 // on (--telemetry-relay, YNH_TELEMETRY_RELAY or config.json) and the vendor is
