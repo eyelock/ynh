@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -15,6 +16,9 @@ import (
 func TestMain(m *testing.M) {
 	switch os.Getenv("DELEGATION_HELPER") {
 	case "supervise":
+		if os.Getenv("DELEGATION_NO_START_TIME") != "" {
+			procStartFunc = func(int) string { return "" }
+		}
 		err := Supervise(os.Args[len(os.Args)-1], func(r *Record) *exec.Cmd {
 			return exec.Command("sh", "-c", r.Task)
 		})
@@ -303,5 +307,266 @@ func TestUpdateKeepsConcurrentChanges(t *testing.T) {
 	r, _ := Load(path)
 	if len(r.Questions) != 20 {
 		t.Errorf("%d questions kept of 20: updates overwrote one another", len(r.Questions))
+	}
+}
+
+// killSupervisor kills the running record's session process outright and waits for it to go.
+func killSupervisor(t *testing.T, path string) *Record {
+	t.Helper()
+	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	if err := syscall.Kill(rec.Pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for procState(rec.Pid, rec.PidStart) == procSame && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	return rec
+}
+
+func TestReconcileFailsARecordWhoseSupervisorWasKilled(t *testing.T) {
+	folder := setup(t)
+	_, path := start(t, folder, "sleep 30")
+	rec := killSupervisor(t, path)
+	defer func() { _ = syscall.Kill(-rec.Pgid, syscall.SIGKILL) }()
+
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusFailed || !strings.Contains(got.Error, "ended without recording") {
+		t.Fatalf("want failed with an error saying the session ended, got %s %q", got.Status, got.Error)
+	}
+	// The orphaned run was still ours, so it was stopped.
+	deadline := time.Now().Add(5 * time.Second)
+	for groupAlive(rec.Pgid) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if groupAlive(rec.Pgid) {
+		t.Fatal("the orphaned run was left going")
+	}
+}
+
+func TestReconcileLeavesALiveSessionAlone(t *testing.T) {
+	folder := setup(t)
+	_, path := start(t, folder, "sleep 30")
+	waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusRunning {
+		t.Fatalf("want running, got %s", got.Status)
+	}
+	if _, err := Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCancelDoesNotSignalAGroupThatIsNotTheRecordedRun(t *testing.T) {
+	folder := setup(t)
+	// A bystander in a process group of its own, standing in for an unrelated
+	// process that got the recorded group id.
+	by := exec.Command("sleep", "30")
+	by.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := by.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = by.Process.Kill(); _ = by.Wait() }()
+	// Start times are read to the second, so the run must start in a later one.
+	time.Sleep(1100 * time.Millisecond)
+
+	_, path := start(t, folder, "sleep 30")
+	rec := killSupervisor(t, path)
+	defer func() { _ = syscall.Kill(-rec.Pgid, syscall.SIGKILL) }()
+	// The record's group id now names the bystander, whose start differs from
+	// the one recorded.
+	if _, err := Update(path, func(r *Record) { r.Pgid = by.Process.Pid }); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Cancel(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusCancelled {
+		t.Fatalf("want cancelled, got %s", got.Status)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if !groupAlive(by.Process.Pid) {
+		t.Fatal("cancel signalled a group that was not the recorded run")
+	}
+}
+
+func TestFindHandleTakesAHandleNotAPath(t *testing.T) {
+	folder := setup(t)
+	rec, path := start(t, folder, "true")
+	// Let the session finish before the temp dir goes, or it writes into a
+	// folder being removed.
+	waitFor(t, path, func(r *Record) bool { return r.Status.Final() })
+	got, err := FindHandle(rec.Handle)
+	if err != nil || got != path {
+		t.Fatalf("FindHandle = %q, %v; want %q", got, err, path)
+	}
+	for _, bad := range []string{path, "../../etc/passwd", "dlg-../x", "dlg-0000000000000000", ""} {
+		if _, err := FindHandle(bad); err == nil {
+			t.Errorf("FindHandle(%q) succeeded", bad)
+		}
+	}
+}
+
+func TestParseStatStartCountsFromTheLastParenthesis(t *testing.T) {
+	// Field 2 is the command name, which may hold spaces and parentheses.
+	line := "123 (a b) c) S 1 123 123 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 98765 1000 50 18446744073709551615"
+	if got := parseStatStart(line); got != "proc:98765" {
+		t.Fatalf("got %q", got)
+	}
+	for _, bad := range []string{"", "no parens", "1 (x) S 1 2"} {
+		if got := parseStatStart(bad); got != "" {
+			t.Errorf("parseStatStart(%q) = %q, want empty", bad, got)
+		}
+	}
+}
+
+func TestProcStartIsReadableHere(t *testing.T) {
+	if procStart(os.Getpid()) == "" {
+		t.Skip("this platform will not say when a process started")
+	}
+	if procState(os.Getpid(), procStart(os.Getpid())) != procSame {
+		t.Fatal("this process is not the same as itself")
+	}
+}
+
+// Where the start time cannot be read at all, a live delegation must not read
+// as dead; and since nothing can then be verified, cancel marks it cancelled,
+// says why, and signals nothing.
+func TestStartTimeUnreadableIsNotADeadSupervisorAndCancelSignalsNothing(t *testing.T) {
+	folder := setup(t)
+	t.Setenv("DELEGATION_NO_START_TIME", "1") // the session process in this mode too
+	old := procStartFunc
+	procStartFunc = func(int) string { return "" }
+	defer func() { procStartFunc = old }()
+
+	_, path := start(t, folder, "sleep 30")
+	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	defer func() {
+		// Stop the run, then let the session finish writing before the temp dir goes.
+		_ = syscall.Kill(-rec.Pgid, syscall.SIGKILL)
+		for i := 0; i < 250 && procState(rec.Pid, "") != procGone; i++ {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+	if rec.PidStart != "" || rec.PgidStart != "" {
+		t.Fatalf("want no start tokens, got %q %q", rec.PidStart, rec.PgidStart)
+	}
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusRunning {
+		t.Fatalf("a live supervisor was read as dead: %s %q", got.Status, got.Error)
+	}
+	got, err = Cancel(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusCancelled || !strings.Contains(got.Error, "not signalled") {
+		t.Fatalf("want cancelled with the reason, got %s %q", got.Status, got.Error)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if !groupAlive(rec.Pgid) {
+		t.Fatal("cancel signalled a run it could not verify")
+	}
+}
+
+// Both start tokens missing and both ids now held by unrelated processes: a
+// Reconcile then Cancel must signal neither.
+func TestNoTokensAndReusedIdsSignalsNothing(t *testing.T) {
+	folder := setup(t)
+	mk := func() *exec.Cmd {
+		c := exec.Command("sleep", "30")
+		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if err := c.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = c.Process.Kill(); _ = c.Wait() })
+		return c
+	}
+	sup, run := mk(), mk()
+	_, path := start(t, folder, "true")
+	waitFor(t, path, func(r *Record) bool { return r.Status.Final() })
+	// Rewrite it as a live record whose ids now belong to the bystanders.
+	if _, err := Update(path, func(r *Record) {
+		r.Status = StatusRunning
+		r.Pid, r.PidStart = sup.Process.Pid, ""
+		r.Pgid, r.PgidStart = run.Process.Pid, ""
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Reconcile(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update(path, func(r *Record) { r.Status = StatusRunning }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	for name, c := range map[string]*exec.Cmd{"supervisor": sup, "run": run} {
+		if !groupAlive(c.Process.Pid) {
+			t.Errorf("the unrelated %s process group was signalled", name)
+		}
+	}
+}
+
+// With a start token recorded but a different one now at the pid, nothing is
+// signalled either.
+func TestMismatchedTokensSignalNothing(t *testing.T) {
+	folder := setup(t)
+	by := exec.Command("sleep", "30")
+	by.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := by.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = by.Process.Kill(); _ = by.Wait() }()
+	_, path := start(t, folder, "true")
+	waitFor(t, path, func(r *Record) bool { return r.Status.Final() })
+	if _, err := Update(path, func(r *Record) {
+		r.Status = StatusRunning
+		r.Pid, r.PidStart = by.Process.Pid, "proc:1"
+		r.Pgid, r.PgidStart = by.Process.Pid, "proc:1"
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Cancel(path); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if !groupAlive(by.Process.Pid) {
+		t.Fatal("a mismatched start time was signalled")
+	}
+}
+
+func TestStartTimeUnreadableStillSettlesAKilledSupervisor(t *testing.T) {
+	folder := setup(t)
+	t.Setenv("DELEGATION_NO_START_TIME", "1") // the session process in this mode too
+	old := procStartFunc
+	procStartFunc = func(int) string { return "" }
+	defer func() { procStartFunc = old }()
+
+	_, path := start(t, folder, "sleep 30")
+	rec := waitFor(t, path, func(r *Record) bool { return r.Status == StatusRunning })
+	defer func() { _ = syscall.Kill(-rec.Pgid, syscall.SIGKILL) }()
+	_ = syscall.Kill(rec.Pid, syscall.SIGKILL)
+	deadline := time.Now().Add(5 * time.Second)
+	for procState(rec.Pid, "") != procGone && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	got, err := Reconcile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusFailed {
+		t.Fatalf("want failed, got %s", got.Status)
 	}
 }
