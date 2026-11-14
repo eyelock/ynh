@@ -58,16 +58,21 @@ gRPC and protobuf and about sixty-five more modules. It reads these variables:
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | each signal's full URL, as given |
 | `OTEL_EXPORTER_OTLP_HEADERS` and the per-signal `_HEADERS` | sent with each request; the per-signal list wins by name |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` and the per-signal `_TIMEOUT` | milliseconds, but each export is bounded by at least 2 seconds regardless |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | only `http/json` (or unset) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | only `http/json` (or unset); another protocol sends the run to the spool, see below |
 
-These are not supported. When one is set, ynh prints one note on stderr naming
-the setting, never a header value, and writes nothing for the run: not to the
-endpoint, and not to the spool.
+`OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) other than `http/json`, including
+`http/protobuf` and `grpc`, is not spoken. The ynr how-to for Claude Code exports `http/protobuf`,
+and ynh's own relay sets it in the environment of the worker it starts, so this is a common
+setting. ynh does not drop the run for it: it prints one note on stderr naming the setting
+(never a header value) and writes the run to the spool, `YNR_SPOOL` or the standing spool, as if
+the endpoint had not been set. With no spool, the note says so, `nothing was recorded for this run`,
+and nothing is written. Nothing is sent to the endpoint either way. To export to the endpoint, set
+the protocol to `http/json`.
 
-- `OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) other than `http/json`,
-  including `grpc`, and `http/protobuf`. The ynr how-to for Claude Code exports
-  `http/protobuf`, so a shell set up that way reports the setting as
-  unsupported and exports nowhere; unset it, or set `http/json`, for ynh.
+These other settings are not supported. When one is set, ynh prints one note on stderr naming
+the setting, never a header value, and writes nothing for the run: not to the endpoint, and not
+to the spool.
+
 - `OTEL_EXPORTER_OTLP_CERTIFICATE`, `_CLIENT_CERTIFICATE` and `_CLIENT_KEY`
   (and the per-signal forms): custom certificates.
 - `OTEL_EXPORTER_OTLP_COMPRESSION` (and the per-signal forms), other than `none`.
@@ -342,7 +347,10 @@ before the worker starts:
   `ynh run` (see [Other vendors](#other-vendors))
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
-  and with no spool there is nowhere to write
+  and with no spool there is nowhere to write. This holds whatever protocol
+  the operator names: with `http/protobuf` or `grpc`, ynh's own record of the
+  run still goes to the spool (see above), but the relay does not start, under
+  `ynh run` and `ynh agent run` alike
 - `ynr` is on `PATH`
 - the run is not under `--sandbox srt`. srt's settings can allow the relay's
   `127.0.0.1:<port>`, but that entry governs only what goes through srt's
