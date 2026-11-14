@@ -1,0 +1,11 @@
+ ● Copilot Fusion selected MAI-Code-1.1-Flash because it was the best choice out of the models
+   available in your plan.
+
+OK
+
+
+
+Changes    +0 -0
+AI Credits 0.04 (4s)
+Tokens     ↑ 13.5k (12.9k cached) • ↓ 5
+Resume     copilot --resume=SESSION-ID

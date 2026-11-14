@@ -691,6 +691,7 @@ func cmdRun(args []string) error {
 		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, os.Stderr)
 		defer stopRelay()
 		vendorArgs = append(relayArgs, vendorArgs...)
+		vendorArgs = append(delegateQuietArgs(adapter.Name(), vendorArgs, os.Getenv(delegationHandleEnv)), vendorArgs...)
 
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch only reads the run dir: every file a vendor writes at
@@ -707,6 +708,29 @@ func cmdRun(args []string) error {
 		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// delegationHandleEnv is set by the delegate launcher on the ynh run it
+// supervises: its presence means the run's output is a delegate's result.
+const delegationHandleEnv = "YNH_DELEGATION_HANDLE"
+
+// delegateQuietArgs returns the vendor arguments that keep a delegate's own
+// chrome out of the result its parent receives, which is the tail of the run's
+// output. Copilot CLI prints a model-selection banner and a stats block
+// around the answer in a -p run; --silent ("Output only the agent response")
+// leaves just the answer. It applies only to a delegate's run (handle set), so
+// a person running copilot through ynh keeps the stats, and not when the
+// vendor arguments already carry the flag.
+func delegateQuietArgs(vendorName string, vendorArgs []string, handle string) []string {
+	if handle == "" || vendorName != "copilot" {
+		return nil
+	}
+	for _, a := range vendorArgs {
+		if a == "-s" || a == "--silent" || strings.HasPrefix(a, "--silent=") {
+			return nil
+		}
+	}
+	return []string{"--silent"}
 }
 
 // isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
