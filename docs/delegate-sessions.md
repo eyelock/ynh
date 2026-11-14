@@ -21,9 +21,10 @@ fields themselves are in [delegates_to](harnesses.md#delegates-to-optional) and
 definition inside the parent's session. On every vendor it carries its instructions; only on Claude
 Code its MCP servers; on no vendor its hooks or workspace folders (limit
 [L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness), [ynh #729](https://github.com/eyelock/ynh/issues/729)).
-It also dies with the parent's session. A delegate that is its own ynh session is assembled like any
-other run, with its own vendor, MCP servers, hooks, workspace grant, profile or focus, and it can
-outlive whoever started it.
+It also dies with the parent's session. A delegate that is its own ynh session is designed to be
+assembled like any other run, with its own vendor, MCP servers, hooks, workspace grant, profile or
+focus, and it can outlive whoever started it. That its own MCP servers, hooks and workspace folders
+take effect inside its session is **not yet shown live** on any vendor ([Not shown live](#not-shown-live)).
 
 **No vendor CLI speaks A2A, so ynh bridges it.** When this was designed (2026-11-13), none of the
 five vendor CLIs was an A2A client: each had only an open request
@@ -120,7 +121,10 @@ entry, the trusted match with the smallest id wins, so the result never depends 
 - A parent can start only its own `a2a` delegates: each endpoint refuses any request without its
   token, and only the parent's run holds it.
 - An `a2a` delegate runs under its own trust grant, as above: its MCP servers, hooks and focus
-  prompt are reviewed there, not in the parent's digest. A `native` delegate is part of the parent's
+  prompt are reviewed there, not in the parent's digest. The review step was seen live (a delegate
+  that declares commands was refused until `ynh trust accept`); what those servers and hooks then do
+  inside the delegate's session is not yet shown ([Not shown live](#not-shown-live)). A `native`
+  delegate is part of the parent's
   session, so its MCP servers and focus prompt are in the parent's digest.
 - The parent's digest covers every entry as written (source, profile or focus, and its settled
   transport), so repointing an entry or flipping it between `a2a` and `native` asks for review again.
@@ -314,9 +318,9 @@ Three things on this route have a cost worth knowing:
   (`A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" A2ACLI_AUTH=... a2a ...`) is refused under that rule
   ("A variable in this command can't be checked before it runs"), and with several delegates it is
   the only form the skill gives. So on Claude Code this route works headless with one A2A delegate,
-  where `A2ACLI_*` is already set; with several, use the MCP tools. This was found in the v0.18.0
-  acceptance run and is tracked in [ynh #849](https://github.com/eyelock/ynh/issues/849), for v0.18.0;
-  until it is fixed, the MCP tools are the route for several delegates on Claude Code.
+  where `A2ACLI_*` is already set, and not with several. This is a known limit, found in the v0.18.0
+  acceptance run and being fixed for this release in [ynh #849](https://github.com/eyelock/ynh/issues/849).
+  Until that fix lands, the MCP tools reach several delegates on Claude Code.
 - **Allow rules.** Without one a headless run denies every `a2a` call. OpenCode needs none. Cursor's
   shell route has not been run.
 
