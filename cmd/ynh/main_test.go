@@ -1964,11 +1964,26 @@ func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
 }
 
 func TestSymlinkConsentError_NamesTheFlag(t *testing.T) {
-	err := symlinkConsentError("cursor", "demo", 5)
-	for _, want := range []string{"no terminal", "nothing was installed", "ynh run demo -v cursor --install", "5 symlinks"} {
+	err := symlinkConsentError("cursor", "local/demo", 5)
+	for _, want := range []string{"no terminal", "nothing was installed", "ynh run local/demo -v cursor --install", "5 symlinks"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q lacks %q", err, want)
 		}
+	}
+}
+
+func TestHarnessRunRef(t *testing.T) {
+	tests := []struct{ name, id, dir, want string }{
+		{"id wins", "local/demo", "/x/demo", "local/demo"},
+		{"path when run by path", "", "/x/demo", "/x/demo"},
+		{"path with spaces is quoted", "", "/x/my demo", `"/x/my demo"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := harnessRunRef(tt.id, tt.dir); got != tt.want {
+				t.Errorf("harnessRunRef = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

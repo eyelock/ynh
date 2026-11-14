@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -613,7 +614,7 @@ func cmdRun(args []string) error {
 						fmt.Printf("  %s -> %s\n", rel, entry.Target)
 					}
 					if !stdinIsTerminal() {
-						return symlinkConsentError(adapter.Name(), p.Name, len(planned))
+						return symlinkConsentError(adapter.Name(), harnessRunRef(harnessID, harnessDir), len(planned))
 					}
 					fmt.Printf("\nInstall %d symlinks? [Y/n] ", len(planned))
 					reader := bufio.NewReader(os.Stdin)
@@ -1288,11 +1289,26 @@ var stdinIsTerminal = func() bool {
 	return true
 }
 
+// harnessRunRef returns the reference to print in a hint that tells the user
+// to run `ynh run <ref>`: the canonical id when the harness was run by id,
+// otherwise the harness directory's absolute path. A bare name is never
+// returned, because `ynh run` refuses it (#851). A path with spaces is quoted
+// so the printed command pastes as it is.
+func harnessRunRef(id, dir string) string {
+	if id != "" {
+		return id
+	}
+	if strings.ContainsAny(dir, " \t") {
+		return strconv.Quote(dir)
+	}
+	return dir
+}
+
 // symlinkConsentError is the refusal when a vendor needs symlinks in the
 // project and nobody can be asked: consent to write into a project is never
 // assumed from a closed or piped stdin.
-func symlinkConsentError(vendorName, harness string, n int) error {
+func symlinkConsentError(vendorName, ref string, n int) error {
 	return fmt.Errorf("%s needs %d symlinks in this project and there is no terminal to ask on; nothing was installed. "+
 		"Give consent explicitly by running `ynh run %s -v %s --install` once (it records the install, so later runs go ahead), or run from a terminal",
-		vendorName, n, harness, vendorName)
+		vendorName, n, ref, vendorName)
 }
