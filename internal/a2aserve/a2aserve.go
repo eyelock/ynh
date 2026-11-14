@@ -196,7 +196,13 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				yield(nil, errors.New("this endpoint has no record of that task"))
 				return
 			}
-			if err := Answer(path, messageText(ec.Message)); err != nil {
+			// A message on a task is the answer to its question. A task whose
+			// question is no longer open (the delegate gave up waiting and went on, or finished) shows
+			// input-required until it is next asked: the message is then not
+			// an answer, and the task follows the record to where it is.
+			if cur, lerr := delegation.Load(path); lerr == nil && OpenQuestion(cur) == nil && (cur.Status.Final() || hasLapsed(cur)) {
+				// fall through to follow the record
+			} else if err := Answer(path, messageText(ec.Message)); err != nil {
 				yield(nil, err)
 				return
 			}
@@ -253,11 +259,20 @@ func (x *executor) Cancel(_ context.Context, ec *a2asrv.ExecutorContext) iter.Se
 // OpenQuestion is the first question the delegate asked that has no answer.
 func OpenQuestion(rec *delegation.Record) *delegation.Question {
 	for i := range rec.Questions {
-		if rec.Questions[i].Answer == nil {
+		if rec.Questions[i].Open() {
 			return &rec.Questions[i]
 		}
 	}
 	return nil
+}
+
+func hasLapsed(rec *delegation.Record) bool {
+	for _, q := range rec.Questions {
+		if q.LapsedAt != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Answer records text as the answer to the open question.
@@ -265,7 +280,7 @@ func Answer(path, text string) error {
 	var found bool
 	_, err := delegation.Update(path, func(r *delegation.Record) {
 		for i := range r.Questions {
-			if r.Questions[i].Answer == nil {
+			if r.Questions[i].Open() {
 				now := time.Now().UTC()
 				r.Questions[i].Answer, r.Questions[i].AnsweredAt = &text, &now
 				found = true
@@ -280,6 +295,25 @@ func Answer(path, text string) error {
 		return errors.New("the delegate has no open question: a message on a task is an answer, and this task is not asking")
 	}
 	return nil
+}
+
+// AnswerQuestion records text as the answer to the question with the given id,
+// and only that one: it reports false, recording nothing, when that question is
+// not open (answered another way, lapsed or not on the record), so a late
+// answer never lands on the next question asked.
+func AnswerQuestion(path, id, text string) (bool, error) {
+	var found bool
+	_, err := delegation.Update(path, func(r *delegation.Record) {
+		for i := range r.Questions {
+			if r.Questions[i].ID == id && r.Questions[i].Open() {
+				now := time.Now().UTC()
+				r.Questions[i].Answer, r.Questions[i].AnsweredAt = &text, &now
+				found = true
+				return
+			}
+		}
+	})
+	return found, err
 }
 
 // FailureText is why a task failed: the record's error, then the tail of the

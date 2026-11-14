@@ -62,10 +62,22 @@ type Question struct {
 	AskedAt    time.Time  `json:"asked_at"`
 	Answer     *string    `json:"answer,omitempty"`
 	AnsweredAt *time.Time `json:"answered_at,omitempty"`
+	// LapsedAt is set when the delegate withdrew the question, having gone on
+	// without an answer. A lapsed question is no longer open: the delegation
+	// is back to working.
+	LapsedAt *time.Time `json:"lapsed_at,omitempty"`
 }
 
+// DeclinedAnswer is the answer recorded when the parent (or the human behind
+// it) declined to answer a question. The delegate's tool reports it as a
+// decline, so the delegate goes on with its own default or fails plainly.
+const DeclinedAnswer = "(the parent declined to answer)"
+
+// Open reports whether the question still waits for an answer.
+func (q Question) Open() bool { return q.Answer == nil && q.LapsedAt == nil }
+
 // Record is the delegation record. Every field is written by this package
-// except Questions, which the delegate server fills and answers.
+// except Questions, which the delegate's ask tool fills (package parentmcp) and the parent's side answers.
 type Record struct {
 	Handle string `json:"handle"`
 	// Parent is the canonical id of the harness whose delegates_to named the

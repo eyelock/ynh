@@ -69,6 +69,19 @@ YNH_DELEGATE_<NAME>_CARD and _AUTH).
 
 ynh run writes the entry that calls this; it is not meant to be typed.`,
 
+	"parent-mcp": `ynh parent-mcp --record <path> [--max-wait <seconds>]
+
+Internal. The MCP server a vendor starts over stdio for a delegate session: one
+tool, ask_parent, which puts a question to the parent that started the delegate
+and waits for the answer (docs/delegate-sessions.md, "Questions from a
+delegate"). The question goes on the delegation record at --record.
+
+  --record <path>      The delegation record of this session.
+  --max-wait <seconds> The longest one call may be held (45, or YNH_PARENT_ASK_MAX_WAIT).
+
+ynh run writes the entry that calls this, for a delegate's session; it is not
+meant to be typed.`,
+
 	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
 
 Internal. Print the headers of a remote MCP server as a JSON object, with

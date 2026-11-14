@@ -74,20 +74,63 @@ back to its delegates.
 
 ## Questions from a delegate
 
-A delegate session gets one extra tool from ynh for asking its parent a question. ynh passes the
-question up the way the parent can take it:
+A delegate session gets one extra tool from ynh for asking its parent a question: `ask_parent`, from
+an MCP server named `ynh-parent` (`ynh parent-mcp`, which `ynh run` adds to the config of a delegate's
+session, on every vendor, as it does `ynh-delegates` for a parent). Only a delegate's session has it:
+a `ynh run` carrying `YNH_DELEGATION_RECORD`, which the delegate's launcher sets. A harness that
+declares an MCP server of that name is refused at run, with a fix to rename it.
 
-- **Tasks:** the task moves to `input_required` with an `elicitation/create`, and the answer comes
-  back through `tasks/update`. This works in Claude Code interactive.
-- **Blocking:** a server-initiated `elicitation/create` during the call. This works in the
-  interactive UIs of Codex, Copilot CLI and OpenCode. Cursor's CLI declines it without asking.
-- **Headless parent** (`claude -p`, `codex exec`, `copilot -p`, `opencode run`): there is no one to
-  ask. The question is declined, and the delegate's tool says so, so the delegate goes on with its
-  own default or fails plainly. A headless parent cannot answer a delegate's question, on any
-  vendor, and the parity page will list that as a limit.
+A question travels as an A2A task in state `input-required`:
 
-A question asked while the parent is away waits in the delegation record until a parent comes back
-and collects it.
+1. `ask_parent` (`question`, optional `wait`) writes the question to the delegation record and waits
+   for its answer. At most 45 seconds, `YNH_PARENT_ASK_MAX_WAIT` in seconds changes it: that sits
+   under Codex's 60-second tool-call timeout.
+2. The record puts the delegate's A2A task into `input-required`, with the question as the task's
+   message. The parent sees it by its route:
+   - **MCP route, with Tasks** (Claude Code interactive): the task moves to `input_required` with an
+     `elicitation/create` in `inputRequests`, and the answer comes back through `tasks/update`. A
+     declined elicitation is recorded as the answer `(the parent declined to answer)`, and the
+     delegate's tool says `declined`.
+   - **MCP route, elicitation but no Tasks** (the interactive UIs of Codex, Copilot CLI and
+     OpenCode): during a call that waits (`wait` on the delegate's tool, `delegate_status`,
+     `delegate_result` or `delegate_reply`) the server sends a server-initiated `elicitation/create`,
+     once for a question, and records the answer against that question only. The client may
+     take longer than the call is held: the answer is then recorded whenever it comes, unless the
+     question was answered another way first (by `delegate_reply`, say), in which case it is dropped
+     and never lands on a later question. While the elicitation is outstanding, the result's note
+     says it is still waiting for its answer: wait, or answer with `delegate_reply`, and the
+     elicitation's answer is dropped. A client that refuses the request, declines it or
+     cancels it has not answered: Cursor's CLI refuses without asking, and Copilot CLI's `-p`
+     declines at once for want of a person. The question then stays open in the result, with a note
+     that it was put to the client, for the next route.
+   - **MCP route, headless** (`claude -p`, `codex exec`, `copilot -p`, `opencode run`, and anything
+     above that gave no answer): the question is in the structured result of the delegate's tool or
+     `delegate_status`, with state `input-required` and the question as `message`. The parent's
+     model answers it with `delegate_reply` on the same task. This is the model
+     answering, not a person ([L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
+   - **a2a CLI route:** `a2a task get` shows state `input-required` with the question as the status
+     message, and the parent's model answers with `a2a send --task-id <id> "<answer>"` on the same
+     task, as the `ynh-a2a-delegates` skill teaches.
+3. The answer goes back to the delegate's tool, which returns `answered` with the `answer`.
+
+A question nobody answers stays `input-required`, and a parent that comes back later (a restart, a
+handoff) collects it: the record holds it, and `delegate_status` or `delegate_list` shows it. When
+the delegate's wait runs out, `ask_parent` returns `unanswered`, saying no answer came, and the
+question stays open. The delegate chooses: call `ask_parent` again with the `question_id` to keep
+waiting, call it with `question_id` and `withdraw` to close the question and go on, on its own
+default or by failing plainly, or just carry on. A delegation that has ended shows its final state,
+whatever it left open. A task on the a2a CLI route that was left `input-required` stays so, as the
+A2A task store holds it, until it is next spoken to: a message on a task whose question is closed
+follows the record to where the delegation is, instead of answering.
+
+`ask_parent` returns `answered`, `declined`, `unanswered`, `withdrawn` or `ended` (the delegation was
+cancelled while it waited), with the `question_id`, the `answer` when answered, and a `message` on
+what to do next.
+
+**Allowing the tool.** A delegate's one-shot session has no one to approve it either. Codex's
+`ynh run` approves it with the harness's own servers, and Copilot CLI's `--allow-all-tools` and
+OpenCode need nothing; for Claude Code, `ynh run` adds `--allowedTools=mcp__plugin_<delegate>_ynh-parent`
+to a delegate's one-shot session. A harness with `mcp_manual_approval` gets none, and so no question.
 
 ## Outliving the parent
 
@@ -261,10 +304,18 @@ the fields off the structured result). On Claude Code, start with no wait, `dele
 `delegate_cancel` and `delegate_list` each worked. Timeouts driven past: Claude Code with
 `MCP_TOOL_TIMEOUT=5000` and a `wait` of 25 failed with `tool "delegate_to_reviewer" timed out
 after 5s`; Codex with `tool_timeout_sec=5` failed with `timed out awaiting tools/call after
-5s`. Neither parent got the handle, and the delegate kept running. **Not shown live:** Cursor (usage limit), the timeouts of OpenCode and Copilot CLI, MCP Tasks on a
-real client, and `delegate_reply` answering a live `input-required` (a delegate's own question
-tool is not built yet, see [Questions from a delegate](#questions-from-a-delegate)). Tasks and
-`delegate_reply` are covered by tests only.
+5s`. Neither parent got the handle, and the delegate kept running. **Not shown live:** Cursor (usage limit), the timeouts of OpenCode and Copilot CLI, and MCP Tasks on
+a real client. Tasks is covered by tests only.
+
+Live, 2026-11-13, on a build of the questions change run by path (`ask_parent`; a parent `boss`, a
+Claude Code delegate `reviewer` told to ask "Which codeword do I use?" and answer `REVIEWED-` and the
+reply): the question reached the parent as `input-required` and the parent's model answered it with
+`delegate_reply` on the same task, the delegate finishing `REVIEWED-PINEAPPLE`, with the parent as
+Claude Code (`claude -p`), Codex (`codex exec`), Copilot CLI (`-p`) and OpenCode (`run`). Copilot CLI's
+`-p` declined the elicitation it was sent at once, and the question was left to its model. **Not shown
+live:** a delegate on any vendor but Claude Code asking, an elicitation answered by a person
+(elicitation during a wait and Tasks are covered by tests only), Cursor, and the a2a CLI route (the
+`a2a` binary was not installed; the same task answered by an A2A client is covered by tests).
 
 ## The a2a CLI route
 

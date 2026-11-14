@@ -17,6 +17,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/parentmcp"
 )
 
 // The delegate's session is this test binary in a helper mode, and its "ynh
@@ -27,9 +28,18 @@ func TestMain(m *testing.M) {
 	switch os.Getenv("A2ASERVE_HELPER") {
 	case "supervise":
 		err := delegation.Supervise(os.Args[len(os.Args)-1], func(r *delegation.Record) *exec.Cmd {
-			if q, ok := strings.CutPrefix(r.Task, "ask:"); ok {
+			q, ok := strings.CutPrefix(r.Task, "ask:")
+			short := false
+			if !ok {
+				q, ok = strings.CutPrefix(r.Task, "askshort:")
+				short = ok
+			}
+			if ok {
 				c := exec.Command(os.Args[0])
 				c.Env = append(os.Environ(), "A2ASERVE_HELPER=ask", "A2ASERVE_RECORD="+delegation.RecordPath(r.Parent, r.Folder, r.Handle), "A2ASERVE_QUESTION="+q)
+				if short {
+					c.Env = append(c.Env, "A2ASERVE_WAIT=short")
+				}
 				return c
 			}
 			return exec.Command("sh", "-c", r.Task)
@@ -40,22 +50,24 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	case "ask":
+		// The delegate's own ask_parent tool, as the delegate's session calls it.
 		path := os.Getenv("A2ASERVE_RECORD")
-		_, err := delegation.Update(path, func(r *delegation.Record) {
-			r.Questions = append(r.Questions, delegation.Question{ID: "q1", Text: os.Getenv("A2ASERVE_QUESTION"), AskedAt: time.Now().UTC()})
-		})
+		wait := 20 * time.Second
+		if os.Getenv("A2ASERVE_WAIT") != "" {
+			wait = time.Second
+		}
+		o, err := parentmcp.Ask(context.Background(), path, os.Getenv("A2ASERVE_QUESTION"), "", false, wait, 20*time.Millisecond)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		for {
-			r, err := delegation.Load(path)
-			if err == nil && len(r.Questions) > 0 && r.Questions[0].Answer != nil {
-				fmt.Println("you said " + *r.Questions[0].Answer)
-				os.Exit(0)
-			}
-			time.Sleep(50 * time.Millisecond)
+		switch o.State {
+		case parentmcp.StateAnswered:
+			fmt.Println("you said " + o.Answer)
+		default:
+			fmt.Println("no answer: " + o.State)
 		}
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
@@ -420,5 +432,24 @@ func TestEachEndpointHasItsOwnTokenAndPort(t *testing.T) {
 	c, ctx := client(t, b, a.Token)
 	if _, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("echo hi"))}); err == nil {
 		t.Fatal("another delegate's token was accepted")
+	}
+}
+
+func TestAQuestionNobodyAnswersEndsWithTheDelegatesWait(t *testing.T) {
+	// The a2a CLI route: the task shows input-required while the delegate
+	// waits, and carries on to completion when its wait runs out.
+	folder := setup(t)
+	e := open(t, folder, "reviewer")
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "askshort:Which colour?", false)
+	if task.Status.State != a2a.TaskStateInputRequired {
+		t.Fatalf("got %s", task.Status.State)
+	}
+	// The task shows input-required until it is next spoken to; a message
+	// then is not an answer, and the task follows the record to its end.
+	waitRecord(t, func(r *delegation.Record) bool { return r.Status.Final() })
+	done := send(t, c, ctx, string(task.ID), "never mind", false)
+	if done.Status.State != a2a.TaskStateCompleted || !strings.Contains(artifactText(done), "no answer: unanswered") {
+		t.Errorf("got %s %q", done.Status.State, artifactText(done))
 	}
 }
