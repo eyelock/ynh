@@ -646,16 +646,15 @@ func cmdRun(args []string) error {
 		}
 
 		// Claude Code ignores a project allow rule while the workspace is
-		// untrusted, so a one-shot run allows the tools of the servers the
-		// harness declares itself (docs/mcp.md, "Claude Code Format").
-		if adapter.Name() == "claude" && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
-			if preassembled {
-				// A baked image's servers were composed at build time.
-				declaredMCP = mcpServerNames(runDir)
-			}
-			if rule := claudeOwnMCPAllowRule(p.Name, declaredMCP); rule != "" {
-				vendorArgs = append([]string{rule}, vendorArgs...)
-			}
+		// untrusted, so a delegate's one-shot session allows the tools of the
+		// servers its harness declares (docs/mcp.md, "Claude Code Format"). Only
+		// a delegate's: its trust gate holds, and a harness run directly has none.
+		if preassembled {
+			// A baked image's servers were composed at build time.
+			declaredMCP = mcpServerNames(runDir)
+		}
+		if rule := claudeDelegateMCPAllowRule(adapter.Name(), os.Getenv(delegationRecordEnv) != "", prompt != "" && !ra.Interactive, p.MCPManualApproval, p.Name, declaredMCP); rule != "" {
+			vendorArgs = append([]string{rule}, vendorArgs...)
 		}
 
 		// A delegate's one-shot session has no one to approve ask_parent

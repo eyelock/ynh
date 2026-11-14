@@ -142,3 +142,17 @@ func mcpServerNames(runDir string) []string {
 	sort.Strings(names)
 	return names
 }
+
+// claudeDelegateMCPAllowRule is the rule `ynh run` adds to a Claude Code
+// session, or "" when it adds none. It adds one only for a delegate's session
+// (delegate: a delegation record is set), where the trust gate holds: ynh
+// refuses an a2a delegate that declares commands until `ynh trust accept`. A
+// harness run directly is never given it, since `ynh trust` only reports and
+// nothing refuses to run an unreviewed harness. It adds none on an
+// interactive run, or when the harness sets mcp_manual_approval.
+func claudeDelegateMCPAllowRule(vendorName string, delegate, oneShot, manualApproval bool, name string, servers []string) string {
+	if vendorName != "claude" || !delegate || !oneShot || manualApproval {
+		return ""
+	}
+	return claudeOwnMCPAllowRule(name, servers)
+}
