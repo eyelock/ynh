@@ -75,7 +75,8 @@ func realDir(p string) string {
 // delegateEntrySource says where parent's entry d points. A relative git
 // source ("." for the parent's own repo) is the parent's folder when the
 // parent runs from a source tree, and the parent's own remote when the
-// parent is a git install, whose copy is not a repository.
+// parent is a git install, whose copy is not a repository. An absolute git
+// source is a local folder, the same as a local entry.
 func delegateEntrySource(parent *harness.Harness, d harness.Delegate) (delegateSource, error) {
 	src := delegateSource{ref: d.Ref, path: cleanSubpath(d.Path)}
 	switch {
@@ -87,6 +88,11 @@ func delegateEntrySource(parent *harness.Harness, d harness.Delegate) (delegateS
 			return src, nil
 		}
 		src.local = realDir(filepath.Join(resolver.GitSourceURL(d.Git, parent.Dir), d.Path))
+	case d.Git != "" && filepath.IsAbs(d.Git):
+		// An absolute path names a local folder, and "ynh install <path>"
+		// records one as a local install, so it compares as a folder, not
+		// as a remote URL.
+		src.local = realDir(filepath.Join(d.Git, d.Path))
 	case d.Git != "":
 		src.url = normalizeSourceURL(d.Git)
 	case d.Local != "":
