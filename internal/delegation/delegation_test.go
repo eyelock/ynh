@@ -255,6 +255,41 @@ func TestCancelBeforeTheRunBegins(t *testing.T) {
 	assertHistory(t, r, StatusStarted, StatusCancelled)
 }
 
+// A cancel that lands after the supervisor has checked the record but before it
+// has started the run (here, while the launcher builds the command) is acted on
+// once the run has started: the supervisor stops it. It must reap the run
+// while it does, or the exited run stays a zombie that still looks alive to the
+// group check, and the supervisor sits out the whole termination grace.
+func TestCancelDuringLaunchStopsTheRunAtOnce(t *testing.T) {
+	folder := setup(t)
+	old := termGrace
+	termGrace = 10 * time.Second
+	t.Cleanup(func() { termGrace = old })
+	path := RecordPath("local/parent", folder, "dlg-midlaunch")
+	rec := &Record{Handle: "dlg-midlaunch", Parent: "local/parent", Delegate: "local/delegate", Folder: folder,
+		Task: "sleep 30", Log: folder + "/midlaunch.log"}
+	if err := create(path, rec); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	err := Supervise(path, func(r *Record) *exec.Cmd {
+		if _, err := Cancel(path); err != nil {
+			t.Error(err)
+		}
+		return exec.Command("sh", "-c", r.Task)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(started); d > 5*time.Second {
+		t.Errorf("the supervisor took %v to finish after a cancel during launch; it waited out the termination grace", d)
+	}
+	r, _ := Load(path)
+	if r.Status != StatusCancelled {
+		t.Errorf("status = %s, want cancelled", r.Status)
+	}
+}
+
 func TestTwoDelegationsOfOneDelegateAtOnce(t *testing.T) {
 	folder := setup(t)
 	_, pa := start(t, folder, "sleep 0.3; echo alpha; exit 4")
