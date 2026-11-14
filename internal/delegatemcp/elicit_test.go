@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 )
 
 // askedTwice starts a delegation whose record has q1 answered (by the parent's
@@ -19,7 +20,7 @@ func askedTwice(t *testing.T) (*Server, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { stopAll(t) })
+	t.Cleanup(func() { delegationtest.StopAll(t) })
 	path := delegation.RecordPath(parent, folder, rec.Handle)
 	now := time.Now().UTC()
 	answer := "from delegate_reply"

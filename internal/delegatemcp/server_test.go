@@ -8,14 +8,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/parentmcp"
 )
 
@@ -92,7 +91,7 @@ func newSession(t *testing.T, folder, token string, mutate func(*Config)) *sessi
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ep.Close() })
-	t.Cleanup(func() { stopAll(t) })
+	t.Cleanup(func() { delegationtest.StopAll(t) })
 	if token == "" {
 		token = ep.Token
 	}
@@ -110,40 +109,6 @@ func newSession(t *testing.T, folder, token string, mutate func(*Config)) *sessi
 	sc := bufio.NewScanner(outR)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	return &session{t: t, in: inW, lines: sc, ep: ep}
-}
-
-// stopAll cancels every delegation the test left running, and waits for the
-// supervisors to finish, so the test's directories can be removed.
-func stopAll(t *testing.T) {
-	t.Helper()
-	paths, _ := filepath.Glob(filepath.Join(delegation.Dir(), "*", "*", "dlg-*.json"))
-	for _, p := range paths {
-		_, _ = delegation.Cancel(p)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		busy := false
-		for _, p := range paths {
-			// The supervisor outlives the run it supervises: after the run's
-			// group is gone it still writes the final record, so wait for
-			// the supervisor process too, or the temp folder's removal races
-			// that write.
-			r, err := delegation.Load(p)
-			if err != nil {
-				continue
-			}
-			if r.Pgid > 1 && syscall.Kill(-r.Pgid, 0) == nil {
-				busy = true
-			}
-			if r.Pid > 1 && syscall.Kill(r.Pid, 0) == nil {
-				busy = true
-			}
-		}
-		if !busy {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 }
 
 func setup(t *testing.T) string {
@@ -367,7 +332,7 @@ func TestAnotherParentsHandleIsRefused(t *testing.T) {
 	if r := s.call("delegate_status", map[string]any{"task_id": "../../etc/passwd"}); !r.IsError {
 		t.Errorf("a path as a handle = %+v, want a tool error", r)
 	}
-	t.Cleanup(func() { stopAll(t) })
+	t.Cleanup(func() { delegationtest.StopAll(t) })
 }
 
 func TestRestartedParentAnswersForOldHandles(t *testing.T) {

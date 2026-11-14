@@ -17,6 +17,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/parentmcp"
 )
 
@@ -76,7 +77,11 @@ func setup(t *testing.T) (folder string) {
 	t.Helper()
 	t.Setenv("YNH_HOME", t.TempDir())
 	t.Setenv("A2ASERVE_HELPER", "supervise")
-	return t.TempDir()
+	folder = t.TempDir()
+	// Registered after the temp folders, so it runs before they are removed:
+	// a delegation's supervisor still writes its record after the run ends.
+	t.Cleanup(func() { delegationtest.StopAll(t) })
+	return folder
 }
 
 func open(t *testing.T, folder, name string) *Endpoint {
