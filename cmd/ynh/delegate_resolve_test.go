@@ -112,6 +112,34 @@ func TestResolveDelegateLocalEntries(t *testing.T) {
 	}
 }
 
+// An absolute-path git: entry names a local folder, so it resolves to the
+// local install its own hint ("ynh install <path>") makes (ynh #850).
+func TestResolveDelegateAbsoluteGitPathEntry(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	repo := t.TempDir()
+	writeIncludedHarness(t, filepath.Join(repo, "harnesses"), "del", mcpFields("d"))
+	folder := filepath.Join(repo, "harnesses", "del")
+	parent := &harness.Harness{Name: "parent", Dir: t.TempDir()}
+	d := harness.Delegate{GitSource: harness.GitSource{Git: folder}}
+
+	// Not installed: the hint names the folder, and following it resolves.
+	_, err := resolveDelegate(parent, d, trustStore{Harnesses: map[string]trustRecord{}})
+	if err == nil || !strings.Contains(err.Error(), "ynh install "+realDir(folder)) {
+		t.Fatalf("want a not-installed error whose hint names the folder, got %v", err)
+	}
+	id := installLocalHarness(t, folder, "del")
+	got, err := resolveDelegate(parent, d, accepted(t, id))
+	if err != nil || got.ID != id {
+		t.Fatalf("absolute git entry: %+v, %v", got, err)
+	}
+
+	// With a path, the folder is the joined one.
+	dp := harness.Delegate{GitSource: harness.GitSource{Git: repo, Path: "harnesses/del"}}
+	if got, err := resolveDelegate(parent, dp, accepted(t, id)); err != nil || got.ID != id {
+		t.Fatalf("absolute git entry with path: %+v, %v", got, err)
+	}
+}
+
 func TestResolveDelegateGitInstalledParentOwnRepo(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	repo := "https://github.com/eyelock/assistants"
