@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -89,4 +90,31 @@ func parentMCPEntry() (*plugin.MCPServer, error) {
 // flag takes nothing after it.
 func parentAllowRule(name string) string {
 	return "--allowedTools=mcp__plugin_" + name + "_" + parentmcp.ServerName
+}
+
+// claudeOwnMCPAllowRule is the Claude Code flag that allows every tool of the
+// MCP servers the harness called name declares itself (its own and those of
+// its included harnesses, which are under the same trust), and nothing else:
+// not the user's servers, not ynh-delegates. It is "" when there are none.
+// Claude Code names the tools mcp__plugin_<harness>_<server>__<tool>, with
+// any character of a name outside letters, digits, _ and - written as _; a rule
+// naming the server allows all of its tools.
+func claudeOwnMCPAllowRule(name string, servers []string) string {
+	var rules []string
+	for _, s := range servers {
+		rules = append(rules, "mcp__plugin_"+claudeMCPName(name)+"_"+claudeMCPName(s))
+	}
+	if len(rules) == 0 {
+		return ""
+	}
+	return "--allowedTools=" + strings.Join(rules, ",")
+}
+
+func claudeMCPName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			return r
+		}
+		return '_'
+	}, s)
 }

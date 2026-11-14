@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -281,6 +282,7 @@ func cmdRun(args []string) error {
 	// before the vendor takes over (see the launch below); a no-op for a baked
 	// image.
 	unlockRun := func() {}
+	var declaredMCP []string // the MCP servers the harness declares, once composed
 	instructionsApplied := false
 	// The workspace folders granted for this launch, decided once. OpenCode
 	// reads the grant from rules in its agent files, so on a host assembly
@@ -383,6 +385,8 @@ func cmdRun(args []string) error {
 		if expErr != nil {
 			return expErr
 		}
+		// What the harness declares, before ynh adds its own servers.
+		declaredMCP = slices.Sorted(maps.Keys(servers))
 
 		// A parent with A2A delegates gets ynh's own MCP server for them
 		// (docs/delegate-sessions.md). It needs the endpoints, which a launch
@@ -639,6 +643,15 @@ func cmdRun(args []string) error {
 		// unless the harness opts out (mcp_manual_approval).
 		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
 			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		}
+
+		// Claude Code ignores a project allow rule while the workspace is
+		// untrusted, so a one-shot run allows the tools of the servers the
+		// harness declares itself (docs/mcp.md, "Claude Code Format").
+		if adapter.Name() == "claude" && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+			if rule := claudeOwnMCPAllowRule(p.Name, declaredMCP); rule != "" {
+				vendorArgs = append([]string{rule}, vendorArgs...)
+			}
 		}
 
 		// A delegate's one-shot session has no one to approve ask_parent

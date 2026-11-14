@@ -67,3 +67,14 @@ func TestParentMCPRefusesBadArguments(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeOwnMCPAllowRule(t *testing.T) {
+	if got := claudeOwnMCPAllowRule("h", nil); got != "" {
+		t.Errorf("no servers: got %q, want none", got)
+	}
+	got := claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"})
+	want := "--allowedTools=mcp__plugin_my_h_probe,mcp__plugin_my_h_b_c"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
