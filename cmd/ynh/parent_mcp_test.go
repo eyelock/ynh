@@ -111,3 +111,25 @@ func TestClaudeDelegateMCPAllowRuleOnlyForADelegatesOneShotSession(t *testing.T)
 		}
 	}
 }
+
+func TestDelegationNamesHarnessOnlyForTheRecordsDelegate(t *testing.T) {
+	rec := filepath.Join(t.TempDir(), "dlg-1.json")
+	if err := os.WriteFile(rec, []byte(`{"handle":"dlg-1","parent":"local/p","delegate":"local/dlg","folder":"/f"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(delegationRecordEnv, rec)
+	if !delegationNamesHarness("local--dlg") {
+		t.Error("the record's own delegate should be a delegate session")
+	}
+	if delegationNamesHarness("local--other") {
+		t.Error("a different harness run under an inherited record must not be")
+	}
+	t.Setenv(delegationRecordEnv, filepath.Join(t.TempDir(), "missing.json"))
+	if delegationNamesHarness("local--dlg") {
+		t.Error("an unreadable record must not count")
+	}
+	t.Setenv(delegationRecordEnv, "")
+	if delegationNamesHarness("local--dlg") {
+		t.Error("no record must not count")
+	}
+}

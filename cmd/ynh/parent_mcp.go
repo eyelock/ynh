@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/parentmcp"
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -155,4 +157,24 @@ func claudeDelegateMCPAllowRule(vendorName string, delegate, oneShot, manualAppr
 		return ""
 	}
 	return claudeOwnMCPAllowRule(name, servers)
+}
+
+// delegationNamesHarness reports whether this process runs inside a delegate's
+// session and the delegation record names the harness being run (its run
+// directory name, runDirName). The delegate launcher sets the record's path in
+// the environment, which the vendor CLI and every command its model runs
+// inherit, so a bare "record is set" would also hold for a `ynh run <other
+// harness>` the delegate starts. The trust gate (ynh refuses an a2a delegate
+// that declares commands until `ynh trust accept`) was passed for the record's
+// own delegate only.
+func delegationNamesHarness(runDirName string) bool {
+	path := os.Getenv(delegationRecordEnv)
+	if path == "" || runDirName == "" {
+		return false
+	}
+	rec, err := delegation.Load(path)
+	if err != nil || rec.Delegate == "" {
+		return false
+	}
+	return namespace.IDToFSName(rec.Delegate) == runDirName
 }

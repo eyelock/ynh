@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -1964,10 +1965,42 @@ func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
 }
 
 func TestSymlinkConsentError_NamesTheFlag(t *testing.T) {
-	err := symlinkConsentError("cursor", "demo", 5)
-	for _, want := range []string{"no terminal", "nothing was installed", "ynh run demo -v cursor --install", "5 symlinks"} {
+	err := symlinkConsentError("cursor", "local/demo", 5)
+	for _, want := range []string{"no terminal", "nothing was installed", "ynh run local/demo -v cursor --install", "5 symlinks"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
+func TestHarnessRunRef(t *testing.T) {
+	tests := []struct{ name, id, dir, want string }{
+		{"id wins", "local/demo", "/x/demo", "local/demo"},
+		{"path when run by path", "", "/x/demo", "/x/demo"},
+		{"path with spaces is single-quoted", "", "/x/my demo", `'/x/my demo'`},
+		{"double quote and backslash", "", `/x/a"b\c`, `'/x/a"b\c'`},
+		{"dollar and backtick are not expanded", "", "/x/$HOME`id`", "'/x/$HOME`id`'"},
+		{"single quote is closed, escaped and reopened", "", "/x/it's", `'/x/it'\''s'`},
+		{"non-ASCII", "", "/x/café", "'/x/café'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := harnessRunRef(tt.id, tt.dir); got != tt.want {
+				t.Errorf("harnessRunRef = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A shell reading the quoted ref gets the path back exactly.
+func TestShellQuote_RoundTripsThroughSh(t *testing.T) {
+	for _, p := range []string{"/x/plain", "/x/my demo", `/x/a"b\c`, "/x/$HOME`id`", "/x/it's", "/x/café", "/x/a;b&c|d*"} {
+		out, err := exec.Command("sh", "-c", "printf %s "+shellQuote(p)).Output()
+		if err != nil {
+			t.Fatalf("%q: %v", p, err)
+		}
+		if string(out) != p {
+			t.Errorf("sh read %q back as %q", p, out)
 		}
 	}
 }

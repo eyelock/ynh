@@ -401,6 +401,11 @@ func cmdRun(args []string) error {
 			}
 			endpoints = opened
 			defer opened.close()
+			// The companion skill lists each delegate's card address, so the
+			// parent's command needs no variable.
+			if err := writeLiveA2ACLICompanion(adapter, runDir, opened.eps); err != nil {
+				return fmt.Errorf("assembling delegates: %w", err)
+			}
 			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder)
 			if eErr != nil {
 				return eErr
@@ -617,7 +622,7 @@ func cmdRun(args []string) error {
 						fmt.Printf("  %s -> %s\n", rel, entry.Target)
 					}
 					if !stdinIsTerminal() {
-						return symlinkConsentError(adapter.Name(), p.Name, len(planned))
+						return symlinkConsentError(adapter.Name(), harnessRunRef(harnessID, harnessDir), len(planned))
 					}
 					fmt.Printf("\nInstall %d symlinks? [Y/n] ", len(planned))
 					reader := bufio.NewReader(os.Stdin)
@@ -649,11 +654,14 @@ func cmdRun(args []string) error {
 		// untrusted, so a delegate's one-shot session allows the tools of the
 		// servers its harness declares (docs/mcp.md, "Claude Code Format"). Only
 		// a delegate's: its trust gate holds, and a harness run directly has none.
+		// The record is inherited by every process of the delegate's session, so
+		// it must name this harness: another harness the delegate runs gets none.
+		isDelegateSession := delegationNamesHarness(runDirName)
 		if preassembled {
 			// A baked image's servers were composed at build time.
 			declaredMCP = mcpServerNames(runDir)
 		}
-		if rule := claudeDelegateMCPAllowRule(adapter.Name(), os.Getenv(delegationRecordEnv) != "", prompt != "" && !ra.Interactive, p.MCPManualApproval, p.Name, declaredMCP); rule != "" {
+		if rule := claudeDelegateMCPAllowRule(adapter.Name(), isDelegateSession, prompt != "" && !ra.Interactive, p.MCPManualApproval, p.Name, declaredMCP); rule != "" {
 			vendorArgs = append([]string{rule}, vendorArgs...)
 		}
 
@@ -662,7 +670,7 @@ func cmdRun(args []string) error {
 		// Codex approves it with the harness's own servers above, Copilot's
 		// --allow-all-tools covers it and OpenCode needs no rule; Claude Code
 		// needs an allow rule for the server.
-		if adapter.Name() == "claude" && os.Getenv(delegationRecordEnv) != "" && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+		if adapter.Name() == "claude" && isDelegateSession && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
 			vendorArgs = append([]string{parentAllowRule(p.Name)}, vendorArgs...)
 		}
 
@@ -707,6 +715,7 @@ func cmdRun(args []string) error {
 		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, os.Stderr)
 		defer stopRelay()
 		vendorArgs = append(relayArgs, vendorArgs...)
+		vendorArgs = append(delegateQuietArgs(adapter.Name(), vendorArgs, os.Getenv(delegationHandleEnv)), vendorArgs...)
 
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		// The launch only reads the run dir: every file a vendor writes at
@@ -723,6 +732,29 @@ func cmdRun(args []string) error {
 		defer removeHook()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// delegationHandleEnv is set by the delegate launcher on the ynh run it
+// supervises: its presence means the run's output is a delegate's result.
+const delegationHandleEnv = "YNH_DELEGATION_HANDLE"
+
+// delegateQuietArgs returns the vendor arguments that keep a delegate's own
+// chrome out of the result its parent receives, which is the tail of the run's
+// output. Copilot CLI prints a model-selection banner and a stats block
+// around the answer in a -p run; --silent ("Output only the agent response")
+// leaves just the answer. It applies only to a delegate's run (handle set), so
+// a person running copilot through ynh keeps the stats, and not when the
+// vendor arguments already carry the flag.
+func delegateQuietArgs(vendorName string, vendorArgs []string, handle string) []string {
+	if handle == "" || vendorName != "copilot" {
+		return nil
+	}
+	for _, a := range vendorArgs {
+		if a == "-s" || a == "--silent" || strings.HasPrefix(a, "--silent=") {
+			return nil
+		}
+	}
+	return []string{"--silent"}
 }
 
 // isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
@@ -1304,11 +1336,34 @@ var stdinIsTerminal = func() bool {
 	return true
 }
 
+// harnessRunRef returns the reference to print in a hint that tells the user
+// to run `ynh run <ref>`: the canonical id when the harness was run by id,
+// otherwise the harness directory's absolute path. A bare name is never
+// returned, because `ynh run` refuses it (#851). A path with anything a shell
+// would act on is single-quoted (an embedded single quote is closed, escaped
+// and reopened), so the printed command pastes as it is for any path.
+func harnessRunRef(id, dir string) string {
+	if id != "" {
+		return id
+	}
+	return shellQuote(dir)
+}
+
+// shellQuote returns s as one POSIX shell word: unchanged when it holds only
+// characters a shell leaves alone, else single-quoted.
+func shellQuote(s string) string {
+	const plain = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+=:@%,"
+	if s != "" && strings.Trim(s, plain) == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // symlinkConsentError is the refusal when a vendor needs symlinks in the
 // project and nobody can be asked: consent to write into a project is never
 // assumed from a closed or piped stdin.
-func symlinkConsentError(vendorName, harness string, n int) error {
+func symlinkConsentError(vendorName, ref string, n int) error {
 	return fmt.Errorf("%s needs %d symlinks in this project and there is no terminal to ask on; nothing was installed. "+
 		"Give consent explicitly by running `ynh run %s -v %s --install` once (it records the install, so later runs go ahead), or run from a terminal",
-		vendorName, n, harness, vendorName)
+		vendorName, n, ref, vendorName)
 }

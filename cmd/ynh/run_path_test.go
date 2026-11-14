@@ -4,9 +4,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/runsnap"
 )
@@ -249,6 +251,40 @@ func TestCmdRun_NoTerminalRefusesSymlinkInstall(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(os.Getenv("YNH_HOME"), "symlinks.json")); !os.IsNotExist(statErr) {
 		t.Errorf("symlinks.json was written despite the refusal: %v", statErr)
+	}
+}
+
+// The Fix line of the consent refusal is a command that works when pasted
+// (ynh #851): the harness reference it prints is one `ynh run` accepts, never
+// a bare name, and running that argument form with --install succeeds.
+func TestCmdRun_ConsentFixLineRunsAsPrinted(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	harnessDir := filepath.Join(work, "my-dev")
+	writeSkillHarness(t, harnessDir, "my-dev")
+	t.Chdir(work)
+
+	orig := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	defer func() { stdinIsTerminal = orig }()
+
+	err := cmdRun([]string{harnessDir, "-v", "cursor"})
+	if err == nil {
+		t.Fatal("want the consent refusal")
+	}
+	m := regexp.MustCompile("`ynh run (\\S+) -v cursor --install`").FindStringSubmatch(err.Error())
+	if m == nil {
+		t.Fatalf("no printed command in %q", err)
+	}
+	ref := m[1]
+	if namespace.Classify(ref) == namespace.RefInvalid {
+		t.Fatalf("printed ref %q is neither an id nor a path, so ynh run refuses it", ref)
+	}
+	if ref == "my-dev" {
+		t.Fatalf("printed ref is the bare harness name %q", ref)
+	}
+	if err := cmdRun([]string{ref, "-v", "cursor", "--install"}); err != nil {
+		t.Fatalf("the printed command does not work: %v", err)
 	}
 }
 

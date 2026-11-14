@@ -165,7 +165,7 @@ func delegateLauncher(rec *delegation.Record) *exec.Cmd {
 		}
 		cmd.Env = append(cmd.Env, kv)
 	}
-	cmd.Env = append(cmd.Env, "YNH_DELEGATION_HANDLE="+rec.Handle,
+	cmd.Env = append(cmd.Env, delegationHandleEnv+"="+rec.Handle,
 		"YNH_DELEGATION_RECORD="+delegation.RecordPath(rec.Parent, rec.Folder, rec.Handle))
 	return cmd
 }

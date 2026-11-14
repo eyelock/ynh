@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/a2acli"
+	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
@@ -35,6 +37,24 @@ func writeA2ACLISkills(p *harness.Harness, adapter vendor.Adapter, runDir string
 		return nil
 	}
 	return a2acli.WriteSkills(filepath.Join(runDir, adapter.ConfigDir(), dir))
+}
+
+// writeLiveA2ACLICompanion rewrites the companion skill for a live session, now
+// its endpoints are open, with each delegate's card address in it.
+func writeLiveA2ACLICompanion(adapter vendor.Adapter, runDir string, eps []*a2aserve.Endpoint) error {
+	if len(eps) == 0 {
+		return nil
+	}
+	dir, ok := adapter.ArtifactDirs()["skills"]
+	if !ok {
+		return nil
+	}
+	ds := make([]a2acli.Delegate, 0, len(eps))
+	for _, e := range eps {
+		ds = append(ds, a2acli.Delegate{Name: e.Opts.Name, Card: e.CardURL})
+	}
+	sort.Slice(ds, func(i, j int) bool { return ds[i].Name < ds[j].Name })
+	return a2acli.WriteCompanion(filepath.Join(runDir, adapter.ConfigDir(), dir), ds)
 }
 
 // a2aProbe is what doctor reads of the machine, replaceable in tests.
@@ -149,7 +169,7 @@ func a2aVendorFindings(id string, adapter vendor.Adapter, probe a2aProbe) []doct
 	case "claude":
 		if !settingsAllow(a2aAllowSources("claude", probe), "Bash(a2a:*)", "Bash(a2a *)") {
 			out = append(out, doctorFinding{Severity: sevWarn, Subject: id,
-				Message: "no allow rule for the a2a command in Claude Code's settings, so a headless run's a2a calls are denied",
+				Message: "no allow rule for the a2a command in Claude Code's settings, so a headless run's a2a calls are denied. The rule covers every command the companion skill teaches (a2a send -a <card address> ...), which has no variable in it",
 				Remedy:  `add "Bash(a2a:*)" to permissions.allow in .claude/settings.json (or ~/.claude/settings.json), or pass --allowedTools 'Bash(a2a:*)'`})
 		}
 	case "copilot":

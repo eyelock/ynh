@@ -154,7 +154,9 @@ is a detached session and goes on.
   upper-cased, every character outside A-Z and 0-9 turned into `_`. Two entries that map to the
   same `<NAME>` are refused at run, naming both. With exactly one A2A delegate, `A2ACLI_AGENT_CARD`
   and `A2ACLI_AUTH` carry the same values, which the `a2a` CLI reads by itself; with several, they
-  are not set, so the CLI never silently picks one.
+  are not set, so the CLI never silently picks one. Whatever the number, `A2ACLI_CREDENTIAL_HELPER`
+  names a helper that answers with each endpoint's own token (see
+  [The a2a CLI route](#the-a2a-cli-route)).
 - A delegate session never inherits its parent's `YNH_DELEGATE*` or `A2ACLI_*` values; a delegate
   with delegates of its own gets its own when it runs. It does get `YNH_DELEGATION_RECORD`, which
   marks it as a delegate's session ([Questions from a delegate](#questions-from-a-delegate)).
@@ -283,13 +285,33 @@ the parent the same delegates as MCP tools; see [Reaching a delegate over MCP](#
   licence. The official installs take no commit, so ynh keeps its own copy in
   `internal/a2acli/vendored/a2a-cli/`, with the commit recorded beside it. Updating it is a
   deliberate change.
-- `ynh-a2a-delegates`, ynh's own short companion (`internal/a2acli/companion.md`): which environment
-  variables name each delegate's card and credential, and how to prefix a command with them
-  (`A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" A2ACLI_AUTH="$YNH_DELEGATE_<NAME>_AUTH" a2a send --async ...`);
-  to start with `send --async` and poll with `task get`; never to invent a task id when a command is
-  refused or fails; to pass a task as a plain prompt, not a long inline script; and to answer an
-  `input-required` question with `send --task-id <id>` on the same task. It tells the parent never to
-  print the credential.
+- `ynh-a2a-delegates`, ynh's own short companion (`internal/a2acli/companion.md`): for each delegate,
+  the address of its agent card, which a command gives the CLI with `-a`
+  (`a2a send -a <card address> --async "<task>"`, and the same `-a` on every other command, `task get`
+  and `task cancel` included); to start with `send --async` and poll with `task get`; never to invent
+  a task id when a command is refused or fails; to pass a task as a plain prompt, not a long inline
+  script; and to answer an `input-required` question with `send --task-id <id>` on the same task. It
+  lists the addresses because they change on every run: ynh writes this skill again for each launch,
+  once the endpoints are open. It tells the parent never to print a credential, and never to pass one.
+
+A command names a delegate by its address and carries **no variable**, because Claude Code refuses a
+command with one under the allow rule `Bash(a2a:*)` ("A variable in this command can't be checked
+before it runs"), with `A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" a2a ...` and `a2a -a "$VAR"` alike
+([ynh #849](https://github.com/eyelock/ynh/issues/849)). The credential comes from the a2a CLI's own
+credential helper instead: for every run with A2A delegates ynh writes a small private script (0700, in
+its own temporary folder) and sets `A2ACLI_CREDENTIAL_HELPER` to it, scoped to `127.0.0.1`. The CLI
+runs it for each request and it answers with the bearer token of the endpoint asked about, so several
+delegates each get their own and nothing secret is in a command. This works under the one allow rule
+`ynh doctor` recommends, with any number of delegates.
+
+The helper folder is removed when the session ends, normally or on SIGINT, SIGTERM or SIGHUP once the
+vendor is running. It is left behind if ynh is killed with SIGKILL, or signalled after the endpoints
+open and before the vendor starts. The tokens in it are for endpoints that closed with that run, so
+a leftover is not a live credential, and the next launch with A2A delegates removes any such folder
+older than seven days. A baked image's skill is written before any endpoint exists, so it cannot list
+addresses: it teaches the variable form
+(`A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" A2ACLI_AUTH="$YNH_DELEGATE_<NAME>_AUTH" a2a send --async ...`),
+which a vendor that does not refuse a variable accepts.
 
 A task on this route goes `send --async` (state `working`), then `task get` until it is
 `input-required` (answered with `send --task-id <id> "<answer>"`) or `completed`, and
@@ -305,7 +327,7 @@ run's MCP route needs none of them (its own allow rule has its own check, under
 | `a2a` is not on PATH, or older than 0.4.0 | `curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh \| A2A_VERSION=0.4.0 sh`, or `brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli && brew install a2a` |
 | the vendored skill is missing from the run dir's skill folder or differs from the pin | `ynh run <harness>` writes the pinned copy |
 | Codex: the sandbox is not `workspace-write` with `network_access = true` | in `~/.codex/config.toml`, `sandbox_mode = "workspace-write"` and `[sandbox_workspace_write]` `network_access = true` |
-| Claude Code: no `Bash(a2a:*)` allow rule | add it to `permissions.allow` in a settings file, or pass `--allowedTools 'Bash(a2a:*)'` |
+| Claude Code: no `Bash(a2a:*)` allow rule | add it to `permissions.allow` in a settings file, or pass `--allowedTools 'Bash(a2a:*)'`. That one rule covers every command the skill teaches, for any number of delegates |
 | Copilot CLI: no `shell(a2a:*)` allow rule | add it to the allowed tools, or pass `--allow-tool 'shell(a2a:*)'` |
 
 Three things on this route have a cost worth knowing:
@@ -313,14 +335,13 @@ Three things on this route have a cost worth knowing:
 - **Codex's sandbox.** With Codex's default sandbox the `a2a` CLI cannot reach `127.0.0.1`
   (`connect: operation not permitted`). Turning `network_access` on fixes that, and means the shell
   is no longer sandboxed from localhost generally. The MCP route needs neither.
-- **Claude Code with several delegates.** Plain `a2a` commands pass under `Bash(a2a:*)`. The prefixed
-  form the companion skill gives for reaching one of several delegates
-  (`A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" A2ACLI_AUTH=... a2a ...`) is refused under that rule
-  ("A variable in this command can't be checked before it runs"), and with several delegates it is
-  the only form the skill gives. So on Claude Code this route works headless with one A2A delegate,
-  where `A2ACLI_*` is already set, and not with several. This is a known limit, found in the v0.18.0
-  acceptance run and being fixed for this release in [ynh #849](https://github.com/eyelock/ynh/issues/849).
-  Until that fix lands, the MCP tools reach several delegates on Claude Code.
+- **Claude Code with several delegates.** Under `Bash(a2a:*)` a command that carries a variable is
+  refused ("A variable in this command can't be checked before it runs"), so the companion skill gives
+  each delegate's card address (`a2a send -a <card address> ...`) and the CLI gets the token from the
+  credential helper, with no variable in any command
+  ([ynh #849](https://github.com/eyelock/ynh/issues/849), fixed for v0.18.0). It works with any number
+  of delegates under the one allow rule. An `input-required` round trip on this route with several
+  delegates on Claude Code has not been run. A baked image still teaches the variable form.
 - **Allow rules.** Without one a headless run denies every `a2a` call. OpenCode needs none. Cursor's
   shell route has not been run.
 
@@ -389,10 +410,11 @@ what to do next.
 `ynh run` approves it with the harness's own servers, and Copilot CLI's `--allow-all-tools` and
 OpenCode need nothing; for Claude Code, `ynh run` adds `--allowedTools=mcp__plugin_<delegate>_ynh-parent`
 to a delegate's one-shot session. It adds the same kind of rule for the delegate's own declared MCP servers, on a delegate's
-one-shot Claude Code session only (not on a harness run directly, nor an interactive session, nor with
+one-shot Claude Code session only, one whose delegation record names that harness (not on a harness run directly,
+nor on another harness the delegate's model runs from its shell, nor an interactive session, nor with
 `mcp_manual_approval`), so the delegate can call its own harness's tools headless with no allow rule in
 the user's Claude settings ([MCP servers](mcp.md#claude-code-format),
-[ynh #858](https://github.com/eyelock/ynh/issues/858)). A harness with `mcp_manual_approval` gets none, and so no question.
+[ynh #858](https://github.com/eyelock/ynh/issues/858)). A harness with `mcp_manual_approval` gets none, and so no question. The `ynh-parent` rule is added on the same condition, so a harness the delegate's model runs from its shell gets no rule for it either.
 
 ## Outliving the parent
 
