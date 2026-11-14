@@ -10,7 +10,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -1292,16 +1291,24 @@ var stdinIsTerminal = func() bool {
 // harnessRunRef returns the reference to print in a hint that tells the user
 // to run `ynh run <ref>`: the canonical id when the harness was run by id,
 // otherwise the harness directory's absolute path. A bare name is never
-// returned, because `ynh run` refuses it (#851). A path with spaces is quoted
-// so the printed command pastes as it is.
+// returned, because `ynh run` refuses it (#851). A path with anything a shell
+// would act on is single-quoted (an embedded single quote is closed, escaped
+// and reopened), so the printed command pastes as it is for any path.
 func harnessRunRef(id, dir string) string {
 	if id != "" {
 		return id
 	}
-	if strings.ContainsAny(dir, " \t") {
-		return strconv.Quote(dir)
+	return shellQuote(dir)
+}
+
+// shellQuote returns s as one POSIX shell word: unchanged when it holds only
+// characters a shell leaves alone, else single-quoted.
+func shellQuote(s string) string {
+	const plain = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+=:@%,"
+	if s != "" && strings.Trim(s, plain) == "" {
+		return s
 	}
-	return dir
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // symlinkConsentError is the refusal when a vendor needs symlinks in the

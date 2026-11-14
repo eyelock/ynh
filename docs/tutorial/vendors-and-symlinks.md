@@ -138,7 +138,7 @@ The following symlinks will be created in /tmp/ynh-tutorial/project:
 
   .cursor/skills/ping -> /Users/<you>/.ynh/run/local--my-harness/.cursor/skills/ping
 
-Error: cursor needs 1 symlinks in this project and there is no terminal to ask on; nothing was installed. Give consent explicitly by running `ynh run my-harness -v cursor --install` once (it records the install, so later runs go ahead), or run from a terminal
+Error: cursor needs 1 symlinks in this project and there is no terminal to ask on; nothing was installed. Give consent explicitly by running `ynh run local/my-harness -v cursor --install` once (it records the install, so later runs go ahead), or run from a terminal
 ```
 
 Nothing is created in `/tmp/ynh-tutorial/project`. The next section gives consent with `--install`.
