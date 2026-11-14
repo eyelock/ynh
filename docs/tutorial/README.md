@@ -41,7 +41,8 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 
 | Tutorial | What you'll learn |
 |---|---|
-| [Delegation](delegation.md) | Chain harnesses together as subagents |
+| [A First Delegate Session](first-delegate-session.md) | Have one harness hand work to another, running as its own session |
+| [Delegation](delegation.md) | Run a delegate as the vendor's own subagent (`transport: native`) |
 | [Export](export.md) | Produce vendor-native distributable plugins |
 | [Marketplace](marketplace.md) | Generate marketplace indexes for team distribution |
 | [Registry & Discovery](registry-and-discovery.md) | Search and install harnesses from curated registries |
