@@ -315,7 +315,8 @@ Three things on this route have a cost worth knowing:
   ("A variable in this command can't be checked before it runs"), and with several delegates it is
   the only form the skill gives. So on Claude Code this route works headless with one A2A delegate,
   where `A2ACLI_*` is already set; with several, use the MCP tools. This was found in the v0.18.0
-  acceptance run; on 2026-11-14 it was being placed on the roadmap, with no issue yet.
+  acceptance run and is tracked in [ynh #849](https://github.com/eyelock/ynh/issues/849), for v0.18.0;
+  until it is fixed, the MCP tools are the route for several delegates on Claude Code.
 - **Allow rules.** Without one a headless run denies every `a2a` call. OpenCode needs none. Cursor's
   shell route has not been run.
 
