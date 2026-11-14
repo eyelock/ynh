@@ -1,6 +1,6 @@
 # Delegate sessions
 
-> **Status:** built for v0.18.0 ([ynh #729](https://github.com/eyelock/ynh/issues/729)) and merged on `develop`, not yet released. v0.17.0, the release you may have, turns every delegate into a vendor subagent: for that, see [delegates_to](harnesses.md#delegates-to-optional) and [limit L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness). Page checked on 2026-11-14 against `develop` at [ce97443](https://github.com/eyelock/ynh/commit/ce974435) and the live v0.18.0 acceptance run of the same day ([Evidence](#evidence)). What that run could not show is said where it applies, and gathered under [Not shown live](#not-shown-live).
+> **Status:** built for v0.18.0 ([ynh #729](https://github.com/eyelock/ynh/issues/729)) and merged on `develop`, not yet released. v0.17.0, the release you may have, turns every delegate into a vendor subagent: for that, see [delegates_to](harnesses.md#delegates-to-optional) and [limit L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness). Page checked on 2026-11-14 against `develop` at [adfcf55b](https://github.com/eyelock/ynh/commit/adfcf55b), the live v0.18.0 acceptance run of the same day at [ce97443](https://github.com/eyelock/ynh/commit/ce974435), and its re-verification at [c2690e2d](https://github.com/eyelock/ynh/commit/c2690e2d) ([Evidence](#evidence)). What those runs could not show is said where it applies, and gathered under [Not shown live](#not-shown-live).
 
 A harness's `delegates_to` names other harnesses it may hand work to. From v0.18.0 each entry runs
 one of two ways, chosen by its [`transport`](harnesses.md#transport):
@@ -23,8 +23,9 @@ Code its MCP servers; on no vendor its hooks or workspace folders (limit
 [L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness), [ynh #729](https://github.com/eyelock/ynh/issues/729)).
 It also dies with the parent's session. A delegate that is its own ynh session is designed to be
 assembled like any other run, with its own vendor, MCP servers, hooks, workspace grant, profile or
-focus, and it can outlive whoever started it. That its own MCP servers, hooks and workspace folders
-take effect inside its session is **not yet shown live** on any vendor ([Not shown live](#not-shown-live)).
+focus, and it can outlive whoever started it. That its own instructions, MCP servers and hooks take
+effect inside its session was shown live on Claude Code, Codex, Copilot CLI and OpenCode, and its
+workspace folders on all but OpenCode; Cursor was not run ([Not shown live](#not-shown-live)).
 
 **No vendor CLI speaks A2A, so ynh bridges it.** When this was designed (2026-11-13), none of the
 five vendor CLIs was an A2A client: each had only an open request
@@ -122,8 +123,8 @@ entry, the trusted match with the smallest id wins, so the result never depends 
   token, and only the parent's run holds it.
 - An `a2a` delegate runs under its own trust grant, as above: its MCP servers, hooks and focus
   prompt are reviewed there, not in the parent's digest. The review step was seen live (a delegate
-  that declares commands was refused until `ynh trust accept`); what those servers and hooks then do
-  inside the delegate's session is not yet shown ([Not shown live](#not-shown-live)). A `native`
+  that declares commands was refused until `ynh trust accept`), and once accepted its servers and
+  hooks took effect inside its session ([Evidence](#evidence)). A `native`
   delegate is part of the parent's
   session, so its MCP servers and focus prompt are in the parent's digest.
 - The parent's digest covers every entry as written (source, profile or focus, and its settled
@@ -340,8 +341,8 @@ Three things on this route have a cost worth knowing:
   each delegate's card address (`a2a send -a <card address> ...`) and the CLI gets the token from the
   credential helper, with no variable in any command
   ([ynh #849](https://github.com/eyelock/ynh/issues/849), fixed for v0.18.0). It works with any number
-  of delegates under the one allow rule. An `input-required` round trip on this route with several
-  delegates on Claude Code has not been run. A baked image still teaches the variable form.
+  of delegates under the one allow rule: shown live with two delegates, each question answered with
+  `send --task-id`. A baked image still teaches the variable form.
 - **Allow rules.** Without one a headless run denies every `a2a` call. OpenCode needs none. Cursor's
   shell route has not been run.
 
@@ -509,22 +510,22 @@ are equal, when they share one sealed snapshot.
 
 ## Not shown live
 
-The v0.18.0 acceptance run of 2026-11-14 could not show these. Each is open, not a known failure:
+The v0.18.0 verification of 2026-11-14 (the acceptance run, then a re-run on `develop` at
+[c2690e2d](https://github.com/eyelock/ynh/commit/c2690e2d); [Evidence](#evidence)) could not show
+these. Each is open, not a known failure:
 
-- **The heart of [ynh #729](https://github.com/eyelock/ynh/issues/729): an A2A delegate's own MCP
-  servers, hooks and workspace folders taking effect, on any vendor.** ynh refuses a delegate that
-  declares commands or workspace folders until a person runs `ynh trust accept` for it, and the
-  verification accepts no trust on a person's behalf. The delegate sessions themselves, their
-  questions and their results were shown; what their own harness adds inside them was not.
-- **Cursor, on every route** (MCP tools, the `a2a` CLI, and as a delegate): Cursor's Workspace Trust
-  stopped the runs. Native on Cursor is refused by design ([Choosing a transport](#choosing-a-transport)).
+- **Cursor, on every route** (MCP tools, the `a2a` CLI, and as a delegate): its Workspace Trust
+  stopped the runs, and the Cursor delegate was left unaccepted. Native on Cursor is refused by design
+  ([Choosing a transport](#choosing-a-transport)).
+- **A workspace grant's effect on an OpenCode delegate.** ynh grants the folder, but OpenCode, with no
+  restricted agent, reads folders outside its own without any grant, so a test of the grant cannot
+  fail there.
 - **A person answering a question** through elicitation or MCP Tasks in a real client. Covered by
   tests and by a scripted MCP client only; every live question was answered by the parent's model.
-- **OpenCode as parent on the a2a CLI route**, in the acceptance run. An earlier stability check
-  (2026-11-13, `develop` at [3be2fd6](https://github.com/eyelock/ynh/commit/3be2fd6f) and
-  [8ea433e](https://github.com/eyelock/ynh/commit/8ea433ec)) started,
-  polled and cancelled a task from an OpenCode parent with the CLI; a question round trip on that
-  route was not run.
+- **The allow rule for a baked image's** declared MCP servers on a Claude Code delegate: unit-tested
+  only.
+- **A harness run from a Claude Code delegate's shell** (the nested case): shown inside a Copilot CLI
+  delegate only ([Claude Code Format](mcp.md#claude-code-format)).
 - **The tool-call timeouts of OpenCode and Copilot CLI**, which were not driven past.
 
 ## Not built
@@ -608,6 +609,45 @@ The v0.18.0 acceptance run of 2026-11-14 could not show these. Each is open, not
   - **Snapshots** ([ynh #765](https://github.com/eyelock/ynh/issues/765)), on a stub vendor: the same
     inputs reused the snapshot; changed inputs made a new one and swapped the link while the live
     session's snapshot stayed unchanged; after that session ended, the next run deleted it.
-  - **Found:** the Claude Code prefix-form refusal under [The a2a CLI route](#the-a2a-cli-route), and
+  - **Found:** the Claude Code prefix-form refusal under [The a2a CLI route](#the-a2a-cli-route)
+    (since fixed in [ynh #849](https://github.com/eyelock/ynh/issues/849)), and
     that an untrusted delegate refuses the parent's whole run, as
     [Which harness an A2A delegate runs as](#which-harness-an-a2a-delegate-runs-as) now says.
+- **A delegate's own harness**, live, 2026-11-14, `develop` at [ce97443](https://github.com/eyelock/ynh/commit/ce974435),
+  after a person's `ynh trust accept` of one delegate per vendor: one Claude Code parent started four
+  delegates (Claude Code, Codex, Copilot CLI, OpenCode) over the MCP route. Each delegate had a
+  codeword in its instructions, a probe MCP server that logs every call, an `on_session_start` hook,
+  and a workspace folder, granted in one run (`YNH_WORKSPACE_ROOTS`) and not in a control run.
+  Instructions and hooks took effect on all four (each hook ran once, with its own
+  `YNH_DELEGATION_RECORD`; on Codex under the accepted harness, [L7](vendor-parity.md#l7-codex-hooks-need-an-accepted-harness)).
+  The MCP server's tool was called on Codex, Copilot CLI and OpenCode; on Claude Code it was refused,
+  which [ynh #858](https://github.com/eyelock/ynh/issues/858) then fixed. Workspace: on Claude Code and
+  Copilot CLI the granted folder was read and an ungranted one refused, and in the control both were
+  refused; on Codex the folder was in the sandbox's writable roots only when granted (reading cannot
+  show it, since Codex reads outside folders either way); on OpenCode both folders were read in both
+  runs, so the effect is unverified there.
+- **v0.18.0 re-verification**, live, 2026-11-14, a fresh build of `develop` at
+  [c2690e2d](https://github.com/eyelock/ynh/commit/c2690e2d) (vendor versions not recorded for this
+  run), with a full-harness Claude Code delegate re-run at [adfcf55b](https://github.com/eyelock/ynh/commit/adfcf55b):
+  - **A delegate's own harness again**, on the same four: instructions and hooks on all four; MCP tools
+    called on all four, Claude Code now included ([ynh #862](https://github.com/eyelock/ynh/pull/862));
+    workspace as above.
+  - **The allow rule's limits** ([ynh #858](https://github.com/eyelock/ynh/issues/858)): the same
+    Claude Code harness run directly got no rule and its tool call was refused. A real nested run, a
+    Copilot CLI delegate's model running `ynh run` of a second Claude Code harness from its shell, ran
+    inside the delegate's session (its hook logged the enclosing record) and got no rule. Not run inside
+    a Claude Code delegate.
+  - **a2a CLI route with card addresses** ([ynh #849](https://github.com/eyelock/ynh/issues/849),
+    [ynh #857](https://github.com/eyelock/ynh/pull/857)): a Claude Code parent with two A2A delegates
+    (Claude Code and OpenCode), under only `Bash(a2a:*)`, reached both with `a2a send` and
+    `a2a task get -a http://127.0.0.1:<port> ...`, no variable and no `--auth`, and answered both
+    questions with `send --task-id`. The two tokens appeared in none of the transcript, the run's
+    output, the process arguments, the skill files or the delegation logs; only in the snapshot's
+    `.mcp.json`, for the MCP route. The helper was mode 0700 in a 0700 folder, removed on a normal end,
+    SIGTERM, SIGHUP and SIGINT to the process group, and left on SIGKILL; a folder 8 days old was swept
+    at the next launch, one 6 days old kept.
+  - **a2a CLI route** with Codex (sandbox network on; the default sandbox refused), Copilot CLI and
+    OpenCode as parent, each with a question round trip. MCP route and
+    [L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)
+    with all four parents; the scripted elicitation client's checks; native on all four and refused
+    on Cursor; snapshots, all as in the acceptance run.
