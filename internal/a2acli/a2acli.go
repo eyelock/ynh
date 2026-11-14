@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The pin. Updating the vendored skill is a deliberate change: replace
@@ -142,6 +143,26 @@ const CredentialHelperEnv = "A2ACLI_CREDENTIAL_HELPER"
 // own helper, inherited from an enclosing session, from the user's.
 const HelperMarker = "ynh-a2a-credentials"
 
+// StaleHelperAge is how old a helper folder must be before the next launch
+// removes it: far longer than a session, whose endpoints are closed by then.
+const StaleHelperAge = 7 * 24 * time.Hour
+
+// sweepStaleHelpers removes the helper folders in tmp last modified before cutoff.
+func sweepStaleHelpers(tmp string, cutoff time.Time) {
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), HelperMarker+"-") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.RemoveAll(filepath.Join(tmp, e.Name()))
+		}
+	}
+}
+
 // Credential is one endpoint's bearer token, keyed by its card address.
 type Credential struct {
 	Card  string // http://127.0.0.1:<port>
@@ -155,7 +176,13 @@ type Credential struct {
 // headers for that endpoint, or {} for any other. Each delegate has its own
 // endpoint, so each gets its own token with no variable in the parent's command.
 // The file holds the tokens: 0700 in a 0700 folder, like the MCP config.
+//
+// A run that ends normally, or on SIGINT, SIGTERM or SIGHUP once the vendor
+// runs, removes the folder. One that is killed (SIGKILL), or that is signalled
+// after the endpoints open and before the vendor starts, leaves it behind, so
+// each write first sweeps the folders of that kind older than StaleHelperAge.
 func WriteCredentialHelper(creds []Credential) (path string, cleanup func(), err error) {
+	sweepStaleHelpers(os.TempDir(), time.Now().Add(-StaleHelperAge))
 	dir, err := os.MkdirTemp("", HelperMarker+"-")
 	if err != nil {
 		return "", nil, fmt.Errorf("writing the a2a credential helper: %w", err)

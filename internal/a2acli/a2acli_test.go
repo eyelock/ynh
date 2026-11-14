@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWriteSkillsWritesThePinnedSkillAndTheCompanion(t *testing.T) {
@@ -138,5 +139,32 @@ func TestLiveCompanionListsEachCardAddressAndNeedsNoVariable(t *testing.T) {
 	}
 	if strings.Contains(string(Companion()), "{{REACH}}") {
 		t.Error("the generic companion leaves the placeholder")
+	}
+}
+
+func TestSweepStaleHelpersRemovesOnlyOldHelperFolders(t *testing.T) {
+	tmp := t.TempDir()
+	old := filepath.Join(tmp, HelperMarker+"-old")
+	fresh := filepath.Join(tmp, HelperMarker+"-fresh")
+	other := filepath.Join(tmp, "something-else")
+	for _, d := range []string{old, fresh, other} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := time.Now().Add(-2 * StaleHelperAge)
+	for _, d := range []string{old, other} {
+		if err := os.Chtimes(d, past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sweepStaleHelpers(tmp, time.Now().Add(-StaleHelperAge))
+	if _, err := os.Stat(old); err == nil {
+		t.Error("the old helper folder should be gone")
+	}
+	for _, d := range []string{fresh, other} {
+		if _, err := os.Stat(d); err != nil {
+			t.Errorf("%s should stay: %v", d, err)
+		}
 	}
 }
