@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/a2acli"
 	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/harness"
 )
@@ -15,7 +16,7 @@ import (
 // to reach them in this process's environment, which the vendor session
 // inherits: YNH_DELEGATES and, per delegate, YNH_DELEGATE_<NAME>_CARD and
 // _AUTH; with exactly one, also the a2a CLI's own A2ACLI_AGENT_CARD and
-// A2ACLI_AUTH (docs/delegate-sessions.md, "Reaching a delegate"). The delegate's
+// A2ACLI_AUTH, and always the a2a CLI's credential helper (docs/delegate-sessions.md, "Reaching a delegate"). The delegate's
 // vendor session starts only on an endpoint's first message. The returned
 // function closes the endpoints; sessions already running are detached and go on.
 //
@@ -115,6 +116,25 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 			return nil, err
 		}
 	}
+	// The a2a CLI's credential helper gives each endpoint its own token, so the
+	// parent's command names a delegate by its card address alone, with no
+	// variable in it (Claude Code's Bash(a2a:*) rule refuses one).
+	var creds []a2acli.Credential
+	for _, e := range eps {
+		creds = append(creds, a2acli.Credential{Card: e.CardURL, Token: e.Token})
+	}
+	helper, rmHelper, err := a2acli.WriteCredentialHelper(creds)
+	if err != nil {
+		closeAll()
+		return nil, err
+	}
+	closeAll = func(prev func()) func() {
+		return func() { prev(); rmHelper() }
+	}(closeAll)
+	if err := os.Setenv(a2acli.CredentialHelperEnv, "127.0.0.1="+helper); err != nil {
+		closeAll()
+		return nil, err
+	}
 	_, _ = fmt.Fprintf(stderr, "Opened %d A2A delegate endpoint(s): %s\n", len(eps), os.Getenv("YNH_DELEGATES"))
 	return &openedEndpoints{eps: eps, close: closeAll}, nil
 }
@@ -132,7 +152,8 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 func scrubParentEndpoints() {
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
-		if k == "YNH_DELEGATES" || strings.HasPrefix(k, "YNH_DELEGATE_") || k == "A2ACLI_AGENT_CARD" || k == "A2ACLI_AUTH" {
+		if k == "YNH_DELEGATES" || strings.HasPrefix(k, "YNH_DELEGATE_") || k == "A2ACLI_AGENT_CARD" || k == "A2ACLI_AUTH" ||
+			(k == a2acli.CredentialHelperEnv && strings.Contains(kv, a2acli.HelperMarker)) {
 			_ = os.Unsetenv(k)
 		}
 	}
