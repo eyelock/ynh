@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -65,5 +67,69 @@ func TestParentMCPRefusesBadArguments(t *testing.T) {
 		if err := cmdParentMCP(args); err == nil {
 			t.Errorf("%v: want an error", args)
 		}
+	}
+}
+
+func TestClaudeOwnMCPAllowRule(t *testing.T) {
+	if got := claudeOwnMCPAllowRule("h", nil); got != "" {
+		t.Errorf("no servers: got %q, want none", got)
+	}
+	got := claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"})
+	want := "--allowedTools=mcp__plugin_my_h_probe,mcp__plugin_my_h_b_c"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestMCPServerNamesReadsTheRunDirsFile(t *testing.T) {
+	dir := t.TempDir()
+	if got := mcpServerNames(dir); got != nil {
+		t.Errorf("no file: got %v", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(`{"mcpServers":{"b":{},"a":{}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := mcpServerNames(dir); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Errorf("got %v, want [a b]", got)
+	}
+}
+
+func TestClaudeDelegateMCPAllowRuleOnlyForADelegatesOneShotSession(t *testing.T) {
+	servers := []string{"probe"}
+	want := "--allowedTools=mcp__plugin_h_probe"
+	if got := claudeDelegateMCPAllowRule("claude", true, true, false, "h", servers); got != want {
+		t.Errorf("delegate one-shot: got %q, want %q", got, want)
+	}
+	for name, got := range map[string]string{
+		"a harness run directly (no delegation record)": claudeDelegateMCPAllowRule("claude", false, true, false, "h", servers),
+		"an interactive delegate run":                   claudeDelegateMCPAllowRule("claude", true, false, false, "h", servers),
+		"mcp_manual_approval":                           claudeDelegateMCPAllowRule("claude", true, true, true, "h", servers),
+		"another vendor":                                claudeDelegateMCPAllowRule("codex", true, true, false, "h", servers),
+	} {
+		if got != "" {
+			t.Errorf("%s: got %q, want no rule", name, got)
+		}
+	}
+}
+
+func TestDelegationNamesHarnessOnlyForTheRecordsDelegate(t *testing.T) {
+	rec := filepath.Join(t.TempDir(), "dlg-1.json")
+	if err := os.WriteFile(rec, []byte(`{"handle":"dlg-1","parent":"local/p","delegate":"local/dlg","folder":"/f"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(delegationRecordEnv, rec)
+	if !delegationNamesHarness("local--dlg") {
+		t.Error("the record's own delegate should be a delegate session")
+	}
+	if delegationNamesHarness("local--other") {
+		t.Error("a different harness run under an inherited record must not be")
+	}
+	t.Setenv(delegationRecordEnv, filepath.Join(t.TempDir(), "missing.json"))
+	if delegationNamesHarness("local--dlg") {
+		t.Error("an unreadable record must not count")
+	}
+	t.Setenv(delegationRecordEnv, "")
+	if delegationNamesHarness("local--dlg") {
+		t.Error("no record must not count")
 	}
 }

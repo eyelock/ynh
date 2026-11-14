@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -281,6 +282,7 @@ func cmdRun(args []string) error {
 	// before the vendor takes over (see the launch below); a no-op for a baked
 	// image.
 	unlockRun := func() {}
+	var declaredMCP []string // the MCP servers the harness declares, once composed
 	instructionsApplied := false
 	// The workspace folders granted for this launch, decided once. OpenCode
 	// reads the grant from rules in its agent files, so on a host assembly
@@ -383,6 +385,8 @@ func cmdRun(args []string) error {
 		if expErr != nil {
 			return expErr
 		}
+		// What the harness declares, before ynh adds its own servers.
+		declaredMCP = slices.Sorted(maps.Keys(servers))
 
 		// A parent with A2A delegates gets ynh's own MCP server for them
 		// (docs/delegate-sessions.md). It needs the endpoints, which a launch
@@ -646,12 +650,27 @@ func cmdRun(args []string) error {
 			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
 		}
 
+		// Claude Code ignores a project allow rule while the workspace is
+		// untrusted, so a delegate's one-shot session allows the tools of the
+		// servers its harness declares (docs/mcp.md, "Claude Code Format"). Only
+		// a delegate's: its trust gate holds, and a harness run directly has none.
+		// The record is inherited by every process of the delegate's session, so
+		// it must name this harness: another harness the delegate runs gets none.
+		isDelegateSession := delegationNamesHarness(runDirName)
+		if preassembled {
+			// A baked image's servers were composed at build time.
+			declaredMCP = mcpServerNames(runDir)
+		}
+		if rule := claudeDelegateMCPAllowRule(adapter.Name(), isDelegateSession, prompt != "" && !ra.Interactive, p.MCPManualApproval, p.Name, declaredMCP); rule != "" {
+			vendorArgs = append([]string{rule}, vendorArgs...)
+		}
+
 		// A delegate's one-shot session has no one to approve ask_parent
 		// either (docs/delegate-sessions.md, "Questions from a delegate").
 		// Codex approves it with the harness's own servers above, Copilot's
 		// --allow-all-tools covers it and OpenCode needs no rule; Claude Code
 		// needs an allow rule for the server.
-		if adapter.Name() == "claude" && os.Getenv(delegationRecordEnv) != "" && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+		if adapter.Name() == "claude" && isDelegateSession && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
 			vendorArgs = append([]string{parentAllowRule(p.Name)}, vendorArgs...)
 		}
 
