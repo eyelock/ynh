@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -76,5 +78,18 @@ func TestClaudeOwnMCPAllowRule(t *testing.T) {
 	want := "--allowedTools=mcp__plugin_my_h_probe,mcp__plugin_my_h_b_c"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestMCPServerNamesReadsTheRunDirsFile(t *testing.T) {
+	dir := t.TempDir()
+	if got := mcpServerNames(dir); got != nil {
+		t.Errorf("no file: got %v", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(`{"mcpServers":{"b":{},"a":{}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := mcpServerNames(dir); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Errorf("got %v, want [a b]", got)
 	}
 }

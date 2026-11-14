@@ -388,7 +388,9 @@ what to do next.
 **Allowing the tool.** A delegate's one-shot session has no one to approve it either. Codex's
 `ynh run` approves it with the harness's own servers, and Copilot CLI's `--allow-all-tools` and
 OpenCode need nothing; for Claude Code, `ynh run` adds `--allowedTools=mcp__plugin_<delegate>_ynh-parent`
-to a delegate's one-shot session. A harness with `mcp_manual_approval` gets none, and so no question.
+to a delegate's one-shot session. It adds the same kind of rule for the delegate's own declared MCP servers,
+so the delegate can call its own harness's tools headless with no allow rule in the user's Claude settings
+([MCP servers](mcp.md#claude-code-format), [ynh #858](https://github.com/eyelock/ynh/issues/858)). A harness with `mcp_manual_approval` gets none, and so no question.
 
 ## Outliving the parent
 

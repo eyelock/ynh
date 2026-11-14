@@ -149,6 +149,8 @@ Claude uses the same document in `.claude/.mcp.json` (a session) and `mcp/claude
 }
 ```
 
+**Approval on a one-shot run.** Claude Code refuses an MCP tool call it has no allow rule for, and ignores a project `.claude/settings.json` allow rule while the workspace is untrusted, so a headless run could not call its own harness's tools unless your own Claude settings allowed them ([ynh #858](https://github.com/eyelock/ynh/issues/858)). So a one-shot `ynh run` (a prompt, not interactive) adds `--allowedTools=mcp__plugin_<harness>_<server>,...` for each server the harness declares: its own and those of its included harnesses, which are under the same trust, and so only after `ynh trust accept`. It allows nothing else: not your own Claude servers, and not `ynh-delegates` (see [The delegates' server](#the-delegates-server)); `ynh-parent` has its own rule on a delegate's session. A baked image allows the servers in its `.mcp.json`. Your own settings and your own `--allowedTools` still apply as well. To turn it off, set `"mcp_manual_approval": true` in the manifest, as for Codex below; the run then stops at Claude Code's policy until you allow the tools yourself. This covers every one-shot Claude Code run, a delegate's session included.
+
 ### Cursor Format
 
 Cursor uses `.cursor/mcp.json` in a project, or `mcp.json` at the root of an exported plugin, with the same JSON structure as Claude:

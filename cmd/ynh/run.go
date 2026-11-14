@@ -649,6 +649,10 @@ func cmdRun(args []string) error {
 		// untrusted, so a one-shot run allows the tools of the servers the
 		// harness declares itself (docs/mcp.md, "Claude Code Format").
 		if adapter.Name() == "claude" && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+			if preassembled {
+				// A baked image's servers were composed at build time.
+				declaredMCP = mcpServerNames(runDir)
+			}
 			if rule := claudeOwnMCPAllowRule(p.Name, declaredMCP); rule != "" {
 				vendorArgs = append([]string{rule}, vendorArgs...)
 			}

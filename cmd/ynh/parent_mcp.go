@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -117,4 +120,25 @@ func claudeMCPName(s string) string {
 		}
 		return '_'
 	}, s)
+}
+
+// mcpServerNames lists, sorted, the servers in runDir's .mcp.json: for a baked
+// image, the servers its harness declared when it was built.
+func mcpServerNames(runDir string) []string {
+	data, err := os.ReadFile(filepath.Join(runDir, ".mcp.json"))
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	if json.Unmarshal(data, &doc) != nil {
+		return nil
+	}
+	names := make([]string, 0, len(doc.MCPServers))
+	for n := range doc.MCPServers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
