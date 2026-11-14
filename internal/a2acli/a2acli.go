@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The pin. Updating the vendored skill is a deliberate change: replace
@@ -52,8 +53,155 @@ func Skill() []byte { return mustRead("vendored/a2a-cli/SKILL.md") }
 // License is the upstream licence, kept beside the vendored skill.
 func License() []byte { return mustRead("vendored/a2a-cli/LICENSE") }
 
-// Companion is ynh's own skill about reaching this parent's delegates.
-func Companion() []byte { return mustRead("companion.md") }
+// reachPlaceholder is where companion.md takes its "how to reach one" section.
+const reachPlaceholder = "{{REACH}}"
+
+// reachGeneric is the section for a skill written before any endpoint is open
+// (a baked image, or an install): it can name only the variables, not the
+// addresses, which a session's endpoints do not have yet.
+const reachGeneric = `## Which delegates, and how to reach one
+
+- ` + "`YNH_DELEGATES`" + ` lists your delegates' names, comma-separated.
+- Each one has ` + "`YNH_DELEGATE_<NAME>_CARD`" + ` (its agent card URL) and
+  ` + "`YNH_DELEGATE_<NAME>_AUTH`" + ` (its credential). ` + "`<NAME>`" + ` is the delegate's name
+  upper-cased, every character outside A-Z and 0-9 turned into ` + "`_`" + `.
+- To reach one, prefix the command with its two variables:
+
+  ` + "```bash" + `
+  A2ACLI_AGENT_CARD="$YNH_DELEGATE_<NAME>_CARD" A2ACLI_AUTH="$YNH_DELEGATE_<NAME>_AUTH" a2a send --async "<the task>"
+  ` + "```" + `
+
+- With exactly one delegate, ` + "`A2ACLI_AGENT_CARD`" + ` and ` + "`A2ACLI_AUTH`" + ` are already
+  set and the prefix is not needed. With several they are not set, so the CLI
+  never picks one for you.
+- Claude Code refuses a command with a variable in it under the allow rule
+  ` + "`Bash(a2a:*)`" + `. A live ` + "`ynh run`" + ` writes this skill with each delegate's
+  address instead, which needs no variable.
+- Never print, echo or copy the credential itself. Pass the variable, not its
+  value.
+`
+
+// Delegate is one open A2A delegate of a live session: its name and the card
+// address the a2a CLI is given with -a.
+type Delegate struct {
+	Name string
+	Card string
+}
+
+// reachLive is the section for a live session, whose endpoints are open: it
+// lists each delegate's literal card address, so a command needs no variable
+// (Claude Code's allow rule Bash(a2a:*) refuses a command that has one), and
+// the credential comes from the credential helper ynh set, not the command.
+func reachLive(ds []Delegate) string {
+	var b strings.Builder
+	b.WriteString("## Which delegates, and how to reach one\n\n")
+	b.WriteString("Your delegates, and the address of each one's agent card:\n\n")
+	b.WriteString("| Delegate | Card address |\n|---|---|\n")
+	for _, d := range ds {
+		fmt.Fprintf(&b, "| `%s` | `%s` |\n", d.Name, d.Card)
+	}
+	b.WriteString("\nTo reach one, give its address to `-a`, exactly as written above:\n\n")
+	b.WriteString("```bash\na2a send -a <card address> --async \"<the task>\"\n```\n\n")
+	b.WriteString("- Use the address, not a variable: a command with a `$VARIABLE` in it is refused\n")
+	b.WriteString("  under the allow rule `Bash(a2a:*)`. Every command below takes the same `-a`.\n")
+	b.WriteString("- The credential is not yours to pass: ynh set the a2a CLI's credential helper,\n")
+	b.WriteString("  which gives each delegate its own. Do not pass `--auth`, and never print,\n")
+	b.WriteString("  echo or copy a credential.\n")
+	b.WriteString("- The addresses are this session's: they change on every run.\n\n")
+	return b.String()
+}
+
+// Companion is ynh's own skill about reaching this parent's delegates, in its
+// generic form (no endpoints open yet).
+func Companion() []byte { return renderCompanion(reachGeneric) }
+
+// CompanionFor is the companion skill for a live session: it lists each open
+// delegate's card address.
+func CompanionFor(ds []Delegate) []byte { return renderCompanion(reachLive(ds)) }
+
+func renderCompanion(reach string) []byte {
+	return []byte(strings.Replace(string(mustRead("companion.md")), reachPlaceholder, strings.TrimRight(reach, "\n"), 1))
+}
+
+// WriteCompanion rewrites the companion skill under skillsDir for a live
+// session's delegates. WriteSkills has written the generic one before.
+func WriteCompanion(skillsDir string, ds []Delegate) error {
+	dir := filepath.Join(skillsDir, CompanionName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("writing the %s skill: %w", CompanionName, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), CompanionFor(ds), 0o644); err != nil {
+		return fmt.Errorf("writing the %s skill: %w", CompanionName, err)
+	}
+	return nil
+}
+
+// CredentialHelperEnv is the a2a CLI setting that names a credential helper.
+const CredentialHelperEnv = "A2ACLI_CREDENTIAL_HELPER"
+
+// HelperMarker is in the name of every helper ynh writes, so a run can tell its
+// own helper, inherited from an enclosing session, from the user's.
+const HelperMarker = "ynh-a2a-credentials"
+
+// StaleHelperAge is how old a helper folder must be before the next launch
+// removes it: far longer than a session, whose endpoints are closed by then.
+const StaleHelperAge = 7 * 24 * time.Hour
+
+// sweepStaleHelpers removes the helper folders in tmp last modified before cutoff.
+func sweepStaleHelpers(tmp string, cutoff time.Time) {
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), HelperMarker+"-") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			_ = os.RemoveAll(filepath.Join(tmp, e.Name()))
+		}
+	}
+}
+
+// Credential is one endpoint's bearer token, keyed by its card address.
+type Credential struct {
+	Card  string // http://127.0.0.1:<port>
+	Token string
+}
+
+// WriteCredentialHelper writes the credential helper for the a2a CLI into a
+// new private folder and returns its path and a function that removes it. The
+// helper follows the Bazel credential helper protocol the CLI speaks: it is run
+// as `<helper> get` with {"uri": "<agent URL>"} on stdin, and answers with the
+// headers for that endpoint, or {} for any other. Each delegate has its own
+// endpoint, so each gets its own token with no variable in the parent's command.
+// The file holds the tokens: 0700 in a 0700 folder, like the MCP config.
+//
+// A run that ends normally, or on SIGINT, SIGTERM or SIGHUP once the vendor
+// runs, removes the folder. One that is killed (SIGKILL), or that is signalled
+// after the endpoints open and before the vendor starts, leaves it behind, so
+// each write first sweeps the folders of that kind older than StaleHelperAge.
+func WriteCredentialHelper(creds []Credential) (path string, cleanup func(), err error) {
+	sweepStaleHelpers(os.TempDir(), time.Now().Add(-StaleHelperAge))
+	dir, err := os.MkdirTemp("", HelperMarker+"-")
+	if err != nil {
+		return "", nil, fmt.Errorf("writing the a2a credential helper: %w", err)
+	}
+	cleanup = func() { _ = os.RemoveAll(dir) }
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\n# Written by ynh for this session: the a2a CLI's credential helper.\n")
+	b.WriteString("[ \"$1\" = get ] || exit 1\nin=$(cat)\ncase \"$in\" in\n")
+	for _, c := range creds {
+		fmt.Fprintf(&b, "  *'\"%s\"'*|*'\"%s/'*) printf '{\"headers\":{\"Authorization\":[\"Bearer %%s\"]}}\\n' '%s'; exit 0 ;;\n", c.Card, c.Card, c.Token)
+	}
+	b.WriteString("esac\nprintf '{}\\n'\n")
+	path = filepath.Join(dir, "helper")
+	if err := os.WriteFile(path, []byte(b.String()), 0o700); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("writing the a2a credential helper: %w", err)
+	}
+	return path, cleanup, nil
+}
 
 // WriteSkills writes the two skills under skillsDir, the vendor's skill folder
 // (<run dir>/<config dir>/skills).

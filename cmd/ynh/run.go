@@ -397,6 +397,11 @@ func cmdRun(args []string) error {
 			}
 			endpoints = opened
 			defer opened.close()
+			// The companion skill lists each delegate's card address, so the
+			// parent's command needs no variable.
+			if err := writeLiveA2ACLICompanion(adapter, runDir, opened.eps); err != nil {
+				return fmt.Errorf("assembling delegates: %w", err)
+			}
 			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder)
 			if eErr != nil {
 				return eErr

@@ -2,9 +2,11 @@ package a2acli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWriteSkillsWritesThePinnedSkillAndTheCompanion(t *testing.T) {
@@ -75,6 +77,94 @@ func TestVersions(t *testing.T) {
 	}{{"0.3.9", "0.4.0", true}, {"0.4.0", "0.4.0", false}, {"0.10.0", "0.4.0", false}, {"0.4.1", "0.4.0", false}} {
 		if Older(c.a, c.b) != c.want {
 			t.Errorf("Older(%s,%s) != %v", c.a, c.b, c.want)
+		}
+	}
+}
+
+func TestCredentialHelperAnswersEachEndpointWithItsOwnToken(t *testing.T) {
+	path, cleanup, err := WriteCredentialHelper([]Credential{
+		{Card: "http://127.0.0.1:5068", Token: "tok-short"},
+		{Card: "http://127.0.0.1:50682", Token: "tok-long"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if st, _ := os.Stat(path); st == nil || st.Mode().Perm() != 0o700 {
+		t.Errorf("the helper must be 0700, got %v", st)
+	}
+	run := func(arg, in string) string {
+		cmd := exec.Command(path, arg)
+		cmd.Stdin = strings.NewReader(in)
+		out, _ := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out))
+	}
+	for _, c := range []struct{ in, want string }{
+		{`{"uri":"http://127.0.0.1:5068"}`, `{"headers":{"Authorization":["Bearer tok-short"]}}`},
+		{`{"uri":"http://127.0.0.1:5068/x"}`, `{"headers":{"Authorization":["Bearer tok-short"]}}`},
+		{`{"uri":"http://127.0.0.1:50682"}`, `{"headers":{"Authorization":["Bearer tok-long"]}}`},
+		{`{"uri":"http://127.0.0.1:506"}`, `{}`},
+		{`{"uri":"https://example.com"}`, `{}`},
+	} {
+		if got := run("get", c.in); got != c.want {
+			t.Errorf("helper get %s = %s, want %s", c.in, got, c.want)
+		}
+	}
+	if got := run("store", `{}`); got != "" {
+		t.Errorf("a verb other than get must fail quietly, got %q", got)
+	}
+	cleanup()
+	if _, err := os.Stat(path); err == nil {
+		t.Error("cleanup left the helper behind")
+	}
+}
+
+func TestLiveCompanionListsEachCardAddressAndNeedsNoVariable(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "skills")
+	if err := WriteSkills(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteCompanion(dir, []Delegate{{"alpha", "http://127.0.0.1:1"}, {"beta", "http://127.0.0.1:2"}}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, CompanionName, "SKILL.md"))
+	got := string(b)
+	for _, want := range []string{"| `alpha` | `http://127.0.0.1:1` |", "| `beta` | `http://127.0.0.1:2` |", "a2a send -a <card address> --async", "Do not pass `--auth`", "--task-id"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("live companion lacks %q", want)
+		}
+	}
+	if strings.Contains(got, "A2ACLI_AUTH=") || strings.Contains(got, "{{REACH}}") {
+		t.Errorf("live companion teaches a variable prefix or leaves the placeholder:\n%s", got)
+	}
+	if strings.Contains(string(Companion()), "{{REACH}}") {
+		t.Error("the generic companion leaves the placeholder")
+	}
+}
+
+func TestSweepStaleHelpersRemovesOnlyOldHelperFolders(t *testing.T) {
+	tmp := t.TempDir()
+	old := filepath.Join(tmp, HelperMarker+"-old")
+	fresh := filepath.Join(tmp, HelperMarker+"-fresh")
+	other := filepath.Join(tmp, "something-else")
+	for _, d := range []string{old, fresh, other} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := time.Now().Add(-2 * StaleHelperAge)
+	for _, d := range []string{old, other} {
+		if err := os.Chtimes(d, past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sweepStaleHelpers(tmp, time.Now().Add(-StaleHelperAge))
+	if _, err := os.Stat(old); err == nil {
+		t.Error("the old helper folder should be gone")
+	}
+	for _, d := range []string{fresh, other} {
+		if _, err := os.Stat(d); err != nil {
+			t.Errorf("%s should stay: %v", d, err)
 		}
 	}
 }
