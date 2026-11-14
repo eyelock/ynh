@@ -82,7 +82,7 @@ This installs both `ynh` (harness template manager) and `ynd` (developer tools).
 
 #### **Build from Source**
 
-Requires Go 1.25+.
+Requires Go 1.26+.
 
 ```bash
 git clone https://github.com/eyelock/ynh.git
