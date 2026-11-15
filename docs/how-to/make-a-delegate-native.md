@@ -24,7 +24,7 @@ After these steps `ynh run` assembles it into the parent's run dir.
 
    or `"transport": "native"` at the top level for the harness default.
 
-2. Check the manifest:
+2. Check the manifest. `ynd validate` checks the harness in the current folder, or the one at `[path]`:
 
    ```
    ynd validate
@@ -43,7 +43,7 @@ After these steps `ynh run` assembles it into the parent's run dir.
    ynh trust accept <parent>
    ```
 
-4. Confirm: `ynh info <parent>` prints `transport=native (entry)` or `(harness)`.
+4. Confirm: `ynh info <parent's installed id>` prints `transport=native (entry)` or `(harness)`.
 
 A native delegate needs no installed harness and no `ynh trust accept` of its own. `ynd export` exports it;
 an `a2a` delegate is left out with one warning.
@@ -51,5 +51,4 @@ an `a2a` delegate is left out with one warning.
 ## Checked against
 
 [Transport](../delegates-reference.md#transport), [harnesses.md Transport](../harnesses.md#transport) and
-[reference.md](../reference.md), v0.18.0 (develop `4c05c4b5`), 2026-11-15. The `ynd validate` invocation (run
-from the parent's folder) is not stated in those pages; check `ynd validate --help`.
+[reference.md](../reference.md), v0.18.0 (develop `4c05c4b5`), 2026-11-15, and `ynd validate --help`. Not run on any vendor.

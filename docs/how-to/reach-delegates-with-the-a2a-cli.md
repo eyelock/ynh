@@ -63,4 +63,4 @@ The CLI route and the MCP route reach the same endpoints. Why there are two is i
 ## Checked against
 
 [The a2a CLI route](../delegates-reference.md#the-a2a-cli-route), v0.18.0 (develop `4c05c4b5`), 2026-11-15.
-Not run by Visconti; Cursor's shell route has not been run.
+Not run on any vendor; Cursor's shell route has not been run.

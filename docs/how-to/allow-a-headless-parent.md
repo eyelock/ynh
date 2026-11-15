@@ -21,7 +21,9 @@ The parent has an `a2a` delegate that is installed and trusted ([Add a delegate]
    It reads the vendor's settings files, so it cannot see a rule you pass on a command line and warns
    anyway.
 
-2. Allow the MCP tools (route 1), for the vendor your parent runs on:
+2. Allow the MCP tools (route 1), for the vendor your parent runs on. A flag goes after the harness and ynh
+   passes it to the vendor, so for Claude Code `ynh run <parent> --allowedTools=mcp__plugin_<harness>_ynh-delegates "<prompt>"`
+   works as an alternative to the settings entry:
 
    | Parent | What to do |
    |---|---|
@@ -54,5 +56,4 @@ The parent has an `a2a` delegate that is installed and trusted ([Add a delegate]
 
 [Allow rules for the tools](../delegates-reference.md#allow-rules-for-the-tools) and
 [The a2a CLI route](../delegates-reference.md#the-a2a-cli-route) at v0.18.0 (develop `4c05c4b5`),
-2026-11-15; not run by Visconti on any vendor. The record does not say how a flag is handed through
-`ynh run` to a vendor; use the settings files above if unsure.
+2026-11-15, and `ynh run --help` for how a flag reaches the vendor. Not run on any vendor.

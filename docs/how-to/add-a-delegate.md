@@ -11,10 +11,9 @@ Two routes, by where the delegate lives:
 Why a delegate is its own session is in [Delegate sessions](../delegate-sessions.md). The manifest fields are
 in [delegates_to](../harnesses.md#delegates-to-optional).
 
-> **Intended, not run.** This page describes the intended behaviour. What was run, on 2026-11-15 against a
-> build of `develop` `4c05c4b5` in a scratch `YNH_HOME`, is marked **run**. Everything else is **intended,
-> not run**. The tutorial that follows this page is meant to run all of it; where it does not, the page or ynh is
-> wrong, and the finding goes to the roadmap.
+> **Intended, not run.** What was run, on 2026-11-15 against a build of `develop` `4c05c4b5` in a scratch
+> `YNH_HOME`, is marked **run**. Everything else is marked **intended, not run**: the behaviour is designed
+> and documented, and has not been shown here.
 
 ## Before you start
 
@@ -89,7 +88,7 @@ You know two ynh terms:
 
 > **Intended, not run.** The entry was written with a placeholder URL (**run**), but a delegate installed
 > from a remote URL or a registry entry and then started by its parent has not been shown live. See
-> [the evidence on the parity page](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live).
+> [the evidence on the parity page](../vendor-parity.md#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live).
 
 ## After either route
 
@@ -109,19 +108,6 @@ You know two ynh terms:
 > refuses the parent's whole run, before the vendor starts, and the message names the command that fixes it.
 > ynh never installs or trusts anything for you. The four messages are under
 > [Refusals when a delegate cannot be matched](../delegates-reference.md#refusals-when-a-delegate-cannot-be-matched).
-
-## Findings from writing this page
-
-For the desk to hand to the roadmap. None is filed.
-
-1. `ynh delegate add --help` says "Add a Git delegate" and "`<url>` Git URL of the source", and
-   `docs/reference.md` says local paths are not supported. A local absolute path is accepted and written.
-   Help and reference are stale, or the command should refuse; which one is a decision.
-2. `ynh delegate add` takes `.` or a path for `<harness>` but refuses a bare name; `ynh info` refuses `.` and
-   takes only an installed id. The same argument means different things on sibling commands.
-3. [CONTRIBUTING](https://github.com/eyelock/ynh/blob/develop/.github/CONTRIBUTING.md#delegates-remote-only)
-   still says delegate entries "must be remote git URLs", against what `ynh delegate add` and
-   [ynh #855](https://github.com/eyelock/ynh/pull/855) now do. I can't change that file; it needs a worker.
 
 ## Checked against
 

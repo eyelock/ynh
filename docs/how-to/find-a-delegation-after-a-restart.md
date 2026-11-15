@@ -42,7 +42,7 @@ parent harness and its working folder, so another folder will not find them.
 > and a cancel records that the run was not signalled and may still be running.
 
 > **Known issue.** Continuing a delegate's session after it completed is not built
-> ([A2A delegates, not shown live](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
+> ([A2A delegates, not shown live](../vendor-parity.md#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live)).
 
 ## Checked against
 
