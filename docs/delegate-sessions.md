@@ -25,7 +25,9 @@ It also dies with the parent's session. A delegate that is its own ynh session i
 assembled like any other run, with its own vendor, MCP servers, hooks, workspace grant, profile or
 focus, and it can outlive whoever started it. That its own instructions, MCP servers and hooks take
 effect inside its session was shown live on Claude Code, Codex, Copilot CLI and OpenCode, and its
-workspace folders on all but OpenCode; Cursor was not run ([Not shown live](#not-shown-live)).
+workspace grant on Claude Code, Codex and Copilot CLI. On OpenCode a workspace grant cannot shut
+anything out ([What a vendor cannot do](#what-a-vendor-cannot-do)). Cursor is waived for v0.18.0: not
+required, and not claimed verified ([Not shown live](#not-shown-live)).
 
 **No vendor CLI speaks A2A, so ynh bridges it.** When this was designed (2026-11-13), none of the
 five vendor CLIs was an A2A client: each had only an open request
@@ -508,18 +510,25 @@ the newest snapshot, and Cursor gets `--trust` for an accepted harness (see
 [vendors](vendors.md#vendor-notes)). Two runs of one harness do not share a folder unless their inputs
 are equal, when they share one sealed snapshot.
 
+## What a vendor cannot do
+
+- **A workspace grant on an OpenCode delegate shuts nothing out.** ynh grants the folder, but
+  OpenCode 2.2.3, with no restricted agent, reads folders outside its own without any grant: in the
+  granted run and in the control run alike, the delegate read both the granted folder and an
+  ungranted one ([Evidence](#evidence)). A grant only matters to an agent that denies by default
+  ([Workspace](workspace.md#per-vendor), [ynh #698](https://github.com/eyelock/ynh/pull/698)); that
+  case was not run for a delegate. Limit [L41](vendor-parity.md#l41-opencode-reads-outside-folders-without-a-workspace-grant).
+
 ## Not shown live
 
 The v0.18.0 verification of 2026-11-14 (the acceptance run, then a re-run on `develop` at
 [c2690e2d](https://github.com/eyelock/ynh/commit/c2690e2d); [Evidence](#evidence)) could not show
 these. Each is open, not a known failure:
 
-- **Cursor, on every route** (MCP tools, the `a2a` CLI, and as a delegate): its Workspace Trust
+- **Cursor, on every route** (MCP tools, the `a2a` CLI, and as a delegate): **waived for v0.18.0**
+  ([the decisions on ynh #729](https://github.com/eyelock/ynh/issues/729#issuecomment-6875830532)): not required for the release, and not claimed verified. Its Workspace Trust
   stopped the runs, and the Cursor delegate was left unaccepted. Native on Cursor is refused by design
   ([Choosing a transport](#choosing-a-transport)).
-- **A workspace grant's effect on an OpenCode delegate.** ynh grants the folder, but OpenCode, with no
-  restricted agent, reads folders outside its own without any grant, so a test of the grant cannot
-  fail there.
 - **A person answering a question** through elicitation or MCP Tasks in a real client. Covered by
   tests and by a scripted MCP client only; every live question was answered by the parent's model.
 - **The allow rule for a baked image's** declared MCP servers on a Claude Code delegate: unit-tested
@@ -625,7 +634,7 @@ these. Each is open, not a known failure:
   Copilot CLI the granted folder was read and an ungranted one refused, and in the control both were
   refused; on Codex the folder was in the sandbox's writable roots only when granted (reading cannot
   show it, since Codex reads outside folders either way); on OpenCode both folders were read in both
-  runs, so the effect is unverified there.
+  runs, so a grant shuts nothing out there ([What a vendor cannot do](#what-a-vendor-cannot-do)).
 - **v0.18.0 re-verification**, live, 2026-11-14, a fresh build of `develop` at
   [c2690e2d](https://github.com/eyelock/ynh/commit/c2690e2d) (vendor versions not recorded for this
   run), with a full-harness Claude Code delegate re-run at [adfcf55b](https://github.com/eyelock/ynh/commit/adfcf55b):
