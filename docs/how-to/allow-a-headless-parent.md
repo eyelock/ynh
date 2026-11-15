@@ -46,10 +46,9 @@ The parent has an `a2a` delegate that is installed and trusted ([Add a delegate]
 4. Run `ynh doctor` again. A rule given on a command line is still warned about; the check is only for
    settings files.
 
-## If a delegate has a question
-
-A headless parent answers a delegate's question with its model, not a person. See the
-[known limit on the parity page](../vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
+> **Known issue.** A headless parent answers a delegate's question with its model, not a person
+> ([known limit](../vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
+> If the delegate's questions need a person, run the parent interactively.
 
 ## Checked against
 

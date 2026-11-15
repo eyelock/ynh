@@ -12,6 +12,10 @@ A delegate runs detached and every delegation has a record on disk, so it outliv
 Start the parent again from the same working folder with `ynh run <parent>`. Records are keyed by the
 parent harness and its working folder, so another folder will not find them.
 
+> **Intended, not run.** That a restarted parent finds a delegation from an earlier session is the designed
+> behaviour. What was shown live is a parent that lost a call to a short tool timeout and found its handle
+> again with `delegate_list` (2026-11-13, [ynh #832](https://github.com/eyelock/ynh/pull/832)).
+
 ## Steps
 
 1. Ask the parent to list its delegations. The `delegate_list` tool returns every delegation of this parent
@@ -28,16 +32,17 @@ parent harness and its working folder, so another folder will not find them.
 
 5. If the record itself is wanted, it is under `$YNH_HOME/delegations/`.
 
-Notes:
+> **Note.** A delegation started with the `a2a` CLI shows in `delegate_list`, but its id there is the handle,
+> not the A2A task id the CLI used.
 
-- A delegation started with the `a2a` CLI shows in `delegate_list`, but its id there is the handle, not the
-  A2A task id the CLI used.
-- If the session process was killed outright, the next status or cancel notices and marks the delegation
-  `failed` with an error saying so.
-- When ynh cannot verify that a recorded process is the one it started, it signals nothing, and a cancel
-  records that the run was not signalled and may still be running.
-- Continuing a delegate's session after it completed is not built
-  ([A2A delegates, not shown live](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
+> **Note.** If the session process was killed outright, the next status or cancel notices and marks the
+> delegation `failed` with an error saying so.
+
+> **Watch out.** When ynh cannot verify that a recorded process is the one it started, it signals nothing,
+> and a cancel records that the run was not signalled and may still be running.
+
+> **Known issue.** Continuing a delegate's session after it completed is not built
+> ([A2A delegates, not shown live](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
 
 ## Checked against
 

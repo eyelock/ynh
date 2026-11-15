@@ -11,9 +11,9 @@ Two routes, by where the delegate lives:
 Why a delegate is its own session is in [Delegate sessions](../delegate-sessions.md). The manifest fields are
 in [delegates_to](../harnesses.md#delegates-to-optional).
 
-> **Status of this page.** It describes the intended behaviour. What was run, on 2026-11-15 against a build
-> of `develop` `4c05c4b5` in a scratch `YNH_HOME`, is marked **run**. Everything else is **intended, not
-> run**. The tutorial that follows this page is meant to run all of it; where it does not, the page or ynh is
+> **Intended, not run.** This page describes the intended behaviour. What was run, on 2026-11-15 against a
+> build of `develop` `4c05c4b5` in a scratch `YNH_HOME`, is marked **run**. Everything else is **intended,
+> not run**. The tutorial that follows this page is meant to run all of it; where it does not, the page or ynh is
 > wrong, and the finding goes to the roadmap.
 
 ## Before you start
@@ -87,9 +87,9 @@ You know two ynh terms:
 
 3. Read and accept it as in route 1, step 3, with the id `ynh install` printed.
 
-The remote route is **intended, not run**: the entry was written with a placeholder URL (**run**), but a
-delegate installed from a remote URL or a registry entry and then started by its parent has not been shown
-live. See [the evidence on the parity page](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live).
+> **Intended, not run.** The entry was written with a placeholder URL (**run**), but a delegate installed
+> from a remote URL or a registry entry and then started by its parent has not been shown live. See
+> [the evidence on the parity page](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live).
 
 ## After either route
 

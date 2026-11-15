@@ -23,8 +23,11 @@ The CLI route and the MCP route reach the same endpoints. Why there are two is i
    or `brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli && brew install a2a`.
 
 2. Allow the shell command for your vendor, as in
-   [Allow a headless parent](allow-a-headless-parent.md#steps) step 3. On Codex the sandbox must reach
-   `127.0.0.1`.
+   [Allow a headless parent](allow-a-headless-parent.md#steps) step 3.
+
+   > **Watch out.** On Codex the default sandbox cannot reach `127.0.0.1`: the command fails with `connect:
+   > operation not permitted`. Turning `network_access` on fixes it, and means the shell is then no longer
+   > sandboxed from localhost generally.
 
 3. Check:
 
@@ -51,13 +54,11 @@ The CLI route and the MCP route reach the same endpoints. Why there are two is i
    The token comes from the credential helper ynh sets in `A2ACLI_CREDENTIAL_HELPER`, so a command carries
    no variable.
 
-## If it fails
-
-- `connect: operation not permitted` on Codex: the sandbox cannot reach localhost. Turn `network_access`
-  on, knowing the shell is then no longer sandboxed from localhost generally.
-- Claude Code refuses a command with a variable under `Bash(a2a:*)`
-  ([ynh #849](https://github.com/eyelock/ynh/issues/849)). Use the address the skill gives.
-- A baked image's skill teaches the variable form, since it is written before any endpoint exists.
+   > **Known issue.** Claude Code refuses a command that carries a variable under the rule `Bash(a2a:*)`
+   > ([ynh #849](https://github.com/eyelock/ynh/issues/849)), which is why the skill writes the address into
+   > the command and the token comes from the helper. A run from a baked image has its skill written before
+   > any endpoint exists, so that skill teaches the variable form and hits this. Use the address from a live
+   > `ynh run` until it is fixed.
 
 ## Checked against
 
