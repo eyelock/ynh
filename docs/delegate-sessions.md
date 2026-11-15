@@ -15,16 +15,17 @@ the manifest fields themselves are in [delegates_to](harnesses.md#delegates-to-o
 [make a delegate native](how-to/make-a-delegate-native.md) and
 [find a delegation after a restart](how-to/find-a-delegation-after-a-restart.md).
 
-Status, and what was and was not shown live, is on the parity page: limit
-[L40](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
-for A2A delegates and [L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)
-for who answers a delegate's question. This page claims only what those limits show.
+Status, and what was and was not shown live, is on the [parity page](vendor-parity.md), which lists each
+known gap in what a vendor receives as a numbered **limit** (L12, L39, L40) with its evidence. Two apply
+here: [what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
+and [who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
+This page claims only what those limits show.
 
 ## Why
 
 **A subagent is only part of a harness.** A `native` delegate is a vendor subagent definition inside the
 parent's session. On every vendor it carries its instructions; only on Claude Code its MCP servers; on
-no vendor its hooks or workspace folders ([L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
+no vendor its hooks or workspace folders ([known limit L12, delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
 It also ends with the parent's session. A delegate that is its own ynh session is assembled like any
 other run, and it can outlive whoever started it.
 
@@ -33,7 +34,7 @@ was designed, each had at most an open request, for example
 [anthropics/claude-code #104852](https://github.com/anthropics/claude-code/issues/104852)). So a parent
 reaches a delegate through a bridge, and ynh gives it two, both reaching the same endpoints: ynh's own
 MCP server, which every vendor CLI can call, and the [official a2a CLI](https://github.com/a2aproject/a2a-cli)
-as a shell route. There is no `ynh delegate` command for the parent.
+as a shell route.
 
 **A2A on the wire, not MCP alone.** [A2A](https://a2a-protocol.org/latest/specification/) (Agent2Agent)
 is built for one agent handing a task to another: a durable task id, a cancel, and a state,
@@ -47,7 +48,8 @@ a rule like "a parent starts only the delegates it names" cannot live in the bri
 delegate's side: each endpoint has its own bearer token, and only the parent's run holds it.
 
 **Why `native` stays.** Native is a setting, per entry or for the whole harness, for a parent that wants
-its delegate inside its own session and can live with L12.
+its delegate inside its own session and accepts what that costs: the delegate keeps its instructions but
+loses its hooks and workspace folders, and its MCP servers on every vendor but Claude Code ([known limit L12, delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
 
 ## The shape
 
@@ -69,22 +71,24 @@ parent vendor CLI ────┤                (ynh delegate-mcp) ├── A2
 
 ## Which harness a delegate runs as
 
-A `delegates_to` entry is a source (`git`, `path`, `ref`), not an installed harness. For an `a2a` entry,
-ynh matches it to the installed harness whose source matches, and runs the delegate as that harness,
-under that harness's own trust, workspace and hook grants. So the delegate is installed and trusted like
-any harness: it can be installed from a remote git URL or from a registry entry, and once `ynh trust
-accept` has been run on it, the parent can start it.
+A `delegates_to` entry is a source, not an installed harness. For an `a2a` entry, ynh finds the installed
+harness whose recorded source matches and runs the delegate as that harness. So the delegate must be
+installed (`ynh install <source>`) and **trusted** first: `ynh trust accept <id>` records that you have read
+what the harness will run (its commands, hooks and MCP servers), which is explained under
+[What a command sensor can reach](sensors.md#what-a-command-sensor-can-reach). A delegate that runs
+nothing needs no accepting.
 
-**Being verified.** That a delegate installed from a remote git URL or from a registry entry, with trust
-accepted, then works as a delegate, is how this is designed to work. It has not been shown live yet: the
-live runs recorded in [L40](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
-used delegates installed by a person's `ynh trust accept`, and the record does not say how each was
-installed. May, the verifier, has not yet run the remote and registry cases.
+> **Watch out.** A delegate that is not installed, not trusted, changed since it was trusted, or unreadable
+> refuses the parent's whole run, before the vendor starts, with the command that fixes it. A parent must
+> not start believing it has a delegate it cannot reach, and ynh never installs or trusts anything on a
+> parent's behalf. The messages are in the
+> [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched).
 
-A parent whose delegate is not installed, not trusted, changed since it was trusted, or cannot be read
-in full is refused **before the vendor starts**, with the command that fixes it. A parent must not start
-believing it has a delegate it cannot reach. ynh never installs or trusts anything on a parent's behalf.
-The messages are in the [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched).
+**Being verified.** That a delegate installed from a remote git URL or from a registry entry, then trusted,
+works as a delegate is the designed path. It has not been shown live. The live runs on the parity page
+([what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)) used delegates a person installed and trusted by
+hand, and the record does not say how each was installed. May, the verifier, has not yet run the remote and
+registry cases.
 
 ## Trust
 
@@ -131,7 +135,7 @@ A delegate session gets one extra tool, `ask_parent`, from an MCP server named `
 travels as an A2A task in state `input-required`, and the parent sees it by whichever route its client
 offers: as an elicitation or a task where the client takes one, otherwise in the tool result, where the
 parent's model answers it with a reply on the same task. In a headless parent that is the model
-answering, not a person ([L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
+answering, not a person ([parity page: who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
 
 A question outlives the delegate's wait: if no answer comes, the delegate is told `unanswered`, the
 question stays open in the record, and the delegate chooses whether to keep waiting, withdraw it or carry
@@ -155,7 +159,7 @@ The record's contents, and how liveness is decided, are in the
 
 With `transport: native`, ynh assembles the delegate as a subagent definition in the parent's run dir,
 and the parent's vendor runs it inside the parent's session. No endpoint is opened and no installed
-harness is matched. It carries only part of its harness, which is limit L12, and it is the price of
+harness is matched. It carries only part of its harness ([known limit L12, delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)), which is the price of
 choosing native. `ynd export` exports native delegates and leaves `a2a` ones out with one warning,
 since they need ynh at runtime.
 
@@ -185,8 +189,8 @@ the old behaviour, chosen with `"transport": "native"` on an entry or as the har
 The status of A2A delegates, what was not shown live, what is not built (remote delegates, continuing a
 delegate's session after it completes, `ynh run`'s own record of every launch, [ynh #746](https://github.com/eyelock/ynh/issues/746)) and the
 evidence runs are on the parity page, under
-[L40](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
-and [L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
+[A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live) and
+[who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
 
 * **Why**
   * [Harness Engineering](/harness-engineering.md)
