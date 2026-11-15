@@ -15,11 +15,9 @@ the manifest fields themselves are in [delegates_to](harnesses.md#delegates-to-o
 [make a delegate native](how-to/make-a-delegate-native.md) and
 [find a delegation after a restart](how-to/find-a-delegation-after-a-restart.md).
 
-Status, and what was and was not shown live, is on the [parity page](vendor-parity.md), which lists each
-known gap in what a vendor receives as a numbered **limit** (L12, L39, L40) with its evidence. Two apply
-here: [what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
-and [who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
-This page claims only what those limits show.
+> **Note.** Status, and what was and was not shown live, is on the [parity page](vendor-parity.md), which
+> lists each known gap in what a vendor receives as a numbered **limit** with its evidence. This page claims
+> only what those limits show. The ones that apply sit beside the text they qualify, below.
 
 ## Why
 
@@ -85,11 +83,11 @@ nothing needs no accepting.
 > [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched); the steps to add one are
 > in [Add a delegate](how-to/add-a-delegate.md).
 
-**Being verified.** That a delegate installed from a remote git URL or from a registry entry, then trusted,
-works as a delegate is the designed path. It has not been shown live. The live runs on the parity page
-([what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)) used delegates a person installed and trusted by
-hand, and the record does not say how each was installed. May, the verifier, has not yet run the remote and
-registry cases.
+> **Intended, not run.** That a delegate installed from a remote git URL or from a registry entry, then trusted,
+> works as a delegate is the designed path. It has not been shown live. The live runs on the parity page
+> ([what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)) used delegates a person installed and trusted by
+> hand, and the record does not say how each was installed. May, the verifier, has not yet run the remote and
+> registry cases.
 
 ## Trust
 
@@ -135,8 +133,12 @@ checks and the Codex sandbox cost are in the [reference](delegates-reference.md#
 A delegate session gets one extra tool, `ask_parent`, from an MCP server named `ynh-parent`. A question
 travels as an A2A task in state `input-required`, and the parent sees it by whichever route its client
 offers: as an elicitation or a task where the client takes one, otherwise in the tool result, where the
-parent's model answers it with a reply on the same task. In a headless parent that is the model
-answering, not a person ([parity page: who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
+parent's model answers it with a reply on the same task.
+
+> **Known issue.** In a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) the
+> model answers a delegate's question, not a person
+> ([known limit](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
+> Until a person can answer, run the parent interactively if the delegate's questions need one.
 
 A question outlives the delegate's wait: if no answer comes, the delegate is told `unanswered`, the
 question stays open in the record, and the delegate chooses whether to keep waiting, withdraw it or carry
@@ -160,8 +162,14 @@ The record's contents, and how liveness is decided, are in the
 
 With `transport: native`, ynh assembles the delegate as a subagent definition in the parent's run dir,
 and the parent's vendor runs it inside the parent's session. No endpoint is opened and no installed
-harness is matched. It carries only part of its harness ([known limit L12, delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)), which is the price of
-choosing native. `ynd export` exports native delegates and leaves `a2a` ones out with one warning,
+harness is matched.
+
+> **Watch out.** A `native` delegate carries only part of its harness: its instructions on every vendor, its
+> MCP servers only on Claude Code, and its hooks and workspace folders on none
+> ([known limit: delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
+> That is the price of choosing native.
+
+`ynd export` exports native delegates and leaves `a2a` ones out with one warning,
 since they need ynh at runtime.
 
 ## Why a run dir is a snapshot
@@ -187,11 +195,11 @@ the old behaviour, chosen with `"transport": "native"` on an entry or as the har
 
 ## Status and evidence
 
-The status of A2A delegates, what was not shown live, what is not built (remote delegates, continuing a
-delegate's session after it completes, `ynh run`'s own record of every launch, [ynh #746](https://github.com/eyelock/ynh/issues/746)) and the
-evidence runs are on the parity page, under
-[A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live) and
-[who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
+> **Known issue.** Not built: remote delegates, continuing a delegate's session after it completes, and
+> `ynh run`'s own record of every launch ([ynh #746](https://github.com/eyelock/ynh/issues/746)). Not shown
+> live: see [A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
+> and [who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)
+> on the parity page, which hold the evidence runs.
 
 * **Why**
   * [Harness Engineering](/harness-engineering.md)
