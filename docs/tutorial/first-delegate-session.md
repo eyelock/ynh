@@ -455,12 +455,20 @@ The same harnesses work with another vendor as the parent, chosen with `-v`. Wha
 
 - **Codex:** use `-v codex` in place of `--allowedTools=...`: ynh
   approves the delegate tools itself. The first run in a project asks to make two links in it; say
-  yes.
+  yes. Without a terminal to answer on, run `ynh run local/team-lead -v codex --install` once first.
 - **Copilot CLI:** add `-v copilot --allow-tool=ynh-delegates`, and end the prompt with "and wait
   for its result". Without "wait for its result", the model may stop once the review has started.
 - **OpenCode:** use `-v opencode` in place of `--allowedTools=...`. No allow rule is needed.
 
 The reviewer itself still runs on Claude Code, its own `default_vendor`.
+
+> **Known issue.** On Codex, the prompt "Ask the reviewer to review README.md" can make the model use the
+> `a2a` shell route, which fails with `command not found: a2a` unless the `a2a` binary is installed (`ynh
+> doctor` warns of this). Name the tool in the prompt instead: "Use your delegate_to_reviewer tool to ask the
+> reviewer to review README.md, wait for its result, and report it."
+
+> **Note.** Last run end to end on 2026-11-15 on macOS, with ynh at `develop` `09e9f50`, as the parent on
+> Claude Code, Codex, Copilot CLI and OpenCode.
 
 > **Intended, not run.** Cursor as the parent has not been run on the delegate routes for v0.18.0.
 
