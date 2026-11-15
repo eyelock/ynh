@@ -239,7 +239,9 @@ Error: delegate /private/tmp/ynh-tutorial/reviewer of team-lead is installed as 
   Review with 'ynh trust show local/reviewer', then run: ynh trust accept local/reviewer
 ```
 
-On macOS the path begins `/private/tmp`, because `/tmp` is a link to it.
+Trust is ynh's record that you have read what a harness will run, before ynh runs it. We do that next.
+
+> **Note.** On macOS the path begins `/private/tmp`, because `/tmp` is a link to it.
 
 ## Trust the reviewer
 
@@ -437,9 +439,9 @@ terminal-based CLI that lets me read and edit files, run commands, and call tool
 or sub-agents on your behalf."
 ```
 
-> **Being verified for v0.18.0:** a delegate from a remote Git URL or a registry entry whose harness
-> runs commands, so that it needs `ynh trust accept` as the reviewer did. The researcher here runs
-> none.
+> **Intended, not run.** A delegate from a remote Git URL or a registry entry whose harness runs commands,
+> so that it needs `ynh trust accept` as the reviewer did, is the designed path and has not been shown
+> live. The researcher here runs no commands, so it needs no accepting.
 
 ## What we did
 
@@ -457,9 +459,10 @@ The same harnesses work with another vendor as the parent, chosen with `-v`. Wha
 - **Copilot CLI:** add `-v copilot --allow-tool=ynh-delegates`, and end the prompt with "and wait
   for its result". Without "wait for its result", the model may stop once the review has started.
 - **OpenCode:** use `-v opencode` in place of `--allowedTools=...`. No allow rule is needed.
-- **Cursor:** not verified for v0.18.0.
 
 The reviewer itself still runs on Claude Code, its own `default_vendor`.
+
+> **Intended, not run.** Cursor as the parent has not been run on the delegate routes for v0.18.0.
 
 ## Clean up
 
