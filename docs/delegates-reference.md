@@ -4,8 +4,12 @@ Facts about how a delegate runs under `ynh run`, as of v0.18.0. For why it is bu
 [Delegate sessions](delegate-sessions.md). The manifest fields are in
 [delegates_to](harnesses.md#delegates-to-optional) and [Transport](harnesses.md#transport). What was shown
 live, and what was not, is under limit
-[L40](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
+[A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
 on the [parity page](vendor-parity.md).
+
+This page is reference: facts only. Steps are in the how-tos and reasons are in
+[Delegate sessions](delegate-sessions.md); a fact that needs a reason or a step goes there, not here. A
+"limit" is a numbered known gap on the parity page, linked by what it says.
 
 ## Transport
 
@@ -14,7 +18,7 @@ on the [parity page](vendor-parity.md).
 | What the delegate is | its own detached ynh session, started on the endpoint's first message | a vendor subagent inside the parent's session |
 | Endpoint, `ynh-delegates` server | yes | no |
 | Installed harness matched | yes, by source | no: built from the entry's source |
-| Carries its own MCP servers, hooks, workspace folders | yes, as its own run | instructions on every vendor, MCP servers only on Claude Code, hooks and workspace nowhere ([L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)) |
+| Carries its own MCP servers, hooks, workspace folders | yes, as its own run | instructions on every vendor, MCP servers only on Claude Code, hooks and workspace nowhere ([delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)) |
 | Ends with the parent's session | no | yes |
 | `ynd export` | left out, with one warning | exported |
 
@@ -31,14 +35,15 @@ A `native` delegate on a vendor with no native subagents is refused by `ynh inst
 ```
 
 Only Cursor declares none today (its subagents are unverified,
-[L35](vendor-parity.md#l35-cursor-under-ynh-run-not-shown-live)). Claude Code, Codex, Copilot CLI and
+[Cursor under `ynh run`, not shown live](vendor-parity.md#l35-cursor-under-ynh-run-not-shown-live)). Claude Code, Codex, Copilot CLI and
 OpenCode declare native subagents.
 
 ## Refusals when a delegate cannot be matched
 
 For an `a2a` entry, `ynh run` of the parent matches the entry to the installed harness whose source
 matches (the Git URL and path, or the local folder), before it opens the endpoints. An unmatched delegate
-refuses the parent's whole run, before the vendor starts:
+refuses the parent's whole run, before the vendor starts. A delegate is *trusted* once `ynh trust accept <id>`
+has recorded that you read what it will run ([what that covers](sensors.md#what-a-command-sensor-can-reach)):
 
 ```
 delegate <source> of <parent> is not installed
@@ -56,7 +61,7 @@ matched. When several installs match one entry, the trusted match with the small
 
 Not shown live: a delegate installed from a remote git URL or from a registry entry, with trust accepted,
 then started by its parent. It is the designed path; the record does not yet show it run
-([L40](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
+([A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
 
 ## The A2A endpoints
 
@@ -233,7 +238,7 @@ seconds (`YNH_PARENT_ASK_MAX_WAIT`, in seconds). The record puts the delegate's 
 |---|---|---|
 | MCP, with Tasks (Claude Code interactive) | the task moves to `input_required` with an `elicitation/create` in `inputRequests` | `tasks/update`; a declined elicitation is recorded as `(the parent declined to answer)` and the delegate's tool says `declined` |
 | MCP, elicitation but no Tasks (interactive Codex, Copilot CLI, OpenCode) | during a call that waits, a server-initiated `elicitation/create`, once per question | the elicitation, or `delegate_reply` (then the elicitation's answer is dropped). A client that refuses, declines or cancels has not answered: Cursor's CLI refuses without asking, Copilot CLI's `-p` declines at once |
-| MCP, headless (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) | state `input-required`, the question as `message` | `delegate_reply` on the same task: the model answers, not a person ([L39](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)) |
+| MCP, headless (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) | state `input-required`, the question as `message` | `delegate_reply` on the same task: the model answers, not a person ([a headless parent's model answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)) |
 | `a2a` CLI | `a2a task get` shows `input-required` with the question as the status message | `a2a send --task-id <id> "<answer>"` |
 
 `ask_parent` returns `answered`, `declined`, `unanswered`, `withdrawn` or `ended` (the delegation was
@@ -287,4 +292,4 @@ A baked image's pre-assembled run dir is used as it is. Limit: Codex and Cursor 
 the stable link, so they show the newest snapshot, not the session's. Both key state by the folder a session
 starts in, so `--resume` finds the newest session that started in any snapshot of the harness and resumes it by
 id in the newest snapshot, and Cursor gets `--trust` for an accepted harness ([Vendors](vendors.md#vendor-notes),
-[L38](vendor-parity.md#l38-cursor-resume-and-interactive-trust-across-snapshots-not-shown-live)).
+[Cursor resume across snapshots, not shown live](vendor-parity.md#l38-cursor-resume-and-interactive-trust-across-snapshots-not-shown-live)).
