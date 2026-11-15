@@ -23,6 +23,12 @@ no vendor its hooks or workspace folders ([known limit L12, delegates carry only
 It also ends with the parent's session. A delegate that is its own ynh session is assembled like any
 other run, and it can outlive whoever started it.
 
+> **Known issue.** On OpenCode a workspace grant shuts nothing out: with no restricted agent, OpenCode reads
+> folders outside its own whether or not the delegate's harness grants them
+> ([known limit: OpenCode reads outside folders without a workspace grant](vendor-parity.md#l41-opencode-reads-outside-folders-without-a-workspace-grant)).
+> ynh still writes the grant. Cursor is waived for v0.18.0: not required for the release, and not claimed
+> verified.
+
 **No vendor CLI speaks A2A, so ynh bridges it.** The five vendor CLIs are not A2A clients (when this
 was designed, each had at most an open request, for example
 [anthropics/claude-code #104852](https://github.com/anthropics/claude-code/issues/104852)). So a parent
@@ -80,9 +86,8 @@ nothing needs no accepting.
 
 > **Intended, not run.** That a delegate installed from a remote git URL or from a registry entry, then trusted,
 > works as a delegate is the designed path. It has not been shown live. The live runs on the parity page
-> ([what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)) used delegates a person installed and trusted by
-> hand, and the record does not say how each was installed. May, the verifier, has not yet run the remote and
-> registry cases.
+> ([what is not shown live for A2A delegates](vendor-parity.md#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live)) used delegates a person installed and trusted by
+> hand, and the record does not say how each was installed. The remote and registry cases have not been run.
 
 ## Trust
 
@@ -192,7 +197,7 @@ the old behaviour, chosen with `"transport": "native"` on an entry or as the har
 
 > **Known issue.** Not built: remote delegates, continuing a delegate's session after it completes, and
 > `ynh run`'s own record of every launch ([ynh #746](https://github.com/eyelock/ynh/issues/746)). Not shown
-> live: see [A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
+> live: see [A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live)
 > and [who answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)
 > on the parity page, which hold the evidence runs.
 

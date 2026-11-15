@@ -4,7 +4,7 @@ Facts about how a delegate runs under `ynh run`, as of v0.18.0. For why it is bu
 [Delegate sessions](delegate-sessions.md). The manifest fields are in
 [delegates_to](harnesses.md#delegates-to-optional) and [Transport](harnesses.md#transport). What was shown
 live, and what was not, is under limit
-[A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)
+[A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live)
 on the [parity page](vendor-parity.md).
 
 This page is reference: facts only. Steps are in the how-tos and reasons are in
@@ -61,7 +61,7 @@ matched. When several installs match one entry, the trusted match with the small
 
 > **Intended, not run.** A delegate installed from a remote git URL or from a registry entry, with trust accepted,
 > then started by its parent. It is the designed path; the record does not yet show it run
-> ([A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
+> ([A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-a-person-answering-a-baked-image-and-nesting-not-shown-live)).
 
 ## The A2A endpoints
 
