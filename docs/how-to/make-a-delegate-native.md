@@ -3,10 +3,11 @@
 You want a delegate to run as a vendor subagent inside the parent's session, not as its own ynh session.
 After these steps `ynh run` assembles it into the parent's run dir.
 
-Choose this knowing the price: a native delegate carries its instructions on every vendor, its MCP servers
-only on Claude Code and its hooks and workspace folders nowhere
-([known limit: delegates carry only part of a harness](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)), and it ends with the parent's
-session. The comparison is the table under [Transport](../delegates-reference.md#transport).
+> **Watch out.** A native delegate carries its instructions on every vendor, its MCP servers only on Claude
+> Code and its hooks and workspace folders nowhere
+> ([known limit: delegates carry only part of a harness](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)),
+> and it ends with the parent's session. The comparison is the table under
+> [Transport](../delegates-reference.md#transport).
 
 ## Steps
 
