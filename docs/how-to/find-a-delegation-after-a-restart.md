@@ -37,7 +37,7 @@ Notes:
 - When ynh cannot verify that a recorded process is the one it started, it signals nothing, and a cancel
   records that the run was not signalled and may still be running.
 - Continuing a delegate's session after it completed is not built
-  ([L40](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
+  ([A2A delegates, not shown live](../vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
 
 ## Checked against
 

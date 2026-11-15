@@ -82,7 +82,8 @@ nothing needs no accepting.
 > refuses the parent's whole run, before the vendor starts, with the command that fixes it. A parent must
 > not start believing it has a delegate it cannot reach, and ynh never installs or trusts anything on a
 > parent's behalf. The messages are in the
-> [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched).
+> [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched); the steps to add one are
+> in [Add a delegate](how-to/add-a-delegate.md).
 
 **Being verified.** That a delegate installed from a remote git URL or from a registry entry, then trusted,
 works as a delegate is the designed path. It has not been shown live. The live runs on the parity page

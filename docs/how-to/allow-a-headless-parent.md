@@ -48,8 +48,8 @@ The parent has an `a2a` delegate that is installed and trusted ([Add a delegate]
 
 ## If a delegate has a question
 
-A headless parent answers a delegate's question with its model, not a person. See
-[L39](../vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
+A headless parent answers a delegate's question with its model, not a person. See the
+[known limit on the parity page](../vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person).
 
 ## Checked against
 

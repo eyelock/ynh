@@ -5,7 +5,7 @@ After these steps `ynh run` assembles it into the parent's run dir.
 
 Choose this knowing the price: a native delegate carries its instructions on every vendor, its MCP servers
 only on Claude Code and its hooks and workspace folders nowhere
-([L12](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)), and it ends with the parent's
+([known limit: delegates carry only part of a harness](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)), and it ends with the parent's
 session. The comparison is the table under [Transport](../delegates-reference.md#transport).
 
 ## Steps
@@ -33,7 +33,8 @@ session. The comparison is the table under [Transport](../delegates-reference.md
    `ynh run`. Today only Cursor declares none; there is no fallback to `a2a`. The fix is the message's:
    `transport: a2a` on that delegate, or another vendor.
 
-3. Read and accept the parent again. Its digest covers each entry's settled transport, so flipping it reads
+3. Read and accept the parent again. Trust is ynh's record that you read what a harness will run
+   ([what that covers](../sensors.md#what-a-command-sensor-can-reach)). The parent's digest covers each entry's settled transport, so flipping it reads
    `changed`, and the delegate's MCP servers and focus prompt are now in the parent's digest:
 
    ```
