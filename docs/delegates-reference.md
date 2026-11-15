@@ -59,9 +59,9 @@ delegate <source> of <parent> is installed as <id> but cannot be read in full: <
 A delegate that executes nothing (no sensors, hooks or MCP servers) needs no `ynh trust accept` to be
 matched. When several installs match one entry, the trusted match with the smallest id wins.
 
-Not shown live: a delegate installed from a remote git URL or from a registry entry, with trust accepted,
-then started by its parent. It is the designed path; the record does not yet show it run
-([A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
+> **Intended, not run.** A delegate installed from a remote git URL or from a registry entry, with trust accepted,
+> then started by its parent. It is the designed path; the record does not yet show it run
+> ([A2A delegates, not shown live](vendor-parity.md#l40-a2a-delegates-cursor-opencode-workspace-folders-and-a-person-answering-not-shown-live)).
 
 ## The A2A endpoints
 
@@ -155,9 +155,9 @@ task id is the handle. Of the five vendors, only Claude Code's interactive mode 
 2026-11-03. The Go MCP SDK has no Tasks extension ([go-sdk #626](https://github.com/modelcontextprotocol/go-sdk/issues/626)),
 so ynh writes this server's JSON-RPC itself.
 
-**OpenCode (2.2.3)** exposes MCP tools through Code Mode: the model sees one `execute` tool and calls
-`tools["ynh-delegates"].delegate_to_<name>({...})` inside it. In a check of 2026-11-13 a parent did not find
-the tools until its prompt named Code Mode.
+> **Known issue.** OpenCode (2.2.3) exposes MCP tools through Code Mode: the model sees one `execute` tool and calls
+> `tools["ynh-delegates"].delegate_to_<name>({...})` inside it. In a check of 2026-11-13 a parent did not find
+> the tools until its prompt named Code Mode.
 
 ### Allow rules for the tools
 
@@ -219,10 +219,10 @@ ynh does not install the `a2a` binary. `ynh doctor` warns (never fails) when thi
 | Claude Code: no `Bash(a2a:*)` allow rule | add it to `permissions.allow`, or pass `--allowedTools 'Bash(a2a:*)'`. One rule covers every command, for any number of delegates |
 | Copilot CLI: no `shell(a2a:*)` allow rule | add it to the allowed tools, or pass `--allow-tool 'shell(a2a:*)'` |
 
-Costs: with Codex's default sandbox the CLI cannot reach `127.0.0.1` (`connect: operation not permitted`);
-turning `network_access` on fixes it and means the shell is no longer sandboxed from localhost generally. A
-headless run denies every `a2a` call without an allow rule; OpenCode needs none. Cursor's shell route has not
-been run.
+> **Watch out.** With Codex's default sandbox the CLI cannot reach `127.0.0.1` (`connect: operation not permitted`);
+> turning `network_access` on fixes it and means the shell is no longer sandboxed from localhost generally. A
+> headless run denies every `a2a` call without an allow rule; OpenCode needs none. Cursor's shell route has not
+> been run.
 
 ## Questions from a delegate
 
