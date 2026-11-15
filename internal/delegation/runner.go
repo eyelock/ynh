@@ -171,12 +171,16 @@ func Supervise(path string, launch Launcher) error {
 		_ = cmd.Wait()
 		return err
 	}
-	if cancelledEarly {
-		stopGroup(pgid)
-	}
-
+	// Wait for the run from here on, before stopping it: stopGroup judges the
+	// group gone only once the run is reaped, and a run that has exited but
+	// not been waited for is a zombie that still counts as alive.
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
+	var stoppedEarly chan struct{}
+	if cancelledEarly {
+		stoppedEarly = make(chan struct{})
+		go func() { stopGroup(pgid); close(stoppedEarly) }()
+	}
 	var werr error
 loop:
 	for {
@@ -194,6 +198,9 @@ loop:
 			})
 			go stopGroup(pgid)
 		}
+	}
+	if stoppedEarly != nil {
+		<-stoppedEarly // it ends as soon as the run is reaped
 	}
 	// Whatever the vendor left behind in the group goes with it.
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
