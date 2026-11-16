@@ -50,7 +50,9 @@ in every separate shell your tools start for you.
 ## Make the reviewer, the team lead and a project
 
 The reviewer asks its parent a question before it reviews, which is what the delegate will be waiting
-on:
+on. Its instructions also tell it to keep waiting. Each wait lasts at most 45 seconds
+([Questions from a delegate](../delegate-sessions.md#questions-from-a-delegate)), and a delegate that
+is not told to keep asking may give up after two waits, about 90 seconds, and sign with a placeholder:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/reviewer/.agents/harness
@@ -73,6 +75,10 @@ You are a reviewer. You are given one file to review.
 
 Before you start, ask your parent one question with
 the ask_parent tool: "Which codeword should I sign with?"
+
+If ask_parent returns "unanswered", call it again with
+the same question_id and keep waiting. Never withdraw
+the question and never guess a codeword.
 
 Then read the file and reply with one short finding,
 signed on its own last line as REVIEWED-<codeword>.
@@ -195,7 +201,9 @@ pgrep -fl 'ynh run local/reviewer'
 
 You should see one line naming `ynh run local/reviewer`, with a process id; it also shows the review
 prompt, and on macOS the project path begins `/private/tmp`. The delegate is waiting for its parent's
-answer to "Which codeword should I sign with?".
+answer to "Which codeword should I sign with?". The reviewer was still waiting, and still
+unlapsed in its record, when a new parent answered it three minutes later; but it keeps asking only
+as long as the model follows its instructions, so do not leave it for long.
 
 ynh also keeps a record of each delegation on disk, under the ynh home and keyed by the parent
 harness and the folder it ran in:
@@ -206,7 +214,9 @@ ls "$YNH_HOME"/delegations/local--team-lead/*/
 
 The folder under `local--team-lead/` is one ynh names for the project folder. In it you should see a
 `dlg-….json` file with the task id you were given, a `.log` beside it, and a `.json.lock` file you
-can leave alone. The `.json` record is what a returning parent reads. If you also ran the later sections of the first
+can leave alone. The `.json` record is what a returning parent reads, and it shows the waiting: print it with
+`cat "$YNH_HOME"/delegations/local--team-lead/*/dlg-*.json` and look at `"questions"`: your question
+is there with an `asked_at` and no `lapsed_at` while it is open. If you also ran the later sections of the first
 tutorial, the folder holds a record for each earlier delegation too; look for the task id you were
 given.
 
