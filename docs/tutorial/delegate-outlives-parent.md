@@ -19,21 +19,21 @@ use the flags in that tutorial's [Which vendor?](first-delegate-session.md#which
 
 Do [A First Delegate Session](first-delegate-session.md) as far as the end of
 [Trust the reviewer](first-delegate-session.md#trust-the-reviewer), and stop there: do not run its
-Clean up. You should have, in `/tmp/ynh-tutorial`, a built ynh, the installed and trusted `reviewer`
-and the installed `team-lead`, and a `project` folder.
+Clean up. You should have ynh 0.18.0 or newer and, in `/tmp/ynh-tutorial`, the installed and trusted
+`reviewer`, the installed `team-lead` and a `project` folder.
 
-In the terminal you use here, point at the tutorial's ynh and home again (the lines last only for the
+In the terminal you use here, point at the tutorial's ynh home again (the lines last only for the
 shell you ran them in), and go to the project:
 
 ```sh
 export YNH_HOME=/tmp/ynh-tutorial/home
-export PATH=/tmp/ynh-tutorial/ynh-src/bin:/tmp/ynh-tutorial/home/bin:$PATH
+export PATH=/tmp/ynh-tutorial/home/bin:$PATH
 cd /tmp/ynh-tutorial/project
-which ynh
+echo $YNH_HOME
 ```
 
 ```
-/tmp/ynh-tutorial/ynh-src/bin/ynh
+/tmp/ynh-tutorial/home
 ```
 
 ## Start a review and let the parent end
@@ -78,7 +78,9 @@ ls "$YNH_HOME"/delegations/local--team-lead/*/
 
 The folder under `local--team-lead/` is one ynh names for the project folder. In it you should see a
 `dlg-….json` file with the task id you were given, a `.log` beside it, and a `.json.lock` file you
-can leave alone. The `.json` record is what a returning parent reads.
+can leave alone. The `.json` record is what a returning parent reads. If you also ran the later sections of the first
+tutorial, the folder holds a record for each earlier delegation too; look for the task id you were
+given.
 
 ## Start a new parent and collect the result
 
@@ -106,7 +108,8 @@ The reviewer's result:
 - It signed off with REVIEWED-PINEAPPLE.
 ```
 
-Look for the same task id you were given before (the reply's wording varies, so match on `dlg-`),
+If you ran the first tutorial's cancel and list steps, the reply may also mention those older
+delegations. Look for the same task id you were given before (the reply's wording varies, so match on `dlg-`),
 and `PINEAPPLE`. This is a new session of the team
 lead: it did not remember the first one. It found the delegate because it asked for its delegations,
 and ynh answered from the record.

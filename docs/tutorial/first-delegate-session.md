@@ -6,8 +6,8 @@ ask the team lead for a review and watch the reviewer do it in its own session, 
 question, and sign its answer. Then we will cancel a delegation, list what happened, and add a second
 delegate fetched from GitHub.
 
-Everything happens in `/tmp/ynh-tutorial`, with a ynh built for this tutorial and a ynh home of its
-own, so your usual ynh setup, its installed harnesses and its trust records are not touched.
+Everything happens in `/tmp/ynh-tutorial`, with a ynh home of its own, so your usual ynh setup, its
+installed harnesses and its trust records are not touched.
 
 ## Who this is for
 
@@ -16,13 +16,13 @@ and settings. A delegate lets one harness hand a piece of work to another, which
 session and reports back.
 
 This tutorial is for anyone who wants to see delegation work once, from never having used ynh to using it daily. The
-tutorial starts from nothing but `git`, Go and a vendor CLI, and builds everything it needs.
+tutorial starts from nothing but `git`, ynh 0.18.0 or newer and a vendor CLI, and builds everything else it needs.
 
 If you already install and trust harnesses, you can skip ahead: the parts that are about delegates
 are [Make the team lead](#make-the-team-lead) (the `delegates_to` field),
 [Ask before trusting](#ask-before-trusting) (the refusal) and [Get a review](#get-a-review) (the
 reviewer asking its parent a question). Everything before them only builds the two harnesses. To skip
-it you still need the built ynh with the two `export` lines, the reviewer installed from a folder that
+it you still need ynh 0.18.0 or newer with the `export` lines, the reviewer installed from a folder that
 is a committed Git repository (`delegates_to` reads it with `git`), and the team lead installed. You
 can paste the manifests and instructions in as they are.
 
@@ -68,7 +68,8 @@ named beside it.
 You need:
 
 - `git`, with `user.name` and `user.email` set (`git config user.name`; the reviewer is committed
-  to a throwaway repository), and Go 1.26 or newer (`go version`);
+  to a throwaway repository);
+- ynh 0.18.0 or newer, installed;
 - Claude Code (`claude`), logged in as you normally use it, and, if you chose another parent, that
   vendor's CLI (`codex`, `copilot` or `opencode`), installed and logged in.
 
@@ -78,61 +79,42 @@ If you have run this tutorial before, start clean:
 rm -rf /tmp/ynh-tutorial
 ```
 
-## Build ynh into the tutorial folder
+## Set up the tutorial folder and ynh home
 
-Make the folder and fetch ynh's source:
-
-```sh
-mkdir -p /tmp/ynh-tutorial
-git clone --branch develop \
-  https://github.com/eyelock/ynh.git \
-  /tmp/ynh-tutorial/ynh-src
-```
-
-Build it:
-
-```sh
-make -C /tmp/ynh-tutorial/ynh-src build
-```
-
-The build ends with lines naming Go packages, such as:
-
-```
-github.com/eyelock/ynh/cmd/ynd
-```
-
-Now point this terminal at the new build and at a ynh home of its own. Run these two lines exactly:
-
-```sh
-export YNH_HOME=/tmp/ynh-tutorial/home
-export PATH=/tmp/ynh-tutorial/ynh-src/bin:/tmp/ynh-tutorial/home/bin:$PATH
-```
-
-They last only for the shell you ran them in. Run the two lines again in every new terminal, and in
-every separate shell your tools start for you (an editor's terminal, a script, an agent that runs
-each command in a fresh shell). If `which ynh` does not print the path above, the lines were lost
-and a different ynh, with its own home, would run: run them again. The same goes for the `cd` later
-on: the working folder is also per shell.
-
-Check that the terminal uses the new build:
-
-```sh
-which ynh
-```
-
-```
-/tmp/ynh-tutorial/ynh-src/bin/ynh
-```
+Check which ynh you have:
 
 ```sh
 ynh version
 ```
 
-```
-dev-develop-6848839
+It should say 0.18.0 or newer (a build of `develop` prints `dev-develop-` and a commit, and counts). Delegates that run as their own session arrived in v0.18.0; with an
+older ynh, a delegate is a vendor subagent and this tutorial will not behave as written. To install or
+upgrade, see the [install instructions](README.md).
+
+Make the tutorial folder, and give this terminal a ynh home of its own inside it. Run these two lines
+exactly:
+
+```sh
+mkdir -p /tmp/ynh-tutorial
+export YNH_HOME=/tmp/ynh-tutorial/home
+export PATH=/tmp/ynh-tutorial/home/bin:$PATH
 ```
 
-Yours ends with a different commit, but it starts with `dev-develop-`.
+Check it took:
+
+```sh
+echo $YNH_HOME
+```
+
+```
+/tmp/ynh-tutorial/home
+```
+
+They last only for the shell you ran them in. Run the `export` lines again in every new terminal, and
+in every separate shell your tools start for you (an editor's terminal, a script, an agent that runs
+each command in a fresh shell). If `echo $YNH_HOME` prints nothing, the lines were lost and ynh would
+use your usual home: run them again. The same goes for the `cd` later on: the working folder is also
+per shell.
 
 ## Make the reviewer
 
@@ -541,7 +523,7 @@ The reviewer itself still runs on Claude Code, its own `default_vendor`.
 ```bash
 ynh uninstall local/team-lead
 ynh uninstall local/reviewer
-ynh uninstall github.com/eyelock/assistants/researcher
+ynh uninstall github.com/eyelock/assistants/researcher   # only if you added it
 cd /tmp
 rm -rf /tmp/ynh-tutorial
 ```
