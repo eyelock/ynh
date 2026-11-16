@@ -354,13 +354,15 @@ run carries on.
 After a minute or so, the team lead reports. Your wording will differ:
 
 ```
-The reviewer finished its review of README.md. I handed the whole review to them
-and didn't read the file myself.
+The reviewer has reviewed `/private/tmp/ynh-tutorial/project/README.md`. It signed off with the
+codeword PINEAPPLE.
 
-- Verdict: The README is accurate but too thin. It says the project prints hello,
-  and it doesn't say how to install or run it.
-- Sign-off: The reviewer asked which codeword to sign with. I answered PINEAPPLE,
-  and they signed off with REVIEWED-PINEAPPLE.
+- **Accuracy:** The README is accurate.
+- **Gaps:** It's minimal. It only says the project prints hello. It has no usage, install or run
+  instructions, and no license or contact details.
+- **Suggestion:** Add a short "Usage" section with the command to run the project.
+
+I haven't changed the file.
 ```
 
 Look for `PINEAPPLE` in the reply. The reviewer signs its review `REVIEWED-PINEAPPLE`; the team lead
