@@ -555,7 +555,7 @@ and the `rm -rf` above removes it. Then close this terminal, or open a new one, 
   its parent.
 - [delegates_to](../harnesses.md#delegates-to-optional) and [Transport](../harnesses.md#transport):
   the manifest fields.
-- [Delegation](delegation.md): the same idea with `transport: native`, as the vendor's own
+- [Native Delegation](delegation.md): the same idea with `transport: native`, as the vendor's own
   subagent.
 
 ## Next
@@ -563,4 +563,4 @@ and the `rm -rf` above removes it. Then close this terminal, or open a new one, 
 [A Delegate That Outlives Its Parent](delegate-outlives-parent.md) — end the parent mid-review and
 collect the result from a new one.
 
-[Delegation](delegation.md) — run a delegate as the vendor's own subagent instead.
+[Native Delegation](delegation.md) — run a delegate as the vendor's own subagent instead.

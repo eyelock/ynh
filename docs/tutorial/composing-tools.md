@@ -1062,4 +1062,4 @@ unset TRACKER_TOKEN PAGER_TOKEN
 
 [Project-Local Config](project-local-config.md): use `.agents/harness/plugin.json` in your project root for zero-install configuration.
 
-To go further with what you built here, [Delegation](delegation.md) chains harnesses as subagents instead of including them, and the [MCP reference](../mcp.md) lists every rule for servers from included harnesses.
+To go further with what you built here, [Native Delegation](delegation.md) chains harnesses as subagents instead of including them, and the [MCP reference](../mcp.md) lists every rule for servers from included harnesses.

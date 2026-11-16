@@ -60,7 +60,7 @@
 * **Tutorials: Share & Scale**
   * [19. A First Delegate Session](/tutorial/first-delegate-session.md)
   * [20. A Delegate That Outlives Its Parent](/tutorial/delegate-outlives-parent.md)
-  * [21. Delegation](/tutorial/delegation.md)
+  * [21. Native Delegation](/tutorial/delegation.md)
   * [22. Export](/tutorial/export.md)
   * [23. Marketplace](/tutorial/marketplace.md)
   * [24. Registry & Discovery](/tutorial/registry-and-discovery.md)

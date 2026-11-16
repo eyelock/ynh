@@ -147,4 +147,4 @@ and the `rm -rf` above removes it. Then close this terminal, or open a new one, 
 
 ## Next
 
-[Delegation](delegation.md) — run a delegate as the vendor's own subagent instead.
+[Native Delegation](delegation.md) — run a delegate as the vendor's own subagent instead.

@@ -1,4 +1,4 @@
-# Delegation
+# Native Delegation
 
 This tutorial runs a delegate the other way: as the vendor's own subagent, inside the parent's session, with `"transport": "native"`. By default a delegate runs as its own ynh session instead; start with [A First Delegate Session](first-delegate-session.md) for that. A native delegate carries only part of its harness: its instructions everywhere, its MCP servers only on Claude Code, and its hooks and workspace folders nowhere ([limit L12](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
 

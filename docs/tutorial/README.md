@@ -43,7 +43,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 |---|---|
 | [A First Delegate Session](first-delegate-session.md) | Have one harness hand work to another, running as its own session |
 | [A Delegate That Outlives Its Parent](delegate-outlives-parent.md) | End a parent while its delegate runs, then reattach from a new parent |
-| [Delegation](delegation.md) | Run a delegate as the vendor's own subagent (`transport: native`) |
+| [Native Delegation](delegation.md) | Run a delegate as the vendor's own subagent (`transport: native`) |
 | [Export](export.md) | Produce vendor-native distributable plugins |
 | [Marketplace](marketplace.md) | Generate marketplace indexes for team distribution |
 | [Registry & Discovery](registry-and-discovery.md) | Search and install harnesses from curated registries |
