@@ -4,9 +4,10 @@ In this tutorial we will start a review, let the parent that started it end, and
 delegate is still running. Then we will start a new parent in the same folder and have it find the
 delegate, answer the question the delegate was waiting on, and collect its result.
 
-It continues [A First Delegate Session](first-delegate-session.md), and uses the folder and the
-harnesses that tutorial builds. The commands are the Claude Code ones; for another parent vendor,
-use the flags in that tutorial's [Which vendor?](first-delegate-session.md#which-vendor) table.
+It stands on its own: it builds the two small harnesses it needs. If delegates are new to you,
+[A First Delegate Session](first-delegate-session.md) explains the words used here and why ynh asks
+you to trust a delegate. The commands are the Claude Code ones; for another parent vendor, use the
+flags in that tutorial's [Which vendor?](first-delegate-session.md#which-vendor) table.
 
 > **Note.** This is about `a2a` delegates, the default, which run as their own session. A `native`
 > delegate is the vendor's own subagent and ends with the parent's session, so none of this applies to
@@ -17,17 +18,146 @@ use the flags in that tutorial's [Which vendor?](first-delegate-session.md#which
 
 ## Before you start
 
-Do [A First Delegate Session](first-delegate-session.md) as far as the end of
-[Trust the reviewer](first-delegate-session.md#trust-the-reviewer), and stop there: do not run its
-Clean up. You should have ynh 0.18.0 or newer and, in `/tmp/ynh-tutorial`, the installed and trusted
-`reviewer`, the installed `team-lead` and a `project` folder.
+You need:
 
-In the terminal you use here, point at the tutorial's ynh home again (the lines last only for the
-shell you ran them in), and go to the project:
+- `git`, with `user.name` and `user.email` set (`git config user.name`; the reviewer is committed to
+  a throwaway repository);
+- ynh 0.18.0 or newer, installed. Check with `ynh version` (a build of `develop` prints
+  `dev-develop-` and a commit, and counts). Delegates that run as their own session arrived in
+  v0.18.0. To install or upgrade, see the [install instructions](README.md);
+- Claude Code (`claude`), logged in as you normally use it.
 
-```sh
+If you have run this tutorial before, start clean:
+
+```bash
+rm -rf /tmp/ynh-tutorial
+```
+
+## Set up the tutorial folder and ynh home
+
+Make the tutorial folder, and give this terminal a ynh home of its own inside it, so your usual ynh
+setup and its trust records are not touched:
+
+```bash
+mkdir -p /tmp/ynh-tutorial
 export YNH_HOME=/tmp/ynh-tutorial/home
 export PATH=/tmp/ynh-tutorial/home/bin:$PATH
+```
+
+They last only for the shell you ran them in. Run the `export` lines again in every new terminal, and
+in every separate shell your tools start for you.
+
+## Make the reviewer, the team lead and a project
+
+The reviewer asks its parent a question before it reviews, which is what the delegate will be waiting
+on:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/reviewer/.agents/harness
+```
+
+```bash
+cat > /tmp/ynh-tutorial/reviewer/.agents/harness/plugin.json <<'EOF'
+{
+  "name": "reviewer",
+  "version": "0.1.0",
+  "description": "Reviews a file and reports one finding",
+  "default_vendor": "claude"
+}
+EOF
+```
+
+```bash
+cat > /tmp/ynh-tutorial/reviewer/instructions.md <<'EOF'
+You are a reviewer. You are given one file to review.
+
+Before you start, ask your parent one question with
+the ask_parent tool: "Which codeword should I sign with?"
+
+Then read the file and reply with one short finding,
+signed on its own last line as REVIEWED-<codeword>.
+EOF
+```
+
+```bash
+git -C /tmp/ynh-tutorial/reviewer init -q
+git -C /tmp/ynh-tutorial/reviewer add .
+git -C /tmp/ynh-tutorial/reviewer commit -q -m init
+```
+
+The team lead names the reviewer in `delegates_to`, and answers its question:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/team-lead/.agents/harness
+```
+
+```bash
+cat > /tmp/ynh-tutorial/team-lead/.agents/harness/plugin.json <<'EOF'
+{
+  "name": "team-lead",
+  "version": "0.1.0",
+  "description": "Hands reviews to a reviewer",
+  "default_vendor": "claude",
+  "delegates_to": [
+    {"git": "/tmp/ynh-tutorial/reviewer"}
+  ]
+}
+EOF
+```
+
+```bash
+cat > /tmp/ynh-tutorial/team-lead/instructions.md <<'EOF'
+You are a team lead. Hand every review to your
+reviewer delegate; do not review files yourself.
+
+If the reviewer asks which codeword to sign with,
+answer: PINEAPPLE.
+EOF
+```
+
+A project for the reviewer to review:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/project
+```
+
+```bash
+cat > /tmp/ynh-tutorial/project/README.md <<'EOF'
+# Demo
+
+This project prints hello.
+EOF
+```
+
+## Install and trust
+
+```bash
+ynh install /tmp/ynh-tutorial/reviewer
+ynh install /tmp/ynh-tutorial/team-lead
+```
+
+Each prints `Installed harness "..."` and its location, launcher and vendor; the team lead's install
+also prints `Fetching 0 include(s) and 1 delegate(s)...` and a `Fetched` line for the reviewer. ynh will not start a
+delegate until you have recorded that you reviewed it. The reviewer here runs no commands, so there is
+little to read, but the record is still needed:
+
+```bash
+ynh trust accept local/reviewer
+```
+
+```
+Recorded local/reviewer: 0 command(s), sha256:1282d82bafd3a002
+```
+
+Your digest after `sha256:` may differ.
+
+## Start a review and let the parent end
+
+Go to the project, in the terminal you will use from here. Every `team-lead` command below must run
+from this folder, because a returning parent finds its delegates by the folder it runs in. Check that
+the home took, too:
+
+```bash
 cd /tmp/ynh-tutorial/project
 echo $YNH_HOME
 ```
@@ -35,8 +165,6 @@ echo $YNH_HOME
 ```
 /tmp/ynh-tutorial/home
 ```
-
-## Start a review and let the parent end
 
 Ask the team lead to start the review and not to wait for it. The reviewer's instructions make it ask
 its parent a question first, which nobody will answer yet:
