@@ -6,7 +6,7 @@ toolchain go1.26.11
 
 require (
 	github.com/a2aproject/a2a-go/v2 v2.8.0
-	github.com/eyelock/ynr/spoolexporter v0.4.0
+	github.com/eyelock/ynr/spoolexporter v0.4.1-0.20261113214833-cba94caf8f03
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/log v1.47.0
@@ -30,4 +30,5 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
