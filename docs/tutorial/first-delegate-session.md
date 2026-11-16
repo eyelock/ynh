@@ -9,14 +9,68 @@ delegate fetched from GitHub.
 Everything happens in `/tmp/ynh-tutorial`, with a ynh built for this tutorial and a ynh home of its
 own, so your usual ynh setup, its installed harnesses and its trust records are not touched.
 
-The examples use Claude Code. [Other vendors](#other-vendors) says what changes for the rest.
+## Who this is for
+
+ynh launches AI coding tools (Claude Code, Codex and others) with a harness: a folder of instructions
+and settings. A delegate lets one harness hand a piece of work to another, which does it in its own
+session and reports back.
+
+This tutorial is for anyone who wants to see delegation work once, from never having used ynh to using it daily. The
+tutorial starts from nothing but `git`, Go and a vendor CLI, and builds everything it needs.
+
+If you already install and trust harnesses, you can skip ahead: the parts that are about delegates
+are [Make the team lead](#make-the-team-lead) (the `delegates_to` field),
+[Ask before trusting](#ask-before-trusting) (the refusal) and [Get a review](#get-a-review) (the
+reviewer asking its parent a question). Everything before them only builds the two harnesses. To skip
+it you still need the built ynh with the two `export` lines, the reviewer installed from a folder that
+is a committed Git repository (`delegates_to` reads it with `git`), and the team lead installed. You
+can paste the manifests and instructions in as they are.
+
+## Words used here
+
+- A **vendor** is an AI command-line tool that ynh launches, such as Claude Code (`claude`).
+- A **harness** is a folder with a manifest (`.agents/harness/plugin.json`, the file that names it
+  and sets its options) and instructions, which ynh launches inside a vendor. A **hook** is a command
+  the manifest asks ynh to run at a set moment, such as when a session starts.
+- A **delegate** is a harness that another harness (its **parent**) hands work to. It runs as its own
+  session, not inside the parent's. The parent names its delegates in the manifest field
+  `delegates_to`.
+- **A2A** is the protocol ynh uses to carry that work and the delegate's answers between the two
+  sessions. [Delegate Sessions](../delegate-sessions.md) explains it; you do not need it to follow
+  this page.
+- **Trust** is ynh's record that you have read what a harness will run. We meet it in
+  [Ask before trusting](#ask-before-trusting).
+
+## Which vendor?
+
+The reviewer always runs on Claude Code, its own `default_vendor`, whichever parent you choose, so
+you need `claude` installed and logged in in every case. The parent is your choice.
+
+The commands below use Claude Code as the parent, so on Claude Code you change nothing. To use
+another parent, replace `--allowedTools=mcp__plugin_team-lead_ynh-delegates` in every `team-lead`
+command with the flags in the table, and read `claude` in ynh's `Launching claude...` line as your
+vendor.
+
+| Parent vendor | Flags in place of `--allowedTools=...` | Also |
+|---|---|---|
+| Claude Code | none: the commands are as written | |
+| Codex | `-v codex` | See [Other vendors](#other-vendors) for the first-run prompt and a known issue. |
+| Copilot CLI | `-v copilot --allow-tool=ynh-delegates` | End each prompt with "and wait for its result". |
+| OpenCode | `-v opencode` | Its output is long tool-call tracing; look for `PINEAPPLE` as described under [Get a review](#get-a-review). |
+
+`--allowedTools=...` is a Claude Code flag: ynh passes flags it does not recognise on to the vendor.
+
+Model output differs on every run and every vendor. Where this page shows a reply, what matters is
+named beside it.
 
 ## Before you start
 
 You need:
 
-- `git`, and Go 1.26 or newer (`go version`);
-- Claude Code (`claude`), logged in as you normally use it.
+- `git`, with `user.name` and `user.email` set (`git config user.name`; the reviewer is committed
+  to a throwaway repository), and Go 1.26 or newer (`go version`);
+- Claude Code (`claude`), logged in as you normally use it, and, if you chose another parent, that
+  vendor's CLI (`codex`, `copilot` or `opencode`), installed and logged in.
 
 If you have run this tutorial before, start clean:
 
@@ -54,8 +108,11 @@ export YNH_HOME=/tmp/ynh-tutorial/home
 export PATH=/tmp/ynh-tutorial/ynh-src/bin:/tmp/ynh-tutorial/home/bin:$PATH
 ```
 
-They last only for this terminal. If you open a new one during the tutorial, run the two lines
-again there.
+They last only for the shell you ran them in. Run the two lines again in every new terminal, and in
+every separate shell your tools start for you (an editor's terminal, a script, an agent that runs
+each command in a fresh shell). If `which ynh` does not print the path above, the lines were lost
+and a different ynh, with its own home, would run: run them again. The same goes for the `cd` later
+on: the working folder is also per shell.
 
 Check that the terminal uses the new build:
 
@@ -224,7 +281,8 @@ cd /tmp/ynh-tutorial/project
 
 ## Ask before trusting
 
-Ask the team lead for a review now, before we have reviewed the reviewer's hook:
+Ask the team lead for a review now, before we have reviewed the reviewer's hook (on another vendor,
+use the flags from [Which vendor?](#which-vendor)):
 
 ```bash
 team-lead \
@@ -232,7 +290,8 @@ team-lead \
   "Ask the reviewer to review README.md"
 ```
 
-ynh refuses, and nothing starts:
+ynh refuses, and nothing starts. On macOS the path in the message begins `/private/tmp`, not `/tmp`,
+because `/tmp` is a link to it:
 
 ```
 Error: delegate /private/tmp/ynh-tutorial/reviewer of team-lead is installed as local/reviewer but not trusted
@@ -240,8 +299,6 @@ Error: delegate /private/tmp/ynh-tutorial/reviewer of team-lead is installed as 
 ```
 
 Trust is ynh's record that you have read what a harness will run, before ynh runs it. We do that next.
-
-> **Note.** On macOS the path begins `/private/tmp`, because `/tmp` is a link to it.
 
 ## Trust the reviewer
 
@@ -269,7 +326,10 @@ Hooks, executed by the vendor CLI with your environment:
     echo Reviewer session started.
 ```
 
-A list of environment variables follows; yours will differ. It ends:
+A list of environment variables follows; yours will differ. It is the environment the hook would
+inherit, so it can include tokens and keys from your own shell; it shows names, not values, and can
+run to about fifty names. That is why ynh shows it before you accept. You do not need to read each
+one. It ends:
 
 ```
 Not yet reviewed. 'ynh trust accept local/reviewer' records that you have read the above.
@@ -291,8 +351,6 @@ The `sha256:` value is the one `ynh trust show` printed as `digest:`. This trust
 
 Ask again:
 
-*This launches:* `claude --plugin-dir .../run/.snapshots/local--team-lead/.../.claude --add-dir .../run/.snapshots/local--team-lead/... --append-system-prompt You are a team lead. ... -p Ask the reviewer to review README.md --allowedTools=mcp__plugin_team-lead_ynh-delegates`
-*Your output will differ: it shows what the model did.*
 ```bash
 team-lead \
   --allowedTools=mcp__plugin_team-lead_ynh-delegates \
@@ -307,7 +365,11 @@ Opened 1 A2A delegate endpoint(s): reviewer
 Launching claude...
 ```
 
-After a minute or so, the team lead reports:
+`Launching claude...` names your parent vendor. In a terminal with no input attached you may also
+see a `Warning: no stdin data received in 3s, proceeding without it.` line and a 3 second wait; the
+run carries on.
+
+After a minute or so, the team lead reports. Your wording will differ:
 
 ```
 The reviewer finished its review of README.md. I handed the whole review to them
@@ -319,16 +381,19 @@ and didn't read the file myself.
   and they signed off with REVIEWED-PINEAPPLE.
 ```
 
-Look for `REVIEWED-PINEAPPLE`. The reviewer could only know `PINEAPPLE` by asking the team lead,
-and the team lead's model answered it, so the question went from the delegate to its parent and
-back.
+Look for `PINEAPPLE` in the reply. The reviewer signs its review `REVIEWED-PINEAPPLE`; the team lead
+may quote that line or only mention the codeword, and either shows it worked. The reviewer could only
+know `PINEAPPLE` by asking the team lead, and the team lead's model answered it, so the question went
+from the delegate to its parent and back.
+
+On macOS the model's own text may also show `/private/tmp/...` paths, and a later step's reply may
+quote `REVIEWED-PINEAPPLE` too. If a run has printed nothing for three minutes, press Ctrl-C and run
+it again.
 
 ## Cancel a delegation
 
 Start a review and stop it at once:
 
-*This launches:* `claude --plugin-dir .../run/.snapshots/local--team-lead/.../.claude --add-dir .../run/.snapshots/local--team-lead/... --append-system-prompt You are a team lead. ... -p Start the reviewer on README.md, cancel it at once, and say its state. --allowedTools=mcp__plugin_team-lead_ynh-delegates`
-*Your output will differ: it shows what the model did.*
 ```bash
 team-lead \
   --allowedTools=mcp__plugin_team-lead_ynh-delegates \
@@ -347,8 +412,6 @@ The task id is different every time. It always starts with `dlg-`.
 
 Each delegation is recorded, so a later session of the team lead can see the earlier ones:
 
-*This launches:* `claude --plugin-dir .../run/.snapshots/local--team-lead/.../.claude --add-dir .../run/.snapshots/local--team-lead/... --append-system-prompt You are a team lead. ... -p List your delegations and their states. --allowedTools=mcp__plugin_team-lead_ynh-delegates`
-*Your output will differ: it shows what the model did.*
 ```bash
 team-lead \
   --allowedTools=mcp__plugin_team-lead_ynh-delegates \
@@ -377,7 +440,8 @@ Fetching 1 include(s) and 0 delegate(s)...
 Installed harness "researcher"
 ```
 
-followed by its location, launcher and vendor. Check whether it needs trusting:
+followed by its location, launcher and vendor. The count in `Fetching 1 include(s)` is the repository
+ynh fetched, `eyelock/assistants`. Check whether the harness needs trusting:
 
 ```bash
 ynh trust show github.com/eyelock/assistants/researcher
@@ -418,10 +482,8 @@ ynh install /tmp/ynh-tutorial/team-lead
 Fetching 0 include(s) and 2 delegate(s)...
 ```
 
-and then the same lines as before. Ask the new delegate something:
+and then a `Fetched` line for each delegate, followed by the same install lines as before. Ask the new delegate something:
 
-*This launches:* `claude --plugin-dir .../run/.snapshots/local--team-lead/.../.claude --add-dir .../run/.snapshots/local--team-lead/... --append-system-prompt You are a team lead. ... -p Ask the researcher delegate, in one sentence, what kind of harness it is. --allowedTools=mcp__plugin_team-lead_ynh-delegates`
-*Your output will differ: it shows what the model did.*
 ```bash
 team-lead \
   --allowedTools=mcp__plugin_team-lead_ynh-delegates \
@@ -451,14 +513,16 @@ We cancelled a delegation, listed both, and added a second delegate from GitHub.
 
 ## Other vendors
 
-The same harnesses work with another vendor as the parent, chosen with `-v`. What changes:
+The same harnesses work with another vendor as the parent, chosen as in [Which vendor?](#which-vendor).
+What else changes:
 
-- **Codex:** use `-v codex` in place of `--allowedTools=...`: ynh
-  approves the delegate tools itself. The first run in a project asks to make two links in it; say
-  yes. Without a terminal to answer on, run `ynh run local/team-lead -v codex --install` once first.
-- **Copilot CLI:** add `-v copilot --allow-tool=ynh-delegates`, and end the prompt with "and wait
-  for its result". Without "wait for its result", the model may stop once the review has started.
-- **OpenCode:** use `-v opencode` in place of `--allowedTools=...`. No allow rule is needed.
+- **Codex:** ynh approves the delegate tools itself. The first run in a project asks to make two
+  links in it; say yes. Without a terminal to answer on, run
+  `ynh run local/team-lead -v codex --install` once first.
+- **Copilot CLI:** without "and wait for its result" at the end of the prompt, the model may stop once
+  the review has started.
+- **OpenCode:** no allow rule is needed. Its output is long tool-call tracing, nothing like the replies
+  shown here; look for the codeword as before.
 
 The reviewer itself still runs on Claude Code, its own `default_vendor`.
 
@@ -482,7 +546,8 @@ cd /tmp
 rm -rf /tmp/ynh-tutorial
 ```
 
-Then close this terminal, or open a new one, to leave the tutorial's `YNH_HOME` and `PATH` behind.
+Each `ynh uninstall` of a local harness prints `Source tree left in place`: it leaves your folder,
+and the `rm -rf` above removes it. Then close this terminal, or open a new one, to leave the tutorial's `YNH_HOME` and `PATH` behind.
 
 ## Learn more
 
