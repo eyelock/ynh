@@ -57,10 +57,12 @@
   * [17. The Agent Loop](/tutorial/agent-loop.md)
   * [18. Shadow Mode](/tutorial/shadow-mode.md)
 
-* **Tutorials: Share & Scale**
+* **Tutorials: Delegates**
   * [19. A First Delegate Session](/tutorial/first-delegate-session.md)
   * [20. A Delegate That Outlives Its Parent](/tutorial/delegate-outlives-parent.md)
   * [21. Native Delegation](/tutorial/delegation.md)
+
+* **Tutorials: Share & Scale**
   * [22. Export](/tutorial/export.md)
   * [23. Marketplace](/tutorial/marketplace.md)
   * [24. Registry & Discovery](/tutorial/registry-and-discovery.md)
