@@ -59,12 +59,13 @@
 
 * **Tutorials: Share & Scale**
   * [19. A First Delegate Session](/tutorial/first-delegate-session.md)
-  * [20. Delegation](/tutorial/delegation.md)
-  * [21. Export](/tutorial/export.md)
-  * [22. Marketplace](/tutorial/marketplace.md)
-  * [23. Registry & Discovery](/tutorial/registry-and-discovery.md)
-  * [24. Docker Images](/tutorial/docker-image.md)
-  * [25. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
+  * [20. A Delegate That Outlives Its Parent](/tutorial/delegate-outlives-parent.md)
+  * [21. Delegation](/tutorial/delegation.md)
+  * [22. Export](/tutorial/export.md)
+  * [23. Marketplace](/tutorial/marketplace.md)
+  * [24. Registry & Discovery](/tutorial/registry-and-discovery.md)
+  * [25. Docker Images](/tutorial/docker-image.md)
+  * [26. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
 
 * **Project**
   * [Migrating to 0.2](/migration.md)
