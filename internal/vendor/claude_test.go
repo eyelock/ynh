@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -29,7 +30,7 @@ func TestBuildClaudeArgs_WithInstructions(t *testing.T) {
 	expected := []string{
 		"claude",
 		"--plugin-dir", claudeDir,
-		"--add-dir", configPath,
+		ClaudeRunDirReadArgs(configPath)[0],
 		"--append-system-prompt", instructions,
 		"--model", "opus",
 	}
@@ -57,7 +58,7 @@ func TestBuildClaudeArgs_NoInstructions(t *testing.T) {
 	expected := []string{
 		"claude",
 		"--plugin-dir", claudeDir,
-		"--add-dir", configPath,
+		ClaudeRunDirReadArgs(configPath)[0],
 	}
 
 	if len(args) != len(expected) {
@@ -125,7 +126,7 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 		if arg == "--plugin-dir" {
 			foundPlugin = true
 		}
-		if arg == "--add-dir" {
+		if strings.HasPrefix(arg, "--allowedTools=Read(/") {
 			foundAddDir = true
 		}
 		if arg == "-p" && i+1 < len(args) && args[i+1] == "fix the bug" {
@@ -136,7 +137,7 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 		t.Error("missing --plugin-dir")
 	}
 	if !foundAddDir {
-		t.Error("missing --add-dir")
+		t.Error("missing run dir read rule")
 	}
 	if !foundPrompt {
 		t.Error("missing -p prompt")
@@ -158,7 +159,7 @@ func TestBuildClaudeArgs_InitialPromptBeforeAddDir(t *testing.T) {
 		if arg == "do the thing" {
 			promptIdx = i
 		}
-		if arg == "--add-dir" {
+		if strings.HasPrefix(arg, "--allowedTools=Read(/") {
 			addDirIdx = i
 		}
 	}
@@ -166,7 +167,7 @@ func TestBuildClaudeArgs_InitialPromptBeforeAddDir(t *testing.T) {
 		t.Fatal("initial prompt not found in args")
 	}
 	if addDirIdx == -1 {
-		t.Fatal("--add-dir not found in args")
+		t.Fatal("run dir read rule not found in args")
 	}
 	if promptIdx > addDirIdx {
 		t.Errorf("prompt at index %d comes after --add-dir at index %d; --add-dir suppresses positional args that follow it", promptIdx, addDirIdx)
@@ -563,15 +564,17 @@ func TestBuildClaudeArgs_Isolation(t *testing.T) {
 	pluginDir := filepath.Join(dir, ".claude")
 
 	plain := buildClaudeArgs(dir, "hello", nil)
-	wantPlain := []string{"claude", "hello", "--plugin-dir", pluginDir, "--add-dir", dir}
+	wantPlain := []string{"claude", "hello", "--plugin-dir", pluginDir}
+	wantPlain = append(wantPlain, ClaudeRunDirReadArgs(dir)...)
 	if !reflect.DeepEqual(plain, wantPlain) {
 		t.Errorf("plain argv = %v, want %v", plain, wantPlain)
 	}
 
 	iso, _ := (&Claude{}).IsolateMCP(dir)
 	got := buildClaudeArgs(dir, "hello", iso)
-	wantIso := []string{"claude", "hello", "--plugin-dir", pluginDir, "--add-dir", dir,
-		"--strict-mcp-config", "--mcp-config=" + mcpPath}
+	wantIso := []string{"claude", "hello", "--plugin-dir", pluginDir}
+	wantIso = append(wantIso, ClaudeRunDirReadArgs(dir)...)
+	wantIso = append(wantIso, "--strict-mcp-config", "--mcp-config="+mcpPath)
 	if !reflect.DeepEqual(got, wantIso) {
 		t.Errorf("isolated argv = %v, want %v", got, wantIso)
 	}
@@ -620,4 +623,26 @@ func TestClaudeGenerateSessionPluginManifest(t *testing.T) {
 		t.Errorf("manifest = %+v", got)
 	}
 	var _ SessionPluginNamer = &Claude{}
+}
+
+func TestClaudeRunDirReadArgs(t *testing.T) {
+	dir := t.TempDir()
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "run")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks unavailable")
+	}
+	got := ClaudeRunDirReadArgs(link)
+	want := "--allowedTools=Read(/" + link + "/**),Read(/" + real + "/**)"
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("got %v, want [%s]", got, want)
+	}
+	for _, a := range buildClaudeArgs(link, "", nil) {
+		if a == "--add-dir" {
+			t.Error("the run dir must not be passed with --add-dir (ynh #898)")
+		}
+	}
 }
