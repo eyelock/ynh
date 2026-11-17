@@ -67,6 +67,7 @@ Commands:
   Operating
     init                                   Show the ynh home path and setup instructions
     status                                 Show symlink installations across projects
+    ps                                     List live sessions ynh has launched
     paths                                  Show resolved path roots
     doctor                                 Diagnose a broken setup: vendors, harnesses, symlinks, PATH
     prune                                  Clean orphaned symlinks and stale run dirs

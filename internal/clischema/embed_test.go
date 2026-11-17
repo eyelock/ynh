@@ -190,6 +190,7 @@ func TestSearchGolden(t *testing.T)   { validateGolden(t, "search", "search.json
 func TestSourcesGolden(t *testing.T)  { validateGolden(t, "sources", "sources.json") }
 func TestRegistryGolden(t *testing.T) { validateGolden(t, "registry", "registry.json") }
 func TestPathsGolden(t *testing.T)    { validateGolden(t, "paths", "paths.json") }
+func TestPsGolden(t *testing.T)       { validateGolden(t, "ps", "ps.json") }
 func TestVendorsGolden(t *testing.T)  { validateGolden(t, "vendors", "vendors.json") }
 func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json") }
 

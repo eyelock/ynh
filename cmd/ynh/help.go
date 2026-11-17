@@ -295,6 +295,19 @@ Show symlink installations across projects.
 Flags:
   --format text|json   Output format (default text)`,
 
+	"ps": `ynh ps [flags]
+
+List the sessions ynh has launched that are live or orphaned (a delegate whose
+owner session is gone). Each row has the harness, vendor, launch mode
+(interactive, one-shot, delegate), wrapper and vendor pid, start time and
+address. A session whose process is gone, or whose pid now belongs to another
+process, is dead and is not listed without --all.
+
+Flags:
+  --all                Include ended and dead sessions (history)
+  --format text|json   Output format (default text)
+  --json               Same as --format json`,
+
 	"search": `ynh search <term> [flags]
 
 Search configured registries and sources for a harness.

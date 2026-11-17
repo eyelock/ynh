@@ -16,6 +16,7 @@
   * [Profiles](/profiles.md)
   * [Focus](/focus.md)
   * [Sensors](/sensors.md)
+  * [Session Presence](/presence.md)
   * [Agent Loop](/agent.md)
   * [Telemetry](/telemetry.md)
   * [Namespacing](/namespacing.md)
