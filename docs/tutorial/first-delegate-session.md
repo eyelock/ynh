@@ -598,4 +598,7 @@ and the `rm -rf` above removes it. Then close this terminal, or open a new one, 
 
 ## Next
 
+[A Delegate That Outlives Its Parent](delegate-outlives-parent.md) — end the parent mid-review and
+collect the result from a new one.
+
 [Native Delegation](delegation.md) — run a delegate as the vendor's own subagent instead.
