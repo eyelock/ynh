@@ -69,8 +69,7 @@ You need:
 
 - `git`, with `user.name` and `user.email` set (`git config user.name`; the reviewer is committed
   to a throwaway repository);
-- ynh 0.18.0 or newer, installed; until v0.18.0 is released, Go 1.26 or newer (`go version`)
-  instead, to build ynh from `develop` inside the tutorial folder, as shown below;
+- ynh 0.18.0 or newer, installed;
 - Claude Code (`claude`), logged in as you normally use it, and, if you chose another parent, that
   vendor's CLI (`codex`, `copilot` or `opencode`), installed and logged in.
 
@@ -101,35 +100,18 @@ echo $YNH_HOME
 /tmp/ynh-tutorial/home
 ```
 
-Until v0.18.0 is released, build ynh from `develop` into the tutorial's own home. If you already
-have ynh 0.18.0 or newer installed, skip these two commands:
-
-```sh
-git clone --branch develop https://github.com/eyelock/ynh.git /tmp/ynh-tutorial/ynh-src
-make -C /tmp/ynh-tutorial/ynh-src install INSTALL_DIR=/tmp/ynh-tutorial/home/bin
-```
-
-The build prints each command it runs, then ends with:
-
-```
-Installed ynh and ynd to /tmp/ynh-tutorial/home/bin
-```
-
-`INSTALL_DIR` puts the two binaries in `/tmp/ynh-tutorial/home/bin`, not in `~/.ynh/bin`, so the ynh
-you normally use is not replaced. The `PATH` line above puts this folder first, so in this terminal
-`ynh` is the one you just built.
-
 Check which ynh you have:
 
 ```sh
 ynh version
 ```
 
-It should say 0.18.0 or newer. The build from `develop` prints `dev-develop-` and a commit, such as
-`dev-develop-3c75df5`, and counts. Delegates that run as their own session arrived in v0.18.0;
-with an older ynh, a delegate is a vendor subagent and this tutorial will not behave as written.
+It should say 0.18.0 or newer (a build of `develop` prints `dev-develop-` and a commit, and counts).
+Delegates that run as their own session arrived in v0.18.0; with an
+older ynh, a delegate is a vendor subagent and this tutorial will not behave as written. To install or
+upgrade, see the [install instructions](README.md).
 
-The `export` lines last only for the shell you ran them in. Run the `export` lines again in every new terminal, and
+The `export` lines last only for the shell you ran them in. Run them again in every new terminal, and
 in every separate shell your tools start for you (an editor's terminal, a script, an agent that runs
 each command in a fresh shell). If `echo $YNH_HOME` prints nothing, the lines were lost and ynh would
 use your usual home: run them again. The same goes for the `cd` later on: the working folder is also
