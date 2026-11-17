@@ -62,7 +62,7 @@ A record is live only if the wrapper pid exists and its start time equals `start
 
 ## MCP tool
 
-A session whose harness has A2A delegates gets ynh's delegate MCP server (see [Delegate sessions](delegate-sessions.md)). It carries the tool `ynh_ps`, which returns the same listing as `ynh ps --json`; its `all` argument is `--all`.
+A session whose harness has A2A delegates gets ynh's delegate MCP server (see [Delegate sessions](delegate-sessions.md)). It carries the tool `ynh_ps`, which returns the same listing as `ynh ps --json`, whose shape is published as [`ps.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/ps.schema.json) (`ynh schema ps`); its `all` argument is `--all`.
 
 ## Where the files are, and history
 
