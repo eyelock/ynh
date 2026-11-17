@@ -646,3 +646,10 @@ func TestClaudeRunDirReadArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeRunDirReadArgs_RelativePathIsMadeAbsolute(t *testing.T) {
+	got := ClaudeRunDirReadArgs("rel/dir")[0]
+	if !strings.HasPrefix(got, "--allowedTools=Read(//") || strings.Contains(got, "Read(/rel") {
+		t.Errorf("relative path not made absolute: %s", got)
+	}
+}

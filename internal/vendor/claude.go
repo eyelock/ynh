@@ -859,8 +859,11 @@ func (c *Claude) GeneratePluginHookConfigForCopilot(hooks map[string][]plugin.Ho
 // resolves to when it is a link. Not --add-dir, which makes Claude Code ask to
 // trust a folder it has not seen (a snapshot's path changes with its content)
 // and load the folder's own agents (ynh #898). An absolute path in a rule
-// starts with a second slash.
+// starts with a second slash, so the path is made absolute first.
 func ClaudeRunDirReadArgs(configPath string) []string {
+	if abs, err := filepath.Abs(configPath); err == nil {
+		configPath = abs
+	}
 	paths := []string{configPath}
 	if abs, err := filepath.EvalSymlinks(configPath); err == nil && abs != configPath {
 		paths = append(paths, abs)
