@@ -431,33 +431,64 @@ Two delegations, both to the reviewer:
 
 ## Add a delegate from GitHub
 
-A delegate can come from a Git URL. Install the `researcher` harness from eyelock/assistants:
+A delegate can come from a Git URL, and ynh asks you to trust it just as it did the reviewer. ynh's
+own repository keeps a small harness for this tutorial, the `librarian`, in
+[docs/tutorial/harnesses/librarian](https://github.com/eyelock/ynh/tree/develop/docs/tutorial/harnesses/librarian).
+It answers one question and runs one hook. Install it:
 
 ```bash
-ynh install github.com/eyelock/assistants --path ynh/researcher
+ynh install github.com/eyelock/ynh --path docs/tutorial/harnesses/librarian
 ```
 
 ```
-Fetching 1 include(s) and 0 delegate(s)...
-  Fetched eyelock/assistants
-Installed harness "researcher"
+Installed harness "librarian"
 ```
 
-followed by its location, launcher and vendor. The count in `Fetching 1 include(s)` is the repository
-ynh fetched, `eyelock/assistants`. Check whether the harness needs trusting:
+followed by its location, launcher and vendor. Check whether the harness needs trusting:
 
 ```bash
-ynh trust show github.com/eyelock/assistants/researcher
+ynh trust show github.com/eyelock/ynh/librarian
 ```
 
-Among its first lines:
+It begins:
 
 ```
-  state:    no-commands
+github.com/eyelock/ynh/librarian
+  source:   github.com/eyelock/ynh
+  commit:   <the commit ynh fetched>
+  state:    unreviewed
+  digest:   sha256:ba038f58317449ef
 ```
 
-It runs no commands of its own, so there is nothing to accept. Now name it in the team lead,
-writing the whole manifest again:
+The `commit:` line names the commit of ynh's repository that ynh fetched; yours will differ. Then
+it lists the hook:
+
+```
+Hooks, executed by the vendor CLI with your environment:
+
+  on_session_start
+    echo Librarian session started.
+```
+
+and, as for the reviewer, the names of the environment variables the hook would inherit, ending:
+
+```
+Not yet reviewed. 'ynh trust accept github.com/eyelock/ynh/librarian' records that you have read the above.
+```
+
+This hook came from someone else's repository, so reading it before accepting matters more than it
+did for the reviewer, which you wrote yourself. It only prints a line. Record that you have read
+it:
+
+```bash
+ynh trust accept github.com/eyelock/ynh/librarian
+```
+
+```
+Recorded github.com/eyelock/ynh/librarian: 1 command(s), sha256:ba038f58317449ef
+```
+
+Now name it in the team lead, writing the whole manifest again:
 
 ```bash
 cat > /tmp/ynh-tutorial/team-lead/.agents/harness/plugin.json <<'EOF'
@@ -468,8 +499,8 @@ cat > /tmp/ynh-tutorial/team-lead/.agents/harness/plugin.json <<'EOF'
   "default_vendor": "claude",
   "delegates_to": [
     {"git": "/tmp/ynh-tutorial/reviewer"},
-    {"git": "github.com/eyelock/assistants",
-     "path": "ynh/researcher"}
+    {"git": "github.com/eyelock/ynh",
+     "path": "docs/tutorial/harnesses/librarian"}
   ]
 }
 EOF
@@ -490,29 +521,30 @@ and then a `Fetched` line for each delegate, followed by the same install lines 
 ```bash
 team-lead \
   --allowedTools=mcp__plugin_team-lead_ynh-delegates \
-  "Ask the researcher delegate, in one sentence, what kind of harness it is."
+  "Ask the librarian delegate what a harness is."
 ```
 
 ```
-Opened 2 A2A delegate endpoint(s): researcher,reviewer
+Opened 2 A2A delegate endpoint(s): librarian,reviewer
 Launching claude...
 ```
 
+After a minute or so the team lead reports the librarian's answer. Your wording will differ:
+
 ```
-The researcher delegate said: "I'm Claude Code, Anthropic's agent harness: a
-terminal-based CLI that lets me read and edit files, run commands, and call tools
-or sub-agents on your behalf."
+The librarian said: "A harness is a folder of instructions and settings that ynh
+launches inside an AI coding tool. SHELVED"
 ```
 
-> **Intended, not run.** A delegate from a remote Git URL or a registry entry whose harness runs commands,
-> so that it needs `ynh trust accept` as the reviewer did, is the designed path and has not been shown
-> live. The researcher here runs no commands, so it needs no accepting.
+Look for `SHELVED`: the librarian's instructions ask it to end its answer with that word, so it
+shows the answer came from the librarian, running as its own session.
 
 ## What we did
 
 We made a delegate and a parent, installed both, trusted the delegate's hook, and had the parent hand
 it a review. The reviewer ran as its own session, asked its parent a question and signed its answer.
-We cancelled a delegation, listed both, and added a second delegate from GitHub.
+We cancelled a delegation, listed both, and added a second delegate from GitHub, trusting its hook
+as we did the reviewer's.
 
 ## Other vendors
 
@@ -535,7 +567,10 @@ The reviewer itself still runs on Claude Code, its own `default_vendor`.
 > reviewer to review README.md, wait for its result, and report it."
 
 > **Note.** Last run end to end on 2026-11-15 on macOS, with ynh at `develop` `09e9f50`, as the parent on
-> Claude Code, Codex, Copilot CLI and OpenCode.
+> Claude Code, Codex, Copilot CLI and OpenCode, and again on 2026-11-17 with Claude Code as the parent,
+> ynh at `develop` `a12c56be`. Both runs used an earlier GitHub delegate that ran no commands. The
+> librarian steps in [Add a delegate from GitHub](#add-a-delegate-from-github) have been run up to
+> `ynh trust show` (2026-11-17); from `ynh trust accept` on, they have not been run yet.
 
 > **Intended, not run.** Cursor as the parent has not been run on the delegate routes for v0.18.0.
 
@@ -544,7 +579,7 @@ The reviewer itself still runs on Claude Code, its own `default_vendor`.
 ```bash
 ynh uninstall local/team-lead
 ynh uninstall local/reviewer
-ynh uninstall github.com/eyelock/assistants/researcher   # only if you added it
+ynh uninstall github.com/eyelock/ynh/librarian   # only if you added it
 cd /tmp
 rm -rf /tmp/ynh-tutorial
 ```
