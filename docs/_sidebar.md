@@ -16,13 +16,21 @@
   * [Profiles](/profiles.md)
   * [Focus](/focus.md)
   * [Sensors](/sensors.md)
-  * [Delegate Sessions](/delegate-sessions.md)
   * [Session Presence](/presence.md)
   * [Agent Loop](/agent.md)
   * [Telemetry](/telemetry.md)
   * [Namespacing](/namespacing.md)
   * [Vendor Support](/vendors.md)
   * [Vendor Feature Parity](/vendor-parity.md)
+
+* **Delegates**
+  * [Delegate Sessions (why)](/delegate-sessions.md)
+  * [Add a delegate](/how-to/add-a-delegate.md)
+  * [Allow a headless parent](/how-to/allow-a-headless-parent.md)
+  * [Reach delegates with the a2a CLI](/how-to/reach-delegates-with-the-a2a-cli.md)
+  * [Make a delegate native](/how-to/make-a-delegate-native.md)
+  * [Find a delegation after a restart](/how-to/find-a-delegation-after-a-restart.md)
+  * [Delegates Reference](/delegates-reference.md)
 
 * **Tools**
   * [CLI Reference](/reference.md)
