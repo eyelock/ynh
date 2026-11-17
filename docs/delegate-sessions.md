@@ -9,7 +9,11 @@ your parent, which answers it or hands it to you.
 This page explains why delegates work this way and how the pieces fit. It is explanation: it says why,
 and does not list every field, tool and message. For those, see the [delegates reference](delegates-reference.md);
 the manifest fields themselves are in [delegates_to](harnesses.md#delegates-to-optional) and
-[Transport](harnesses.md#transport).
+[Transport](harnesses.md#transport). For tasks, see the how-tos: [add a delegate](how-to/add-a-delegate.md),
+[allow a headless parent](how-to/allow-a-headless-parent.md),
+[reach delegates with the a2a CLI](how-to/reach-delegates-with-the-a2a-cli.md),
+[make a delegate native](how-to/make-a-delegate-native.md) and
+[find a delegation after a restart](how-to/find-a-delegation-after-a-restart.md).
 
 > **Note.** Status, and what was and was not shown live, is on the [parity page](vendor-parity.md), which
 > lists each known gap in what a vendor receives as a numbered **limit** with its evidence. This page claims
@@ -82,7 +86,8 @@ nothing needs no accepting.
 > refuses the parent's whole run, before the vendor starts, with the command that fixes it. A parent must
 > not start believing it has a delegate it cannot reach, and ynh never installs or trusts anything on a
 > parent's behalf. The messages are in the
-> [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched).
+> [reference](delegates-reference.md#refusals-when-a-delegate-cannot-be-matched); the steps to add one are
+> in [Add a delegate](how-to/add-a-delegate.md).
 
 > **Intended, not run.** That a delegate installed from a remote git URL or from a registry entry, then trusted,
 > works as a delegate is the designed path. It has not been shown live. The live runs on the parity page
