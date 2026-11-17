@@ -13,7 +13,22 @@ import (
 var (
 	childStartMu   sync.Mutex
 	childStartHook func()
+	childPIDHook   func(pid int)
 )
+
+// OnChildPID registers fn to run with the vendor child's pid once it has
+// started (the presence record's vendor_pid). Like OnChildStart it has one
+// slot; the returned function removes the registration.
+func OnChildPID(fn func(pid int)) (remove func()) {
+	childStartMu.Lock()
+	childPIDHook = fn
+	childStartMu.Unlock()
+	return func() {
+		childStartMu.Lock()
+		childPIDHook = nil
+		childStartMu.Unlock()
+	}
+}
 
 // OnChildStart registers fn to run in the launch of every vendor child, just
 // before the child starts and after the launch has finished reading ynh's own
@@ -109,6 +124,12 @@ func runChildProcess(cmd *exec.Cmd) error {
 	fireChildStart()
 	if err := cmd.Start(); err != nil {
 		return err
+	}
+	childStartMu.Lock()
+	pidHook := childPIDHook
+	childStartMu.Unlock()
+	if pidHook != nil {
+		pidHook(cmd.Process.Pid)
 	}
 	stopWatchdog := startWatchdog(os.Getpid(), cmd.Process.Pid)
 	defer stopWatchdog()

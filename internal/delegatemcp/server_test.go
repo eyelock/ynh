@@ -16,6 +16,7 @@ import (
 	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/presence"
 )
 
 // The delegate's session is this test binary in a helper mode: its "ynh run"
@@ -286,7 +287,7 @@ func TestToolsDeclareOutputSchemas(t *testing.T) {
 			t.Errorf("%s: schemas %v / %v", tl.Name, tl.InputSchema, tl.OutputSchema)
 		}
 	}
-	want := "delegate_cancel delegate_list delegate_reply delegate_result delegate_status delegate_to_reviewer"
+	want := "delegate_cancel delegate_list delegate_reply delegate_result delegate_status delegate_to_reviewer ynh_ps"
 	if strings.Join(sorted(names), " ") != want {
 		t.Errorf("tools = %v, want %s", names, want)
 	}
@@ -615,5 +616,20 @@ func TestAQuestionNobodyAnswersStaysOpenAfterTheDelegatesWait(t *testing.T) {
 	rec, _ := delegation.Load(path)
 	if len(rec.Questions) != 1 || rec.Questions[0].Answer != nil {
 		t.Errorf("questions = %+v", rec.Questions)
+	}
+}
+
+func TestYnhPsListsLiveSessions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	s := newSession(t, setup(t), "", nil)
+	ps, err := presence.Start(presence.Record{SessionID: "ps-1", Harness: "seat", Vendor: "claude", Mode: presence.ModeInteractive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ps.End()
+	raw := s.call("ynh_ps", nil).Raw
+	if !strings.Contains(string(raw), `ps-1`) || !strings.Contains(string(raw), `ynh:ps-1`) {
+		t.Errorf("ynh_ps = %s", raw)
 	}
 }

@@ -730,6 +730,8 @@ func cmdRun(args []string) error {
 		// has exited.
 		removeHook := vendor.OnChildStart(unlockRun)
 		defer removeHook()
+		endPresence := startPresence(adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession)
+		defer endPresence()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
 }
