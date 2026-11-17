@@ -436,13 +436,14 @@ It begins:
 
 ```
 github.com/eyelock/ynh/librarian
-  source:   github.com/eyelock/ynh
+  source:   github.com/eyelock/ynh (develop)
   commit:   <the commit ynh fetched>
   state:    unreviewed
   digest:   sha256:ba038f58317449ef
 ```
 
-The `commit:` line names the commit of ynh's repository that ynh fetched; yours will differ. Then
+`(develop)` is the branch ynh fetched, ynh's default. The `commit:` line names the commit it fetched;
+yours will differ. Then
 it lists the hook:
 
 ```
@@ -518,8 +519,9 @@ The librarian said: "A harness is a folder of instructions and settings that ynh
 launches inside an AI coding tool. SHELVED"
 ```
 
-Look for `SHELVED`: the librarian's instructions ask it to end its answer with that word, so it
-shows the answer came from the librarian, running as its own session.
+Look for `SHELVED` in the reply. The librarian's instructions ask it to end its answer with that
+word; the team lead may quote the answer or only mention the word, and either shows it worked. Only
+the librarian, running as its own session, was told to say it.
 
 ## What we did
 
@@ -548,11 +550,11 @@ The reviewer itself still runs on Claude Code, its own `default_vendor`.
 > doctor` warns of this). Name the tool in the prompt instead: "Use your delegate_to_reviewer tool to ask the
 > reviewer to review README.md, wait for its result, and report it."
 
-> **Note.** Last run end to end on 2026-11-15 on macOS, with ynh at `develop` `09e9f50`, as the parent on
-> Claude Code, Codex, Copilot CLI and OpenCode, and again on 2026-11-17 with Claude Code as the parent,
-> ynh at `develop` `a12c56be`. Both runs used an earlier GitHub delegate that ran no commands. The
-> librarian steps in [Add a delegate from GitHub](#add-a-delegate-from-github) have been run up to
-> `ynh trust show` (2026-11-17); from `ynh trust accept` on, they have not been run yet.
+> **Note.** Last run end to end on 2026-11-17 on macOS, with ynh at `develop` `3c75df5`, with Claude Code
+> as the parent. That run fetched the librarian from this page's pull request branch, before it reached
+> `develop`. An earlier run, on 2026-11-15 with ynh at `develop` `09e9f50`, also had Codex, Copilot CLI
+> and OpenCode as the parent, with an earlier GitHub delegate that ran no commands; the librarian steps
+> have not been run on those vendors.
 
 > **Intended, not run.** Cursor as the parent has not been run on the delegate routes for v0.18.0.
 
