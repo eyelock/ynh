@@ -1,0 +1,11 @@
+{
+  "name": "librarian",
+  "version": "0.1.0",
+  "description": "Tutorial fixture for 'A First Delegate Session': answers a question in one sentence, and runs one hook so it needs trusting",
+  "default_vendor": "claude",
+  "hooks": {
+    "on_session_start": [
+      {"command": "echo Librarian session started."}
+    ]
+  }
+}
