@@ -57,7 +57,7 @@ groups:
         type: string
         stability: development
         brief: The backend that ran the worker.
-        examples: ["claude", "codex", "cursor"]
+        examples: ["claude", "codex", "copilot", "cursor", "opencode"]
       - id: ynh.run.effort
         type: string
         stability: development

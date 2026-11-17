@@ -44,6 +44,23 @@ func validateAutoApprove(level, backend string) error {
 	switch backend {
 	case "claude":
 		return nil
+	case "copilot":
+		// Copilot's --allow-tool='write' approves the tools that create and
+		// modify files, and shell commands still need their own rule. It is
+		// still not "edits": an unscoped write rule also approves a shell
+		// command's redirection of output into a file (a read-only command
+		// such as `cat a > b`), so a command can write a file without being
+		// approved as a command. #425 asks for edits to approve file writes
+		// only and never shell commands, so the level is refused rather than
+		// mapped to a grant wider than it says (copilot help permissions,
+		// 1.0.107).
+		if level == AutoApproveEdits {
+			return fmt.Errorf(
+				"copilot cannot auto-approve edits only: its only file-write grant (--allow-tool='write') " +
+					"also approves a shell command's output redirection into a file (for example `cat a > b`); " +
+					"use --auto-approve all or a different backend")
+		}
+		return nil
 	case "codex", "cursor", "opencode":
 		if level == AutoApproveEdits {
 			return fmt.Errorf(
@@ -52,7 +69,7 @@ func validateAutoApprove(level, backend string) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor, opencode)", backend)
+		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: %s)", backend, supportedBackends())
 	}
 }
 
@@ -93,6 +110,13 @@ func projectPermissionSetting(dir, backend string) (string, error) {
 	case "codex":
 		return codexProjectPolicy(filepath.Join(dir, (&vendor.Codex{}).ConfigDir(), "config.toml"))
 	default:
+		// copilot: settings.json and settings.local.json under .github/copilot
+		// (copilot config --repo / --local) carry allowedUrls and deniedUrls,
+		// which Copilot applies under --allow-all-tools too (denial wins), and
+		// defaultPermissionMode, which its help says does not apply to
+		// -p/--prompt runs. So no repo setting chooses a permission mode for a
+		// worker run, and there is nothing to refuse (copilot help config,
+		// 1.0.107).
 		// opencode: --auto approves everything not explicitly denied, so a
 		// project's permission rules still apply under it, as with cursor.
 		// cursor's project file (.cursor/cli.json) carries only allow and

@@ -34,7 +34,10 @@ func TestValidateAutoApprove(t *testing.T) {
 		{"edits", "opencode", "opencode cannot auto-approve edits only"},
 		{"edits", "codex", "codex cannot auto-approve edits only"},
 		{"edits", "cursor", "cursor cannot auto-approve edits only"},
-		{"all", "copilot", "not supported by the copilot backend"},
+		{"", "copilot", ""},
+		{"all", "copilot", ""},
+		{"edits", "copilot", "copilot cannot auto-approve edits only"},
+		{"all", "nope", "not supported by the nope backend"},
 		{"yes", "claude", `unknown --auto-approve level "yes"`},
 		{"Edits", "claude", "unknown --auto-approve level"},
 	}
@@ -59,7 +62,7 @@ func TestValidateAutoApprove(t *testing.T) {
 var permissionFlags = []string{
 	"--permission-mode", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
 	"--dangerously-bypass-approvals-and-sandbox", "--yolo", "--full-auto", "--ask-for-approval",
-	"-a", "--sandbox", "-s", "--force", "-f", "--auto",
+	"-a", "--sandbox", "-s", "--force", "-f", "--auto", "--allow-all-tools", "--allow-all", "--allow-all-paths", "--allow-all-urls",
 }
 
 // backendArgs returns the argument list each backend builds for opts.
@@ -71,6 +74,9 @@ func backendArgs(backend string, opts StartOptions) []string {
 		return buildCodexArgs(opts, "")
 	case "opencode":
 		return buildOpenCodeArgs(opts, "", "do the task")
+	case "copilot":
+		args, _ := buildCopilotWorkerArgs(opts, "", "do the task")
+		return args
 	default:
 		return buildCursorArgs(opts, "chat", true, "do the task")
 	}
@@ -92,6 +98,8 @@ func TestBackendArgs_AutoApproveMapping(t *testing.T) {
 		{"cursor", "all", []string{"--force"}},
 		{"opencode", "", nil},
 		{"opencode", "all", []string{"--auto"}},
+		{"copilot", "", nil},
+		{"copilot", "all", []string{"--allow-all-tools"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.backend+"/"+tt.level, func(t *testing.T) {
@@ -219,7 +227,7 @@ func TestProjectPermissionSetting_IgnoresUserSettings(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":{"defaultMode":"plan"}}`)
 	writeFile(t, filepath.Join(home, ".codex", "config.toml"), "approval_policy = \"never\"\n")
 	project := t.TempDir()
-	for _, backend := range []string{"claude", "codex", "cursor", "opencode"} {
+	for _, backend := range []string{"claude", "codex", "cursor", "opencode", "copilot"} {
 		got, err := projectPermissionSetting(project, backend)
 		if err != nil || got != "" {
 			t.Errorf("%s: got %q, %v; want no setting", backend, got, err)
