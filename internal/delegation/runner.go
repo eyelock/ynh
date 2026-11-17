@@ -56,6 +56,10 @@ func Start(o StartOptions) (*Record, string, error) {
 	if o.Profile != "" && o.Focus != "" {
 		return nil, "", errors.New("starting a delegation: an entry names a profile or a focus, not both")
 	}
+	anc, err := Guard(o.Parent, o.Delegate, Chain(os.Getenv), os.Getenv)
+	if err != nil {
+		return nil, "", err
+	}
 	folder, err := filepath.Abs(o.Folder)
 	if err != nil {
 		return nil, "", fmt.Errorf("starting a delegation: %w", err)
@@ -67,7 +71,7 @@ func Start(o StartOptions) (*Record, string, error) {
 	path := RecordPath(o.Parent, folder, handle)
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
-		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus,
+		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
 		Log: strings.TrimSuffix(path, ".json") + ".log",
 	}
 	if err := create(path, rec); err != nil {
@@ -79,10 +83,13 @@ func Start(o StartOptions) (*Record, string, error) {
 	// The session never inherits its parent's A2A endpoints or their tokens:
 	// those are the parent's, and a delegate with delegates of its own gets its own.
 	for _, kv := range os.Environ() {
-		if !ParentOnlyEnv(kv) {
+		if k, _, _ := strings.Cut(kv, "="); !ParentOnlyEnv(kv) && k != ChainEnv {
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}
+	// The session carries its ancestry, so a delegation it starts is checked
+	// against the whole chain (Guard).
+	cmd.Env = append(cmd.Env, chainEnvEntry(anc))
 	// Setsid makes the session its own session and process group leader, so a
 	// signal to the caller's group, or the caller's terminal closing, never
 	// reaches it.

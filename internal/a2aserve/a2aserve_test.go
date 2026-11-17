@@ -458,3 +458,24 @@ func TestAQuestionNobodyAnswersEndsWithTheDelegatesWait(t *testing.T) {
 		t.Errorf("got %s %q", done.Status.State, artifactText(done))
 	}
 }
+
+// A delegation the guard refuses is the task's failure, with the reason and
+// its Fix line: the parent's delegate tool returns it as its result, and no
+// session or record is started (ynh #892).
+func TestARefusedDelegationIsAFailedTaskWithAFixLine(t *testing.T) {
+	folder := setup(t)
+	t.Setenv(delegation.ChainEnv, "local/reviewer")
+	e := open(t, folder, "reviewer")
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo should-not-run", false)
+	if task.Status.State != a2a.TaskStateFailed || task.Status.Message == nil {
+		t.Fatalf("got %s %+v", task.Status.State, task.Status.Message)
+	}
+	msg := messageText(task.Status.Message)
+	if !strings.Contains(msg, "loop") || !strings.Contains(msg, "Fix:") {
+		t.Fatalf("the refusal lacks the loop and a Fix line: %q", msg)
+	}
+	if n := len(records(t)); n != 0 {
+		t.Errorf("a refused delegation left %d record(s)", n)
+	}
+}
