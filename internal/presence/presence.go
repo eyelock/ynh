@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -109,7 +110,13 @@ func Save(r Record) error {
 }
 
 // Session is a running session's handle on its own record.
+//
+// mu guards rec and is held across each mutate-and-Save, so the heartbeat
+// goroutine and the run's goroutine never race on rec and their renames land
+// in the order their changes were made: a later Save always carries every
+// earlier change (vendor_pid is never dropped by a stale beat).
 type Session struct {
+	mu   sync.Mutex
 	rec  Record
 	stop chan struct{}
 	done chan struct{}
@@ -148,14 +155,18 @@ func (s *Session) beat(every time.Duration) {
 		case <-s.stop:
 			return
 		case <-t.C:
+			s.mu.Lock()
 			s.rec.LastBeat = time.Now().UTC()
 			_ = Save(s.rec)
+			s.mu.Unlock()
 		}
 	}
 }
 
 // SetVendorPID records the vendor process once it has started.
 func (s *Session) SetVendorPID(pid int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.rec.VendorPID = pid
 	s.rec.LastBeat = time.Now().UTC()
 	_ = Save(s.rec)
@@ -165,6 +176,8 @@ func (s *Session) SetVendorPID(pid int) {
 func (s *Session) End() {
 	close(s.stop)
 	<-s.done
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.rec.Ended = true
 	s.rec.LastBeat = time.Now().UTC()
 	_ = Save(s.rec)

@@ -110,3 +110,32 @@ func TestInvalidIDAndEmptyDir(t *testing.T) {
 		t.Fatalf("empty list should be [] not nil: %v %v", es, err)
 	}
 }
+
+// The heartbeat and SetVendorPID share one record: under -race they must not
+// collide, and once SetVendorPID has returned no later beat may drop the pid.
+func TestSetVendorPIDDuringHeartbeat(t *testing.T) {
+	home(t)
+	s, err := Start(Record{SessionID: "race", Harness: "h", Vendor: "claude", Mode: ModeInteractive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Replace the 15s heartbeat with a 1ms one.
+	close(s.stop)
+	<-s.done
+	s.stop = make(chan struct{})
+	s.done = make(chan struct{})
+	go s.beat(time.Millisecond)
+
+	for i := 1; i <= 200; i++ {
+		s.SetVendorPID(1000 + i)
+		time.Sleep(200 * time.Microsecond)
+	}
+	time.Sleep(20 * time.Millisecond) // let several more beats land
+	s.End()
+
+	es, _ := List(true)
+	e, ok := find(es, "race")
+	if !ok || e.VendorPID != 1200 {
+		t.Fatalf("vendor_pid lost or stale: %+v ok=%v", e, ok)
+	}
+}
