@@ -96,7 +96,9 @@ Installed harness "team-lead"
 ynh ls
 ```
 
-Expected:
+This lists every harness installed on your machine, so other rows may appear. Find the `local/team-lead` row: its source is `/tmp/ynh-tutorial/team-lead`, and its `DELEGATES TO` column shows two delegates. The column may be shortened to `… (+2)`, which is the two delegates.
+
+On an otherwise empty install the row reads:
 ```
 ID               KIND   VENDOR  SOURCE                       ARTIFACTS  INCLUDES  DELEGATES TO                                                     LABELS
 local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          -         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher  -
