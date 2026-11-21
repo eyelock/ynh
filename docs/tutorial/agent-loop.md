@@ -66,7 +66,7 @@ Exit code `1`.
 
 ## Run the loop
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --session-id ...`
 ```bash
 ynh agent run --harness local/demo --focus tidy --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
 echo "exit=$?"
@@ -340,7 +340,7 @@ That folder is the session directory. Here it is `/tmp/loop-demo`, because
 
 Resume by pointing at the directory that holds it:
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --resume ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --resume ...`
 ```bash
 ynh agent run --resume /tmp/loop-demo
 ```

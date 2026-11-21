@@ -319,7 +319,7 @@ nothing" is the wrong conclusion, and it is the one the numbers invite.
 
 ## Run the loop against the base state
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --session-id ...`
 ```bash
 ynh agent run \
   --harness local/<pinned-harness> \
@@ -418,7 +418,7 @@ cp /tmp/shadow/task-173.txt /tmp/shadow/task-8382382.txt
 Each historical tree gets its own worktree, and `--cwd` points the "before"
 check at it:
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --session-id ...`
 ```bash
 for FIX in $(cat /tmp/shadow/candidates.txt); do
   W=/tmp/shadow/$FIX

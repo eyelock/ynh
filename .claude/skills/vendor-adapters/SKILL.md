@@ -547,7 +547,7 @@ vendor. A plugin can reach Claude Code's main thread only through a root
 | Binary:           | claude                           | codex                            | agent                            |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Launch:           | exec.Command (child process)     | exec.Command (child process)     | exec.Command (child process)     |
-|                   | --plugin-dir + --add-dir +       | cmd.Dir = stagingDir             | cmd.Dir = stagingDir             |
+|                   | --plugin-dir + Read allow rule + | cmd.Dir = stagingDir             | cmd.Dir = stagingDir             |
 |                   | --append-system-prompt           |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Symlinks:         | No (uses --plugin-dir)           | Yes (into project .codex/)       | Yes (into project .cursor/)      |
