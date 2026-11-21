@@ -90,6 +90,9 @@ type Record struct {
 	Model   string `json:"model,omitempty"`
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// Chain is the ancestry of the delegate: the canonical ids of the
+	// harnesses above it, root first, ending with Parent (Guard).
+	Chain []string `json:"chain,omitempty"`
 
 	Status  Status   `json:"status"`
 	History []Change `json:"history"`

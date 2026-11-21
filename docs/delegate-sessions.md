@@ -151,6 +151,41 @@ on. That keeps the delegate's tool call inside its vendor's timeout without losi
 answer belongs to one question. The routes, results and limits are in the
 [reference](delegates-reference.md#questions-from-a-delegate).
 
+## Limits on delegation
+
+An A2A delegate is an ordinary new session: nothing in its own harness says who started it, and a
+delegate's own `delegates_to` applies inside its own session. So a loop in `delegates_to` (A
+delegates to B, which delegates back to A) is not ended by anything in the harnesses. The
+[flattening](harnesses.md#cycles-and-shared-delegates) of the agent list is for `native` delegates
+and for `ynh doctor`; it is not a runtime guard. ynh guards the runtime itself
+([ynh #892](https://github.com/eyelock/ynh/issues/892)), where every delegation starts, so the same
+rule holds whichever vendor the parent runs on.
+
+- **Ancestry.** Each delegate session carries the chain of harness ids above it, root first, in
+  `YNH_DELEGATION_CHAIN` and in its delegation record (`chain`). A delegation that would return to a
+  harness already in the chain, or start a harness delegating to itself, is refused at once.
+- **Depth.** A delegation is refused when it would put the delegate more than 4 levels below the
+  harness that was run (the root's own delegate is level 1). Set `YNH_DELEGATION_MAX_DEPTH` to a
+  whole number above 0 to change it.
+- **Live sessions.** A delegation is refused while 16 delegate sessions are live (started, running
+  or waiting on a question) under the same `YNH_HOME`, which bounds a chain that is wide rather than
+  deep. Set `YNH_DELEGATION_MAX_LIVE` to a whole number above 0 to change it. A session whose
+  process is gone is settled first and does not count.
+
+A refusal is the delegate tool's result to the parent (the failed task over A2A, so the parent's
+model reads it and can change course), never a crash, and no session or record is started. It names
+the chain and ends in a Fix line:
+
+```
+delegation refused: this is a loop. local/loopa -> local/loopb -> local/loopa returns to local/loopa, which is already in the chain.
+  Fix: remove the delegates_to entry that closes the loop, or do this work in local/loopb itself instead of delegating it back
+```
+
+The limits are set in the environment of the `ynh run` of the harness that is run (a delegate
+session inherits it), and a value that is not a whole number above 0 is refused with a Fix line.
+They count `a2a` delegations, started through ynh. A `native` delegate is a subagent inside the
+parent's session, and the vendor's own limits apply to it.
+
 ## Outliving the parent
 
 A delegate session must survive its parent going away (a restart, a handoff or a crash) and coming back.
