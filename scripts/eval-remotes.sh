@@ -154,6 +154,15 @@ A reference Agent Plugin."
 file $P LICENSE "Fixture licence text."
 publish $P
 
+# --- github.com/eyelock/ynh ---------------------------------------------------
+# ynh's own tutorial harnesses (docs/tutorial/harnesses), copied from this
+# checkout rather than written out here, so the fixture is the real file.
+Y=eyelock/ynh
+YNH_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+mkdir -p "$REMOTES/src/$Y/docs/tutorial"
+cp -R "$YNH_ROOT/docs/tutorial/harnesses" "$REMOTES/src/$Y/docs/tutorial/harnesses"
+publish $Y
+
 # Served from the sandbox's own home, so only this sandbox's git sees it.
 cp "$REMOTES/gitconfig" "$SANDBOX/home/.gitconfig"
 echo "eval-remotes: serving $(grep -c '^\[url' "$REMOTES/gitconfig") repositories from $REMOTES"
