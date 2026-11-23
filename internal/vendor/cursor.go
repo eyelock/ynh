@@ -488,7 +488,9 @@ func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (stri
 //
 //   - description: the source's, else the humanised file name.
 //   - globs: the source's globs, else its paths (Claude Code's rule scoping),
-//     comma-joined the way Cursor writes them. A globs scalar is already
+//     comma-joined the way Cursor writes them, in double quotes so the
+//     frontmatter stays valid YAML (an unquoted `*` starts an alias, a
+//     leading `{` a flow mapping). A globs scalar is already
 //     Cursor's form and is kept verbatim.
 //   - alwaysApply: the source's when it is a valid boolean; otherwise false
 //     for a rule with globs, which Cursor would ignore under alwaysApply:
@@ -533,7 +535,7 @@ func cursorRule(stem string, data []byte) []byte {
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "description: %s\n", strconv.Quote(description))
 	if len(globs) > 0 {
-		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
+		fmt.Fprintf(&b, "globs: %s\n", strconv.Quote(strings.Join(globs, ",")))
 	}
 	fmt.Fprintf(&b, "alwaysApply: %t\n", alwaysApply)
 	b.WriteString("---\n\n")

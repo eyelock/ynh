@@ -121,7 +121,7 @@ merged from the rule's own:
 | Cursor field | Taken from |
 |---|---|
 | `description` | the rule's `description`, else its file name (`always-test` becomes `Always Test`) |
-| `globs` | the rule's `globs`, else its `paths`, comma-joined; omitted when it has neither |
+| `globs` | the rule's `globs`, else its `paths`, comma-joined and written in double quotes (so `**/*.ts` stays valid YAML); omitted when it has neither |
 | `alwaysApply` | the rule's `alwaysApply` when it is `true` or `false`; otherwise `false` when there are globs (Cursor ignores globs on an always-on rule) and `true` when there are none |
 
 Any other field, such as `name`, is dropped from the `.mdc`, because Cursor does
