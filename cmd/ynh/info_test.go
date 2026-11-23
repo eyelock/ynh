@@ -668,7 +668,20 @@ func TestCmdInfoText_LocalIncludes(t *testing.T) {
 			]`,
 			want: []string{
 				"  extras",
-				"  github.com/eyelock/assistants  path=skills/dev  ref=v2",
+				"  github.com/eyelock/assistants  path=skills/dev  ref=v2  (floating)",
+			},
+		},
+		{
+			name: "pinned, floating and short SHA",
+			includes: `[
+				{"git": "github.com/example/a", "ref": "abc1234567890abcdef1234567890abcdef12345"},
+				{"git": "github.com/example/b"},
+				{"git": "github.com/example/c", "ref": "abc1234"}
+			]`,
+			want: []string{
+				"  github.com/example/a  ref=abc1234567890abcdef1234567890abcdef12345  (pinned)",
+				"  github.com/example/b  (floating)",
+				"  github.com/example/c  ref=abc1234  (floating: short SHA is not pinned, use the full 40 characters)",
 			},
 		},
 		{

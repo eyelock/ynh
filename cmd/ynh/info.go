@@ -414,6 +414,9 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 			if len(inc.Pick) > 0 {
 				line += "  pick=[" + strings.Join(inc.Pick, ", ") + "]"
 			}
+			if !inc.IsLocal() {
+				line += "  (" + includePinState(inc.Ref) + ")"
+			}
 			_, _ = fmt.Fprintln(w, line)
 		}
 		for _, note := range view.includeNotes {
@@ -655,4 +658,19 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 	}
 	_, err = fmt.Fprintln(stdout, string(data))
 	return err
+}
+
+// includePinState says what an include's ref does on `ynh update`: "pinned"
+// for a full commit SHA, "floating" for a branch, a tag or no ref (each moves
+// or is re-resolved), and a plain statement for a short SHA, which ynh cannot
+// fetch.
+func includePinState(ref string) string {
+	switch {
+	case harness.IsPinnedRef(ref):
+		return "pinned"
+	case harness.IsShortSHARef(ref):
+		return "floating: short SHA is not pinned, use the full 40 characters"
+	default:
+		return "floating"
+	}
 }
