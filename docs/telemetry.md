@@ -267,8 +267,11 @@ it launches, gets:
 
 ynh sets these in its own environment before the launch, so they reach the
 vendor on every vendor. `YNR_SPOOL` is not set. When there is no destination,
-the vendor's environment is exactly what it was. A spool that appears mid-launch
-does not reach a vendor already running, as for `ynh agent run`.
+the vendor's environment is exactly what it was, an operator's `ynh.label.*` in
+`OTEL_RESOURCE_ATTRIBUTES` included (it is removed only once telemetry has a
+destination, [below](#where-they-go)). A spool that appears mid-launch does not
+reach a vendor already running, as for `ynh agent run`; when it appears, ynh
+removes the operator's `ynh.label.*` before it writes the first record.
 
 ## Run labels
 
@@ -320,10 +323,13 @@ these is yours.
 
 - **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
   record `ynh agent run` and `ynh run` write (the registry declares the
-  template `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is
-  removed from ynh's environment when the run starts (with a note on stderr
-  naming the keys), since only these were validated; the vendor and `ynh check`
-  never inherit one.
+  template `ynh.label`). When telemetry has a destination, every `ynh.label.*`
+  in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment (with a note
+  on stderr naming the keys), since only these were validated; the vendor and
+  `ynh check` started after that never inherit one. When a spool appears only
+  after the run began, the removal happens at that moment, before the first
+  record is written. With no destination at all, nothing is removed and no
+  note is printed: the environment is the operator's own.
 - **Child processes:** ynh sets `YNH_LABELS` to the merged set in the
   environment of every process it starts: the vendor CLI (including past
   `env_passthrough`, which does not apply to it) and each `ynh check`. With no
@@ -647,8 +653,9 @@ path, and no relay was left running. The relay is not yet started for Claude Cod
 
 Codex under `ynh run` is given the same `-c` overrides as under `ynh agent run` ([What Codex
 receives](#what-codex-receives)), added to its command line, since Codex reads nothing from
-`OTEL_*` variables; ynh's environment is left as it was. `ynh run` writes no run span, so there is
-no `TRACEPARENT` to join and `codex.exec` starts its own trace. The relay lives as long as the
+`OTEL_*` variables; ynh's environment is left as it was. This was verified before `ynh run` wrote
+its own `ynh.session` span, when there was no `TRACEPARENT` to join and `codex.exec` started its
+own trace; whether Codex's records now join the `ynh.session` trace has not been checked. The relay lives as long as the
 Codex child and is stopped when it exits.
 
 Verified on 2026-11-07 with codex-cli 0.166.0, signed in with ChatGPT, against a real `ynr
