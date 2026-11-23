@@ -17,7 +17,8 @@ import (
 )
 
 // runDestination is where `ynh run`'s vendor telemetry would go. `ynh run`
-// writes no records of its own, so there is no Telemetry to ask.
+// does not use the launch record's Telemetry for the relay, so the destination
+// is chosen here.
 type runDestination struct {
 	dest telemetry.Destination
 	dir  string

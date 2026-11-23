@@ -52,7 +52,7 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | `delegates_to`, `transport: native` | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | P [L12](#l12-delegates-carry-only-part-of-a-harness) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | P [L12](#l12-delegates-carry-only-part-of-a-harness) |
 | Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | U [L38](#l38-cursor-resume-and-interactive-trust-across-snapshots-not-shown-live) | Y |
 | Own `ynh.session` record from `ynh run` | Y | Y | Y | Y | Y |
-| Vendor telemetry through the relay (`--telemetry-relay`) | N [L13](#l13-ynh-run-emits-no-telemetry) | Y [L19](#l19-vendor-telemetry-through-the-relay) | Y | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
+| Vendor telemetry through the relay (`--telemetry-relay`) | N [L13](#l13-ynh-run-does-not-wire-vendor-telemetry) | Y [L19](#l19-vendor-telemetry-through-the-relay) | Y | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
 
 ## ynh agent run
 
