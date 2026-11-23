@@ -184,6 +184,8 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           sudo npm install -g @anthropic-ai/sandbox-runtime@0.0.83
           srt --version
+          lsb_release -d; uname -r; bwrap --version
+          sysctl -a 2>/dev/null | grep -E 'userns|unprivileged' || true
       # Runs the tests that skip without srt, so ynh #920's Done-when (a
       # credential read is refused, the worktree still readable) is shown on
       # Linux on every change. They must run, not skip: -v output is checked.
