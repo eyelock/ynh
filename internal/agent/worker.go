@@ -95,6 +95,11 @@ type StartOptions struct {
 	ConfigPath string
 	// Sandbox is "srt" or "none".
 	Sandbox string
+	// SrtDenyRead is the read-deny list the worker runs under with --sandbox
+	// srt, as the loop resolved it (SrtReadPolicy) and reported in the run's
+	// result. Nil means the loop did not resolve one and srtCommand uses ynh's
+	// defaults; an empty, non-nil slice is a deliberate "deny nothing".
+	SrtDenyRead []string
 	// SessionDir is the run's session directory (beside its trajectory),
 	// or "" when the run has none. Under srt the sandbox's settings file is
 	// written there.

@@ -252,7 +252,7 @@ missing or invalid. Neither falls back to running unsandboxed.
 |---|---|---|
 | Network | Claude Code: `api.anthropic.com`, `claude.ai`, `platform.claude.com` (the API, and signing in and refreshing a claude.ai or Console login). Codex: `api.openai.com`, `auth.openai.com`, `chatgpt.com`. Cursor: `*.cursor.sh`, `cursor.com`, `*.cursor.com` | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
 | Writes | the worktree; the vendor's own state: Claude Code's `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; Codex's `$CODEX_HOME`, `~/.codex` by default; Cursor's `~/.cursor/` and `~/.config/cursor/`; srt's own temporary directory, `/tmp/claude` (srt sets `TMPDIR` to it, but makes it writable only if the folder already exists; ynh creates it before every srt launch, see below) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
-| Reads | everywhere, srt's default | |
+| Reads | everywhere, except the credential paths below | refused: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/Library/Keychains` (macOS), `~/.local/share/keyrings` (Linux) and `$YNH_HOME/trust.json`, where `~` is the worker's home; extend or relax the list with `srt_deny_read` and `srt_allow_read` ([read policy](#srts-read-policy)) |
 
 For Codex and Cursor, ynh also sets srt's `enableWeakerNetworkIsolation`,
 which lets the worker reach macOS's `trustd`. Codex verifies TLS through the
@@ -264,6 +264,27 @@ The network list is the worker's only way out: a task that needs `github.com`
 or a package registry fails under `--sandbox srt`. The telemetry relay is not
 reachable from inside srt and is skipped; see
 [telemetry](telemetry.md#turning-it-on).
+
+#### srt's read policy
+
+Under `--sandbox srt` the worker may read everything except a deny list. ynh's
+default list is the credential paths in the table above; srt refuses a read of
+them (and of anything beneath them) even with `--auto-approve all`. This is a
+deny list, not containment: a credential kept anywhere else is readable.
+
+Two keys in `~/.ynh/config.json` change it. `~/` expands to the worker's home.
+
+```json
+{
+  "srt_deny_read": ["~/.kube", "/srv/secrets"],
+  "srt_allow_read": ["~/.ssh"]
+}
+```
+
+`srt_deny_read` adds paths; `srt_allow_read` removes a default (a path equal to
+one after `~/` expands). The list in force is in the run's result JSON, as
+`sandbox` (`"srt"`) and `sandbox_deny_read` (the absolute paths), and absent
+without `--sandbox srt`.
 
 #### srt's temporary directory
 
