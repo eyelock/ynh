@@ -1,0 +1,49 @@
+# The tutorial evals are the release gate (.claude/agents/evals.md): the verdict
+# must be PASS before any release. They are an LLM agent, so they cannot run in
+# ci.yml on every push; this runs them on demand, against the branch it is
+# dispatched on, and records the verdict as this job's check run.
+#
+#   gh workflow run evals.yml --ref release/vX.Y
+#
+# The job fails unless the agent ends with `EVALS: PASS`; its verdict line is in
+# the run's summary, and the full report is the `evals-report` artifact. It
+# needs the CLAUDE_CODE_OAUTH_TOKEN secret that claude.yml already uses.
+#
+# Nothing in release.yml requires this check yet: wiring it into the release is
+# the release owner's change.
+
+name: Evals
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    name: Tutorial evals
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run the evals
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: make evals
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: evals-report
+          path: evals-report.txt
+          if-no-files-found: ignore
