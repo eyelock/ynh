@@ -403,3 +403,18 @@ func TestCmdDelegateAdd_SelectionFlagNeedsValue(t *testing.T) {
 		}
 	}
 }
+
+// "." names the current harness folder, the same form ynh info takes.
+func TestCmdDelegateAdd_DotPath(t *testing.T) {
+	dir := t.TempDir()
+	writeDelegateTestHarness(t, dir, "h")
+	t.Chdir(dir)
+
+	var buf bytes.Buffer
+	if err := cmdDelegateTo([]string{"add", ".", "github.com/example-org/agent"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dels := loadTestDelegates(t, dir); len(dels) != 1 {
+		t.Errorf("expected 1 delegate, got %+v", dels)
+	}
+}

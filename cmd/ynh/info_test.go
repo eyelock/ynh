@@ -1447,3 +1447,48 @@ func TestCmdInfo_DelegateTransport(t *testing.T) {
 		}
 	}
 }
+
+// info takes the same forms for a harness as delegate add, run and check: an
+// installed id, or a path to a harness folder, "." included.
+func TestCmdInfoAcceptsPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	dir := t.TempDir()
+	if err := writePluginJSONFile(dir, []byte(`{"name": "pathy", "version": "1.0.0", "default_vendor": "claude"}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, ref := range []string{dir, "."} {
+		if ref == "." {
+			t.Chdir(dir)
+		}
+		var stdout bytes.Buffer
+		if err := cmdInfoTo([]string{ref}, &stdout, io.Discard); err != nil {
+			t.Fatalf("info %q (text): %v", ref, err)
+		}
+		if !strings.Contains(stdout.String(), "pathy") {
+			t.Errorf("info %q (text) lacks the harness name:\n%s", ref, stdout.String())
+		}
+
+		var js, errBuf bytes.Buffer
+		if err := cmdInfoTo([]string{ref, "--format", "json"}, &js, &errBuf); err != nil {
+			t.Fatalf("info %q (json): %v\n%s", ref, err, errBuf.String())
+		}
+		if !strings.Contains(js.String(), `"name": "pathy"`) {
+			t.Errorf("info %q (json) lacks the harness name:\n%s", ref, js.String())
+		}
+	}
+}
+
+func TestCmdInfoMissingPathIsNotFound(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	err := cmdInfoTo([]string{filepath.Join(t.TempDir(), "nope"), "--format", "json"}, &stdout, &stderr)
+	if !errors.Is(err, errStructuredReported) {
+		t.Fatalf("expected errStructuredReported, got: %v", err)
+	}
+	if !strings.Contains(stderr.String(), errCodeNotFound) {
+		t.Errorf("expected code %q: %s", errCodeNotFound, stderr.String())
+	}
+}
