@@ -479,3 +479,21 @@ func TestARefusedDelegationIsAFailedTaskWithAFixLine(t *testing.T) {
 		t.Errorf("a refused delegation left %d record(s)", n)
 	}
 }
+
+func TestTaskListWithTheTokenListsTheDelegatesTasksAndWithoutItIsRefused(t *testing.T) {
+	folder := setup(t)
+	e := open(t, folder, "reviewer")
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hello", false)
+	got, err := c.ListTasks(ctx, &a2a.ListTasksRequest{})
+	if err != nil {
+		t.Fatalf("task list with the right token: %v", err)
+	}
+	if len(got.Tasks) != 1 || got.Tasks[0].ID != task.ID {
+		t.Fatalf("want the one task %s, got %+v", task.ID, got.Tasks)
+	}
+	bad, badCtx := client(t, e, "wrong")
+	if _, err := bad.ListTasks(badCtx, &a2a.ListTasksRequest{}); err == nil || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("task list with a wrong token: want a 401, got %v", err)
+	}
+}
