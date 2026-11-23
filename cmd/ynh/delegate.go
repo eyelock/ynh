@@ -86,6 +86,13 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 		return err
 	}
 
+	// Delegates are remote: a delegate's identity and pinned SHA come from its
+	// Git URL. Hand-written absolute git: entries still resolve locally
+	// (ynh #855); this refuses only what the command is given.
+	if strings.HasPrefix(url, "file://") || looksLikeLocalPath(url, dir) {
+		return fmt.Errorf("delegate %q is a local path: delegates are remote, give a Git URL such as github.com/owner/repo", url)
+	}
+
 	if installed {
 		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
 		basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
