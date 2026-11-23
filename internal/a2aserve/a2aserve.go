@@ -98,7 +98,7 @@ func Open(o Options) (*Endpoint, error) {
 	}
 	ex := &executor{o: o, paths: map[a2a.TaskID]string{}}
 	mux := http.NewServeMux()
-	mux.Handle("/a2a", a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(ex)))
+	mux.Handle("/a2a", a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(ex, a2asrv.WithCallInterceptors(bearerUser{}))))
 	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(card))
 	e := &Endpoint{Opts: o, CardURL: base, Token: token, ex: ex,
 		srv: &http.Server{Handler: bearer(token, mux), ReadHeaderTimeout: 10 * time.Second}}
@@ -134,6 +134,19 @@ func bearer(token string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// bearerUser names the caller the bearer check let in. The task store keeps each task under its
+// caller and lists only the caller's own, refusing a call with no named user as unauthenticated;
+// the bearer wrapper authenticates at the HTTP layer and names nobody, so without this the
+// listing of tasks was refused even with the right token. One token means one caller.
+type bearerUser struct {
+	a2asrv.PassthroughCallInterceptor
+}
+
+func (bearerUser) Before(ctx context.Context, callCtx *a2asrv.CallContext, _ *a2asrv.Request) (context.Context, any, error) {
+	callCtx.User = a2asrv.NewAuthenticatedUser("delegate", nil)
+	return ctx, nil, nil
 }
 
 type executor struct {
