@@ -223,7 +223,7 @@ silently ignored. ynh's Cursor adapter (`internal/vendor/cursor.go`,
 at copy time (both `ynh run` staging and `ynh export`). A source rule's own
 frontmatter is merged into that block, never left in the body as a second one
 (#532): `description` from the source, else the humanised file name; `globs` from
-the source's `globs`, else its `paths` (Claude Code's rule scoping), comma-joined;
+the source's `globs`, else its `paths` (Claude Code's rule scoping), comma-joined and double-quoted;
 `alwaysApply` from the source when it is a boolean, else `false` with globs and
 `true` without. Other source fields are dropped. See `docs/artifacts.md#rules`.
 

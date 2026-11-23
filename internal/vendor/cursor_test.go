@@ -366,22 +366,22 @@ func TestCursorTransformArtifact_MergesSourceFrontmatter(t *testing.T) {
 		{
 			name: "Claude paths block list becomes scoped globs",
 			src:  "---\npaths:\n  - \"src/**/*.ts\"\n  - lib/**\n---\nbody\n",
-			want: "---\ndescription: \"Safety\"\nglobs: src/**/*.ts,lib/**\nalwaysApply: false\n---\n\nbody\n",
+			want: "---\ndescription: \"Safety\"\nglobs: \"src/**/*.ts,lib/**\"\nalwaysApply: false\n---\n\nbody\n",
 		},
 		{
 			name: "paths flow list keeps braces whole",
 			src:  "---\npaths: [\"src/**/*.{ts,tsx}\", docs/**]\n---\nbody\n",
-			want: "---\ndescription: \"Safety\"\nglobs: src/**/*.{ts,tsx},docs/**\nalwaysApply: false\n---\n\nbody\n",
+			want: "---\ndescription: \"Safety\"\nglobs: \"src/**/*.{ts,tsx},docs/**\"\nalwaysApply: false\n---\n\nbody\n",
 		},
 		{
 			name: "Cursor globs scalar passes through verbatim and wins over paths",
 			src:  "---\npaths:\n  - other/**\nglobs: src/**/*.{ts,tsx},lib/**\n---\nbody\n",
-			want: "---\ndescription: \"Safety\"\nglobs: src/**/*.{ts,tsx},lib/**\nalwaysApply: false\n---\n\nbody\n",
+			want: "---\ndescription: \"Safety\"\nglobs: \"src/**/*.{ts,tsx},lib/**\"\nalwaysApply: false\n---\n\nbody\n",
 		},
 		{
 			name: "explicit alwaysApply is honoured",
-			src:  "---\nglobs: src/**\nalwaysApply: true\n---\nbody\n",
-			want: "---\ndescription: \"Safety\"\nglobs: src/**\nalwaysApply: true\n---\n\nbody\n",
+			src:  "---\nglobs: \"src/**\"\nalwaysApply: true\n---\nbody\n",
+			want: "---\ndescription: \"Safety\"\nglobs: \"src/**\"\nalwaysApply: true\n---\n\nbody\n",
 		},
 		{
 			name: "explicit alwaysApply false without globs",
@@ -456,5 +456,23 @@ func TestCursorRule_DescriptionRoundTrips(t *testing.T) {
 				t.Errorf("description = %#v, want %q", fm["description"], desc)
 			}
 		})
+	}
+}
+
+// TestCursorRuleGlobsParseAsYAML pins #769: globs that start with `*` or `{`
+// are not valid unquoted YAML, so the frontmatter must parse and give the
+// comma-joined globs back as one string.
+func TestCursorRuleGlobsParseAsYAML(t *testing.T) {
+	for _, globs := range []string{"**/*.ts,lib/**", "*.md", "{a,b}/*.ts", "src/**/*.ts"} {
+		out := string(cursorRule("safety", []byte("---\nglobs: "+strconv.Quote(globs)+"\n---\nbody\n")))
+		block := strings.TrimPrefix(out, "---\n")
+		block = block[:strings.Index(block, "\n---\n")]
+		var fm map[string]any
+		if err := yaml.Unmarshal([]byte(block), &fm); err != nil {
+			t.Fatalf("globs %q: frontmatter does not parse as YAML: %v\n%s", globs, err, out)
+		}
+		if fm["globs"] != globs {
+			t.Errorf("globs %q: parsed back as %#v", globs, fm["globs"])
+		}
 	}
 }
