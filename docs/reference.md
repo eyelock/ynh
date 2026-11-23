@@ -44,7 +44,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 
 | Command | Key Flags |
 |---------|-----------|
-| `ynh install <source>` | `--path`, `-v` |
+| `ynh install <source>` | `--path`, `--ref`, `--allow-shadow`, `-v` |
 | `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--label <key:value>` (repeatable; `key:` removes a [run label](telemetry.md#run-labels)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
