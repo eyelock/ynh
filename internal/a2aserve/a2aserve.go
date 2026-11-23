@@ -189,14 +189,17 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
 			})
 			sub := a2a.NewSubmittedTask(ec, ec.Message)
-			if err == nil {
-				sub.Metadata = map[string]any{MetaHandle: rec.Handle}
-			}
-			if !yield(sub, nil) {
+			if err != nil {
+				// A refusal decided before start is the task itself, already
+				// failed and carrying its reason: a client that takes the
+				// first event (ReturnImmediately) must not see a bare
+				// submitted task and lose the reason to a later event.
+				sub.Status = a2a.TaskStatus{State: a2a.TaskStateFailed, Message: agentMessage(ec, err.Error())}
+				yield(sub, nil)
 				return
 			}
-			if err != nil {
-				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateFailed, agentMessage(ec, err.Error())), nil)
+			sub.Metadata = map[string]any{MetaHandle: rec.Handle}
+			if !yield(sub, nil) {
 				return
 			}
 			path = p

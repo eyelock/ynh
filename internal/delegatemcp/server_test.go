@@ -646,3 +646,29 @@ func TestYnhPsListsLiveSessions(t *testing.T) {
 		t.Errorf("ynh_ps = %s", raw)
 	}
 }
+
+// A refusal the guard decides before the session starts reaches the parent
+// with its reason and Fix line every time, not only when the failed status
+// arrives before the parent reads the task (ynh #955). Depth zero and a
+// self-loop, repeated.
+func TestARefusedDelegationAlwaysCarriesItsReasonAndFixLine(t *testing.T) {
+	cases := []struct {
+		name, env, val, want string
+	}{
+		{"depth zero", delegation.MaxDepthEnv, "0", delegation.MaxDepthEnv},
+		{"self-loop", delegation.ChainEnv, "local/reviewer", "loop"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(c.env, c.val)
+			s := newSession(t, setup(t), "", nil)
+			for i := 0; i < 20; i++ {
+				r := s.call("delegate_to_reviewer", map[string]any{"task": "echo should-not-run"})
+				got := r.StructuredContent
+				if got.State != "failed" || !strings.Contains(got.Message, c.want) || !strings.Contains(got.Message, "Fix:") {
+					t.Fatalf("refusal %d: state %q, message %q; want the reason (%s) and a Fix line", i, got.State, got.Message, c.want)
+				}
+			}
+		})
+	}
+}
