@@ -8,7 +8,16 @@
 //   - a terminal with NO_COLOR set: the same box, uncoloured;
 //   - anything else (piped, a file, CI): plain lines, "warning: <message>"
 //     then "  Fix: <fix>" when there is one, with no box characters, so logs
-//     stay greppable.
+//     stay greppable. A message of several lines repeats "warning: " on each
+//     line, so grepping a log for "warning:" misses none of it.
+//
+// Box layout: text wraps at spaces to the box width. A word longer than the
+// width (a path, a URL) is cut at the width, so a box never outgrows the
+// terminal. A Fix that fits on one line is "Fix: <fix>"; one that does not
+// puts "Fix:" on its own line and the command below it, kept whole unless the
+// command alone is longer than the width. Width is counted in runes: the box
+// assumes one terminal cell per rune, so wide characters (CJK, emoji) can draw
+// a ragged right border.
 package warn
 
 import (
@@ -100,7 +109,9 @@ func Render(w io.Writer, mode Mode, numbered bool, ws ...Warning) {
 }
 
 func writePlain(w io.Writer, label string, x Warning) {
-	_, _ = fmt.Fprintf(w, "%s: %s\n", label, x.Message)
+	for _, line := range strings.Split(x.Message, "\n") {
+		_, _ = fmt.Fprintf(w, "%s: %s\n", label, line)
+	}
 	if x.Fix != "" {
 		_, _ = fmt.Fprintf(w, "  Fix: %s\n", x.Fix)
 	}
@@ -122,7 +133,7 @@ func writeBox(w io.Writer, label string, x Warning, color bool, width int) {
 	lines = append(lines, wrap(x.Message, width)...)
 	if x.Fix != "" {
 		lines = append(lines, "")
-		lines = append(lines, wrap("Fix: "+x.Fix, width)...)
+		lines = append(lines, fixLines(x.Fix, width)...)
 	}
 	inner := 0
 	for _, l := range lines {
@@ -146,13 +157,51 @@ func writeBox(w io.Writer, label string, x Warning, color bool, width int) {
 	_, _ = io.WriteString(w, b.String())
 }
 
+// fixLines lays out a Fix: on one line when "Fix: <fix>" fits, otherwise
+// "Fix:" then the command on its own line, so the command a user copies is
+// not split at a space. Only a command longer than width is cut.
+func fixLines(fix string, width int) []string {
+	one := "Fix: " + fix
+	if !strings.Contains(fix, "\n") && utf8.RuneCountInString(one) <= width {
+		return []string{one}
+	}
+	out := []string{"Fix:"}
+	for _, l := range strings.Split(fix, "\n") {
+		out = append(out, cut(l, width)...)
+	}
+	return out
+}
+
+// cut splits s into pieces of at most width runes.
+func cut(s string, width int) []string {
+	r := []rune(s)
+	if len(r) <= width {
+		return []string{s}
+	}
+	var out []string
+	for len(r) > width {
+		out = append(out, string(r[:width]))
+		r = r[width:]
+	}
+	return append(out, string(r))
+}
+
 // wrap breaks s into lines of at most width runes at spaces. A newline in s
-// starts a new line; a word longer than width stays whole.
+// starts a new line; a word longer than width is cut at width.
 func wrap(s string, width int) []string {
 	var out []string
 	for _, para := range strings.Split(s, "\n") {
 		line := ""
 		for _, word := range strings.Fields(para) {
+			for utf8.RuneCountInString(word) > width {
+				if line != "" {
+					out = append(out, line)
+					line = ""
+				}
+				c := cut(word, width)
+				out = append(out, c[0])
+				word = strings.Join(c[1:], "")
+			}
 			switch {
 			case line == "":
 				line = word
