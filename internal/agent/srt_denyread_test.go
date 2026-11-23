@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,6 +150,25 @@ func TestSrt_DeniesCredentialRead(t *testing.T) {
 		srtPolicy{denyRead: SrtReadPolicy(&config.Config{}, []string{"HOME=" + home})}))
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Some CI hosts forbid the nested user namespace srt's seccomp helper
+	// needs. YNH_SRT_TEST_NO_SECCOMP=1 turns the helper off (srt's
+	// allowAllUnixSockets) in this test's copy of the settings; the read
+	// policy under test is the same.
+	if os.Getenv("YNH_SRT_TEST_NO_SECCOMP") == "1" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatal(err)
+		}
+		m["network"].(map[string]any)["allowAllUnixSockets"] = true
+		raw, _ = json.Marshal(m)
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	cat := func(file string) ([]byte, error) {
 		c := exec.Command(srtBin, "--settings", path, "--", "cat", file)

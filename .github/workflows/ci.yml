@@ -191,6 +191,8 @@ jobs:
       # credential read is refused, the worktree still readable) is shown on
       # Linux on every change. They must run, not skip: -v output is checked.
       - name: Test against real srt
+        env:
+          YNH_SRT_TEST_NO_SECCOMP: '1'
         run: |
           go test -v -run 'TestSrt_' ./internal/agent/ | tee srt-test.log
           grep -q -- '--- PASS: TestSrt_DeniesCredentialRead' srt-test.log
