@@ -165,6 +165,38 @@ jobs:
       - name: Dockerfile Go matches go.mod toolchain
         run: make check-go-pin
 
+  srt:
+    name: Test (real srt, Linux)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+      # srt on Linux needs bubblewrap, socat and ripgrep, and bubblewrap needs
+      # unprivileged user namespaces, which Ubuntu 24.04 restricts by default.
+      - name: Install srt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap socat ripgrep
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo npm install -g @anthropic-ai/sandbox-runtime@0.0.83
+          srt --version
+          lsb_release -d; uname -r; bwrap --version
+          sysctl -a 2>/dev/null | grep -E 'userns|unprivileged' || true
+      # Runs the tests that skip without srt, so ynh #920's Done-when (a
+      # credential read is refused, the worktree still readable) is shown on
+      # Linux on every change. They must run, not skip: -v output is checked.
+      - name: Test against real srt
+        env:
+          YNH_SRT_TEST_NO_SECCOMP: '1'
+        run: |
+          go test -v -run 'TestSrt_' ./internal/agent/ | tee srt-test.log
+          grep -q -- '--- PASS: TestSrt_DeniesCredentialRead' srt-test.log
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -364,7 +396,7 @@ jobs:
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry, conformance]
+    needs: [changes, build, test, srt, lint, format, artifacts, skill-security, packaging, registry, conformance]
     if: always()
     steps:
       - name: Check results
@@ -373,6 +405,7 @@ jobs:
           echo "  changes: ${{ needs.changes.result }}"
           echo "  build: ${{ needs.build.result }}"
           echo "  test: ${{ needs.test.result }}"
+          echo "  srt: ${{ needs.srt.result }}"
           echo "  lint: ${{ needs.lint.result }}"
           echo "  format: ${{ needs.format.result }}"
           echo "  artifacts: ${{ needs.artifacts.result }}"

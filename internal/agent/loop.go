@@ -743,12 +743,23 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 	}
 	trustedHooks := opts.HookTrust != nil && loadedHarness != nil && opts.HookTrust(loadedHarness, loadedID, wb.Name(), configPath)
+	var srtDenyRead []string
+	if opts.Sandbox == "srt" {
+		cfg, cfgErr := config.Load()
+		if cfgErr != nil {
+			return result, fmt.Errorf("loading config: %w", cfgErr)
+		}
+		srtDenyRead = SrtReadPolicy(cfg, workerEnvFor(workerEnv))
+		result.Sandbox = "srt"
+		result.SandboxDenyRead = srtDenyRead
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		TrustedHooks: trustedHooks,
 		WorktreeDir:  opts.WorktreeDir,
 		Workspace:    workspaceDirs,
 		ConfigPath:   configPath,
 		Sandbox:      opts.Sandbox,
+		SrtDenyRead:  srtDenyRead,
 		SessionDir:   sessionDir,
 		AutoApprove:  opts.AutoApprove,
 		Model:        opts.Model,

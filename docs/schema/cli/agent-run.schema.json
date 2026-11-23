@@ -65,6 +65,16 @@
       "enum": ["edits", "all"],
       "description": "The --auto-approve level the worker ran with. Absent means none: no permission flag was passed to the worker."
     },
+    "sandbox": {
+      "type": "string",
+      "enum": ["srt"],
+      "description": "The sandbox the worker ran under (--sandbox srt). Absent means none."
+    },
+    "sandbox_deny_read": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "The absolute paths the worker was denied reading under --sandbox srt: ynh's credential defaults, adjusted by the srt_deny_read and srt_allow_read config keys. Absent without --sandbox srt."
+    },
     "effort": {
       "type": "string",
       "description": "The reasoning effort the worker reported it ran with, in the backend's own terms (Claude Code: low, medium, high, xhigh, max). Absent means the backend did not report one, not that none was in force. Never inferred from the model name, and never filled in from `effort_requested`."

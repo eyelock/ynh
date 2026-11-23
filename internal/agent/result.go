@@ -48,6 +48,12 @@ type RunResult struct {
 	// AutoApprove is the --auto-approve level the worker ran with. Absent
 	// means none.
 	AutoApprove string `json:"auto_approve,omitempty"`
+	// Sandbox is the sandbox the worker ran under, "srt"; absent means none.
+	Sandbox string `json:"sandbox,omitempty"`
+	// SandboxDenyRead is the paths the worker was denied reading under
+	// --sandbox srt (ynh's credential defaults, adjusted by the srt_deny_read
+	// and srt_allow_read config keys). Absent without --sandbox srt.
+	SandboxDenyRead []string `json:"sandbox_deny_read,omitempty"`
 	// Effort is the reasoning effort the worker reported it ran with. Absent
 	// means the backend did not report one, not that none was in force; it is
 	// never inferred from the model name.
