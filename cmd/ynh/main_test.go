@@ -611,6 +611,7 @@ func TestResolveVendor(t *testing.T) {
 func TestGenerateLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "") // an exported YNH_HOME would override HOME
 
 	if err := generateLauncher("david", "local/david"); err != nil {
 		t.Fatalf("generateLauncher failed: %v", err)
