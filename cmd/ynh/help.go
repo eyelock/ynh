@@ -213,7 +213,10 @@ On a terminal, a row wider than the terminal is cut to fit: INCLUDES and
 DELEGATES TO first (ending "… (+N)"), then SOURCE, then LABELS. Piped output is
 never cut. An empty INCLUDES or DELEGATES TO shows "-".`,
 
-	"info": `ynh info <name> [flags]
+	"info": `ynh info <harness-id|path> [flags]
+
+Takes an installed harness id, or a path to a harness folder ("." for the
+current one), as ynh run, ynh check and ynh delegate add do.
 
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
@@ -338,7 +341,9 @@ Run 'ynh backend <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"delegate": `ynh delegate <add|remove|update> <harness> <url> [flags]
 
-Manage a harness's Git delegates.
+Manage a harness's Git delegates. <harness> is an installed harness id, or a
+path to a harness folder ("." for the current one), the same forms ynh info
+takes.
 
   ynh delegate add <harness> <url>      Add a delegate
   ynh delegate remove <harness> <url>   Remove a delegate

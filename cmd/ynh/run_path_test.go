@@ -165,7 +165,7 @@ func TestCmdRun_HarnessFileLegacyRefused(t *testing.T) {
 }
 
 // Each command's rejection hint offers only the forms that command accepts
-// (#448): run takes a path, info does not.
+// (#448): run and info both take a path (#887).
 func TestBadRefHint_PerCommand(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -173,7 +173,7 @@ func TestBadRefHint_PerCommand(t *testing.T) {
 		wantPath bool
 	}{
 		{"run", func() error { return cmdRun([]string{"my-dev", "-v", "cursor", "--install"}) }, true},
-		{"info", func() error { return cmdInfoTo([]string{"my-dev"}, io.Discard, io.Discard) }, false},
+		{"info", func() error { return cmdInfoTo([]string{"my-dev"}, io.Discard, io.Discard) }, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
