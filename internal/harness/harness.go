@@ -152,15 +152,28 @@ type ForkedFrom struct {
 	Version      string
 }
 
-// pinnedRefRe matches a Git SHA (full or short) — 7 to 40 lowercase hex chars.
-// Used to classify an include's ref as pinned (SHA) vs floating (tag/branch).
-var pinnedRefRe = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+// pinnedRefRe matches a full Git SHA: exactly 40 lowercase hex chars. Only a
+// full SHA is pinned, because only a full SHA can be fetched by the resolver
+// (git refuses a short one through `clone --branch`). Used to classify an
+// include's ref as pinned (SHA) vs floating (tag/branch).
+var pinnedRefRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// IsPinnedRef reports whether ref looks like a resolved Git SHA.
+// shortSHARe matches a ref that looks like an abbreviated SHA: 7 to 39
+// lowercase hex chars.
+var shortSHARe = regexp.MustCompile(`^[0-9a-f]{7,39}$`)
+
+// IsPinnedRef reports whether ref is a full 40-character Git SHA.
 // Pinned refs identify a single immutable commit; floating refs (tags,
-// branches, "main", "HEAD") track moving targets. Empty refs are floating.
+// branches, "main", "HEAD") track moving targets. Empty refs are floating,
+// and so is an abbreviated SHA: see IsShortSHARef.
 func IsPinnedRef(ref string) bool {
 	return ref != "" && pinnedRefRe.MatchString(ref)
+}
+
+// IsShortSHARef reports whether ref looks like an abbreviated Git SHA. ynh
+// cannot fetch one, so it is neither pinned nor a usable branch or tag.
+func IsShortSHARef(ref string) bool {
+	return shortSHARe.MatchString(ref)
 }
 
 type Harness struct {

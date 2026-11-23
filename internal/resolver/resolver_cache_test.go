@@ -531,6 +531,33 @@ func TestEnsureRepo_FreshClone_NonTransientError_DoesNotRetry(t *testing.T) {
 	}
 }
 
+func TestEnsureRepo_ShortSHA_FailsWithClearMessage(t *testing.T) {
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	orig := gitCmdFunc
+	t.Cleanup(func() { gitCmdFunc = orig })
+	gitCmdFunc = func(args ...string) error {
+		return errors.New("exit status 128\nfatal: Remote branch abc1234 not found in upstream origin")
+	}
+
+	_, err := EnsureRepo("https://example.invalid/repo.git", "abc1234")
+	if err == nil {
+		t.Fatal("expected an error for a short SHA")
+	}
+	for _, want := range []string{"short commit SHA", "40-character SHA", "abc1234"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+
+	// A branch name that is not hex gets the plain clone error.
+	_, err = EnsureRepo("https://example.invalid/repo.git", "feature-x")
+	if err == nil || strings.Contains(err.Error(), "short commit SHA") {
+		t.Errorf("non-SHA ref must not get the short-SHA message, got %v", err)
+	}
+}
+
 func TestEnsureRepo_ExistingDirWithoutGit_ClonesClean(t *testing.T) {
 	srcDir := t.TempDir()
 	runGit(t, srcDir, "init")

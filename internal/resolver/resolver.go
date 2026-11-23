@@ -884,6 +884,9 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		}
 		// Branch/tag: use clone --branch for the depth-1 shortcut.
 		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
+			if harness.IsShortSHARef(ref) {
+				return RepoResult{}, shortSHAError(fullURL, ref, err)
+			}
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
@@ -922,6 +925,9 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			return RepoResult{}, fmt.Errorf("removing stale registry cache: %w", err)
 		}
 		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
+			if harness.IsShortSHARef(ref) {
+				return RepoResult{}, shortSHAError(fullURL, ref, err)
+			}
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
@@ -1215,6 +1221,14 @@ func repoDirPrefix(url string) string {
 // shaLike matches a 40-character hex commit SHA. Git refuses to take a
 // SHA via `clone --branch`, so SHA pinning has to go through init+fetch.
 var shaLike = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// shortSHAError explains a failed clone of a ref that looks like an
+// abbreviated SHA. git cannot clone one, so the ref must be the full
+// 40-character SHA, or a branch or tag name.
+func shortSHAError(url, ref string, cause error) error {
+	return fmt.Errorf("git clone %s: ref %q looks like a short commit SHA, which ynh cannot fetch; "+
+		"use the full 40-character SHA (git rev-parse %s) or a branch or tag name: %w", url, ref, ref, cause)
+}
 
 func isShaLike(ref string) bool {
 	return shaLike.MatchString(ref)

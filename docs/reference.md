@@ -229,7 +229,7 @@ Per-harness fields:
 | `ref_installed` | Currently installed Git ref or SHA — omitted when there is no Git provenance |
 | `ref_available` | Latest Git SHA known upstream — same omission rules as `version_available`. For registry harnesses this is the registry entry's recorded SHA (may lag the actual source); for git harnesses it equals `sha_available` |
 | `sha_available` | Live upstream SHA from a fresh `git ls-remote` against `installed_from.source` at the recorded `installed_from.ref` — answers "has the source moved since I installed?" independently of registry freshness. Omitted with the same rules as `ref_available` |
-| `is_pinned` | `true` iff `ref_installed` matches `^[0-9a-f]{7,40}$` (resolved SHA). Tags and branches are floating |
+| `is_pinned` | `true` iff `ref_installed` matches `^[0-9a-f]{40}$` (a full commit SHA). Tags, branches and abbreviated SHAs are floating |
 | `installed_from` | Provenance object — `source_type`, `source`, optional `ref`, `sha`, `path`, `registry_name`, `installed_at`, `forked_from` |
 | `installed_from.ref` | Branch/tag/SHA recorded at install time — the ref this harness actually tracks. Empty for pre-migration installs (re-run `ynh update <name>` to backfill) |
 | `installed_from.sha` | Resolved commit SHA at install time. Empty for pre-migration installs |
@@ -267,8 +267,8 @@ Three-state rendering on the consumer side:
 
 The `is_pinned` rule is the same on harnesses and includes:
 
-- `ref_installed` matches `^[0-9a-f]{7,40}$` ⇒ `"is_pinned": true` (a resolved SHA)
-- Anything else (tag, branch, `main`, `HEAD`, empty) ⇒ `"is_pinned": false`
+- `ref_installed` matches `^[0-9a-f]{40}$` ⇒ `"is_pinned": true` (a full commit SHA)
+- Anything else (tag, branch, `main`, `HEAD`, an abbreviated SHA, empty) ⇒ `"is_pinned": false`
 
 ### ynh fork output
 
