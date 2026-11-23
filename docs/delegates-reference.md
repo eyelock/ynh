@@ -130,7 +130,7 @@ Every tool returns `structuredContent` with a declared `outputSchema`, and the s
 
 | Tool | Does |
 |---|---|
-| `delegate_to_<name>` (`task`, optional `wait`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle at once with state `working`. A wrong or missing token's 401 comes back as a tool error. |
+| `delegate_to_<name>` (`task`, optional `wait`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle with state `working`: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client may move a long tool call to the background and return at once whatever `wait` says (reported with Claude Code, [ynh #902](https://github.com/eyelock/ynh/issues/902): the words "moved to the background" appear nowhere in ynh, and the cause is not yet confirmed on a second vendor). Then hold with `delegate_status` and a `wait`. A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is the delegate's question. |
 | `delegate_result` (`task_id`, optional `wait`) | The result once completed; the state for one still going. |

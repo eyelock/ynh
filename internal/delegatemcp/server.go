@@ -376,7 +376,7 @@ func (s *Server) tools() []any {
 	names := make([]Delegate, len(s.cfg.Delegates))
 	copy(names, s.cfg.Delegates)
 	sort.Slice(names, func(i, j int) bool { return names[i].Name < names[j].Name })
-	waitProp := map[string]any{"type": "integer", "minimum": 0, "description": fmt.Sprintf("seconds to hold the call for the delegate to finish or ask something, at most %d (the default is to return at once)", int(s.cfg.MaxWait.Seconds()))}
+	waitProp := map[string]any{"type": "integer", "minimum": 0, "description": fmt.Sprintf("seconds to hold the call for the delegate to finish or ask something, at most %d (with none the call returns at once; some clients move a long call to the background and return at once whatever the wait)", int(s.cfg.MaxWait.Seconds()))}
 	handleProp := map[string]any{"type": "string", "description": "the task_id of a delegation"}
 	tool := func(name, desc string, props map[string]any, required []string) map[string]any {
 		schema := map[string]any{"type": "object", "properties": props}
@@ -387,7 +387,7 @@ func (s *Server) tools() []any {
 	}
 	for _, d := range names {
 		out = append(out, tool(ToolName(d.Name),
-			fmt.Sprintf("Start the delegate %q as its own session on a task. It returns at once with a task_id (state working); poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
+			fmt.Sprintf("Start the delegate %q as its own session on a task. With no wait it returns at once with a task_id (state working); with a wait it holds the call for that long, at most the server's limit, unless your client moves a long call to the background and returns at once, and then delegate_status with a wait holds it. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
 			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp},
 			[]string{"task"}))
 	}
