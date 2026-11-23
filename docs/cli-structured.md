@@ -151,7 +151,7 @@ Each structured-output command documents its own field reference in `docs/refere
 
 ## Published JSON Schemas
 
-Every `--format json` command has a published JSON Schema embedded in the binary. The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
+Every `--format json` command except `ynh sensors run` has a published JSON Schema embedded in the binary (`ynh sensors run` is JSON-only and has none yet; `delegate-run` and `mcp-headers` are internal and take no `--format`). The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
 
 - `ynh schema <name>` — print one embedded schema (`version`, `list`, `info`, `installed`, `fork`, `error`, etc.).
 - `ynh schema --all --format json` — manifest of every embedded schema, for tools that load them at startup.
