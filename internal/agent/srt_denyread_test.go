@@ -150,15 +150,15 @@ func TestSrt_DeniesCredentialRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cat := func(file string) error {
+	cat := func(file string) ([]byte, error) {
 		c := exec.Command(srtBin, "--settings", path, "--", "cat", file)
 		c.Dir = worktree
-		return c.Run()
+		return c.CombinedOutput()
 	}
-	if err := cat(ok); err != nil {
-		t.Skipf("srt cannot run a command here: %v", err)
+	if out, err := cat(ok); err != nil {
+		t.Skipf("srt cannot run a command here: %v: %s", err, out)
 	}
-	if err := cat(key); err == nil {
+	if _, err := cat(key); err == nil {
 		t.Errorf("srt let the worker read %s", key)
 	}
 }
