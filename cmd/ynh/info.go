@@ -581,7 +581,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 		return cliError(stderr, true, code, err.Error())
 	}
 
-	// Migration chain has run (harness.LoadQualified was called above), so the
+	// Migration chain has run (harness.LoadIDOrPath was called above, which runs the format chain for a path and LoadByID for an id), so the
 	// manifest is a plugin.json in one of the manifest directories. A harness
 	// derived from an Agent Plugins package has no file to read; its manifest
 	// is the one the loader built.
