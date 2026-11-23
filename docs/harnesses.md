@@ -126,7 +126,7 @@ the two must be set.
 |-------|----------|-------------|
 | `git` | one of git/local | Git URL (see formats below) |
 | `local` | one of git/local | Local filesystem path. Absolute, or relative to the harness root. |
-| `ref` | no | Git tag, branch, or commit (Git sources only) |
+| `ref` | no | Git tag, branch, or a full 40-character commit SHA (Git sources only). A short SHA is refused at install; only a full SHA pins. See [What Pinning Means Here](factory-pattern.md#what-pinning-means-here) |
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include, in `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`), or a top-level skill folder by its name alone (see [Skills at the top level of a repository](#skills-at-the-top-level-of-a-repository)). If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
@@ -308,7 +308,7 @@ Other harnesses this one can invoke as subagents.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `git` | yes | Git URL (same formats as includes) |
-| `ref` | no | Git tag/branch |
+| `ref` | no | Git tag, branch, or a full 40-character commit SHA. A short SHA is refused at install. See [What Pinning Means Here](factory-pattern.md#what-pinning-means-here) |
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
