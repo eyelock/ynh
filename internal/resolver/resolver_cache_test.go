@@ -929,3 +929,51 @@ func TestEnsureRepo_DetachedHeadSourceWithNoBranch_Updates(t *testing.T) {
 		t.Fatalf("second EnsureRepo on a source with no branch: %v", err)
 	}
 }
+
+// An update with no ref follows the source's live HEAD. When the source's
+// default branch changes after the clone, ResolvedRef must follow it too, so
+// the install records the branch the cache holds and --check-updates probes
+// that branch instead of reporting drift an update cannot clear.
+func TestEnsureRepo_DefaultBranchChange_ResolvedRefFollows(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init", "-b", "main")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "main")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	first, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("first EnsureRepo: %v", err)
+	}
+	if first.ResolvedRef != "main" {
+		t.Fatalf("first ResolvedRef = %q, want main", first.ResolvedRef)
+	}
+
+	runGit(t, srcDir, "checkout", "-b", "develop")
+	if err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("develop"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "commit", "-am", "develop")
+
+	second, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("second EnsureRepo after the default branch changed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(second.Path, "file.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "develop" {
+		t.Errorf("cache content = %q, want develop (the source's live HEAD)", data)
+	}
+	if second.ResolvedRef != "develop" {
+		t.Errorf("ResolvedRef = %q, want develop: it must name the branch the cache holds", second.ResolvedRef)
+	}
+}

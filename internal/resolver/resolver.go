@@ -835,10 +835,12 @@ type RepoResult struct {
 	SHA  string // resolved commit SHA at HEAD after fetch/checkout
 	// ResolvedRef is the branch name actually tracked by this clone.
 	// For non-empty input refs it equals the input ref. For empty input
-	// refs it is read from the cache's origin/HEAD symref (the default
-	// branch as of clone time, which never auto-updates with upstream
-	// default-branch changes). Used by --check-updates to probe the same
-	// ref that ynh update tracks, so the two stay consistent.
+	// refs it is read from the cache's origin/HEAD symref, the remote's
+	// default branch as of the last clone or update (an update with no ref
+	// follows the remote's HEAD and re-points the symref to match; it is
+	// empty when the remote's HEAD names no branch). Used by --check-updates
+	// to probe the same ref that ynh update tracks, so the two stay
+	// consistent.
 	ResolvedRef string
 	Cloned      bool // true if freshly cloned (not previously cached)
 	Changed     bool // true if HEAD moved during update
@@ -947,8 +949,37 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		return RepoResult{}, fmt.Errorf("git clean in %s: %w", repoDir, err)
 	}
 
+	if ref == "" {
+		syncOriginHead(repoDir)
+	}
+
 	after := gitHead(repoDir)
 	return RepoResult{Path: repoDir, SHA: after, ResolvedRef: effectiveRef(repoDir, ref), Changed: before != after}, nil
+}
+
+// syncOriginHead points the clone's origin/HEAD symref at the branch the
+// remote's HEAD names now, or removes it when the remote's HEAD names none (a
+// source on a detached HEAD). An update with no ref resets to the remote's
+// live HEAD, so the symref ResolvedRef is read from has to follow it:
+// otherwise installed.json records the clone-time branch while the cache holds
+// another, and --check-updates reports drift that an update cannot clear. Best
+// effort: with the remote unreachable the fetch before it would have failed.
+func syncOriginHead(repoDir string) {
+	out, err := exec.Command(gitBin, "-C", repoDir, "ls-remote", "--symref", "origin", "HEAD").Output()
+	if err != nil {
+		return
+	}
+	// "ref: refs/heads/<branch>\tHEAD" names the branch; a detached HEAD
+	// prints only the commit line.
+	for _, line := range strings.Split(string(out), "\n") {
+		if name, ok := strings.CutPrefix(line, "ref: refs/heads/"); ok {
+			if branch, _, ok := strings.Cut(name, "\t"); ok {
+				_ = gitCmd("-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/"+branch)
+				return
+			}
+		}
+	}
+	_ = gitCmd("-C", repoDir, "remote", "set-head", "origin", "--delete")
 }
 
 // refuseToResetClone reports why repoDir must not be handed to the commands
@@ -1057,8 +1088,8 @@ func resolveGitBin() string {
 //
 // We capture this so --check-updates probes the same ref that ynh update
 // tracks. Git pins this symref at clone time and does not auto-update it
-// when upstream changes its default branch — which is exactly the divergence
-// that makes phantom drift possible.
+// when upstream changes its default branch, so an update with no ref
+// re-points it (syncOriginHead) after following the remote's HEAD.
 func resolvedBranchName(repoDir string) string {
 	cmd := exec.Command(gitBin, "-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	out, err := cmd.Output()
