@@ -12,7 +12,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/mcpexec"
@@ -108,8 +107,8 @@ func (c *Claude) SupportsResume() bool { return true }
 // ~/.claude/projects/<slugified-cwd>/, so the newest file's stem is the id
 // `--resume` wants.
 //
-// This lookup is only correct because Claude is launched via syscall.Exec and
-// therefore inherits ynh's cwd — the project directory. (Codex and Cursor set
+// This lookup is only correct because Claude is launched as a child of ynh
+// without a cmd.Dir and therefore inherits ynh's cwd — the project directory. (Codex and Cursor set
 // cmd.Dir to the run dir, so a cwd-keyed lookup would be meaningless for them.)
 func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	home, err := vendorHomeDir()
@@ -556,6 +555,9 @@ func (c *Claude) AgentPluginLayout() AgentPluginLayout {
 
 func (c *Claude) SupportsExportDelegates() bool { return true }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (c *Claude) SupportsNativeSubagents() bool { return true }
+
 // ExportCarriesInstructions: a Claude Code plugin cannot carry instructions.
 // A plugin's AGENTS.md (and the CLAUDE.md that imports it) is installed with
 // it but never reaches the session: Claude Code reads CLAUDE.md only from the
@@ -821,7 +823,7 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
-	return syscall.Exec(claudeBin, args, append(env, extra...))
+	return execVendor(claudeBin, args, append(env, extra...))
 }
 
 // Workspace folders: the flag that grants a directory beside the project

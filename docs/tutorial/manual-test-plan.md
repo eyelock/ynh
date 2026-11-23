@@ -58,7 +58,7 @@ Re-run `make install` after any code change you want to test.
 | Create and install test harness | [Create and install a test harness](vendors-and-symlinks.md#create-and-install-a-test-harness) |
 | List available vendors | [List available vendors](vendors-and-symlinks.md#list-available-vendors) |
 | Switch vendors | [Switch vendors](vendors-and-symlinks.md#switch-vendors) |
-| Automatic symlink prompt | [Symlinks — automatic prompt](vendors-and-symlinks.md#symlinks-automatic-prompt) |
+| Automatic symlink prompt | [Symlinks — the prompt needs a terminal](vendors-and-symlinks.md#symlinks-the-prompt-needs-a-terminal) |
 | Explicit install and clean | [Symlinks — explicit install and clean](vendors-and-symlinks.md#symlinks-explicit-install-and-clean) |
 | Claude no-symlinks | [Symlinks — Claude doesn't need them](vendors-and-symlinks.md#symlinks-claude-doesn-t-need-them) |
 | Prune orphans | [Prune orphaned installations](vendors-and-symlinks.md#prune-orphaned-installations) |
@@ -73,7 +73,7 @@ These need a real OpenCode 2.x install (`brew install anomalyco/tap/opencode-v2`
 | Skills, agents and rules load | `ynh run <harness> -v opencode -m opencode/nemotron-3-ultra-free -- "<prompt>"` (flags ynh does not know pass through to OpenCode): the model can load the bundle skill through its `skill` tool, `--agent <name>` finds the bundle agent, and an instruction that only the harness's rule carries is followed (rules are composed into `.opencode/AGENTS.md`) |
 | Blocking `before_tool` hook | Declare a `before_tool` hook with matcher `Bash` and a command that prints a reason to stderr and exits 2. Ask the model to run a shell command: the tool does not run and the model sees the reason as the tool error. A matcher of `Edit` must not fire on a shell call |
 | MCP server visible | Declare a stdio MCP server in the harness. Ask the model to call one of its tools: it connects and the tool is callable. With no `tools:` list it is reached through Code Mode, so the model calls it from inside `execute`; for an agent whose `tools:` list names it (`mcp__<server>__<tool>`), Code Mode is off and it is an ordinary tool. Add a `before_tool` hook with the matcher `mcp__<server>__<tool>` that exits 2: in both cases the call is blocked with the hook's message and the server never receives it |
-| Resume | Run a turn, then `ynh run <harness> -v opencode --resume`: OpenCode continues the last session with `-c`, with no picker. ynh cannot look a session id up itself because OpenCode keeps sessions in SQLite, as with Codex, so `--resume` always means continue-last; `--resume=<id>` resumes that id with `-s` |
+| Resume | Run a turn, then `ynh run <harness> -v opencode --resume`: OpenCode continues the last session with `-c`, with no picker. ynh cannot look a session id up itself because OpenCode keeps sessions in SQLite, so `--resume` always means continue-last; `--resume=<id>` resumes that id with `-s` |
 | Preview matches | `ynd preview <harness> -v opencode` lists `.opencode/opencode.json`, `.opencode/plugins/ynh-hooks.ts`, `.opencode/agents/`, `.opencode/rules/`, `.opencode/skills/` and the root `AGENTS.md`; the composed `.opencode/AGENTS.md` appears only in the run directory after launch |
 | Agent backend | `ynh agent run --backend opencode` runs a loop turn. An effort level is refused (select a variant with `--model provider/model#variant`), and auto-approve accepts `all` only |
 
@@ -635,8 +635,8 @@ rm -rf /tmp/ynh-edge/e16
 
 ```bash
 ynh info nonexistent
-# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>'. Run 'ynh ls' to see installed ids
-# (no './<path>': `ynh info` takes only an installed id, unlike `ynh run` in E6)
+# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+# (`ynh info` takes an installed id or a './<path>', as `ynh run` does in E6)
 
 ynh info local/nonexistent
 # Expected: Error: harness "local/nonexistent": harness not found
@@ -646,7 +646,7 @@ ynh info local/nonexistent
 
 ```bash
 ynh info
-# Expected: Error: usage: ynh info <harness-name>
+# Expected: Error: usage: ynh info <harness-id|path>
 ```
 
 ### E19: Focus and profile mutual exclusivity

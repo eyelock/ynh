@@ -20,7 +20,7 @@ func delegateGit(t *testing.T, dir, name string, to ...string) {
 	t.Helper()
 	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0"}
 	for _, d := range to {
-		hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: d})
+		hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: d, Transport: "native"})
 	}
 	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestFetchNestedDelegates_FetchesTheWholeGraph(t *testing.T) {
 	if _, err := resolver.EnsureRepo(a, ""); err != nil {
 		t.Fatal(err)
 	}
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 
 	got, err := fetchNestedDelegates(root, &config.Config{})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestFetchNestedDelegates_FetchesTheWholeGraph(t *testing.T) {
 		t.Errorf("fetched = %v, want [b c]", fetched)
 	}
 	// Nothing needs the network now: trust reads from the cache alone.
-	views, err := delegateViews(root)
+	views, _, err := delegateViews(root)
 	if err != nil {
 		t.Fatalf("trust cannot read the graph after the fetch: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestFetchNestedDelegates_HonoursAllowList(t *testing.T) {
 	if _, err := resolver.EnsureRepo(a, ""); err != nil {
 		t.Fatal(err)
 	}
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 
 	_, err := fetchNestedDelegates(root, &config.Config{AllowedRemoteSources: []string{a}})
 	if err == nil || !strings.Contains(err.Error(), "not in the allowed sources list") {
@@ -104,7 +104,7 @@ func TestFetchNestedDelegates_RecordsAnchoredSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	delegateGit(t, sib, "b")
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 	got, err := fetchNestedDelegates(root, &config.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestFetchNestedDelegates_RefusalIsTyped(t *testing.T) {
 	if _, err := resolver.EnsureRepo(a, ""); err != nil {
 		t.Fatal(err)
 	}
-	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: a}}}}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
 	_, err := fetchNestedDelegates(root, &config.Config{AllowedRemoteSources: []string{a}})
 	if !isNestedRefusal(err) {
 		t.Fatalf("want a refusal, got %v", err)
@@ -188,5 +188,42 @@ func TestCmdUpdate_NestedFetchFailureIsAWarning(t *testing.T) {
 	installDelegating(t, "local/rootharn", a)
 	if err := cmdUpdate([]string{"local/rootharn"}); err != nil {
 		t.Fatalf("a nested fetch failure should only warn, got %v", err)
+	}
+}
+
+// A fresh install fetches a native delegate's own includes, not only the
+// delegate: the cache-only trust walk reads them, and without them the
+// harness is unavailable for review and `ynh update` says it will fix that
+// (ynh #842).
+func TestFetchNestedDelegates_FetchesTheDelegatesIncludes(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	inc, a, rootDir := t.TempDir(), t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(inc, "README.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, inc)
+	runGitInDir(t, inc, "add", ".")
+	runGitInDir(t, inc, "commit", "-m", "init")
+	if err := plugin.SavePluginJSON(a, &plugin.HarnessJSON{Name: "a", Version: "0.1.0", Includes: []plugin.IncludeMeta{{Git: inc}}}); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, a)
+	runGitInDir(t, a, "add", ".")
+	runGitInDir(t, a, "commit", "-m", "init")
+	delegateGit(t, rootDir, "root", a)
+	// The install loop fetches the root's own delegate, and nothing else.
+	if _, err := resolver.EnsureRepo(a, ""); err != nil {
+		t.Fatal(err)
+	}
+	root := &harness.Harness{Name: "root", Dir: rootDir, DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: a}}}}
+	if _, _, err := delegateViews(root); err == nil || !strings.Contains(err.Error(), "not in the include cache") {
+		t.Fatalf("before the fetch the delegate's include is uncached; err = %v", err)
+	}
+
+	if _, err := fetchNestedDelegates(root, &config.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := delegateViews(root); err != nil {
+		t.Errorf("trust cannot read the delegate after the fetch: %v", err)
 	}
 }

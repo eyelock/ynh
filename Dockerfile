@@ -5,8 +5,15 @@
 # ynr changes. Stages that use it redeclare `ARG YNR_VERSION` to inherit it.
 ARG YNR_VERSION=0.2.0
 
+# The Go the image's binaries are built with. It is go.mod's `toolchain` line,
+# and `make check-go-pin` (part of `make check`) fails when the two differ, so
+# the image ships the Go that govulncheck scans. The official golang images set
+# GOTOOLCHAIN=local, so go.mod's line cannot select the compiler here: this tag
+# does. Move both together.
+ARG GO_VERSION=1.26.11
+
 # Stage 1: Build ynh and ynd
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
 
 RUN apk add --no-cache git
 
@@ -42,7 +49,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
-FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS cursor-cli
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS cursor-cli
 RUN apk add --no-cache curl bash
 
 # The installer at cursor.com/install is regenerated per release: it embeds
@@ -78,7 +85,7 @@ RUN set -eu; \
     rm -rf /tmp/agent /tmp/agent.tar.gz
 
 # Stage 2d: ynr (parallel), only the slim binary
-FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS ynr-cli
+FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS ynr-cli
 RUN apk add --no-cache curl
 
 ARG YNR_VERSION
@@ -163,8 +170,7 @@ LABEL org.opencontainers.image.title="ynh" \
       dev.ynh.ynr.version="${YNR_VERSION}" \
       dev.ynh.cursor-agent.version="latest"
 
-# tini handles PID 1 signal forwarding correctly for both:
-# - Claude's syscall.Exec (process replacement)
-# - Codex/Cursor's child process signal forwarding
+# tini handles PID 1 signal forwarding correctly for the vendor CLIs, which
+# ynh runs as child processes and forwards SIGTERM and SIGHUP to
 ENTRYPOINT ["tini", "-s", "--", "ynh"]
 CMD ["help"]

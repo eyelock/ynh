@@ -33,6 +33,13 @@ func TestMain(m *testing.M) {
 		main()
 		os.Exit(0)
 	}
+	// YNH_HOME takes precedence over the HOME these tests set, so an exported value would send
+	// their launchers, harnesses and caches into the developer's real ynh home. A test that wants
+	// YNH_HOME sets its own with t.Setenv.
+	if err := os.Unsetenv("YNH_HOME"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	state, err := isolateTelemetry()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

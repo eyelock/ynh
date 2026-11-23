@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -108,17 +107,6 @@ func (c *Cursor) SupportsInitialPrompt() bool { return true }
 
 func (c *Cursor) SupportsResume() bool { return true }
 
-// ResolveLastSession always reports no resumable session: Cursor keeps no local
-// session store to read. ~/.cursor/ holds configuration only and
-// ~/.local/share/cursor-agent/ holds nothing but installed versions — chats
-// appear to live server-side, reachable only through the CLI's own picker.
-//
-// Cursor can still resume (see LaunchResume); it just cannot be told *which*
-// session from here unless a caller supplies an id from elsewhere.
-func (c *Cursor) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
-	return "", ErrSessionLookupUnavailable
-}
-
 // LaunchResume continues a prior Cursor chat. An empty sessionID uses
 // --continue ("Continue previous session"). A bare --resume is never emitted:
 // Cursor documents it as "Select a session to resume", i.e. a picker.
@@ -157,10 +145,15 @@ func cursorResumeArgs(sessionID, prompt string, interactive bool, extraArgs []st
 	return append(args, extraArgs...)
 }
 
-// IsolateMCP cannot isolate on Cursor: ynh knows no way to keep the user's
-// configured servers out, so it says so and launches normally.
+// IsolateMCP cannot isolate on Cursor, and the limit is Cursor's: a launch has
+// no way to leave ~/.cursor/mcp.json or .cursor/mcp.json out. cursor-agent
+// 2026.11.05-86047df has no flag for it (--approve-mcps only approves), no
+// environment variable that moves its config (the bundle reads none), and its
+// `agent mcp disable <name>` persists to the user's own state, which a launch
+// must not rewrite. From Cursor's documentation and the CLI's own help, not a
+// live run (docs/vendor-parity.md, L6). ynh says so and launches normally.
 func (c *Cursor) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation is not supported by Cursor: servers in your Cursor config will still load"
+	return nil, "MCP isolation is not supported by Cursor: servers in ~/.cursor/mcp.json and .cursor/mcp.json will still load"
 }
 
 func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
@@ -339,6 +332,9 @@ func (c *Cursor) ExportArtifactDirs() map[string]string { return nil }
 
 func (c *Cursor) SupportsExportDelegates() bool { return true }
 
+// Cursor's subagents are unverified (limit L35 on docs/vendor-parity.md), so a native delegate is refused.
+func (c *Cursor) SupportsNativeSubagents() bool { return false }
+
 func (c *Cursor) PluginManifestDir() string { return ".cursor-plugin" }
 
 // AgentPluginLayout: Cursor loads the portable core and has published no
@@ -492,7 +488,9 @@ func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (stri
 //
 //   - description: the source's, else the humanised file name.
 //   - globs: the source's globs, else its paths (Claude Code's rule scoping),
-//     comma-joined the way Cursor writes them. A globs scalar is already
+//     comma-joined the way Cursor writes them, in double quotes so the
+//     frontmatter stays valid YAML (an unquoted `*` starts an alias, a
+//     leading `{` a flow mapping). A globs scalar is already
 //     Cursor's form and is kept verbatim.
 //   - alwaysApply: the source's when it is a valid boolean; otherwise false
 //     for a rule with globs, which Cursor would ignore under alwaysApply:
@@ -535,9 +533,9 @@ func cursorRule(stem string, data []byte) []byte {
 
 	var b bytes.Buffer
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "description: %s\n", description)
+	fmt.Fprintf(&b, "description: %s\n", strconv.Quote(description))
 	if len(globs) > 0 {
-		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
+		fmt.Fprintf(&b, "globs: %s\n", strconv.Quote(strings.Join(globs, ",")))
 	}
 	fmt.Fprintf(&b, "alwaysApply: %t\n", alwaysApply)
 	b.WriteString("---\n\n")

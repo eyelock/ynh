@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -45,11 +46,33 @@ func sameDir(a, b string) bool {
 // isNestedRefusal is true.
 func fetchNestedDelegates(p *harness.Harness, cfg *config.Config) ([]plugin.ResolvedSourceJSON, error) {
 	var got []plugin.ResolvedSourceJSON
+	withIncludes := map[string]bool{}
+	// fetchIncludes fetches the includes of the delegate at base, once, since
+	// the cache-only trust walk reads a delegate's own includes too (its
+	// sensors and MCP servers) and would otherwise find them missing.
+	fetchIncludes := func(base string) error {
+		if withIncludes[base] {
+			return nil
+		}
+		withIncludes[base] = true
+		l, err := harness.LoadDir(base)
+		if err != nil || len(l.Includes) == 0 || (p.Name != "" && l.Name == p.Name) {
+			return nil // the walk reports a delegate it cannot load
+		}
+		if _, err := resolver.Resolve(l, cfg); err != nil {
+			return fmt.Errorf("includes of delegate %s: %w", l.Name, err)
+		}
+		return nil
+	}
 	_, err := resolver.FlattenDelegates(p.DelegatesTo, p.Dir, p.Name, func(gs harness.GitSource, dir string) (string, error) {
 		if dir == p.Dir {
-			// One of p's own: fetched already.
+			// One of p's own: its repository is fetched already, its includes
+			// are not.
 			base, _, err := resolver.ResolveGitSourceFromCache(gs, dir)
-			return base, err
+			if err != nil {
+				return base, err
+			}
+			return base, fetchIncludes(base)
 		}
 		if err := cfg.CheckSource(gs.Git, dir); err != nil {
 			return "", &errNestedRefused{err}
@@ -68,7 +91,10 @@ func fetchNestedDelegates(p *harness.Harness, cfg *config.Config) ([]plugin.Reso
 			}
 			got = append(got, plugin.ResolvedSourceJSON{Git: url, Ref: res.ResolvedRef, Path: gs.Path, SHA: res.SHA})
 		}
-		return base, err
+		if err != nil {
+			return base, err
+		}
+		return base, fetchIncludes(base)
 	})
 	return got, err
 }

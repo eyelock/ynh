@@ -71,7 +71,7 @@ When the grant is withheld, ynh prints one line on stderr saying Codex will skip
 
 Nothing is written to your `~/.codex/config.toml`. The overrides are table-form, and they merge with the entries you persisted there rather than replacing them: your own Codex hooks stay trusted and other trusted projects still load during an `ynh run`. This was checked on codex-cli 0.166.0 with a separate Codex home (`hooks/list` through `codex app-server`), and `config.toml` was byte-identical afterwards. It has not been re-checked on other Codex versions. Trusting the run directory as a project also lets Codex load the rest of what ynh wrote under its `.codex/` (for example the agent files), and ynh is the only writer there. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
 
-This covers `ynh run` only. `ynh agent run --backend codex` does not pass these overrides, so a harness's hooks do not fire there. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
+`ynh agent run --backend codex` follows the same rule, passing the hooks a different way. Its worker runs in the task's worktree, so Codex never reads the run directory's `.codex/hooks.json`; for an accepted harness ynh declares each hook inline (`-c hooks.<Event>=[...]`) with its hash trusted (`hooks.state`), on every turn including resumed ones, and trusts no project. A harness that is not accepted gets the same stderr line and no hooks. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
 
 ### on_session_end semantics
 

@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pin check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -53,7 +53,13 @@ test: ## Run tests with coverage (use FILE=./path/to/pkg to target specific pack
 ifdef FILE
 	$(GO) test $(FILE) -cover -race -v
 else
-	$(GO) test ./... -cover -race
+	@# Run with YNH_HOME exported to a scratch directory, then fail if a test wrote into it: a test
+	@# that sets only HOME must not reach a developer's real ynh home (ynh #865). A directory that
+	@# is not empty is left in place to inspect.
+	@scratch=$$(mktemp -d) && \
+	  YNH_HOME=$$scratch $(GO) test ./... -cover -race; status=$$?; \
+	  if [ -n "$$(ls -A $$scratch)" ]; then echo "tests wrote into an exported YNH_HOME, left at $$scratch:"; ls -A $$scratch; status=1; else find $$scratch -maxdepth 0 -empty -delete; fi; \
+	  exit $$status
 endif
 
 test-coverage: ## Run tests with coverage profile (use FILE=./path/to/pkg to target specific package)
@@ -74,6 +80,13 @@ format: ## Format code
 
 lint: ## Lint code
 	golangci-lint run ./...
+
+check-go-pin: ## Fail if the Dockerfile's Go version differs from go.mod's toolchain line
+	@want=$$(awk '$$1=="toolchain"{sub(/^go/,"",$$2); print $$2}' go.mod); \
+	got=$$(sed -n 's/^ARG GO_VERSION=//p' Dockerfile); \
+	if [ -z "$$want" ] || [ "$$want" != "$$got" ]; then \
+		echo "Dockerfile ARG GO_VERSION=$$got but go.mod toolchain is go$$want: move them together"; exit 1; fi; \
+	echo "ok: the image builds with Go $$want, go.mod's toolchain"
 
 check-tidy: ## Fail if go.mod or go.sum is not tidy (read-only; CI's `go mod tidy -diff`)
 	@# A direct import marked `// indirect` is invisible to build, test and lint
@@ -181,4 +194,4 @@ docker-push: ## Push base Docker image to GHCR
 #   e2e                             e2e.yml (release gate)
 # `format` rewrites files where CI's Format Check only reports them, so commit
 # what it changes.
-check: deps format lint check-tidy test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network
+check: deps format lint check-tidy check-go-pin test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network

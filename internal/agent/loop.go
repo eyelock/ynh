@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -113,6 +114,12 @@ type RunOptions struct {
 	// the operator's allow-list and trust record, which this package does not
 	// read.
 	WorkspaceGrant func(h *harness.Harness, id, backend, worktree string) []string
+	// HookTrust decides whether the harness's hooks may run on the backend.
+	// It is handed the harness as loaded, the installed id ("" for a harness
+	// given by path), the backend and the assembled harness directory, and
+	// reports a refusal itself. Nil trusts nothing; the decision needs the
+	// operator's trust record, which this package does not read.
+	HookTrust func(h *harness.Harness, id, backend, configDir string) bool
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -358,6 +365,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	var gateProfile string
 	// workspaceDirs are the extra folders granted to the worker.
 	var workspaceDirs []string
+	// loadedHarness and loadedID are what the hook trust decision is made on:
+	// the harness as loaded, before any focus or profile, as for workspaces.
+	var loadedHarness *harness.Harness
+	var loadedID string
 
 	if opts.HarnessName != "" {
 		// An installed id or a local harness directory, resolved exactly as
@@ -374,11 +385,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			reportedName = harnessObj.Name
 		}
 
+		loadedHarness = harnessObj
+		if namespace.Classify(opts.HarnessName) == namespace.RefID {
+			loadedID = opts.HarnessName
+		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
-			id := ""
-			if namespace.Classify(opts.HarnessName) == namespace.RefID {
-				id = opts.HarnessName
-			}
+			id := loadedID
 			workspaceDirs = opts.WorkspaceGrant(harnessObj, id, opts.Backend, opts.WorktreeDir)
 		}
 
@@ -721,19 +733,38 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 
 	isolatedMCP := harnessObj != nil && harnessObj.MCPIsolation
-	if isolatedMCP && wb.Name() != "claude" {
-		_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is only applied to the claude backend: %s will load your own MCP servers\n", wb.Name())
+	// The claude, codex and opencode backends isolate (each says so itself if it
+	// cannot do it fully); any other cannot.
+	switch wb.Name() {
+	case "claude", "codex", "opencode":
+	default:
+		if isolatedMCP {
+			_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is not supported by the %s backend: it will load your own MCP servers\n", wb.Name())
+		}
+	}
+	trustedHooks := opts.HookTrust != nil && loadedHarness != nil && opts.HookTrust(loadedHarness, loadedID, wb.Name(), configPath)
+	var srtDenyRead []string
+	if opts.Sandbox == "srt" {
+		cfg, cfgErr := config.Load()
+		if cfgErr != nil {
+			return result, fmt.Errorf("loading config: %w", cfgErr)
+		}
+		srtDenyRead = SrtReadPolicy(cfg, workerEnvFor(workerEnv))
+		result.Sandbox = "srt"
+		result.SandboxDenyRead = srtDenyRead
 	}
 	sess, err := wb.Start(ctx, StartOptions{
-		WorktreeDir: opts.WorktreeDir,
-		Workspace:   workspaceDirs,
-		ConfigPath:  configPath,
-		Sandbox:     opts.Sandbox,
-		SessionDir:  sessionDir,
-		AutoApprove: opts.AutoApprove,
-		Model:       opts.Model,
-		Effort:      opts.Effort,
-		IsolatedMCP: isolatedMCP,
+		TrustedHooks: trustedHooks,
+		WorktreeDir:  opts.WorktreeDir,
+		Workspace:    workspaceDirs,
+		ConfigPath:   configPath,
+		Sandbox:      opts.Sandbox,
+		SrtDenyRead:  srtDenyRead,
+		SessionDir:   sessionDir,
+		AutoApprove:  opts.AutoApprove,
+		Model:        opts.Model,
+		Effort:       opts.Effort,
+		IsolatedMCP:  isolatedMCP,
 		// The profile's mcp_manual_approval is already resolved into harnessObj.
 		MCPManualApproval: harnessObj != nil && harnessObj.MCPManualApproval,
 		ResumeToken:       resumeToken,
@@ -1714,7 +1745,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
 		}
 	}
-	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name})
+	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name, RootTransport: h.Transport})
 	if delErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)
@@ -1872,7 +1903,7 @@ func resumeTaskConflict(focus, task string, cp *Checkpoint) string {
 // callers get a useful message instead of "unknown vendor" from deeper in.
 // validateSandbox rejects a sandbox request the chosen backend cannot honour.
 //
-// `--sandbox srt` was read only by the Claude backend; codex and cursor
+// `--sandbox srt` was once read only by the Claude backend; codex and cursor
 // contained no reference to it, so `--sandbox srt --backend codex` ran
 // completely unsandboxed and said nothing. A declared containment control that
 // silently does not apply is worse than an absent one, because it gets relied
@@ -1884,13 +1915,24 @@ func validateSandbox(sandbox, backend string) error {
 	case "", "none":
 		return nil
 	case "srt":
-		if backend != "claude" {
+		switch backend {
+		case "claude", "codex", "cursor":
+			return nil
+		case "opencode":
+			// opencode run spawns /bin/ps, which srt's macOS profile refuses
+			// (see L18 in docs/vendor-parity.md). On Linux it runs under srt
+			// (shown live, ynh #805), so only macOS stays refused.
+			if runtime.GOOS == "linux" {
+				return nil
+			}
 			return fmt.Errorf(
-				"--sandbox srt is not supported by the %s backend (only claude implements it); "+
-					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
-				backend)
+				"--sandbox srt is not supported by the opencode backend on %s (opencode run cannot start under srt: it spawns ps, which srt's macOS sandbox refuses; it is supported on Linux only); "+
+					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed", runtime.GOOS)
 		}
-		return nil
+		return fmt.Errorf(
+			"--sandbox srt is not supported by the %s backend; "+
+				"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
+			backend)
 	default:
 		return fmt.Errorf("unknown sandbox %q (supported: none, srt)", sandbox)
 	}

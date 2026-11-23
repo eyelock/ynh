@@ -536,28 +536,6 @@ func TestBuildCopilotArgs_InstructionsFrontmatterMerged(t *testing.T) {
 	}
 }
 
-func TestIsolateMCP_PartialAndUnsupportedVendors(t *testing.T) {
-	dir := t.TempDir()
-
-	args, warning := (&Copilot{}).IsolateMCP(dir)
-	if len(args) != 1 || args[0] != "--disable-builtin-mcps" {
-		t.Errorf("copilot args = %v, want [--disable-builtin-mcps]", args)
-	}
-	if !strings.Contains(warning, "~/.copilot/mcp-config.json") {
-		t.Errorf("copilot warning = %q, want it to name ~/.copilot/mcp-config.json", warning)
-	}
-
-	for name, a := range map[string]Adapter{"codex": &Codex{}, "cursor": &Cursor{}, "opencode": &OpenCode{}} {
-		args, warning := a.IsolateMCP(dir)
-		if len(args) != 0 {
-			t.Errorf("%s args = %v, want none", name, args)
-		}
-		if !strings.Contains(warning, "not supported") || strings.Contains(warning, "\n") {
-			t.Errorf("%s warning = %q, want a one-line 'not supported' warning", name, warning)
-		}
-	}
-}
-
 func TestWarnLegacyProjectMCP(t *testing.T) {
 	runDoc := `{"mcpServers":{"a":{"type":"local","command":"x","env":{"K":"secret"},"tools":["*"]}}}`
 	cases := []struct {
@@ -607,5 +585,37 @@ func TestWarnLegacyProjectMCP(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestBuildCopilotArgsWritesNothingToRunDir: Copilot's launch projects the
+// instructions into the project folder, never into the run dir, which is a
+// sealed snapshot by then (ynh #765).
+func TestBuildCopilotArgsWritesNothingToRunDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through read-only folders")
+	}
+	cfg := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(cfg, ".copilot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("base"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, ".copilot", ".mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := treeDigest(t, cfg)
+	sealRunDir(t, cfg)
+	project := t.TempDir()
+	t.Chdir(project)
+	if _, err := buildCopilotArgs(cfg, "go", nil); err != nil {
+		t.Fatalf("launch arguments on a read-only run dir: %v", err)
+	}
+	if after := treeDigest(t, cfg); after != before {
+		t.Errorf("the launch changed the run dir:\nbefore %s\nafter  %s", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(project, copilotInstructionsRelPath)); err != nil {
+		t.Errorf("instructions not projected into the project: %v", err)
 	}
 }

@@ -35,12 +35,22 @@ type ExportDelegate struct {
 // directory cannot be exported and is an error. harnessDir is the exporting
 // harness's directory, which a relative delegate source resolves against.
 func ResolveExportDelegates(delegates []harness.Delegate, harnessDir, rootName string, cfg *config.Config) ([]ExportDelegate, error) {
-	flat, err := resolver.FlattenDelegates(delegates, harnessDir, rootName, func(gs harness.GitSource, dir string) (string, error) {
+	out, _, err := ResolveExportDelegatesBy(delegates, harnessDir, rootName, "", false, cfg)
+	return out, err
+}
+
+// ResolveExportDelegatesBy is ResolveExportDelegates for an export, which
+// carries only the native delegates: with nativeOnly, an entry whose
+// transport is a2a (its own, else rootTransport, else a2a) is left out, and
+// so is everything only it reaches, since that delegate is its own ynh
+// session. The left-out entries come back as skipped.
+func ResolveExportDelegatesBy(delegates []harness.Delegate, harnessDir, rootName, rootTransport string, nativeOnly bool, cfg *config.Config) ([]ExportDelegate, []harness.Delegate, error) {
+	flat, skipped, err := resolver.FlattenDelegatesBy(delegates, harnessDir, rootName, rootTransport, nativeOnly, func(gs harness.GitSource, dir string) (string, error) {
 		base, _, err := resolver.ResolveGitSource(gs, dir)
 		return base, err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []ExportDelegate
 	for _, fd := range flat {
@@ -48,15 +58,15 @@ func ResolveExportDelegates(delegates []harness.Delegate, harnessDir, rootName s
 
 		included, _, err := resolver.ResolveSelected(delHarness, cfg, harness.Selection{})
 		if err != nil {
-			return nil, fmt.Errorf("resolving includes of delegate %s: %w", delHarness.Name, err)
+			return nil, nil, fmt.Errorf("resolving includes of delegate %s: %w", delHarness.Name, err)
 		}
 		servers, err := harness.ComposeDelegateMCPServersForExport(delHarness, resolver.IncludedHarnesses(included))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, focus: focus, declared: fd.Declared, servers: servers})
 	}
-	return out, nil
+	return out, skipped, nil
 }
 
 // WriteDelegates writes the delegates' agent files directly into

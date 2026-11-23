@@ -13,17 +13,21 @@ import (
 
 // HarnessJSON represents the plugin.json manifest: the single source of truth.
 type HarnessJSON struct {
-	Schema        string                 `json:"$schema,omitempty"`
-	Name          string                 `json:"name"`
-	Version       string                 `json:"version"`
-	Description   string                 `json:"description,omitempty"`
-	Author        *AuthorInfo            `json:"author,omitempty"`
-	Keywords      []string               `json:"keywords,omitempty"`
-	DefaultVendor string                 `json:"default_vendor,omitempty"`
-	Includes      []IncludeMeta          `json:"includes,omitempty"`
-	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
-	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
-	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	Schema        string         `json:"$schema,omitempty"`
+	Name          string         `json:"name"`
+	Version       string         `json:"version"`
+	Description   string         `json:"description,omitempty"`
+	Author        *AuthorInfo    `json:"author,omitempty"`
+	Keywords      []string       `json:"keywords,omitempty"`
+	DefaultVendor string         `json:"default_vendor,omitempty"`
+	Includes      []IncludeMeta  `json:"includes,omitempty"`
+	DelegatesTo   []DelegateMeta `json:"delegates_to,omitempty"`
+	// Transport is the default transport of the harness's delegates_to
+	// entries: "a2a" or "native". An entry's own transport wins; neither
+	// set means a2a.
+	Transport  string                 `json:"transport,omitempty"`
+	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
+	MCPServers map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	// MCPRemovals names the servers the manifest sets to null in
 	// mcp_servers: a server inherited from an included harness that this
 	// harness does not want. It is not a field of its own on the wire (see
@@ -815,6 +819,10 @@ type DelegateMeta struct {
 	// one of the two; neither runs the delegate on its base config.
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// Transport is how the parent reaches this delegate: "a2a" (its own
+	// detached ynh session) or "native" (the vendor's subagents). Empty
+	// takes the harness's transport, then a2a.
+	Transport string `json:"transport,omitempty"`
 }
 
 // HarnessFile is the legacy single-file harness manifest. ynh reads it only to

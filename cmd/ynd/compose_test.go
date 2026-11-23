@@ -1235,3 +1235,48 @@ func TestCmdComposePicksTopLevelSkillFolder(t *testing.T) {
 		t.Errorf("counts.skills = %d, want 1", got.Counts.Skills)
 	}
 }
+
+// ynd compose shows each delegate's resolved transport and where it came from.
+func TestCompose_DelegateTransport(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	repo := gitRepo(t, "")
+	del := filepath.Join(repo, "harnesses", "del")
+	writeComposeHarnesses(t, map[string]map[string]any{
+		repo: {
+			"name": "root", "version": "1.0.0", "transport": "native",
+			"delegates_to": []map[string]any{
+				{"git": ".", "path": "harnesses/del", "transport": "a2a"},
+				{"git": ".", "path": "harnesses/del"},
+			},
+		},
+		del: {"name": "del", "version": "1.0.0"},
+	})
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "c"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{repo}, &stdout, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DelegatesTo) != 2 ||
+		got.DelegatesTo[0].Transport != "a2a" || got.DelegatesTo[0].TransportFrom != "entry" ||
+		got.DelegatesTo[1].Transport != "native" || got.DelegatesTo[1].TransportFrom != "harness" {
+		t.Fatalf("delegates_to = %+v", got.DelegatesTo)
+	}
+	stdout.Reset()
+	if err := cmdComposeTo([]string{repo, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{"transport=a2a (entry)", "transport=native (harness)"} {
+		if !strings.Contains(stdout.String(), w) {
+			t.Errorf("text output lacks %q:\n%s", w, stdout.String())
+		}
+	}
+}

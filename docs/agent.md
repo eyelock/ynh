@@ -149,9 +149,12 @@ named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
 names them. A harness or profile that sets `mcp_isolation` runs its worker
 with only that composed set, the same as `ynh run`; `ynh agent run` has no
 `--isolated-mcp` flag, so isolation comes from the manifest alone. It is
-applied on the `claude` backend only (its tools are then named `<server>`);
-on `codex`, `cursor` and `opencode` ynh prints one `warning:` line on stderr
-and the worker loads your own servers too. See
+applied on the `claude`, `codex` and `opencode` backends (on `claude` its tools are
+then named `<server>`); on `cursor`, which cannot isolate, ynh prints one
+`warning:` line on stderr and the worker loads your own servers too. The
+vendor is asked which servers it would load under the worker's environment,
+which is smaller than ynh's, so pass `CODEX_HOME` or `XDG_CONFIG_HOME` in
+`env_passthrough` if the worker should see your config at all. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
 **Codex and MCP approval.** A `codex` worker runs `codex exec`, which has no one
@@ -225,17 +228,20 @@ parent process environment holds every credential the operator holds, which is
 not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
 
-`--sandbox srt` is honoured by the `claude` backend only. Requesting it with
-`codex`, `cursor` or `opencode` is an **error**, not a warning — a containment control that
-silently does not apply is worse than an absent one, because it gets relied
-upon. ynh does not provide isolation; it runs inside one you configured.
+`--sandbox srt` is honoured by the `claude`, `codex` and `cursor` backends,
+and by `opencode` on Linux. Requesting it with `opencode` on macOS is an
+**error**, not a warning — a containment
+control that silently does not apply is worse than an absent one, because it
+gets relied upon ([L18](vendor-parity.md#l18-sandbox-srt)). ynh does not
+provide isolation; it runs inside one you configured.
 
 ### What `--sandbox srt` allows
 
 [srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install
 -g @anthropic-ai/sandbox-runtime`) reads its rules from a settings file, so ynh
 writes one for each run and starts the worker as
-`srt --settings <file> -- claude ...`. The file is `srt-settings.json` in the
+`srt --settings <file> -- claude ...` (or `codex`, or Cursor's CLI; a backend
+that runs one process per turn wraps each turn). The file is `srt-settings.json` in the
 session directory (beside the `--emit-jsonl` file), mode 0600. A run with no
 session directory gets it in a private directory under `$YNH_HOME/run/`,
 removed when the worker exits. If the file cannot be written the run stops
@@ -244,14 +250,80 @@ missing or invalid. Neither falls back to running unsandboxed.
 
 | | Allowed | Everything else |
 |---|---|---|
-| Network | `api.anthropic.com`, `claude.ai`, `platform.claude.com`: the API, and signing in and refreshing a claude.ai or Console login | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
-| Writes | the worktree; Claude Code's own state: `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; srt's own temporary directory (`TMPDIR` is set to `/tmp/claude`) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
-| Reads | everywhere, srt's default | |
+| Network | Claude Code: `api.anthropic.com`, `claude.ai`, `platform.claude.com` (the API, and signing in and refreshing a claude.ai or Console login). Codex: `api.openai.com`, `auth.openai.com`, `chatgpt.com`. Cursor: `*.cursor.sh`, `cursor.com`, `*.cursor.com` | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
+| Writes | the worktree; the vendor's own state: Claude Code's `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; Codex's `$CODEX_HOME`, `~/.codex` by default; Cursor's `~/.cursor/` and `~/.config/cursor/`; srt's own temporary directory, `/tmp/claude` (srt sets `TMPDIR` to it, but makes it writable only if the folder already exists; ynh creates it before every srt launch, see below) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
+| Reads | everywhere, except the credential paths below | refused: `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.local/share/keyrings` (Linux) and `$YNH_HOME/trust.json`, where `~` is the worker's home; the macOS keychain (`~/Library/Keychains`) is readable, see [the keychain](#the-macos-keychain); extend or relax the list with `srt_deny_read` and `srt_allow_read` ([read policy](#srt-s-read-policy)) |
+
+For Codex and Cursor, ynh also sets srt's `enableWeakerNetworkIsolation`,
+which lets the worker reach macOS's `trustd`. Codex verifies TLS through the
+system trust store, and without it every request fails, an allowed host's too.
+srt warns that this opens a possible exfiltration path through `trustd`; it is
+not set for Claude Code.
 
 The network list is the worker's only way out: a task that needs `github.com`
 or a package registry fails under `--sandbox srt`. The telemetry relay is not
 reachable from inside srt and is skipped; see
 [telemetry](telemetry.md#turning-it-on).
+
+#### srt's read policy
+
+Under `--sandbox srt` the worker may read everything except a deny list. ynh's
+default list is the credential paths in the table above; srt refuses a read of
+them (and of anything beneath them) even with `--auto-approve all`. This is a
+deny list, not containment: a credential kept anywhere else is readable.
+
+##### The macOS keychain
+
+`~/Library/Keychains` is not on the default list. Claude Code on macOS keeps its
+claude.ai login in the login keychain, and srt denies a whole path, never one
+keychain item. With the folder denied, `security find-generic-password -s
+"Claude Code-credentials"` exits 44 (not found) under srt, so a worker signed in
+that way loses its login and cannot run a turn. The cost is that a worker under
+`--sandbox srt` can read the login keychain's file, and with it whatever other
+secrets that keychain holds (the items stay encrypted, and opening them still
+asks the keychain for access). A worker that signs in with `ANTHROPIC_API_KEY`
+or `CLAUDE_CODE_OAUTH_TOKEN` does not need it: add `"~/Library/Keychains"` to
+`srt_deny_read` to close the exposure. Codex and Cursor were not checked for
+keychain use.
+
+Two keys in `~/.ynh/config.json` change it. `~/` expands to the worker's home.
+
+```json
+{
+  "srt_deny_read": ["~/.kube", "/srv/secrets"],
+  "srt_allow_read": ["~/.ssh"]
+}
+```
+
+`srt_deny_read` adds paths; `srt_allow_read` removes a default (a path equal to
+one after `~/` expands). The list in force is in the run's result JSON, as
+`sandbox` (`"srt"`) and `sandbox_deny_read` (the absolute paths), and absent
+without `--sandbox srt`.
+
+#### srt's temporary directory
+
+srt sets `TMPDIR=/tmp/claude` for the worker and makes it writable only when
+the folder already exists. On a host where nothing has made it, the worker
+fails with `EROFS: mkdir /tmp/claude`. So before every `--sandbox srt` launch,
+on every backend, ynh creates `/tmp/claude` with mode `0700`. `/tmp` is shared,
+so when the folder already exists ynh uses it only if it is a real directory
+(not a link), owned by the user running ynh, and writable by no group or other
+user. Otherwise the run is refused with one error naming the folder, and ynh
+never changes or reuses someone else's folder.
+
+#### OpenCode under srt
+
+`--sandbox srt` runs `opencode` on Linux only. On macOS it stays an error:
+srt's macOS profile refuses the setuid `/bin/ps` that `opencode run` spawns
+([L18](vendor-parity.md#l18-sandbox-srt)). The proof behind the Linux support
+has limits: it ran in a container on arm64 that needed
+`--security-opt systempaths=unconfined`, and hosts that restrict user
+namespaces (for example Ubuntu with
+`kernel.apparmor_restrict_unprivileged_userns`) were not tested.
+
+One call is not sandboxed: `opencode --version`, which the OpenCode backend
+runs once when a session starts, before the sandboxed turns, to check OpenCode
+is version 2.x. It reads no task input and sends no request.
 
 ## Permissions and `--auto-approve`
 

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func main() {
@@ -76,6 +78,8 @@ func main() {
 		err = cmdPaths(os.Args[2:])
 	case "status":
 		err = cmdStatus(os.Args[2:])
+	case "ps":
+		err = cmdPs(os.Args[2:])
 	case "search":
 		err = cmdSearch(os.Args[2:])
 	case "registry":
@@ -100,6 +104,12 @@ func main() {
 		err = cmdMCP(os.Args[2:])
 	case "mcp-exec":
 		err = cmdMCPExec(os.Args[2:])
+	case "delegate-run":
+		err = cmdDelegateRun(os.Args[2:])
+	case "delegate-mcp":
+		err = cmdDelegateMCP(os.Args[2:])
+	case "parent-mcp":
+		err = cmdParentMCP(os.Args[2:])
 	case "mcp-headers":
 		err = cmdMCPHeaders(os.Args[2:], os.Stdout)
 	case "sensors":
@@ -138,6 +148,13 @@ func main() {
 		var coded *exitCodeError
 		if errors.As(err, &coded) {
 			os.Exit(coded.code)
+		}
+		// `ynh run` is the vendor CLI's parent for the whole session and ends
+		// with the exact code the vendor ended with; the vendor has already
+		// said whatever it had to say.
+		var vendorExit *vendor.ExitError
+		if errors.As(err, &vendorExit) {
+			os.Exit(vendorExit.Code)
 		}
 		// `ynh check` distinguishes its two failure modes by exit code so a
 		// gate is unambiguous: 1 means a blocking sensor failed (the report

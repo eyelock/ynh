@@ -45,11 +45,11 @@ ynh update david@eyelock/assistants
 
 Applied in order:
 
-1. Local filesystem path (`./foo` or `/abs/path`) → install from local dir
+1. Local filesystem path (`./foo`, `/abs/path`, or a relative path that exists on disk) → install from local dir
 2. Git SSH URL (`git@...`) → install directly
 3. Git HTTPS URL (`https://...`) → install directly
 4. `name@org/repo` → look up `name` in the registry with matching namespace
-5. Git shorthand (`github.com/owner/repo`) → install as Git URL
+5. Git shorthand (`github.com/owner/repo`) → install as Git URL. The first segment must look like a host (contain `.` or `:`); a host-less `harnesses/x` or `org/repo` that is not on disk is reported as a missing local path. Pass `./harnesses/x`, `github.com/org/repo`, or `git@alias:org/repo.git` for an SSH alias
 6. Plain `name` → search registries; error if ambiguous
 
 ### Unambiguous short names

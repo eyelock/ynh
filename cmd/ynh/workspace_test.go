@@ -14,6 +14,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 	"github.com/eyelock/ynh/internal/workspace"
 )
 
@@ -248,13 +249,17 @@ func TestWorkspaceGrantSilentWithoutRequest(t *testing.T) {
 	}
 }
 
-func TestWorkspaceLaunchArgsPerVendor(t *testing.T) {
+func TestWorkspaceGrantForPerVendor(t *testing.T) {
 	w := newWSWorld(t)
 	w.writeConfig(t, w.home)
 	t.Chdir(w.project)
 	for _, v := range []string{"claude", "codex", "copilot", "cursor"} {
 		var stderr bytes.Buffer
-		args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", v, t.TempDir(), false, false, &stderr)
+		granted, err := workspaceGrantFor(w.harness("../ynh"), "local/seat", v, false, false, &stderr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		args, _, err := vendor.WorkspaceArgs(v, granted)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -262,48 +267,30 @@ func TestWorkspaceLaunchArgsPerVendor(t *testing.T) {
 			t.Errorf("%s: args = %v, want %v", v, args, want)
 		}
 	}
+	// OpenCode has no flag: the folder is decided here and written into the
+	// agent files by GrantOpenCodeWorkspace before the snapshot is sealed.
 	var stderr bytes.Buffer
-	runDir := t.TempDir()
-	agents := filepath.Join(runDir, ".opencode", "agents")
-	if err := os.MkdirAll(agents, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	denyAll := "---\ndescription: d\npermissions:\n  - action: \"*\"\n    resource: \"*\"\n    effect: deny\n---\nbody\n"
-	if err := os.WriteFile(filepath.Join(agents, "a.md"), []byte(denyAll), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "opencode", runDir, false, false, &stderr)
-	got, _ := os.ReadFile(filepath.Join(agents, "a.md"))
-	if !strings.Contains(string(got), "external_directory") || !strings.Contains(string(got), w.sibling+"/**") {
-		t.Errorf("opencode agent not granted the folder:\n%s", got)
-	}
-	if err != nil || len(args) != 0 || !strings.Contains(stderr.String(), "workspace: granted") || strings.Contains(stderr.String(), "not granted") {
-		t.Errorf("opencode: args %v, err %v, stderr %q", args, err, stderr.String())
+	granted, err := workspaceGrantFor(w.harness("../ynh"), "local/seat", "opencode", false, false, &stderr)
+	args, _, argsErr := vendor.WorkspaceArgs("opencode", granted)
+	if err != nil || argsErr != nil || len(args) != 0 || !reflect.DeepEqual(granted, []string{w.sibling}) ||
+		!strings.Contains(stderr.String(), "workspace: granted") || strings.Contains(stderr.String(), "not granted") {
+		t.Errorf("opencode: granted %v, args %v, err %v/%v, stderr %q", granted, args, err, argsErr, stderr.String())
 	}
 }
 
 // A pre-assembled (baked) run dir is never edited: a rule written there would
 // survive a later run whose grant no longer names the folder.
-func TestWorkspaceLaunchArgsPreassembledOpenCodeNotEdited(t *testing.T) {
+func TestWorkspaceGrantForPreassembledOpenCodeNotGranted(t *testing.T) {
 	w := newWSWorld(t)
 	w.writeConfig(t, w.home)
 	t.Chdir(w.project)
-	runDir := t.TempDir()
-	agents := filepath.Join(runDir, ".opencode", "agents")
-	if err := os.MkdirAll(agents, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	denyAll := "---\ndescription: d\npermissions:\n  - action: \"*\"\n    resource: \"*\"\n    effect: deny\n---\nbody\n"
-	if err := os.WriteFile(filepath.Join(agents, "a.md"), []byte(denyAll), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	var stderr bytes.Buffer
-	if _, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "opencode", runDir, true, false, &stderr); err != nil {
+	granted, err := workspaceGrantFor(w.harness("../ynh"), "local/seat", "opencode", true, false, &stderr)
+	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(filepath.Join(agents, "a.md"))
-	if string(got) != denyAll {
-		t.Errorf("pre-assembled agent was edited:\n%s", got)
+	if len(granted) != 0 {
+		t.Errorf("granted %v for a pre-assembled run dir", granted)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "not granted") {

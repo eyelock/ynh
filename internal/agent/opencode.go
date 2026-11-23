@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -45,12 +44,16 @@ func (b *OpenCodeBackend) Start(ctx context.Context, opts StartOptions) (WorkerS
 	if err := vendor.GrantOpenCodeWorkspace(opts.ConfigPath, opts.Workspace); err != nil {
 		return nil, err
 	}
-	return &openCodeSession{
+	sess := &openCodeSession{
 		ctx:       ctx,
 		bin:       bin,
 		opts:      opts,
 		sessionID: opts.ResumeToken,
-	}, nil
+	}
+	if opts.IsolatedMCP {
+		_, sess.isolationEnv = workerMCPIsolation(&vendor.OpenCode{}, opts.ConfigPath, workerEnvFor(opts.Env), opts.WorktreeDir, opts.Stderr)
+	}
+	return sess, nil
 }
 
 // openCodeSession holds the resumable session id across per-turn processes.
@@ -61,6 +64,9 @@ type openCodeSession struct {
 	sessionID string
 	pending   string
 	hasMsg    bool
+	// isolationEnv turns off the operator's own MCP servers (IsolatedMCP),
+	// found once in Start and set on every turn.
+	isolationEnv []string
 }
 
 // ResumeToken returns the OpenCode session id once known: the one resumed, or
@@ -85,7 +91,11 @@ func (s *openCodeSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending, s.hasMsg = "", false
 
-	cmd := exec.CommandContext(s.ctx, s.bin, buildOpenCodeArgs(s.opts, s.sessionID, msg)...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, opencodeSrtPolicy, s.bin, buildOpenCodeArgs(s.opts, s.sessionID, msg))
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
@@ -94,6 +104,7 @@ func (s *openCodeSession) Next() (Turn, error) {
 	if dir := openCodeConfigDir(s.opts.ConfigPath); dir != "" {
 		cmd.Env = append(cmd.Env, "OPENCODE_CONFIG_DIR="+dir)
 	}
+	cmd.Env = append(cmd.Env, s.isolationEnv...)
 	tail := &stderrTail{}
 	cmd.Stderr = stderrSink(s.opts.Stderr, tail)
 

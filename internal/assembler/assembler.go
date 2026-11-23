@@ -85,7 +85,7 @@ func Assemble(adapter LayoutProvider, content []resolver.ResolvedContent) (strin
 
 // AssembleTo populates a specific directory with vendor-specific config layout.
 // The directory is cleaned and recreated. Use this for deterministic paths that
-// survive process replacement (syscall.Exec).
+// outlive the launching process: a vendor session reads its run dir to the end.
 func AssembleTo(dir string, adapter LayoutProvider, content []resolver.ResolvedContent) error {
 	// Clean previous run
 	if err := os.RemoveAll(dir); err != nil {

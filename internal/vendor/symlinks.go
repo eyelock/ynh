@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // PlanSymlinks returns the symlink entries that would be created by Install,
@@ -130,6 +131,24 @@ func cleanSymlinks(entries []SymlinkEntry) error {
 		if err := os.Remove(entry.Link); err != nil {
 			return fmt.Errorf("removing symlink %s: %w", entry.Link, err)
 		}
+		removeEmptyParents(entry.Link)
 	}
 	return nil
+}
+
+// removeEmptyParents removes the artifact folder and the config folder above a
+// removed link (<config>/<artifact>/<item>) when each is left empty, so a clean
+// does not leave the .cursor/ the install created. os.Remove refuses a folder
+// with anything in it, so a folder that holds other files stays.
+func removeEmptyParents(link string) {
+	artifactDir := filepath.Dir(link)
+	configDir := filepath.Dir(artifactDir)
+	// Only a link laid out as <.config>/<artifact>/<item> is ours to tidy.
+	if !strings.HasPrefix(filepath.Base(configDir), ".") {
+		return
+	}
+	if os.Remove(artifactDir) != nil {
+		return
+	}
+	_ = os.Remove(configDir)
 }

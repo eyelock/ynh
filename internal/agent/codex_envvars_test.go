@@ -3,8 +3,10 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -26,4 +28,34 @@ func TestBuildCodexArgs_ForwardsEnvPassthrough(t *testing.T) {
 		}
 	}
 	t.Errorf("args lack %s:\n%v", want, args)
+}
+
+func TestBuildCodexArgsHooks(t *testing.T) {
+	runDir := t.TempDir()
+	files, err := (&vendor.Codex{}).GenerateHookConfig(map[string][]plugin.HookEntry{
+		"on_session_start": {{Command: "echo s"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rel, data := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(runDir, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(runDir, rel), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	has := func(args []string) bool {
+		return strings.Contains(strings.Join(args, "\n"), "hooks.SessionStart=")
+	}
+	if !has(buildCodexArgs(StartOptions{ConfigPath: runDir, TrustedHooks: true}, "")) {
+		t.Error("a trusted harness's hooks are not passed")
+	}
+	if has(buildCodexArgs(StartOptions{ConfigPath: runDir}, "")) {
+		t.Error("an untrusted harness's hooks are passed")
+	}
+	if !has(buildCodexArgs(StartOptions{ConfigPath: runDir, TrustedHooks: true}, "thread-1")) {
+		t.Error("a resumed turn does not pass the hooks")
+	}
 }

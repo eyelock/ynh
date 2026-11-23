@@ -47,7 +47,7 @@ func harnessWithDelegates(t *testing.T) string {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatal(err)
 	}
-	m["delegates_to"] = []map[string]string{{"git": "example.invalid/org/reviewer"}}
+	m["delegates_to"] = []map[string]string{{"git": "example.invalid/org/reviewer", "transport": "native"}}
 	out, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		t.Fatal(err)

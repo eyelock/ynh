@@ -127,6 +127,11 @@ Where a vendor refuses, ynh stops before launching with an error naming it
 (for example `codex cannot resume a session interactively with a prompt; drop
 --resume or the prompt`). The prompt is never dropped silently.
 
+On Codex and Cursor, `--resume` continues the newest session that started in any
+snapshot of the harness, by id, in the newest snapshot. With none found it stops
+with an error naming the harness and suggesting `--resume=<id>`; it never falls
+back to the vendor's own "last session".
+
 ### Binding a resume to a session name
 
 Without `--session-name`, `--resume` continues the newest session in the
@@ -156,9 +161,9 @@ A `delegates_to` entry may name one of the delegate harness's own focuses:
 { "delegates_to": [ { "git": "github.com/eyelock/triager", "focus": "ci-failures" } ] }
 ```
 
-The focus's profile, if it has one, is applied to the delegate, and its prompt is added to the delegate's agent as standing instructions, under `## Focus: ci-failures`. It does not become the delegate's task: the calling session still gives the task each time it delegates. An entry names a profile or a focus, not both, since a focus carries its profile.
+The focus's profile, if it has one, is applied to the delegate, and its prompt is added to the delegate's agent as standing instructions, under `## Focus: ci-failures`. This is for a `transport: native` delegate, which is a subagent of the session; an `a2a` delegate (the default) is its own ynh session, which applies the focus when it starts. It does not become the delegate's task: the calling session still gives the task each time it delegates. An entry names a profile or a focus, not both, since a focus carries its profile.
 
-Because that prompt steers the delegate for every task, `ynh trust show` lists it against the delegate, with its profile, and the trust digest covers it, as it does a [launch focus](#launch-focus). Changing the prompt, or selecting another focus, asks for review again. A harness whose `delegates_to` entries select no focus keeps the digest it had. See [delegates_to](harnesses.md#profile-or-focus-of-a-delegate).
+Because that prompt steers the delegate for every task, for a `native` delegate `ynh trust show` lists it against the delegate, with its profile, and the trust digest covers it, as it does a [launch focus](#launch-focus). Changing the prompt, or selecting another focus, asks for review again. An `a2a` delegate's focus prompt is reviewed under that delegate's own trust grant, not in the parent's digest. The digest does cover every `delegates_to` entry (its source, selection and transport) whatever it selects, so a parent with delegates reads `changed` once from v0.18.0. See [delegates_to](harnesses.md#profile-or-focus-of-a-delegate).
 
 ## Missing Focus Behavior
 

@@ -26,7 +26,7 @@ ynh ls --format json | ynd validate-output --schema list
 
 ## Capability versioning
 
-Every structured response carries a `capabilities` field: `config.CapabilitiesVersion`, currently `0.10.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
+Every structured response that uses the success envelope carries a `capabilities` field (the bare-shape commands listed under [Envelope shape](#envelope-shape) do not): `config.CapabilitiesVersion`, currently `0.10.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
 
 **Capability bumps:**
 - Removing a field; renaming a field; changing a field's type
@@ -54,7 +54,7 @@ Every command's schema is a top-level `oneOf: [<success envelope>, <error envelo
 
 Envelopes use `additionalProperties: true` at the top level — adding a new envelope field is not a capabilities bump. Nested payload `$def`s use `additionalProperties: false`.
 
-**Note:** `ynh version`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh paths`, `ynh status`, `ynh vendors` and `ynh telemetry registry` currently emit shapes without the full envelope (a bare object or array). Envelope retrofit is a separate, capabilities-bumping change tracked outside this initial schema publication.
+**Note:** `ynh version`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh paths`, `ynh ps`, `ynh status`, `ynh vendors` and `ynh telemetry registry` currently emit shapes without the full envelope (a bare object or array). Envelope retrofit is a separate, capabilities-bumping change tracked outside this initial schema publication.
 
 ## Error envelope
 
@@ -118,8 +118,8 @@ The in-tree `internal/jsonschema` validator covers a deliberate JSON Schema draf
 
 ## Adding a new schema
 
-1. Author the schema under `internal/clischema/schema/cli/<name>.schema.json`.
-2. Mirror it to `docs/schema/cli/<name>.schema.json` (the parity test enforces byte-identity).
+1. Author the schema at `docs/schema/cli/<name>.schema.json`. That one file is both the published document and the copy compiled into the binary (`docs/schema/embed.go`); there is no mirror to keep in step.
+2. Nothing registers it: `internal/clischema` lists whatever is under `docs/schema/cli/`. Run `TestSchemasCompile` and `TestNamesSorted` in `internal/clischema/embed_test.go` to confirm it compiles.
 3. Add a representative `test/golden/<name>.json` fixture.
 4. Add a `TestCmdXxx_JSONSchemaRoundTrip` in the command's `_test.go` that validates live emission against the schema.
 5. Add a golden validation in `internal/clischema/embed_test.go`.

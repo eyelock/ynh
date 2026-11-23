@@ -80,6 +80,23 @@ func TestCmdDelegateAdd_PathBased(t *testing.T) {
 	}
 }
 
+func TestCmdDelegateAdd_RefusesLocalPath(t *testing.T) {
+	dir := t.TempDir()
+	writeDelegateTestHarness(t, dir, "h")
+	other := t.TempDir()
+
+	for _, src := range []string{other, "./sibling", "../sibling", "~/delegate", "file://" + other} {
+		var buf bytes.Buffer
+		err := cmdDelegateTo([]string{"add", dir, src}, &buf)
+		if err == nil || !strings.Contains(err.Error(), "delegates are remote") {
+			t.Errorf("%q: expected remote-only refusal, got: %v", src, err)
+		}
+	}
+	if dels := loadTestDelegates(t, dir); len(dels) != 0 {
+		t.Errorf("expected no delegates written, got %+v", dels)
+	}
+}
+
 func TestCmdDelegateAdd_WithFlags(t *testing.T) {
 	dir := t.TempDir()
 	writeDelegateTestHarness(t, dir, "h")
@@ -401,5 +418,20 @@ func TestCmdDelegateAdd_SelectionFlagNeedsValue(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), f+" requires a value") {
 			t.Errorf("%s: got %v", f, err)
 		}
+	}
+}
+
+// "." names the current harness folder, the same form ynh info takes.
+func TestCmdDelegateAdd_DotPath(t *testing.T) {
+	dir := t.TempDir()
+	writeDelegateTestHarness(t, dir, "h")
+	t.Chdir(dir)
+
+	var buf bytes.Buffer
+	if err := cmdDelegateTo([]string{"add", ".", "github.com/example-org/agent"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dels := loadTestDelegates(t, dir); len(dels) != 1 {
+		t.Errorf("expected 1 delegate, got %+v", dels)
 	}
 }

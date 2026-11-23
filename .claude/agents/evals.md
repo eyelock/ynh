@@ -99,6 +99,7 @@ A stub runs nothing: it appends its name and arguments to
 | `srt` | the sandbox wrapper `ynh agent run --sandbox srt` puts around `claude` |
 | `gh` | GitHub sensors (network) |
 | `docker` | `ynh image` (Docker) |
+| `a2a` | `ynh doctor`, which runs `a2a version` for the a2a CLI route |
 
 `make check-vendor-parity` fails if a vendor's CLI, as `ynh vendors` reports it,
 is missing from the `STUBS` line below, or if ynh or ynd source launches a program
@@ -112,7 +113,7 @@ Stubs also make `ynh vendors` deterministic: every vendor reports
 ### Launch blocks
 
 Because every vendor CLI is a stub, a block that launches a harness is safe to
-run: ynh assembles `~/.ynh/run/<id>/` and then executes the stub, which records
+run: ynh assembles a snapshot under `~/.ynh/run/.snapshots/<id>/` and then executes the stub, which records
 its arguments and exits 1. The launch block's success criterion is everything
 ynh does before the vendor starts: the assembly, which the blocks after it read
 (`ls ~/.ynh/run/...`), and the arguments the vendor receives. What the
@@ -126,7 +127,7 @@ own above the block, one line per launch, in order. The line reads
 as the block's expected call. In `first-harness.md` it reads:
 
 ```markdown
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what are you?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```
 
 The command is the program name, then its arguments joined by single spaces,
@@ -184,7 +185,7 @@ Once at tutorial start, in a single Bash invocation from the checkout. Fill in `
 YNH_REPO=$(git rev-parse --show-toplevel)
 SLUG=<slug>                                  # e.g. sensors for tutorial/sensors.md
 SANDBOX=/tmp/ynh-eval-$SLUG
-STUBS="claude codex copilot opencode agent cursor cursor-agent srt gh docker ynr"
+STUBS="claude codex copilot opencode agent cursor cursor-agent srt gh docker ynr a2a"
 case $SANDBOX in /tmp/ynh-eval-?*) rm -rf "$SANDBOX" ;; *) echo "bad sandbox: $SANDBOX"; exit 1 ;; esac
 mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state" "$SANDBOX/stubs"
 cp "$YNH_REPO/bin/ynh" "$YNH_REPO/bin/ynd" "$SANDBOX/home/.ynh/bin/"   # what make install would put there

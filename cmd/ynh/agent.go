@@ -303,6 +303,10 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		return workspaceGrant(h, id, backend, worktree, false, stderr)
 	}
 
+	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {
+		return codexHooksTrusted(h, id, backend, configDir, stderr)
+	}
+
 	result, err := agent.RunLoop(opts)
 	// The vendor has exited: let the relay drain what it sent, then stop it.
 	rt.relay.stop()

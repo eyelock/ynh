@@ -197,7 +197,7 @@
       "items": {
         "$ref": "#/$defs/MCPServer"
       },
-      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source. Delegates contribute the servers they carry, named in delegate."
+      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source. Native delegates (transport native, a subagent of the session) contribute the servers they carry, named in delegate; an a2a delegate is its own session under its own trust grant, so its servers are not listed here."
     },
     "legacy_digest": {
       "type": "boolean",
@@ -249,7 +249,7 @@
     },
     "delegate_focuses": {
       "type": "array",
-      "description": "The focuses delegates_to entries select, in entry order. Each prompt becomes the delegate's standing instructions for every task it is given, so it steers that subagent as launch_focus steers a session. Present only when an entry selects a focus. Covered by digest. Filled by `trust show` only.",
+      "description": "The focuses that native delegates_to entries select, in entry order (an a2a delegate's focus is reviewed under its own trust grant). Each prompt becomes the delegate's standing instructions for every task it is given, so it steers that subagent as launch_focus steers a session. Present only when a native entry selects a focus. Covered by digest. Filled by `trust show` only.",
       "items": {
         "type": "object",
         "properties": {

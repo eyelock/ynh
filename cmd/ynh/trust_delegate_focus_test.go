@@ -14,7 +14,7 @@ const focusFields = `,"profiles":{"ci":{}},"focuses":{"triage":{"profile":"ci","
 // withFocus makes h's one delegates_to entry select the named focus.
 func withFocus(h *harness.Harness, focus string) *harness.Harness {
 	c := *h
-	c.DelegatesTo = []harness.Delegate{{GitSource: h.DelegatesTo[0].GitSource, Focus: focus}}
+	c.DelegatesTo = []harness.Delegate{{Transport: h.DelegatesTo[0].Transport, GitSource: h.DelegatesTo[0].GitSource, Focus: focus}}
 	return &c
 }
 
@@ -57,8 +57,9 @@ func TestTrustCoversDelegateFocus(t *testing.T) {
 	}
 }
 
-// An entry that selects no focus leaves the digest as it was: a harness whose
-// delegates name none is not asked to review anything new.
+// An entry that selects no focus adds nothing to review: a harness whose
+// delegates name none is not asked to review anything new, though the entry
+// itself is in the digest.
 func TestTrustDelegateWithoutFocusKeepsDigest(t *testing.T) {
 	h, _ := ownRepoWithDelegate(t, focusFields)
 	empty := trustStore{Harnesses: map[string]trustRecord{}}
@@ -66,8 +67,8 @@ func TestTrustDelegateWithoutFocusKeepsDigest(t *testing.T) {
 	if st.State != trustNoCommands || len(st.delegateFocuses) != 0 {
 		t.Errorf("state %q, focuses %+v; want no commands and none", st.State, st.delegateFocuses)
 	}
-	if st.Digest != executablesDigest(trustSet{Sensors: []executable{}}) {
-		t.Errorf("digest %s differs from an empty set's", st.Digest)
+	if st.Digest == executablesDigest(trustSet{Sensors: []executable{}}) {
+		t.Errorf("digest %s ignores the delegates_to entry", st.Digest)
 	}
 }
 

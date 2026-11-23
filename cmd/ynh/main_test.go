@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -610,6 +611,7 @@ func TestResolveVendor(t *testing.T) {
 func TestGenerateLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "") // an exported YNH_HOME would override HOME
 
 	if err := generateLauncher("david", "local/david"); err != nil {
 		t.Fatalf("generateLauncher failed: %v", err)
@@ -1204,7 +1206,7 @@ func TestFormatIncludes(t *testing.T) {
 		includes []harness.Include
 		want     string
 	}{
-		{"empty", nil, "0"},
+		{"empty", nil, "-"},
 		{"single no pick", []harness.Include{
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}},
 		}, "example/skills/dev"},
@@ -1254,7 +1256,7 @@ func TestFormatDelegates(t *testing.T) {
 		delegates []harness.Delegate
 		want      string
 	}{
-		{"empty", nil, "0"},
+		{"empty", nil, "-"},
 		{"single", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/team"}},
 		}, "example/team"},
@@ -1860,6 +1862,10 @@ func TestParseRunArgs_IsolatedMCP(t *testing.T) {
 
 func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 	dir := t.TempDir()
+	// No vendor CLI on PATH: Codex, Copilot and OpenCode cannot list their
+	// servers, so each warns that isolation could not be applied. The listing
+	// itself is tested in internal/vendor with a stubbed runner.
+	t.Setenv("PATH", t.TempDir())
 	for _, tt := range []struct {
 		vendor   string
 		wantArgs int
@@ -1869,6 +1875,7 @@ func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 		{"copilot", 1, true},
 		{"codex", 0, true},
 		{"cursor", 0, true},
+		{"opencode", 0, true},
 	} {
 		t.Run(tt.vendor, func(t *testing.T) {
 			adapter, err := vendor.Get(tt.vendor)
@@ -1888,6 +1895,39 @@ func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 				t.Errorf("warning %q is not a single 'warning: ' line", out)
 			}
 		})
+	}
+}
+
+// OpenCode's isolation is environment variables, not arguments, so the branch
+// in isolationLaunchArgs must set them in ynh's own environment, where the
+// launch inherits them. Without that branch this test fails.
+func TestIsolationLaunchArgs_OpenCodeSetsTheConfigContent(t *testing.T) {
+	bin := t.TempDir()
+	script := `#!/bin/sh
+case "$*" in
+*"debug config"*) echo '[{"type":"document","path":"/p","info":{"mcp":{"servers":{"usersrv":{"type":"remote","url":"https://x.example/mcp"}}}}}]' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "opencode"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("OPENCODE_CONFIG_CONTENT", "") // restored when the test ends
+
+	adapter, err := vendor.Get("opencode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if args := isolationLaunchArgs(adapter, t.TempDir(), &buf); len(args) != 0 {
+		t.Errorf("args = %v, want none: OpenCode isolates through the environment", args)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("unexpected warning %q", buf.String())
+	}
+	got := os.Getenv("OPENCODE_CONFIG_CONTENT")
+	if !strings.Contains(got, `"usersrv"`) || !strings.Contains(got, `"disabled":true`) {
+		t.Errorf("OPENCODE_CONFIG_CONTENT = %q, want usersrv disabled", got)
 	}
 }
 
@@ -1922,5 +1962,70 @@ func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
 	err := cmdRun([]string{"h"})
 	if err == nil || !strings.Contains(err.Error(), "expected name or namespace:name") {
 		t.Fatalf("YNH_PROFILE should be parsed as a selection, got: %v", err)
+	}
+}
+
+func TestSymlinkConsentError_NamesTheFlag(t *testing.T) {
+	err := symlinkConsentError("cursor", "local/demo", 5)
+	for _, want := range []string{"no terminal", "nothing was installed", "ynh run local/demo -v cursor --install", "5 symlinks"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
+
+func TestHarnessRunRef(t *testing.T) {
+	tests := []struct{ name, id, dir, want string }{
+		{"id wins", "local/demo", "/x/demo", "local/demo"},
+		{"path when run by path", "", "/x/demo", "/x/demo"},
+		{"path with spaces is single-quoted", "", "/x/my demo", `'/x/my demo'`},
+		{"double quote and backslash", "", `/x/a"b\c`, `'/x/a"b\c'`},
+		{"dollar and backtick are not expanded", "", "/x/$HOME`id`", "'/x/$HOME`id`'"},
+		{"single quote is closed, escaped and reopened", "", "/x/it's", `'/x/it'\''s'`},
+		{"non-ASCII", "", "/x/café", "'/x/café'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := harnessRunRef(tt.id, tt.dir); got != tt.want {
+				t.Errorf("harnessRunRef = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A shell reading the quoted ref gets the path back exactly.
+func TestShellQuote_RoundTripsThroughSh(t *testing.T) {
+	for _, p := range []string{"/x/plain", "/x/my demo", `/x/a"b\c`, "/x/$HOME`id`", "/x/it's", "/x/café", "/x/a;b&c|d*"} {
+		out, err := exec.Command("sh", "-c", "printf %s "+shellQuote(p)).Output()
+		if err != nil {
+			t.Fatalf("%q: %v", p, err)
+		}
+		if string(out) != p {
+			t.Errorf("sh read %q back as %q", p, out)
+		}
+	}
+}
+
+func TestStdinIsTerminal_FalseForPipeAndDevNull(t *testing.T) {
+	orig := os.Stdin
+	defer func() { os.Stdin = orig }()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
+	os.Stdin = r
+	if stdinIsTerminal() {
+		t.Error("a pipe is not a terminal")
+	}
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = null.Close() }()
+	os.Stdin = null
+	if stdinIsTerminal() {
+		t.Error("/dev/null is not a terminal")
 	}
 }

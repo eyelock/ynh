@@ -86,10 +86,20 @@ type StartOptions struct {
 	// vendor's flag through vendor.WorkspaceArgs; one whose vendor has none
 	// never receives any, because the decision reports it before this point.
 	Workspace []string
+	// TrustedHooks is set when the operator's trust record accepts the
+	// harness (cmd/ynh decides), so a backend that must be told to run its
+	// hooks does. Only codex reads it: its worker runs in the worktree, so it
+	// is handed the hooks ynh wrote to ConfigPath inline, already trusted.
+	TrustedHooks bool
 	// ConfigPath is the assembled harness directory (contains .claude/, CLAUDE.md, etc.).
 	ConfigPath string
 	// Sandbox is "srt" or "none".
 	Sandbox string
+	// SrtDenyRead is the read-deny list the worker runs under with --sandbox
+	// srt, as the loop resolved it (SrtReadPolicy) and reported in the run's
+	// result. Nil means the loop did not resolve one and srtCommand uses ynh's
+	// defaults; an empty, non-nil slice is a deliberate "deny nothing".
+	SrtDenyRead []string
 	// SessionDir is the run's session directory (beside its trajectory),
 	// or "" when the run has none. Under srt the sandbox's settings file is
 	// written there.
@@ -115,7 +125,7 @@ type StartOptions struct {
 	UsageBase *Usage
 	// IsolatedMCP restricts the worker to the MCP servers the harness composes
 	// (its own and its included harnesses'), leaving out the operator's.
-	// Only the claude backend honours it.
+	// The claude, codex and opencode backends honour it; cursor cannot (L6).
 	IsolatedMCP bool
 	// MCPManualApproval leaves approval of the harness's MCP tools to the
 	// vendor (mcp_manual_approval). Without it the codex backend approves them,

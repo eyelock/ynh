@@ -17,7 +17,7 @@
     },
     "includes": [],
     "delegates_to": [
-      {"git": "github.com/eyelock/triager", "ref_installed": "3f2c9a1e0b7d4c5a6f8e9d0c1b2a3f4e5d6c7b8a", "is_pinned": true, "focus": "ci-failures"}
+      {"git": "github.com/eyelock/triager", "ref_installed": "3f2c9a1e0b7d4c5a6f8e9d0c1b2a3f4e5d6c7b8a", "is_pinned": true, "focus": "ci-failures", "transport": "a2a", "transport_from": "default"}
     ],
     "mcp_servers": [
       {"name": "docs", "source": "root", "url": "https://docs.example.com/mcp"},

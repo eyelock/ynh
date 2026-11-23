@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
@@ -38,6 +37,9 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		codexBin: codexBin,
 		opts:     opts,
 		threadID: opts.ResumeToken,
+	}
+	if opts.IsolatedMCP {
+		s.isolation, _ = workerMCPIsolation(&vendor.Codex{}, opts.ConfigPath, workerEnvFor(opts.Env), opts.WorktreeDir, opts.Stderr)
 	}
 	// Each turn registers the agents again (buildCodexArgs); say once which
 	// cannot be.
@@ -95,6 +97,12 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	// one-shot `ynh run` does, unless the harness opts out (mcp_manual_approval).
 	if !opts.MCPManualApproval {
 		args = append(args, (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, nil)...)
+	}
+	// And its hooks, which codex reads from the project layer of its working
+	// directory, the worktree, and so would never find in ConfigPath. Passed
+	// only for an accepted harness; otherwise codex runs none, as before.
+	if opts.TrustedHooks {
+		args = append(args, vendor.CodexSessionHookArgs(opts.ConfigPath)...)
 	}
 	args = append(args, "--json")
 	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
@@ -274,6 +282,9 @@ type codexSession struct {
 	// known (see Start).
 	totals      codexTotals
 	totalsKnown bool
+	// isolation turns off the operator's own MCP servers (IsolatedMCP), found
+	// once in Start and passed on every turn.
+	isolation []string
 }
 
 // ResumeToken returns the codex thread id once known: the one resumed, or
@@ -295,7 +306,11 @@ func (s *codexSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending, s.hasMsg = "", false
 
-	cmd := exec.CommandContext(s.ctx, s.codexBin, buildCodexArgs(s.opts, s.threadID)...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, codexSrtPolicy, s.codexBin, withIsolationArgs(buildCodexArgs(s.opts, s.threadID), s.isolation, 1))
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir

@@ -194,22 +194,6 @@ func TestReadCopilotWorkspace(t *testing.T) {
 	})
 }
 
-// Codex and Cursor cannot resolve ids locally, but must report that distinctly
-// from "the store is empty" — the two lead to different launch fallbacks.
-func TestLookupUnavailableVendors(t *testing.T) {
-	for _, a := range []Adapter{&Codex{}, &Cursor{}} {
-		t.Run(a.Name(), func(t *testing.T) {
-			if !a.SupportsResume() {
-				t.Error("SupportsResume() = false, want true")
-			}
-			_, err := a.ResolveLastSession("/anywhere", time.Time{})
-			if !errors.Is(err, ErrSessionLookupUnavailable) {
-				t.Errorf("err = %v, want ErrSessionLookupUnavailable", err)
-			}
-		})
-	}
-}
-
 func TestAllVendorsSupportResume(t *testing.T) {
 	for _, name := range Available() {
 		a, err := Get(name)

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
@@ -153,6 +152,11 @@ type listDelegate struct {
 	// profile or focus, when it names one (at most one of the two).
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// Transport is how the parent reaches the delegate (a2a or native), as
+	// resolved; TransportFrom is where it came from: the entry, the harness's
+	// default, or the built-in default.
+	Transport     string `json:"transport"`
+	TransportFrom string `json:"transport_from"`
 }
 
 func cmdList(args []string) error {
@@ -165,6 +169,8 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 	format := "text"
 	checkUpdates := false
 	want := labels.Set{}
+	filter := listFilter{labels: want}
+	var columnNames []string
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -196,6 +202,22 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 			} else {
 				want[op.Key] = op.Value
 			}
+		case "--source", "--includes":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					args[i]+" requires a repository (owner/repo, a URL or a path)")
+			}
+			flag := args[i]
+			i++
+			if err := filter.add(flag, args[i]); err != nil {
+				return cliError(stderr, structured, errCodeInvalidInput, err.Error())
+			}
+		case "--columns":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--columns requires a value (for example id,vendor,source)")
+			}
+			i++
+			columnNames = append(columnNames, strings.Split(args[i], ",")...)
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -207,22 +229,32 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 		i++
 	}
 
+	cols := listColumns
+	if columnNames != nil {
+		var err error
+		if cols, err = parseListColumns(columnNames); err != nil {
+			return cliError(stderr, structured, errCodeInvalidInput, err.Error())
+		}
+	}
+
 	switch format {
 	case "text":
 		if checkUpdates {
 			return cliError(stderr, structured, errCodeInvalidInput,
 				"--check-updates requires --format json")
 		}
-		return printListText(stdout, want)
+		return printListText(stdout, filter, cols, terminalWidth(stdout))
 	case "json":
-		return printListJSON(stdout, checkUpdates, want)
+		return printListJSON(stdout, checkUpdates, filter)
 	default:
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 }
 
-func printListText(w io.Writer, want labels.Set) error {
+// printListText prints the table. width is the terminal's width, or 0 to
+// print every column in full.
+func printListText(w io.Writer, filter listFilter, cols []listColumn, width int) error {
 	entries, err := harness.ListAll()
 	if err != nil {
 		return err
@@ -233,17 +265,14 @@ func printListText(w io.Writer, want labels.Set) error {
 		_, _ = fmt.Fprintln(w, "Install one with: ynh install <git-url|path>")
 		return nil
 	}
-	shown := 0
 
-	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	// ID column carries the canonical id — `local/<name>` or
+	var rows []listRow
+	// The ID column carries the canonical id — `local/<name>` or
 	// `<host>/<org>/<repo>/<name>` — because that's what every harness-
 	// targeting command (info, run, installed, uninstall, update) accepts.
 	// Showing the bare name here invited users to copy it and hit "not
 	// installed" errors; eradicated in the structured-output overhaul and
 	// kept out here.
-	_, _ = fmt.Fprintln(tw, "ID\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO\tLABELS")
-
 	for _, e := range entries {
 		id := canonicalIDForEntry(e)
 		// For pointer-form installs (local harnesses), load via the pointer first
@@ -254,44 +283,56 @@ func printListText(w io.Writer, want labels.Set) error {
 			p, err = harness.LoadDir(e.Dir)
 		}
 		if err != nil {
-			// A harness that cannot load has no labels, so none matches.
-			if len(want) == 0 {
-				_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\t\n", id, err)
-				shown++
+			// A harness that cannot load has no labels, source or includes,
+			// so no filter matches it.
+			if !filter.active() {
+				rows = append(rows, listRow{
+					"id":   {text: id},
+					"kind": {text: fmt.Sprintf("(error: %v)", err)},
+				})
 			}
 			continue
 		}
-		if !labels.Set(p.Labels).Matches(want) {
+		if !filter.matches(p) {
 			continue
 		}
-		shown++
 
 		vendorName := p.DefaultVendor
 		if vendorName == "" {
 			vendorName = "-"
 		}
-
-		kind := classifyKind(p.InstalledFrom)
-		source := formatProvenance(p.InstalledFrom)
-		artifacts := formatArtifactSummaryDir(e.Dir)
-		includes := formatIncludes(p.Includes)
-		delegates := formatDelegates(p.DelegatesTo)
-
 		lbl := "-"
 		if len(p.Labels) > 0 {
 			lbl = labels.Encode(p.Labels)
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, kind, vendorName, source, artifacts, includes, delegates, lbl)
+		incItems := includeItems(p.Includes)
+		delItems := delegateItems(p.DelegatesTo)
+		rows = append(rows, listRow{
+			"id":        {text: id},
+			"kind":      {text: classifyKind(p.InstalledFrom)},
+			"vendor":    {text: vendorName},
+			"source":    {text: formatProvenance(p.InstalledFrom)},
+			"artifacts": {text: formatArtifactSummaryDir(e.Dir)},
+			"includes":  {text: formatIncludes(p.Includes), items: incItems},
+			"delegates": {text: formatDelegates(p.DelegatesTo), items: delItems},
+			"labels":    {text: lbl},
+		})
 	}
 
-	if shown == 0 {
-		_, _ = fmt.Fprintln(w, "No harnesses carry every label given.")
+	if len(rows) == 0 {
+		if len(filter.sources) == 0 && len(filter.includes) == 0 && len(filter.labels) > 0 {
+			_, _ = fmt.Fprintln(w, "No harnesses carry every label given.")
+		} else if filter.active() {
+			_, _ = fmt.Fprintln(w, "No harnesses match every filter given.")
+		} else {
+			_, _ = fmt.Fprintln(w, "No harnesses installed.")
+		}
 		return nil
 	}
-	return tw.Flush()
+	return writeListTable(w, cols, rows, width)
 }
 
-func printListJSON(w io.Writer, checkUpdates bool, want labels.Set) error {
+func printListJSON(w io.Writer, checkUpdates bool, filter listFilter) error {
 	all, err := harness.ListAll()
 	if err != nil {
 		return err
@@ -321,7 +362,7 @@ func printListJSON(w io.Writer, checkUpdates bool, want labels.Set) error {
 				ptr, _ = harness.LoadPointerByID(canonicalIDForEntry(e))
 			}
 			// A harness that cannot load has no labels, so none matches.
-			if ptr != nil && len(want) == 0 {
+			if ptr != nil && !filter.active() {
 				id := namespace.CanonicalID(ptr.Source, ptr.Name)
 				ns, _ := namespace.SplitID(id)
 				entries = append(entries, listEntry{
@@ -342,7 +383,7 @@ func printListJSON(w io.Writer, checkUpdates bool, want labels.Set) error {
 			}
 			continue
 		}
-		if !labels.Set(p.Labels).Matches(want) {
+		if !filter.matches(p) {
 			continue
 		}
 		entries = append(entries, buildListEntry(p))
@@ -458,7 +499,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 		Path:             p.Dir,
 		Artifacts:        scanArtifactCounts(p.Dir),
 		Includes:         buildIncludes(p.Includes),
-		DelegatesTo:      buildDelegates(p.DelegatesTo),
+		DelegatesTo:      buildDelegates(p),
 		Labels:           p.Labels,
 	}
 
@@ -537,9 +578,9 @@ func buildIncludes(includes []harness.Include) []listInclude {
 	return result
 }
 
-func buildDelegates(delegates []harness.Delegate) []listDelegate {
-	result := make([]listDelegate, 0, len(delegates))
-	for _, del := range delegates {
+func buildDelegates(p *harness.Harness) []listDelegate {
+	result := make([]listDelegate, 0, len(p.DelegatesTo))
+	for _, del := range p.DelegatesTo {
 		refInstalled := del.SHA
 		if refInstalled == "" {
 			refInstalled = del.Ref
@@ -549,13 +590,15 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 			probeRef = del.Ref
 		}
 		result = append(result, listDelegate{
-			Git:          del.Git,
-			Ref:          probeRef,
-			RefInstalled: refInstalled,
-			IsPinned:     harness.IsPinnedRef(del.Ref),
-			Path:         del.Path,
-			Profile:      del.Profile,
-			Focus:        del.Focus,
+			Git:           del.Git,
+			Ref:           probeRef,
+			RefInstalled:  refInstalled,
+			IsPinned:      harness.IsPinnedRef(del.Ref),
+			Path:          del.Path,
+			Profile:       del.Profile,
+			Focus:         del.Focus,
+			Transport:     p.TransportOf(del),
+			TransportFrom: p.TransportOrigin(del),
 		})
 	}
 	return result
@@ -617,11 +660,8 @@ func formatProvenance(prov *harness.Provenance) string {
 	return short
 }
 
-// formatIncludes formats the INCLUDES column for ynh ls.
-func formatIncludes(includes []harness.Include) string {
-	if len(includes) == 0 {
-		return "0"
-	}
+// includeItems is each include of the INCLUDES column as it is printed.
+func includeItems(includes []harness.Include) []string {
 	parts := make([]string, 0, len(includes))
 	for _, inc := range includes {
 		s := resolver.ShortGitURL(inc.Git)
@@ -639,14 +679,19 @@ func formatIncludes(includes []harness.Include) string {
 		}
 		parts = append(parts, s)
 	}
-	return strings.Join(parts, ", ")
+	return parts
 }
 
-// formatDelegates formats the DELEGATES TO column for ynh ls.
-func formatDelegates(delegates []harness.Delegate) string {
-	if len(delegates) == 0 {
-		return "0"
+// formatIncludes formats the INCLUDES column for ynh ls: "-" when empty.
+func formatIncludes(includes []harness.Include) string {
+	if len(includes) == 0 {
+		return "-"
 	}
+	return strings.Join(includeItems(includes), ", ")
+}
+
+// delegateItems is each delegate of the DELEGATES TO column as it is printed.
+func delegateItems(delegates []harness.Delegate) []string {
 	parts := make([]string, 0, len(delegates))
 	for _, del := range delegates {
 		s := resolver.ShortGitURL(del.Git)
@@ -664,5 +709,13 @@ func formatDelegates(delegates []harness.Delegate) string {
 		}
 		parts = append(parts, s)
 	}
-	return strings.Join(parts, ", ")
+	return parts
+}
+
+// formatDelegates formats the DELEGATES TO column for ynh ls: "-" when empty.
+func formatDelegates(delegates []harness.Delegate) string {
+	if len(delegates) == 0 {
+		return "-"
+	}
+	return strings.Join(delegateItems(delegates), ", ")
 }

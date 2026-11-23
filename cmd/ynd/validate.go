@@ -145,14 +145,9 @@ func validateFile(path string) error {
 	case base == plugin.PluginFile:
 		issues = lintPluginJSON(path)
 	case base == "marketplace.json":
-		// Registry index (inside a manifest directory) validates against the
-		// schema. Build config (anywhere else) validates via LoadConfig
-		// programmatic checks.
-		if plugin.InManifestDir(path) {
-			issues = lintRegistryMarketplace(path)
-		} else {
-			issues = lintMarketplaceConfig(path)
-		}
+		// Three shapes share this name (marketplace_shapes.go): each is
+		// validated as itself, and a file that is none of them is refused.
+		issues = lintMarketplaceFile(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -325,6 +320,7 @@ func validateHarness(dir string) error {
 			delIssues, delNotes := validateHarnessDelegates(dir, data)
 			issues = append(issues, delIssues...)
 			notes = append(notes, delNotes...)
+			issues = append(issues, validateHarnessTransports(dir)...)
 			wsIssues, wsNotes := validateHarnessWorkspace(dir, hj)
 			issues = append(issues, wsIssues...)
 			notes = append(notes, wsNotes...)
@@ -951,6 +947,21 @@ func validateHarnessDelegates(dir string, data []byte) (issues, notes []string) 
 		}
 	}
 	return issues, notes
+}
+
+// validateHarnessTransports checks the transport of the harness and of each
+// delegates_to entry: a value that is neither a2a nor native, and native on
+// the harness's default vendor when that vendor has no native subagents. A
+// harness that cannot be loaded is left to the other checks.
+func validateHarnessTransports(dir string) []string {
+	h, err := harness.LoadDir(dir)
+	if err != nil {
+		return nil
+	}
+	if err := h.CheckDelegateTransports(h.DefaultVendor); err != nil {
+		return []string{err.Error()}
+	}
+	return nil
 }
 
 // validateHarnessLaunchFocus checks launch_focus: it must name a focus that

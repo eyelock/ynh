@@ -12,7 +12,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -28,7 +27,7 @@ const copilotCLI = "copilot"
 // Copilot implements the Adapter interface for GitHub Copilot CLI.
 //
 // Launch strategy mirrors Claude: --plugin-dir for native plugin loading,
-// no symlinks, syscall.Exec for a clean process replacement. Confirmed via
+// no symlinks, launched as a child process of ynh like every vendor. Confirmed via
 // `copilot help`: --plugin-dir <directory> ("Load a plugin from a local
 // directory") is a direct analog of Claude's flag.
 //
@@ -153,7 +152,7 @@ func (c *Copilot) ResolveLastSession(cwd string, notBefore time.Time) (string, e
 
 // readCopilotWorkspace extracts the id and cwd from a Copilot workspace.yaml.
 // Hand-parsed rather than pulled through a YAML library: the file is flat, only
-// two top-level scalars are needed, and ynh takes no external dependencies.
+// two top-level scalars are needed, so a YAML dependency is not worth adding.
 func readCopilotWorkspace(path string) (id string, cwd string, err error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -222,12 +221,25 @@ func copilotResumeArgs(sessionID, prompt string, interactive bool, extraArgs []s
 	return initial, append(args, extraArgs...)
 }
 
-// IsolateMCP is partial on Copilot: --disable-builtin-mcps drops the built-in
-// servers, but the servers in the user's own ~/.copilot/mcp-config.json still
-// load, and ynh has no flag that stops them.
+// IsolateMCP keeps the user's configured servers out of a launch. Copilot lists
+// every server it would load (`copilot mcp list --json`: the user's, the
+// workspace's, installed plugins' and the built-ins) and takes
+// --disable-mcp-server <name> per launch, so each listed server the harness
+// does not compose is turned off, and --disable-builtin-mcps drops the
+// built-ins as a group. The harness's own servers arrive by
+// --additional-mcp-config and are not in that listing. Verified live on
+// Copilot CLI 1.0.106 (docs/vendor-parity.md, L6). If the listing cannot be
+// read, only the built-ins are dropped and ynh says so.
 func (c *Copilot) IsolateMCP(configPath string) ([]string, string) {
-	return []string{"--disable-builtin-mcps"},
-		"MCP isolation is partial on Copilot: built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load"
+	bin, err := exec.LookPath(c.CLIName())
+	if err != nil {
+		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
+	}
+	listed, err := copilotMCPListNames(bin, nil, "")
+	if err != nil {
+		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
+	}
+	return copilotIsolationArgs(listed, harnessMCPNames(filepath.Join(configPath, ".copilot", ".mcp.json"), false)), ""
 }
 
 // ApplyRuntimeInstructions appends per-invocation text to the assembled
@@ -476,6 +488,9 @@ func (c *Copilot) ExportArtifactDirs() map[string]string {
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (c *Copilot) SupportsNativeSubagents() bool { return true }
+
 // ExportCarriesInstructions: a Copilot plugin cannot carry instructions. A
 // plugin's AGENTS.md is installed with it but never reaches the session
 // (OBSERVED live on Copilot CLI 1.0.105, 2026-11-05: `copilot -p --plugin-dir`
@@ -563,9 +578,11 @@ type copilotMCPServer struct {
 
 // GenerateMCPConfig writes the MCP file for the `ynh run` layout, into
 // .copilot/ (the --plugin-dir target). buildCopilotArgs re-reads this same
-// file and passes it with --additional-mcp-config, because a plugin loaded via
-// --plugin-dir does not get its bundled MCP config read, and the expanded
-// values must not be written into the project. An export uses
+// file and passes it with --additional-mcp-config, because the expanded
+// values must not be written into the project. This file is the root .mcp.json
+// placement, which --plugin-dir did not read on Copilot CLI v1.0.75 and has not
+// been re-run on 1.0.105; the .github/mcp.json placement IS read under
+// --plugin-dir on 1.0.105 (docs/vendor-parity.md L37). An export uses
 // GeneratePluginMCPConfig.
 func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	data, err := copilotMCPDocument(servers)
@@ -743,8 +760,8 @@ func copilotMCPArgs(configPath string) []string {
 // the foreground session mid-launch ("Successfully updated binary" followed
 // immediately by "Unregistering foreground session" in ~/.copilot/logs) —
 // silently dropping whatever initialPrompt/extraArgs this invocation carried,
-// including -i. ynh's launch is a one-shot process replacement
-// (syscall.Exec), so there is no opportunity to retry after such a restart;
+// including -i. ynh's launch is a one-shot start of the CLI
+// with the arguments it was given, so there is no opportunity to retry after such a restart;
 // the update must simply not happen mid-launch.
 func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []string) ([]string, error) {
 	args := []string{copilotCLI, "--no-auto-update"}
@@ -869,7 +886,7 @@ func launchCopilot(configPath string, initialPrompt string, extraArgs []string) 
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(copilotBin, args, os.Environ())
+	return execVendor(copilotBin, args, os.Environ())
 }
 
 // Workspace folders: Copilot CLI's /add-dir command is documented as "Allow

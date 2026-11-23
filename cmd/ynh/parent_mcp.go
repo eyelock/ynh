@@ -1,0 +1,180 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/plugin"
+)
+
+// delegationRecordEnv names the delegation record of a delegate session: the
+// delegate launcher sets it, and its presence is what makes a `ynh run` the
+// run of a delegate.
+const delegationRecordEnv = "YNH_DELEGATION_RECORD"
+
+// parentAskMaxWaitEnv sets, in seconds, the longest one ask_parent call may be
+// held (parentmcp.DefaultMaxWait when unset).
+const parentAskMaxWaitEnv = "YNH_PARENT_ASK_MAX_WAIT"
+
+// cmdParentMCP is `ynh parent-mcp`, the MCP server a vendor starts over stdio
+// for a delegate session, with the one tool ask_parent. It is not for people
+// to run:
+//
+//	ynh parent-mcp --record <path> [--max-wait <seconds>]
+func cmdParentMCP(args []string) error {
+	var record string
+	maxWait := time.Duration(0)
+	for i := 0; i < len(args); i++ {
+		if i+1 >= len(args) {
+			return fmt.Errorf("%s requires a value\nusage: ynh parent-mcp --record <path> [--max-wait <seconds>]", args[i])
+		}
+		v := args[i+1]
+		switch args[i] {
+		case "--record":
+			record = v
+		case "--max-wait":
+			n, err := strconv.Atoi(v)
+			if err != nil || n <= 0 {
+				return fmt.Errorf("--max-wait: want a whole number of seconds above 0")
+			}
+			maxWait = time.Duration(n) * time.Second
+		default:
+			return fmt.Errorf("unknown flag %s\nusage: ynh parent-mcp --record <path> [--max-wait <seconds>]", args[i])
+		}
+		i++
+	}
+	if record == "" {
+		return fmt.Errorf("usage: ynh parent-mcp --record <path> [--max-wait <seconds>]")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return parentmcp.New(parentmcp.Config{Record: record, MaxWait: maxWait, Version: config.Version}).Serve(ctx, os.Stdin, os.Stdout)
+}
+
+// parentMCPEntry is the server `ynh run` adds to a delegate session's MCP
+// config, so the delegate can ask its parent a question. It is nil when this
+// run is not a delegate's (no YNH_DELEGATION_RECORD).
+func parentMCPEntry() (*plugin.MCPServer, error) {
+	record := os.Getenv(delegationRecordEnv)
+	if record == "" {
+		return nil, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("finding the ynh binary: %w", err)
+	}
+	args := []string{"parent-mcp", "--record", record}
+	if v := os.Getenv(parentAskMaxWaitEnv); v != "" {
+		if n, err := strconv.Atoi(v); err != nil || n <= 0 {
+			return nil, fmt.Errorf("%s=%q: want a whole number of seconds above 0", parentAskMaxWaitEnv, v)
+		}
+		args = append(args, "--max-wait", v)
+	}
+	// A vendor may give its MCP servers a trimmed environment (Codex does), so
+	// the home, where the record's folder is, goes in the entry.
+	return &plugin.MCPServer{Type: plugin.MCPTypeStdio, Command: exe, Args: args, Env: map[string]string{"YNH_HOME": config.HomeDir()}}, nil
+}
+
+// parentAllowRule is the Claude Code flag that allows ask_parent, for the
+// delegate harness called name. Claude Code names a plugin's MCP server
+// tools mcp__plugin_<harness>_<server>__<tool>; the rule names the server, so
+// it allows the one tool. The value is joined to the flag, so the variadic
+// flag takes nothing after it.
+func parentAllowRule(name string) string {
+	return "--allowedTools=mcp__plugin_" + name + "_" + parentmcp.ServerName
+}
+
+// claudeOwnMCPAllowRule is the Claude Code flag that allows every tool of the
+// MCP servers the harness called name declares itself (its own and those of
+// its included harnesses, which are under the same trust), and nothing else:
+// not the user's servers, not ynh-delegates. It is "" when there are none.
+// Claude Code names the tools mcp__plugin_<harness>_<server>__<tool>, with
+// any character of a name outside letters, digits, _ and - written as _; a rule
+// naming the server allows all of its tools.
+func claudeOwnMCPAllowRule(name string, servers []string) string {
+	var rules []string
+	for _, s := range servers {
+		rules = append(rules, "mcp__plugin_"+claudeMCPName(name)+"_"+claudeMCPName(s))
+	}
+	if len(rules) == 0 {
+		return ""
+	}
+	return "--allowedTools=" + strings.Join(rules, ",")
+}
+
+func claudeMCPName(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			return r
+		}
+		return '_'
+	}, s)
+}
+
+// mcpServerNames lists, sorted, the servers in runDir's .mcp.json: for a baked
+// image, the servers its harness declared when it was built.
+func mcpServerNames(runDir string) []string {
+	data, err := os.ReadFile(filepath.Join(runDir, ".mcp.json"))
+	if err != nil {
+		return nil
+	}
+	var doc struct {
+		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	}
+	if json.Unmarshal(data, &doc) != nil {
+		return nil
+	}
+	names := make([]string, 0, len(doc.MCPServers))
+	for n := range doc.MCPServers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// claudeDelegateMCPAllowRule is the rule `ynh run` adds to a Claude Code
+// session, or "" when it adds none. It adds one only for a delegate's session
+// (delegate: a delegation record is set), where the trust gate holds: ynh
+// refuses an a2a delegate that declares commands until `ynh trust accept`. A
+// harness run directly is never given it, since `ynh trust` only reports and
+// nothing refuses to run an unreviewed harness. It adds none on an
+// interactive run, or when the harness sets mcp_manual_approval.
+func claudeDelegateMCPAllowRule(vendorName string, delegate, oneShot, manualApproval bool, name string, servers []string) string {
+	if vendorName != "claude" || !delegate || !oneShot || manualApproval {
+		return ""
+	}
+	return claudeOwnMCPAllowRule(name, servers)
+}
+
+// delegationNamesHarness reports whether this process runs inside a delegate's
+// session and the delegation record names the harness being run (its run
+// directory name, runDirName). The delegate launcher sets the record's path in
+// the environment, which the vendor CLI and every command its model runs
+// inherit, so a bare "record is set" would also hold for a `ynh run <other
+// harness>` the delegate starts. The trust gate (ynh refuses an a2a delegate
+// that declares commands until `ynh trust accept`) was passed for the record's
+// own delegate only.
+func delegationNamesHarness(runDirName string) bool {
+	path := os.Getenv(delegationRecordEnv)
+	if path == "" || runDirName == "" {
+		return false
+	}
+	rec, err := delegation.Load(path)
+	if err != nil || rec.Delegate == "" {
+		return false
+	}
+	return namespace.IDToFSName(rec.Delegate) == runDirName
+}

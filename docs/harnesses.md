@@ -126,7 +126,7 @@ the two must be set.
 |-------|----------|-------------|
 | `git` | one of git/local | Git URL (see formats below) |
 | `local` | one of git/local | Local filesystem path. Absolute, or relative to the harness root. |
-| `ref` | no | Git tag, branch, or commit (Git sources only) |
+| `ref` | no | Git tag, branch, or a full 40-character commit SHA (Git sources only). A short SHA is refused at install; only a full SHA pins. See [What Pinning Means Here](factory-pattern.md#what-pinning-means-here) |
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include, in `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`), or a top-level skill folder by its name alone (see [Skills at the top level of a repository](#skills-at-the-top-level-of-a-repository)). If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
@@ -237,10 +237,16 @@ checks the same absolute path, and the clone is cached under it, so two
 harnesses that each name `./inc` get their own repos. The same applies to
 `delegates_to`.
 
-An include or delegate whose source is the harness's own repo (`"git": "."`,
-or `./sub` of it) is refreshed from that repo on every run, so one committed
-after the first run is found without `ynh update`. Uncommitted work is not
-picked up. Every other source, including another repo on disk, is served from
+An include or delegate whose source is the harness's own repo (`"git": "."`)
+is refreshed from that repo on every run, so one committed after the first run
+is found without `ynh update`. Uncommitted work is not picked up: a `path` that
+is on disk but not committed fails the run, and `ynh doctor` says so. This works
+only when the harness sits at the root of its repository. A run clones the
+source, and git clones only a repository's root, so a harness in a subfolder of
+its repo, with `"git": "."` (or `"./sub"`), fails every run; the same holds for
+includes and delegates alike. Give such a source a Git URL, or keep the harness
+at the repo's root. `ynh doctor` reports the delegate case; it does not check
+includes yet. Every other source, including another repo on disk, is served from
 the cache until `ynh update`; if a delegate or include `path` is missing from
 it, the error says the cached copy may be out of date and suggests `ynh update`.
 
@@ -302,14 +308,35 @@ Other harnesses this one can invoke as subagents.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `git` | yes | Git URL (same formats as includes) |
-| `ref` | no | Git tag/branch |
+| `ref` | no | Git tag, branch, or a full 40-character commit SHA. A short SHA is refused at install. See [What Pinning Means Here](factory-pattern.md#what-pinning-means-here) |
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
+| `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
 
-When running as `david`, you can ask it to delegate a task to `team-dev`. The delegation happens through the vendor's native subagent system.
+#### Transport
 
-At runtime, ynh generates a vendor-native agent file for each delegate containing:
+`transport` says how the parent reaches a delegate, and takes `a2a` or `native`. Set it on a `delegates_to` entry, and as a harness-level default of the same name at the top of the manifest:
+
+```json
+{
+  "transport": "a2a",
+  "delegates_to": [
+    {"git": "github.com/eyelock/team-dev-harness", "transport": "native"},
+    {"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
+  ]
+}
+```
+
+An entry's own value wins over the harness default; `a2a` applies when neither says. One harness may mix the two, as above: the first delegate is `native`, the second `a2a` from the default.
+
+A delegate set to `native` on a vendor with no native subagents (today only Cursor, whose subagents are unverified: limit L35 on [vendor parity](vendor-parity.md)) is refused by `ynh install`, `ynh run` and `ynd validate`, with this fix: set `transport: a2a` on this delegate, or run on a vendor with subagents. There is no silent fallback. `ynh install` and `ynd validate` check the harness's `default_vendor` (`ynh install` then the global default); `ynh run` checks the vendor it launches.
+
+`ynh run`, `ynd preview` and `ynh image` assemble a subagent only for a `native` delegate (and for the `native` delegates it reaches, each by its own entry's transport); `ynd export` does the same, and leaves an `a2a` delegate out with one warning, since it needs ynh at runtime. An `a2a` delegate's own `delegates_to` are its session's business, and are not walked from the parent. See [Delegate sessions](delegate-sessions.md) for how an `a2a` delegate runs.
+
+When running as `david`, you can ask it to delegate a task to `team-dev`. How the delegation happens depends on the entry's [transport](#transport). By default (`a2a`) the delegate is its own ynh session, started when the parent asks; see [Delegate sessions](delegate-sessions.md). Only with `transport: native` does it happen through the vendor's own subagent system, and ynh assembles a subagent for the delegate. An `a2a` delegate gets no agent file and no `--agents` entry.
+
+For a `native` delegate, ynh generates a vendor-native agent file at runtime containing:
 
 - **Description** from the delegate's `.agents/harness/plugin.json` (helps the AI route to the right delegate)
 - **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
@@ -324,14 +351,14 @@ A delegate is resolved as a harness: its own `includes` are followed, against it
 Delegates form a graph too, and ynh flattens it: starting from the root's `delegates_to`, it follows each delegate's own `delegates_to` and makes every harness it reaches **one top-level agent, exactly once**. An agent does not nest inside another. They all sit beside one another in the session's agents, so any of them can be asked for.
 
 - **A diamond is one agent.** When B and C both name D as a delegate, D is one agent, and both B's and C's prompts list it.
-- **A cycle ends.** When A names B and B names A, each is one agent and each lists the other.
+- **A cycle ends.** When A names B and B names A, each is one agent and each lists the other. This is how the agent list is built for `native` delegates and `ynh doctor`, and **it is not a runtime guard**: an `a2a` delegate is its own session, so a loop in `delegates_to` is stopped at runtime, by [limits on delegation](delegate-sessions.md#limits-on-delegation) (a return to a harness already in the chain, a depth of 4 and 16 live delegate sessions by default).
 - **The root is never its own delegate.** A `delegates_to` entry that reaches the root harness, however far down, is skipped, and a `ynh run`, `ynd preview` or image build prints a `note:` line naming the harness that declared it. The root is the session itself, not an agent. It is recognised the way any delegate is (by source, below) or by its name. A root with uncommitted changes, or at a commit its clone does not hold, differs in source, so there it is recognised by its name.
 - **What makes two routes one agent.** A delegate is known by its source: the repository it comes from, the commit and its path in that repository, not the folder it was fetched into. The same repository, commit and path is one agent however it is reached, including a seat that names a sibling by a relative `git` source such as `"../.."` from inside a clone of the root's repository (that is cloned again, into another folder, from the first clone). The same repository and path at two commits is two harnesses, so it is the name clash below. A harness in no git repository is known by its folder.
 - **A harness naming itself is skipped** the same way.
 - **Each agent's prompt lists the delegates it declares itself**, under "Delegates", and tells it to hand back to the main session: it reports to the session that invoked it. It does not list the root or itself.
 - **One harness, one selection.** A [profile or focus](#profile-or-focus-of-a-delegate) is per entry. The same harness reached with two different selections (or one with a selection and one without) is an error naming both routes, as one agent cannot be both. Two different harnesses with the same `name` are an error too.
 
-A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every delegate reached this way. `ynh install` and `ynh update` fetch the whole graph, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
+A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every `native` delegate reached this way. The parent's trust digest covers what runs inside the parent's process. A `native` delegate is a subagent of the parent's session, so its MCP servers and its selected focus prompt are in the digest. An `a2a` delegate is its own ynh session under its own trust grant, so its servers and focus prompt are reviewed there, not in the parent's digest. For every delegate, of either transport, the digest covers the entry as written (git URL, local folder, path, ref), its selection (profile, focus) and its settled transport, so repointing an entry, or flipping it between `a2a` and `native`, changes the digest, since it changes what the parent may start or run. A parent accepted before v0.18.0 that has delegates reads `changed` once. `ynh install` and `ynh update` fetch the whole graph, and each delegate's own includes, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
 
 #### Profile or focus of a delegate
 
@@ -389,11 +416,11 @@ The servers of an included harness are carried into the including harness; see [
 
 ### mcp_isolation (optional)
 
-Boolean, default `false`. When `true`, `ynh run` launches the harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+Boolean, default `false`. When `true`, `ynh run` and `ynh agent run` launch the harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
 ### mcp_manual_approval (optional)
 
-Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or an `ynh agent run --backend codex` worker) has no one to approve an MCP tool call, and Codex refuses it. By default ynh approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
+Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or an `ynh agent run --backend codex` worker) has no one to approve an MCP tool call, and Codex refuses it. By default ynh approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. The same setting stops the allow rule ynh gives a delegate's one-shot Claude Code session for those servers, which it adds only to a delegate's session and never to a harness run directly ([ynh #858](https://github.com/eyelock/ynh/issues/858); see [Claude Code Format](mcp.md#claude-code-format)). A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
 
 ### workspace (optional)
 

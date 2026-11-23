@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -138,6 +139,10 @@ func TestDelegate_Update(t *testing.T) {
 		"--ref", repo.SHA,
 	)
 
+	// A delegate is a native subagent, and so gets an agent file, only when
+	// its transport is native; the default is a2a, its own ynh session.
+	setManifestTransport(t, sourceDir, "native")
+
 	const updated = "E2E fixture: fork-source as of the second commit."
 	next := repo.commit(t, "fork-source/.agents/harness/plugin.json",
 		harnessManifest("fork-source", updated, ""))
@@ -155,7 +160,7 @@ func TestDelegate_Update(t *testing.T) {
 	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/fork-source")
 
 	agent := assembledDelegateAgent(t, s, "fork-source")
-	if !strings.Contains(agent, "description: "+updated) {
+	if !strings.Contains(agent, "description: "+strconv.Quote(updated)) {
 		t.Errorf("delegate agent was not assembled from the updated commit %s:\n%s", next, agent)
 	}
 }
@@ -311,6 +316,29 @@ func readManifest(t *testing.T, harnessDir string) pluginManifest {
 		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
 	}
 	return mf
+}
+
+// setManifestTransport sets the harness's default delegate transport in its
+// source plugin.json, keeping every other field.
+func setManifestTransport(t *testing.T, harnessDir, transport string) {
+	t.Helper()
+	path := manifestFile(harnessDir, "plugin.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading plugin.json: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
+	}
+	raw["transport"], _ = json.Marshal(transport)
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(out, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // assembledDelegateAgent assembles local/minimal for Claude and returns the
