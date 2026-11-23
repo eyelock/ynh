@@ -368,9 +368,9 @@ Pinning is per include, and it is only as strong as the `ref` you write:
 | a full 40-character commit SHA | **pinned** | stays on that commit |
 | a branch name, or no `ref` | **floating** | follows the branch (or the remote's default branch) to its new tip |
 | a tag | **floating** | re-resolves the tag, which a publisher can move |
-| a short SHA, such as `abc1234` | **refused** | `ynh install` fails with a message naming the fix: use the full 40-character SHA (`git rev-parse <short>`) |
+| a short SHA, such as `abc1234` | **floating** (not pinned) | `ynh info` says so; `ynh install` refuses it with a message naming the fix: use the full 40-character SHA (`git rev-parse <short>`) |
 
-`ynh info` shows each include as `pinned` or `floating`, and `ynh info --format json`
+`ynh info` shows each include as `pinned` or `floating` (a short SHA shows `floating: short SHA is not pinned, use the full 40 characters`), and `ynh info --format json`
 carries the same as `is_pinned` on each include. There is no lock file: the
 installed SHA that `installed.json` records is a record of what was fetched, not
 a constraint on the next update. If a factory needs a reproducible harness, pin
