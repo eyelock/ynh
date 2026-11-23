@@ -1280,3 +1280,55 @@ func warnIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
 		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyDigestNote, "\n", "\n  "))
 	}
 }
+
+// warnRunIfTrustChanged prints one warning on stderr before `ynh run` launches
+// a harness whose trust state is "changed": its hooks, MCP servers or sensor
+// commands differ from what the operator accepted. It never refuses; whether a
+// changed harness should be blocked is a separate decision. Any other state
+// (accepted, unreviewed, no-commands, unavailable) prints nothing, so a
+// harness that is in order launches with no new output.
+//
+// The record keeps only a digest, so it cannot say which command moved: the
+// warning names the kinds of command the harness declares that the digest
+// covers. When the harness requests workspace folders and no allow-list is
+// set, trust is what grants them, so it also names the folders left ungranted.
+func warnRunIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
+	if stderr == nil || p == nil || id == "" {
+		return
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return
+	}
+	st := trustStatusFor(id, p, store, nil)
+	if st.State != trustChanged {
+		return
+	}
+	var kinds []string
+	if len(st.Hooks) > 0 {
+		kinds = append(kinds, "hooks")
+	}
+	if len(st.MCPServers) > 0 {
+		kinds = append(kinds, "MCP servers")
+	}
+	if len(st.Executables) > 0 {
+		kinds = append(kinds, "sensors")
+	}
+	what := "its commands"
+	if len(kinds) > 0 {
+		what = strings.Join(kinds, ", ")
+	}
+	_, _ = fmt.Fprintf(stderr,
+		"warning: %s has changed since you accepted it on %s (%s). The changed commands are active.\n"+
+			"  Review with 'ynh trust show %s', then 'ynh trust accept %s'.\n",
+		id, st.AcceptedAt, what, id, id)
+	if st.LegacyDigest {
+		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyDigestNote, "\n", "\n  "))
+	}
+	if len(p.Workspace) > 0 {
+		home, _ := os.UserHomeDir()
+		if !workspaceAllowlist(home).Set {
+			_, _ = fmt.Fprintf(stderr, "  workspace folders not granted until you accept: %s\n", strings.Join(p.Workspace, ", "))
+		}
+	}
+}
