@@ -187,8 +187,8 @@ func TestStartReturnsAtOnceWithHandle(t *testing.T) {
 }
 
 // delegate_to_<name> holds the call for its wait, as delegate_status does: a
-// call that comes back at once with a wait set is the client's doing (it
-// moves a long call to the background), not this server's (ynh #902).
+// call that comes back at once with a wait set came from a client that
+// offers MCP Tasks (TestTasksPath), which is given a task at once (ynh #902).
 func TestStartHoldsTheCallForItsWait(t *testing.T) {
 	s := newSession(t, setup(t), "", nil)
 	started := time.Now()
