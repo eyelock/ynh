@@ -145,14 +145,9 @@ func validateFile(path string) error {
 	case base == plugin.PluginFile:
 		issues = lintPluginJSON(path)
 	case base == "marketplace.json":
-		// Registry index (inside a manifest directory) validates against the
-		// schema. Build config (anywhere else) validates via LoadConfig
-		// programmatic checks.
-		if plugin.InManifestDir(path) {
-			issues = lintRegistryMarketplace(path)
-		} else {
-			issues = lintMarketplaceConfig(path)
-		}
+		// Three shapes share this name (marketplace_shapes.go): each is
+		// validated as itself, and a file that is none of them is refused.
+		issues = lintMarketplaceFile(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
