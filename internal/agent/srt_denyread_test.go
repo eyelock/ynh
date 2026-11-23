@@ -54,7 +54,7 @@ func TestSrtReadPolicy_ConfigExtendsAndOverrides(t *testing.T) {
 	if n := countOf(got, filepath.Join(home, ".kube")); n != 1 {
 		t.Errorf("~/.kube listed %d times, want 1", n)
 	}
-	if got := SrtReadPolicy(nil, env); got == nil || len(got) == 0 {
+	if got := SrtReadPolicy(nil, env); len(got) == 0 {
 		t.Errorf("nil config must still give the defaults, got %q", got)
 	}
 }
