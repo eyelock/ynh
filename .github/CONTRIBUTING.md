@@ -13,7 +13,7 @@ See [Harness Engineering §"Design Stance"](../docs/harness-engineering.md#desig
 
 ## Architecture
 
-ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor, Copilot, OpenCode) handles all interaction. ynh's job is to resolve, assemble, and launch.
+ynh is a packaging and distribution tool. It does not own the agent: the AI vendor CLI (Claude, Codex, Cursor, Copilot, OpenCode) handles all interaction. ynh's job is to resolve, assemble, and launch, and it stays alive as the vendor CLI's parent for the whole session (supervising it, keeping telemetry and the run directory's lock).
 
 ### Core Flow
 
@@ -46,11 +46,11 @@ internal/
   telemetry/              OpenTelemetry for `ynh agent run`: destination, run span and events (docs/telemetry.md)
   vendor/                 Vendor adapter interface and implementations
     adapter.go            Interface definition + registry
-    claude.go             Claude Code adapter (exec with --plugin-dir)
+    claude.go             Claude Code adapter (child process with --plugin-dir)
     codex.go              OpenAI Codex adapter (child process + symlinks)
-    copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
+    copilot.go            GitHub Copilot CLI adapter (child process with --plugin-dir)
     cursor.go             Cursor adapter (child process + symlinks)
-    opencode.go           OpenCode 2.x adapter (exec of `opencode --standalone` with OPENCODE_CONFIG_DIR)
+    opencode.go           OpenCode 2.x adapter (child process of `opencode --standalone` with OPENCODE_CONFIG_DIR)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
     toml.go               Minimal TOML emitter for Codex MCP config
@@ -68,7 +68,7 @@ docs/                     User guide (GitHub Pages)
 
 **Harnesses compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
 
-**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, and OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
+**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, and OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, so ynh needs no symlinks for them. Codex and Cursor lack native plugin loading, so ynh installs symlinks. Every vendor CLI runs as a supervised child process of ynh, with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
 **Single manifest.** Harnesses use a single `plugin.json` inside `.agents/harness/` as their manifest: all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The directory was `.ynh-plugin/` before it moved under `.agents/`; ynh no longer reads it (#404), and nothing creates it. `internal/plugin` knows only `PluginDir`; `LegacyPluginDir` exists for the migrator. `migration.ManifestDirMigrator` is the one place the old layout is understood, and it is in `FormatChain`, which every load runs first: in a tree ynh owns (an install under `~/.ynh/harnesses/` or a git clone under `~/.ynh/cache/`) it renames `.ynh-plugin/` to `.agents/harness/`, so a remote source that has not moved keeps working; in any other tree it returns an error naming `ynd migrate`, and a tree with both layouts (or a symlink) is an error in every tree. Only `ynd migrate` (`MigrateChain`) renames a tree the user owns, never as a side effect of reading (#406). `ynd validate` and `ynd preview` ask `migration.LegacyManifestDir` for the same answer. `resolver.EnsureRepo` resets a clone and runs `git clean` after every fetch because ynh may have renamed its manifest directory, which git would otherwise refuse to check out over. `ynh update` overlays upstream onto an install, so `migration.AdoptRefreshedManifest` keeps a still-legacy upstream's fresh `plugin.json` from being shadowed by the moved one. Every reader and writer goes through the path helpers (`PluginPath`, `InstalledPath`, `MarketplacePath`, `HarnessRoot`) rather than joining the directory name by hand. Do not confuse `LegacyPluginDir` with `IsClaudePluginDir`, which detects the unsupported `.claude-plugin/plugin.json` layout.
 
