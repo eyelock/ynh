@@ -132,14 +132,14 @@ var subcommandHelp = map[string]subHelp{
 	"delegate add": {
 		Usage:   "ynh delegate add <harness> <url> [flags]",
 		Summary: "Add a Git delegate: another harness this one hands off to.",
-		Args:    []argHelp{harnessArg, urlArg},
+		Args:    []argHelp{harnessArg, {"<url>", "Git URL of the delegate (remote only; a local path is refused)"}},
 		Flags: []flagHelp{
 			refFlag,
 			{"--path <subdir>", "Subdirectory of the repository holding the delegate harness"},
 			{"--profile <name>", "Run the delegate under one of its own profiles"},
 			{"--focus <name>", "Run the delegate under one of its own focuses (its prompt becomes standing instructions)"},
 		},
-		Notes:   "--profile and --focus are mutually exclusive: a focus already carries its profile. The name is checked against the delegate when it can be read, as ynd validate checks it.",
+		Notes:   "Delegates are remote: a local path is refused. --profile and --focus are mutually exclusive: a focus already carries its profile. The name is checked against the delegate when it can be read, as ynd validate checks it.",
 		Parsers: []string{"cmdDelegateAdd"},
 	},
 	"delegate remove": {

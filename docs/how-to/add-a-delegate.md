@@ -32,21 +32,20 @@ You know two ynh terms:
    ynh install /absolute/path/to/delegate
    ```
 
-2. Add the entry to the parent. `<parent>` is the parent's installed id, or the path to its folder, and `.`
-   inside it works (**run**: a bare name such as `parent` is refused as not a valid harness id):
-
-   ```
-   ynh delegate add <parent> /absolute/path/to/delegate
-   ```
-
-   ynh writes the folder into the entry as an absolute `git:` source (**run**):
+2. Write the entry into the parent's `plugin.json` by hand. `ynh delegate add` refuses a local path
+   (`delegates are remote, give a Git URL`), because a delegate needs a stable, shareable identity: a path
+   baked into a committed `plugin.json` breaks on another machine, and a local path has no SHA or ref to
+   track (see [CONTRIBUTING, Delegates: remote-only](https://github.com/eyelock/ynh/blob/develop/.github/CONTRIBUTING.md#delegates-remote-only)).
+   A `git:` entry holding an absolute folder still resolves locally, so add it yourself (**intended, not
+   run**):
 
    ```json
    {"delegates_to": [{"git": "/absolute/path/to/delegate"}]}
    ```
 
    The path must be absolute. A relative path is resolved against the parent's own folder, and it breaks
-   once the parent is installed elsewhere (see [CONTRIBUTING, Delegates: remote-only](https://github.com/eyelock/ynh/blob/develop/.github/CONTRIBUTING.md#delegates-remote-only)).
+   once the parent is installed elsewhere. Because the entry holds a machine-specific path, keep it out of
+   anything you publish: switch to route 2 before you do.
 
 3. Read what the delegate would run, then accept it. A delegate that runs nothing shows `no-commands`
    (**run**) and needs no accepting; when `ynh trust` shows `unreviewed`, read and accept (**intended, not
@@ -112,7 +111,7 @@ You know two ynh terms:
 ## Checked against
 
 `ynh` built from `develop` `4c05c4b5`, 2026-11-15, in a scratch `YNH_HOME` and `HOME`: `ynh delegate add`
-with a local folder and a placeholder remote, `ynh install` of a local folder, `ynh trust`, `ynh doctor` and
+with a placeholder remote (a local path was accepted then and is now refused), `ynh install` of a local folder, `ynh trust`, `ynh doctor` and
 `ynh info`. Everything marked **intended, not run** is from
 [reference.md](../reference.md), [harnesses.md](../harnesses.md) and
 [delegates-reference.md](../delegates-reference.md).
