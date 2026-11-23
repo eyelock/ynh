@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.11
 
 require (
-	github.com/a2aproject/a2a-go/v2 v2.8.0
+	github.com/a2aproject/a2a-go/v2 v2.9.0
 	github.com/eyelock/ynr/spoolexporter v0.4.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	go.opentelemetry.io/otel v1.47.0
