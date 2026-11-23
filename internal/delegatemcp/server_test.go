@@ -186,6 +186,19 @@ func TestStartReturnsAtOnceWithHandle(t *testing.T) {
 	s.call("delegate_cancel", map[string]any{"task_id": got.TaskID})
 }
 
+// delegate_to_<name> holds the call for its wait, as delegate_status does: a
+// call that comes back at once with a wait set came from a client that
+// offers MCP Tasks (TestTasksPath), which is given a task at once (ynh #902).
+func TestStartHoldsTheCallForItsWait(t *testing.T) {
+	s := newSession(t, setup(t), "", nil)
+	started := time.Now()
+	r := s.call("delegate_to_reviewer", map[string]any{"task": "sleep 30", "wait": 2})
+	if d := time.Since(started); d < 1500*time.Millisecond {
+		t.Errorf("delegate_to_reviewer with wait 2 returned after %v, want it held for about 2s", d)
+	}
+	s.call("delegate_cancel", map[string]any{"task_id": r.StructuredContent.TaskID})
+}
+
 func TestBoundedWaitRunsOut(t *testing.T) {
 	s := newSession(t, setup(t), "", nil)
 	r := s.call("delegate_to_reviewer", map[string]any{"task": "sleep 30", "wait": 1})
