@@ -492,6 +492,17 @@ ynd marketplace build --clean
 ynd validate marketplace.json
 ```
 
+Three files are called `marketplace.json`, and `ynd validate <file>` tells them
+apart before it lints one:
+
+| Shape | Where it lives | Validated as |
+|---|---|---|
+| Registry index (what `ynh` reads) | `.agents/harness/` | `marketplace.schema.json` |
+| Vendor index (what `ynd marketplace build` writes) | `.claude-plugin/`, `.cursor-plugin/`, `.github/plugin/` or `.agents/plugins/` | a name and plugins, each with a name and a source; under `.github/plugin/`, a `git-subdir`, `npm`, `archive` or `command` source is refused |
+| Build config (what `ynd marketplace build` reads) | anywhere else, and it lists `harnesses` | the build config's own checks |
+
+A file that is none of the three is refused, not linted as one of them.
+
 ### Distribution
 
 Once built, push the output directory to a Git repository. Users can then:
