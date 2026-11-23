@@ -408,6 +408,16 @@ acceptance does not cover them. Review them with `ynh trust show`, then
 unreviewed, and `ynh check` warns only on `changed`, never on `unreviewed`: a
 warning that appears on almost every run is one nobody reads.
 
+**`ynh run` is not gated by trust.** `ynh run` (and a harness's launcher, such
+as `david`) does not refuse a harness that is `unreviewed` or `changed`. Its
+hooks and MCP servers are assembled and started by the vendor CLI as soon as you
+run it, with your user's permissions and your environment, whether or not you
+have run `ynh trust accept`. Read a harness with `ynh trust show <harness-id>`
+before you first run it, not after. Acceptance changes only two things today: a
+requested [workspace folder](harnesses.md#workspace-optional) can be granted by trust when no
+allow-list is set, and Codex is told to trust the harness's hooks for the run
+([Codex hook trust](hooks.md#codex-hook-trust)).
+
 The record lives in `$YNH_HOME/trust.json`, deliberately outside the harness
 directory. A harness carrying its own trust record would be authorising itself.
 

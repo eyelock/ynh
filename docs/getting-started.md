@@ -35,6 +35,8 @@ ynh-guide
 
 This gives you an AI session with skills that teach you ynh — including `/ynh-create-harness` to build your own harness interactively.
 
+> **Running a harness runs its commands.** `ynh run`, and a harness's launcher such as `ynh-guide`, does not check the harness against `ynh trust` and does not refuse one you have not reviewed. Its hooks and MCP servers start with your user's permissions as soon as you run it. Before you first run a harness you did not write, read what it will run with `ynh trust show <harness-id>`: `ynh trust` lists each installed harness by its id, and this one is `github.com/eyelock/ynh/ynh-guide`. See [What a command sensor can reach](sensors.md#what-a-command-sensor-can-reach).
+
 ## Create a Harness
 
 A harness is a directory with a `.agents/harness/plugin.json` and your artifacts:
@@ -237,7 +239,7 @@ By default, harnesses can pull skills and agents from any Git repo via `includes
 | Empty array `[]` | All remote sources blocked |
 | Patterns present | Only matching sources allowed |
 
-The harness you install from a local directory (e.g. `ynh install ./david`) is trusted and bypasses this check. Its includes and delegates do not.
+The harness you install from a local directory (e.g. `ynh install ./david`) is not checked against the list (this is not `ynh trust`, which gates nothing on a run). Its includes and delegates are checked.
 
 **Pattern syntax:**
 
