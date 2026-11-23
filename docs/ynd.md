@@ -118,6 +118,18 @@ and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
 `.agents/harness/marketplace.json` against `marketplace.schema.json`), plus the
 cross-field rules assembly enforces that a schema cannot express.
 
+Given a `marketplace.json` file directly (`ynd validate path/to/marketplace.json`),
+`validate` first tells the three files of that name apart:
+
+| Shape | Where it lives | Validated as |
+|---|---|---|
+| Registry index | `.agents/harness/` | `marketplace.schema.json` |
+| Vendor index | `.claude-plugin/`, `.cursor-plugin/`, `.github/plugin/` or `.agents/plugins/` | a `name` and `plugins`, each with a `name` and a `source`; under `.github/plugin/`, a `git-subdir`, `npm`, `archive` or `command` source is refused |
+| Build config | anywhere else, and it lists `harnesses` | the build config's own checks |
+
+A file that is none of the three is refused, not linted as one of them. See
+[Marketplace & Distribution](marketplace.md) for the shapes in full.
+
 One of those is worth naming. An MCP `env`/`headers` value referencing
 `${VAR}` that the harness does not list in `env_passthrough` **cannot
 assemble** — `ynd preview`, `ynh run` and `ynh agent run` all reject it. It
