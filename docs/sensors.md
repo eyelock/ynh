@@ -405,8 +405,13 @@ acceptance does not cover them. Review them with `ynh trust show`, then
 | `unavailable` | What the harness executes could not be read in full, because an include is not in the cache. Nothing can be accepted; run `ynh update`. |
 
 **This reports; it does not block.** Nothing refuses to run because a harness is
-unreviewed, and `ynh check` warns only on `changed`, never on `unreviewed`: a
-warning that appears on almost every run is one nobody reads.
+unreviewed or changed. `ynh check` and `ynh run` warn only on `changed`, never on
+`unreviewed`: a warning that appears on almost every run is one nobody reads.
+`ynh run` prints its warning on stderr before launch, and still launches. It
+names the kinds of command the harness declares (hooks, MCP servers, sensors),
+not which one moved, because the record keeps only a digest. When the harness
+requests workspace folders and no allow-list is set, it also lists the folders
+left ungranted until you accept.
 
 The record lives in `$YNH_HOME/trust.json`, deliberately outside the harness
 directory. A harness carrying its own trust record would be authorising itself.

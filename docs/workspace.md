@@ -21,7 +21,7 @@ Relative entries resolve against the harness's own directory, like other relativ
 A requested folder is granted in one of two ways, decided in this order:
 
 1. **The operator allow-list.** If one is set, a folder that resolves inside one of its roots is granted, with no trust step. A folder outside the roots is refused with a warning that names the allow-list. **Trust cannot override the allow-list.**
-2. **Trust.** With no allow-list, a folder is granted only while the harness is accepted with `ynh trust accept <harness>`, and the accepted digest covers its current `workspace` entries. Anything else is skipped with a warning that says to run `ynh trust accept`. A harness run from a path rather than installed has no trust record, so it needs an allow-list.
+2. **Trust.** With no allow-list, a folder is granted only while the harness is accepted with `ynh trust accept <harness>`, and the accepted digest covers its current `workspace` entries. Anything else is skipped with a warning that says to run `ynh trust accept`. A harness run from a path rather than installed has no trust record, so it needs an allow-list. When a harness's trust state is `changed`, `ynh run` warns before launch and names its ungranted folders.
 
 ### The allow-list
 

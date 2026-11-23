@@ -504,8 +504,11 @@ States:
   changed      The commands differ from what you accepted.
 
 This reports; it does not block. Nothing refuses to run because a harness is
-unreviewed. The record earns its place by pinning the exact command set you
-read, so that "changed" can be reported when an update alters it.
+unreviewed or changed. The record earns its place by pinning the exact command
+set you read, so that "changed" can be reported when an update alters it:
+'ynh check' reports it, and 'ynh run' warns on stderr before launch, naming the
+kinds of command the harness declares (not which one moved) and any workspace
+folders left ungranted.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising
