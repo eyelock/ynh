@@ -118,7 +118,9 @@ func TestSrtCommand_WritesDenyRead(t *testing.T) {
 
 // With srt installed, a worker under the generated settings cannot read a
 // fixture credential and can still read the worktree. Skipped where srt is
-// not installed (macOS and Linux CI runners that have it run it).
+// not installed. The CI job "Test (real srt, Linux)" installs srt and requires
+// this test to pass, so it runs on Linux; on macOS it runs where a developer
+// has srt installed.
 func TestSrt_DeniesCredentialRead(t *testing.T) {
 	srtBin, err := exec.LookPath("srt")
 	if err != nil {
