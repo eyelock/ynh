@@ -649,7 +649,7 @@ Verified on 2026-11-07 with Copilot CLI 1.0.106 against a real `ynr relay`: `ynh
 --telemetry-relay -v copilot` with a one-shot prompt wrote `invoke_agent` and `chat` spans and
 the `gen_ai.*` metrics into the spool (model, token counts, cost), with no prompt text and no
 path, and no relay was left running. The relay is not yet started for Claude Code under
-`ynh run` ([vendor parity, L13](vendor-parity.md#l13-ynh-run-does-not-wire-vendor-telemetry)).
+`ynh run` ([vendor parity, L13](vendor-parity.md#l13-ynh-run-does-not-wire-every-vendor-s-own-telemetry)).
 
 Codex under `ynh run` is given the same `-c` overrides as under `ynh agent run` ([What Codex
 receives](#what-codex-receives)), added to its command line, since Codex reads nothing from

@@ -204,10 +204,11 @@ func TestLaunchRecord_EveryVendorIsRecorded(t *testing.T) {
 }
 
 // With no destination, ynh run writes nothing and the vendor's environment is
-// exactly what it was.
+// exactly what it was, an operator's ynh.label.* in OTEL_RESOURCE_ATTRIBUTES
+// included.
 func TestLaunchRecord_NoDestinationLeavesTheEnvironmentAlone(t *testing.T) {
 	launchTelemetryEnv(t, false)
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=dev")
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.site=lab,deployment.environment.name=dev")
 	before := os.Environ()
 	var during []string
 	if err := launchWith(t, "claude", func() error {
