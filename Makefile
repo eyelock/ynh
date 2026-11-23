@@ -53,7 +53,13 @@ test: ## Run tests with coverage (use FILE=./path/to/pkg to target specific pack
 ifdef FILE
 	$(GO) test $(FILE) -cover -race -v
 else
-	$(GO) test ./... -cover -race
+	@# Run with YNH_HOME exported to a scratch directory, then fail if a test wrote into it: a test
+	@# that sets only HOME must not reach a developer's real ynh home (ynh #865). A directory that
+	@# is not empty is left in place to inspect.
+	@scratch=$$(mktemp -d) && \
+	  YNH_HOME=$$scratch $(GO) test ./... -cover -race; status=$$?; \
+	  if [ -n "$$(ls -A $$scratch)" ]; then echo "tests wrote into an exported YNH_HOME, left at $$scratch:"; ls -A $$scratch; status=1; else find $$scratch -maxdepth 0 -empty -delete; fi; \
+	  exit $$status
 endif
 
 test-coverage: ## Run tests with coverage profile (use FILE=./path/to/pkg to target specific package)
