@@ -120,6 +120,9 @@ func cmdRun(args []string) error {
 	// against it.
 	loaded := p
 
+	// A changed trust state is warned about once, before anything launches.
+	warnRunIfTrustChanged(os.Stderr, harnessID, loaded)
+
 	// A resume continues a task, so only a prompt typed on the command line
 	// travels with it; a focus prompt starts one. Captured before the focus
 	// overwrites ra.Prompt. (--focus and a trailing prompt are exclusive.)
