@@ -892,12 +892,15 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 	// Update existing clone — capture HEAD before and after
 	before := gitHead(repoDir)
 
-	var fetchErr error
-	if ref != "" {
-		fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
-	} else {
-		fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
+	// With no ref, fetch the remote's HEAD by name. A source checkout on a
+	// detached HEAD has no default branch for a clone to track (no
+	// origin/HEAD symref, or one that names an unrelated branch), so
+	// "origin/HEAD" cannot be reset to; the remote's own HEAD always can.
+	fetchRef := ref
+	if fetchRef == "" {
+		fetchRef = "HEAD"
 	}
+	fetchErr := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef)
 
 	if fetchErr != nil {
 		// Stale lock file from an interrupted fetch — remove it and retry once
@@ -905,11 +908,7 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		if strings.Contains(fetchErr.Error(), ".lock") {
 			_ = os.Remove(filepath.Join(repoDir, ".git", "shallow.lock"))
 			_ = os.Remove(filepath.Join(repoDir, ".git", "index.lock"))
-			if ref != "" {
-				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
-			} else {
-				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
-			}
+			fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef)
 		}
 	}
 
@@ -940,7 +939,7 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			return RepoResult{}, fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
 		}
 	} else {
-		if err := gitCmd("-C", repoDir, "reset", "--hard", "origin/HEAD"); err != nil {
+		if err := gitCmd("-C", repoDir, "reset", "--hard", "FETCH_HEAD"); err != nil {
 			return RepoResult{}, fmt.Errorf("git reset in %s: %w", repoDir, err)
 		}
 	}
