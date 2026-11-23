@@ -33,7 +33,7 @@ Structured output is always **opt-in** via a single flag:
 
 - `--format text` is the default and explicit equivalent of omitting the flag.
 - Other values are rejected with a non-zero exit and an error on `stderr`.
-- No `-o json`, no bare `--json`, no per-command variants. One convention, one flag name.
+- No `-o json` and no per-command variants. One convention, one flag name. Three commands still also accept `--json`, the older spelling of `--format json`: `ynh ps`, `ynh migrate` and `ynh quarantine list`. Every other command rejects it as an unknown flag.
 - The flag is **space-separated only**: `--format json`, not `--format=json`. This matches every existing flag in `ynh` and `ynd`. The `=` form is rejected as an unknown flag.
 
 Commands that do not yet have structured output do not accept `--format`; the flag is added per-command as structured mode is implemented.
@@ -42,7 +42,7 @@ Commands that do not yet have structured output do not accept `--format`; the fl
 
 When a command invoked with `--format json` fails:
 
-- Exit code is non-zero (conventional: `1` for user/runtime errors, `2` for usage errors).
+- Exit code is non-zero: `1` for user, runtime and usage errors alike (a bad flag exits 1, not 2). Two commands choose their own codes: `ynh check` exits 1 when a blocking sensor fails and 2 when it could not run the check at all (its usage errors included), and `ynh agent run` exits with the code its run result reports.
 - `stdout` is empty, or contains a partial result only if the command explicitly documents streaming semantics (none do today).
 - `stderr` contains a single JSON object:
 

@@ -83,7 +83,7 @@ Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 
 - **[Getting Started](https://eyelock.github.io/ynh/#/getting-started)** — Create and run your first harness
 - **[Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering)** — Why harness management matters
-- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 18 progressive tutorials from first harness to sensors
+- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 24 progressive tutorials from first harness to sensors
 - **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
 - **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
 - **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget

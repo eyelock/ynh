@@ -27,7 +27,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `A2ACLI_CREDENTIAL_HELPER` | _(none)_ | `ynh run` (set by ynh, with one or more A2A delegates: `127.0.0.1=<helper>`) | — |
 | `XDG_STATE_HOME` | `~/.local/state` | `ynh agent run` | telemetry goes to `$XDG_STATE_HOME/ynr/spool/local` when it exists |
 | `TRACEPARENT`, `TRACESTATE` | _(none)_ | `ynh agent run` | the trace a run joins |
-| `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
+| `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; exported over OTLP/HTTP, see [Exporting to an OTLP endpoint](telemetry.md#exporting-to-an-otlp-endpoint) |
 | `OTEL_RESOURCE_ATTRIBUTES` | _(none)_ | `ynh agent run` | extra telemetry resource attributes |
 | `YNH_WORKSPACE_ROOTS` | _(none)_ | `ynh run`, `ynh agent run` | colon-separated allow-list of folders a harness may be granted; replaces `workspace_roots` in `config.json` for the run ([Workspace Folders](workspace.md)) |
 | `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh run`, `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
@@ -56,10 +56,11 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 
 | Command | Key Flags |
 |---------|-----------|
-| `ynh install <source>` | `--path`, `-v` |
+| `ynh init` | Show the resolved ynh home and setup instructions; creates `~/.ynh` and its subdirectories if missing |
+| `ynh install <source>` | `--path <subdir>`, `--ref <ref>` (there is no `-v`) |
 | `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--label <key:value>` (repeatable; `key:` removes a [run label](telemetry.md#run-labels)), `--telemetry-relay` (see [telemetry](telemetry.md#vendor-telemetry-through-the-relay)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
-| `ynh update [harness]` | |
+| `ynh update <harness>` | (the harness name is required) |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>`, `--label <key:value>` (repeatable; only harnesses whose manifest labels include every one), `--source <repo>` (installed from that repository), `--includes <repo>` (includes or delegates to it), `--columns <a,b,...>` (text only). Repeat `--source` or `--includes` for either; different filters must all match. On a terminal, a wide row is cut to fit (INCLUDES and DELEGATES TO, then SOURCE, then LABELS; a cut list ends `… (+N)`); piped output is never cut. A repo is `owner/repo`, `github.com/owner/repo` or an https URL (all the same repository); a subpath narrows it; a local path matches by prefix; never a substring or glob. Empty INCLUDES and DELEGATES TO cells show `-`. JSON output is filtered by all three filters but never cut, and its shape is unchanged |
 | `ynh info <harness>` | `--format <text\|json>`, `--check-updates` (with `--format json`), `--profile` (repeatable, as on `ynh run`), `--focus` (`name` or `namespace:name`; not with `--profile`). The hooks and MCP servers shown are what a run carries, included harnesses' with their source (an included harness's hooks only where its include says `"hooks": true`; the rest are listed as not active). With a profile or focus selected, they are what a run with that selection carries. Profiles and focuses are still listed as declared. A bare run's [`launch_focus`](focus.md#launch-focus) is not applied: pass it as `--focus` to see what a bare run wakes with |
@@ -116,6 +117,16 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh status` | |
 | `ynh ps` | `--all`, `--format <text\|json>` or `--json`. Lists live and orphaned sessions; see [Session presence](presence.md) |
 | `ynh prune` | |
+| `ynh migrate` | `--dry-run`, `--skip-broken`, `--format <text\|json>` (`--json` is the older spelling). Moves the ynh home to the current schema; most commands do this on first use |
+| `ynh quarantine <list\|restore\|drop>` | `list`, `restore <name>`, `drop <name>`; `--format <text\|json>` on `list`. Manages harnesses quarantined by a failed migration |
+| `ynh baseline <harness>` | `--explain`, `--cwd <dir>`, `--format <text\|json>`. Reports what a harness's ratchet currently forgives |
+| `ynh version` | `--format <text\|json>` (`ynh --version` is the same command) |
+| `ynh help [command]` | Also `ynh <command> --help`; `ynh help` lists the commands |
+| `ynh mcp-exec` | Internal, not typed: `--env-file <path> -- <command> [args...]`. Starts an MCP server with its secrets filled in from an env file |
+| `ynh mcp-headers` | Internal, not typed: `--env-file <path> -- "Name: value" ...`. Prints a remote MCP server's headers as JSON, with `${VAR}` filled in from an env file |
+| `ynh delegate-run` | Internal, not typed: `start`, `status`, `cancel`, `supervise`. Runs a `delegates_to` delegate as its own detached session |
+| `ynh delegate-mcp` | Internal, not typed: `--parent <id>`, `--folder <dir>`, `--max-wait <seconds>`. The MCP server for a parent's A2A delegates |
+| `ynh parent-mcp` | Internal, not typed: `--record <path>`, `--max-wait <seconds>`. The MCP server a delegate session uses to ask its parent |
 | `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, delegates that no longer resolve (every depth: a delegate's own `delegates_to` are walked too, each finding naming the chain that reached it, such as `desk > worker > reviewer`; a harness reached by two routes is walked once, so a cycle ends and each broken `delegates_to` entry is reported once, by the harness that declares it (two entries naming one missing harness are two findings); the root, reached again through its own source or by its name, is skipped as a run skips it; it checks what a run of the harness would need, read from disk and the cache without fetching), quarantine, Claude hook wiring, and the a2a CLI route for a harness with A2A delegates (the `a2a` binary and its version, the vendored skill, Codex's sandbox and the vendor's allow rule for `a2a`; warnings only, see [delegate sessions](delegate-sessions.md)), and the vendor's allow rule for the `ynh-delegates` MCP tools for the same harnesses (read from the vendor's settings files, so a rule given on a command line is not seen; Cursor is noted, not checked; warnings only, see [Allowing the tools](delegates-reference.md#allow-rules-for-the-tools)). Read-only; every finding carries the command that fixes it |
 
 ## ynd Commands
@@ -133,6 +144,10 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd diff <source>` | `-v`, `--harness`, `--profile`, `--focus` |
 | `ynd export <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus`, `--path`, `--merged`, `--clean` |
 | `ynd marketplace build` | `-v`, `-o`, `--clean` |
+| `ynd migrate <path>` | `-n`/`--dry-run`, `-y`/`--yes`. Moves a harness to the current manifest layout in place |
+| `ynd validate-output` | `--schema <name\|path>`, JSON on stdin. Validates a response against a CLI schema |
+| `ynd version` | `--format <text\|json>` |
+| `ynd help` | Also `ynd <command> --help` |
 
 See [ynd Developer Tools](ynd.md) for detailed command documentation.
 
