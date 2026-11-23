@@ -432,7 +432,10 @@ States:
   changed      The commands differ from what you accepted.
 
 This reports; it does not block. Nothing refuses to run because a harness is
-unreviewed. The record earns its place by pinning the exact command set you
+unreviewed. A direct "ynh run", and a harness's launcher, is not gated by trust,
+and that covers "changed" too. Its hooks and MCP servers start with your user's
+permissions, whether or not you have run "ynh trust accept", so read a harness
+with "ynh trust show" before you first run it. The record earns its place by pinning the exact command set you
 read, so that "changed" can be reported when an update alters it.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
