@@ -106,15 +106,20 @@ type srtPolicy struct {
 
 // defaultSrtDenyRead returns the credential paths a worker is denied reading
 // under --sandbox srt unless the operator allows them: SSH and GPG keys,
-// cloud and GitHub CLI credentials, the OS keychains and ynh's own trust
+// cloud and GitHub CLI credentials, the Linux keyring and ynh's own trust
 // record. home is the worker's home; ynhHome holds trust.json.
+//
+// ~/Library/Keychains is deliberately absent: Claude Code reads its claude.ai
+// login from the login keychain, and srt can deny only a whole path, not one
+// keychain item, so denying the folder makes that login "not found" (exit 44)
+// and the worker cannot run a turn. An operator who signs in with an API key
+// or token can add it back with srt_deny_read.
 func defaultSrtDenyRead(home, ynhHome string) []string {
 	return []string{
 		filepath.Join(home, ".ssh"),
 		filepath.Join(home, ".aws"),
 		filepath.Join(home, ".gnupg"),
 		filepath.Join(home, ".config", "gh"),
-		filepath.Join(home, "Library", "Keychains"),
 		filepath.Join(home, ".local", "share", "keyrings"),
 		filepath.Join(ynhHome, "trust.json"),
 	}

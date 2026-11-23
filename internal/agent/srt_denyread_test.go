@@ -23,12 +23,27 @@ func TestSrtReadPolicy_DefaultsNameCredentialPaths(t *testing.T) {
 		filepath.Join(home, ".ssh"),
 		filepath.Join(home, ".aws"),
 		filepath.Join(home, ".config", "gh"),
-		filepath.Join(home, "Library", "Keychains"),
 		filepath.Join(ynhHome, "trust.json"),
 	} {
 		if !slices.Contains(got, want) {
 			t.Errorf("default deny list lacks %s: %q", want, got)
 		}
+	}
+}
+
+// The login keychain holds Claude Code's claude.ai login, and srt cannot deny
+// one item in it: denying the folder made `security find-generic-password -s
+// "Claude Code-credentials"` exit 44 under srt. So it is not denied by default.
+func TestSrtReadPolicy_KeychainsNotDeniedByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", t.TempDir())
+	kc := filepath.Join(home, "Library", "Keychains")
+	if slices.Contains(SrtReadPolicy(&config.Config{}, []string{"HOME=" + home}), kc) {
+		t.Errorf("default deny list must not hold %s", kc)
+	}
+	cfg := &config.Config{SrtDenyRead: []string{"~/Library/Keychains"}}
+	if !slices.Contains(SrtReadPolicy(cfg, []string{"HOME=" + home}), kc) {
+		t.Errorf("srt_deny_read should add %s back", kc)
 	}
 }
 
