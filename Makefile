@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pin check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pin check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck evals
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -148,6 +148,9 @@ check-eval-stand-ins: ## Compare the evals' stand-in harnesses with the real one
 	@# .github/workflows/eval-stand-ins.yml. On a failure, update the stand-in in
 	@# scripts/eval-remotes.sh, never the real harness.
 	@./scripts/eval-stand-ins.sh
+
+evals: ## Run the tutorial evals headless (needs claude on PATH and a login; costs model calls; not part of `make check`)
+	@./scripts/evals.sh
 
 stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)
 	@./scripts/stamp-harness-version.sh $(VERSION)

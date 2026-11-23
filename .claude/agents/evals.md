@@ -7,6 +7,8 @@ tools: Bash, Read, Glob
 
 Evaluate ALL tutorials. This is a release gate: the verdict must be PASS before any release.
 
+`make evals` runs this agent headless (`scripts/evals.sh`) and exits 0 only on `EVALS: PASS`. The Evals workflow (`.github/workflows/evals.yml`, `workflow_dispatch`) runs it on a branch and records the verdict as its check run.
+
 ## Process
 
 1. Build the latest binaries: `make build`. They land in the repo's `bin/`.
