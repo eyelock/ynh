@@ -26,7 +26,8 @@ ynh chooses when the run starts, in this order:
 1. **`OTEL_EXPORTER_OTLP_*`.** An OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`
    or a per-signal one), or a setting ynh cannot honour (below), means the
    operator chose, and that choice wins. ynh posts its spans and logs to the
-   endpoint over OTLP/HTTP with JSON bodies, in the same batches, with the same
+   endpoint over OTLP/HTTP, with JSON or protobuf bodies as
+   `OTEL_EXPORTER_OTLP_PROTOCOL` asks, in the same batches, with the same
    resource and the same 2-second bound on every flush as the spool, and writes
    nothing to the spool. Settings that name no endpoint, such as a lone
    `OTEL_EXPORTER_OTLP_TIMEOUT`, ask for nothing, and the order goes on.
