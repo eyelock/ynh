@@ -188,8 +188,8 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 		// The operator chose; ynh does not look for a spool behind them.
 		opts, _, unsupported := spool.HTTPOptionsFromEnv(os.Getenv)
 		if unsupported != "" {
-			// A protocol the exporter cannot speak (grpc; http/protobuf is
-			// Claude Code's setup and ynh's own relay export) is not a reason
+			// A protocol the exporter cannot speak (grpc, say; http/json and
+			// http/protobuf are both spoken) is not a reason
 			// to lose the run: it goes to the spool, as it would had the
 			// operator set nothing. The other unsupported settings
 			// (certificates, compression) still write nothing.
