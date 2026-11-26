@@ -445,3 +445,92 @@ func TestWrappedScriptsAreCovered(t *testing.T) {
 		}
 	}
 }
+
+// An option that takes a value consumes it; env's own options are skipped.
+func TestOptionValuesAreNotTheScript(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	for cmd, want := range map[string]string{
+		`bash -o pipefail ./x.sh`:              "./x.sh",
+		`sh -o errexit -O extglob ./x.sh`:      "./x.sh",
+		`zsh +o nounset ./x.sh`:                "./x.sh",
+		`bash -e -o pipefail -- ./x.sh`:        "./x.sh",
+		`python3 -W ignore ./x.sh`:             "./x.sh",
+		`python -X dev -u ./x.sh`:              "./x.sh",
+		`node -r ./pre.js ./x.sh`:              "./x.sh",
+		`node --require ./pre.js ./x.sh`:       "./x.sh",
+		`env -i ./x.sh`:                        "./x.sh",
+		`env -u HOME ./x.sh`:                   "./x.sh",
+		`env -i -u HOME FOO=1 ./x.sh`:          "./x.sh",
+		`env -C /tmp bash -o pipefail ./x.sh`:  "./x.sh",
+		`/usr/bin/env -i /bin/bash -eu ./x.sh`: "./x.sh",
+		`env --unset=HOME ./x.sh`:              "./x.sh",
+		`env -S "bash -e ./x.sh"`:              "",
+		`node -e "1"`:                          "",
+		`python3 -c "1"`:                       "",
+		`bash -o pipefail`:                     "",
+	} {
+		if got, _ := scriptToken(strings.Fields(cmd)); got != want {
+			t.Errorf("scriptToken(%q) = %q, want %q", cmd, got, want)
+		}
+	}
+
+	root := t.TempDir()
+	for _, cmd := range []string{`bash -o pipefail ./tools/x.sh`, `python3 -W ignore ./tools/x.sh`, `env -i ./tools/x.sh`, `env -u HOME ./tools/x.sh`} {
+		writeScript(t, root, "tools/x.sh", "#!/bin/sh\n")
+		h := &harness.Harness{Name: "h", Dir: root, Hooks: map[string][]plugin.HookEntry{"on_stop": {{Command: cmd}}}}
+		st := statusOf(t, h)
+		if sc := st.Hooks[0].Script; sc == nil || sc.Path != "./tools/x.sh" || !sc.Covered {
+			t.Errorf("%q: %+v", cmd, sc)
+			continue
+		}
+		if out := showText(t, st); !strings.Contains(out, "script:  ./tools/x.sh (covered with its folder tools") {
+			t.Errorf("%q: show does not name ./tools/x.sh:\n%s", cmd, out)
+		}
+	}
+}
+
+// A script whose folder is a link to a folder inside the harness is read as
+// that folder: its files are hashed, so covered means hashed. A link out is not
+// covered, and an empty folder hashes nothing and is not a digest.
+func TestFolderLinkInsideTheHarness(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := t.TempDir()
+	writeScript(t, root, "real/z.sh", "#!/bin/sh\n")
+	writeScript(t, root, "real/lib/helper.sh", "#!/bin/sh\n")
+	if err := os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "hooks")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	h := &harness.Harness{Name: "h", Dir: root, Hooks: map[string][]plugin.HookEntry{"on_stop": {{Command: "./hooks/z.sh"}}}}
+	st := statusOf(t, h)
+	sc := st.Hooks[0].Script
+	if sc == nil || !sc.Covered || sc.Files != 2 || !strings.HasPrefix(sc.Digest, "sha256:") {
+		t.Fatalf("a folder link inside the harness: %+v", sc)
+	}
+	if out := showText(t, st); !strings.Contains(out, "2 file(s)") {
+		t.Errorf("show does not report the files hashed:\n%s", out)
+	}
+	changedByScriptBody(t, h, root, "real/lib/helper.sh")
+
+	// A link in a folder that loops back is not walked into.
+	if err := os.Symlink(filepath.Join(root, "real"), filepath.Join(root, "real", "lib", "back")); err == nil {
+		done := make(chan trustStatus, 1)
+		go func() { done <- statusOf(t, h) }()
+		select {
+		case got := <-done:
+			if sc := got.Hooks[0].Script; sc == nil || !sc.Covered || sc.Files != 2 {
+				t.Errorf("loop link: %+v", sc)
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatal("a looping folder link hung the report")
+		}
+	}
+
+	// Nothing hashed is never covered by a digest.
+	if err := os.MkdirAll(filepath.Join(root, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	he := &harness.Harness{Name: "h", Dir: root, Hooks: map[string][]plugin.HookEntry{"on_stop": {{Command: "./empty/z.sh"}}}}
+	if sc := statusOf(t, he).Hooks[0].Script; sc == nil || sc.Files != 0 || sc.Digest != "missing" {
+		t.Errorf("empty folder: %+v", sc)
+	}
+}

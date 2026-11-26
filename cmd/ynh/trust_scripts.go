@@ -66,31 +66,96 @@ func unquoteToken(s string) string {
 // holds a slash.
 func scriptToken(fields []string) (tok string, fromInterp bool) {
 	fields = skipEnvWords(fields)
-	// A leading env, with its NAME=value words, is a wrapper, not the command.
+	// A leading env, with its options and NAME=value words, is a wrapper, not
+	// the command.
 	for len(fields) > 0 && filepath.Base(unquoteToken(fields[0])) == "env" {
-		fields = skipEnvWords(fields[1:])
+		var ok bool
+		if fields, ok = skipEnvOptions(fields[1:]); !ok {
+			return "", false
+		}
+		fields = skipEnvWords(fields)
 	}
 	if len(fields) == 0 {
 		return "", false
 	}
 	first := unquoteToken(fields[0])
-	if !scriptInterpreters[filepath.Base(first)] {
+	base := filepath.Base(first)
+	if !scriptInterpreters[base] {
 		return first, false
 	}
-	// An interpreter, with or without a path (/bin/bash), then its flags
-	// (bash -e): the script is the first word after them. -c and -m take code
-	// or a module, not a file, so nothing is named.
-	for _, f := range fields[1:] {
-		f = unquoteToken(f)
-		if f == "-c" || f == "-m" {
+	// An interpreter, with or without a path (/bin/bash), then its options
+	// (bash -e, bash -o pipefail): the script is the first word after them.
+	// An option that takes code or a module (-c, -m) names no file; one that
+	// takes a value consumes it, so the value is never taken for the script.
+	rest := fields[1:]
+	for i := 0; i < len(rest); i++ {
+		f := unquoteToken(rest[i])
+		switch {
+		case f == "--":
+			if i+1 < len(rest) {
+				return unquoteToken(rest[i+1]), true
+			}
 			return "", true
+		case interpCodeFlags[base][f]:
+			return "", true
+		case interpValueFlags[base][f]:
+			i++
+		case strings.HasPrefix(f, "-") || strings.HasPrefix(f, "+"):
+		default:
+			return f, true
 		}
-		if strings.HasPrefix(f, "-") {
-			continue
-		}
-		return f, true
 	}
 	return "", true
+}
+
+// interpValueFlags are the options of each interpreter that take the next word
+// as their value, and interpCodeFlags those that take code or a module to run
+// instead of a file. Keyed by the interpreter's own name.
+var (
+	shValueFlags     = map[string]bool{"-o": true, "+o": true, "-O": true, "+O": true}
+	pyValueFlags     = map[string]bool{"-W": true, "-X": true}
+	nodeValueFlags   = map[string]bool{"-r": true, "--require": true, "--import": true, "--loader": true, "--experimental-loader": true}
+	interpValueFlags = map[string]map[string]bool{
+		"sh": shValueFlags, "bash": shValueFlags, "zsh": shValueFlags,
+		"python": pyValueFlags, "python3": pyValueFlags, "node": nodeValueFlags,
+	}
+	shCodeFlags     = map[string]bool{"-c": true}
+	pyCodeFlags     = map[string]bool{"-c": true, "-m": true}
+	nodeCodeFlags   = map[string]bool{"-e": true, "--eval": true, "-p": true, "--print": true}
+	interpCodeFlags = map[string]map[string]bool{
+		"sh": shCodeFlags, "bash": shCodeFlags, "zsh": shCodeFlags,
+		"python": pyCodeFlags, "python3": pyCodeFlags, "node": nodeCodeFlags,
+	}
+)
+
+// skipEnvOptions drops env's own options (-i, -0, -v, -u NAME, -C DIR and
+// their long forms), leaving the NAME=value words and the command. ok is
+// false when an option hands env a command line to split (-S), which names no
+// file we can read.
+func skipEnvOptions(fields []string) ([]string, bool) {
+	for len(fields) > 0 {
+		f := unquoteToken(fields[0])
+		switch {
+		case f == "--":
+			return fields[1:], true
+		case f == "-S" || f == "--split-string" || strings.HasPrefix(f, "-S") || strings.HasPrefix(f, "--split-string="):
+			return nil, false
+		case f == "-u" || f == "-C" || f == "--unset" || f == "--chdir":
+			if len(fields) < 2 {
+				return nil, true
+			}
+			fields = fields[2:]
+		case strings.HasPrefix(f, "-"):
+			fields = fields[1:]
+		case isEnvWord(f):
+			// A NAME=value word may come between options; skipEnvWords
+			// handles it, but a following option must still be seen.
+			fields = fields[1:]
+		default:
+			return fields, true
+		}
+	}
+	return fields, true
 }
 
 // isEnvWord reports whether w is a NAME=value assignment.
@@ -216,6 +281,10 @@ func hashScript(dir, rel, shown string) *scriptRef {
 	h := sha256.New()
 	field(h, "script")
 	field(h, scriptName)
+	// The walk goes through the resolved folder: a folder that is itself a
+	// link to a folder inside the harness is read as that folder, and one that
+	// leaves the harness was refused above.
+	root = realFolder
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -286,6 +355,12 @@ func hashScript(dir, rel, shown string) *scriptRef {
 		// Never a digest of a part, which could equal the whole.
 		ref.Digest = "unreadable"
 		ref.Files = 0
+		return ref
+	}
+	if ref.Files == 0 {
+		// Nothing was hashed, so nothing is covered: never a digest of an
+		// empty set.
+		ref.Digest = "missing"
 		return ref
 	}
 	ref.Digest = "sha256:" + hex.EncodeToString(h.Sum(nil))
