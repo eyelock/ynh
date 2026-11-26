@@ -329,6 +329,7 @@ anything:
 | `dev.ynh.harness.version` | Author-declared version from the manifest |
 | `dev.ynh.harness.sha` | **Commit the harness came from.** Empty when there is none to name |
 | `dev.ynh.harness.default-vendor` | Vendor baked as the default |
+| `dev.ynh.harness.trust-digest` | Trust digest of the harness the image carries. Present when the image bakes the accepted trust record, and absent otherwise (a harness with nothing to accept has none) |
 | `dev.ynh.entrypoint` | `run` or `agent` — see below |
 | `dev.ynh.assembled-by` | Version of ynh that built the image |
 
