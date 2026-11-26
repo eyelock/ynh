@@ -5,9 +5,21 @@
   "description": "Output of `ynh trust --format json`. Bare array, one entry per installed harness, same shape as `ynh trust show`. Envelope retrofit deferred, matching the other Phase 3 commands. Hooks and MCP servers are covered as in trust show.",
   "x-capabilities": "0.10",
   "$defs": {
+    "ScriptRef": {
+      "type": "object",
+      "description": "The script this command runs, when it names one: its first word, or its first argument when that is bash, sh, python3 or node. covered is true for a file of the declaring harness named by ./x or $YNH_HARNESS_DIR/x, whose contents are part of digest (scheme 3); anything else (bash scripts/wake.sh) is project code, reported with covered false and left out of the digest. What a covered script sources or runs in turn is not covered either.",
+      "properties": {
+        "path": { "type": "string", "description": "The script as the command names it." },
+        "covered": { "type": "boolean" },
+        "digest": { "type": "string", "description": "sha256: and the hex of the script's contents, or missing or unreadable. Present only when covered." }
+      },
+      "required": ["path", "covered"],
+      "additionalProperties": false
+    },
     "Executable": {
       "type": "object",
       "properties": {
+        "script": { "$ref": "#/$defs/ScriptRef" },
         "sensor": {
           "type": "string",
           "description": "The declaring sensor's name."
@@ -47,6 +59,7 @@
     "Hook": {
       "type": "object",
       "properties": {
+        "script": { "$ref": "#/$defs/ScriptRef" },
         "profile": {
           "type": "string",
           "description": "Present when only this profile adds or changes the hook. Absent for a hook of the harness itself. A profile's hook identical to the harness's own is not repeated."
@@ -94,6 +107,7 @@
     "MCPServer": {
       "type": "object",
       "properties": {
+        "script": { "$ref": "#/$defs/ScriptRef" },
         "profile": {
           "type": "string",
           "description": "Present when only this profile adds or changes the server. Absent for a server of the harness itself."

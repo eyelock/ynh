@@ -312,7 +312,7 @@ func TestDigestStableWithoutWorkspace(t *testing.T) {
 	p := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("make lint", "make --version")})
 	h := sha256.New()
 	f := func(s string) { _, _ = fmt.Fprintf(h, "%d:%s\x00", len(s), s) }
-	f("ynh-trust/2")
+	f("ynh-trust/3")
 	for _, s := range []string{"sensor", "", "", "lint", "command", "make lint"} {
 		f(s)
 	}

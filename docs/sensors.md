@@ -390,6 +390,17 @@ are not in the output: a `${VAR}` reference is shown as written, and any other
 value is printed as `(literal, not shown)`, because a literal may be a
 credential. Read the manifest in the harness directory to see one.
 
+**Scripts.** From digest scheme 3 the digest also covers the contents of the script a hook, MCP server
+or sensor command runs, so changing a script's body alone makes the harness read `changed`. A script is
+covered when the command's first word, or the first argument of `bash`, `sh`, `python3` or `node`, is
+`./x` or `$YNH_HARNESS_DIR/x` and the file is in the harness (or the include) that declares the command.
+A sensor reads `$YNH_HARNESS_DIR/x` only: its `./x` runs in the measured tree. `ynh trust show` prints a
+`script:` line under each such command, with the start of the file's digest. A path into the project
+(`bash scripts/wake.sh`) is project code, like `make check`: `trust show` says it is not covered and the
+digest leaves it out, and so is anything a covered script sources or runs in turn. A script that is not
+there is recorded as missing, so creating it later changes the digest too. A harness accepted under
+scheme 2 shows `changed` once, with a note saying why, until you review and accept it again.
+
 **Upgrading.** Until hooks and MCP servers were covered (#577), the digest covered sensor commands only. A harness
 you accepted then shows `changed` once, even if nothing in it has, and says so.
 That is intended: you were never shown its hooks and MCP servers, so the old
