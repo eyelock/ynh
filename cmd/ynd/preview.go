@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdPreview(args []string) error {
@@ -357,9 +358,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	if err != nil {
 		return "", previewReport{}, err
 	}
-	for _, w := range hookWarnings {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, hookWarnings...)
 
 	// Generate MCP config: the harness's own servers and those of its included
 	// harnesses, composed. Same client-side resolution as ynh run, against the

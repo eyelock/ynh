@@ -442,7 +442,7 @@ func TestCmdMarketplaceBuild_PrintsEntryWarnings(t *testing.T) {
 		{
 			name:    "missing hook script",
 			command: "./scripts/missing.sh",
-			want:    "warning: reviewer: hook script ./scripts/missing.sh is not a file in the harness, so the plugin does not carry it\n",
+			want:    "warning: reviewer: hook script ./scripts/missing.sh is not a file in the harness, so the plugin does not carry it\n  Fix: add the script at ./scripts/missing.sh in the harness, or change the hook's command\n",
 		},
 		{name: "clean entry", command: "echo before"},
 	}

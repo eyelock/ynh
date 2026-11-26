@@ -15,6 +15,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // AgentPluginVendor is the ExportResult.Vendor value for a portable package.
@@ -218,7 +219,10 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	// it), so normalisation always leaves something.
 	name, ok := agentplugin.NormalizeName(hj.Name)
 	if !ok {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("name %q is not a valid Agent Plugins name; exported as %q", hj.Name, name))
+		result.Warnings = append(result.Warnings, warn.Warning{
+			Message: fmt.Sprintf("name %q is not a valid Agent Plugins name; exported as %q", hj.Name, name),
+			Fix:     fmt.Sprintf("rename the harness to %q", name),
+		})
 	}
 	manifest := agentplugin.Manifest{
 		Schema:      agentplugin.PluginSchemaID,
@@ -245,7 +249,8 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	result.Warnings = append(result.Warnings, workspaceWarnings(p)...)
 	for _, ns := range p.ImportedExtensions {
 		if _, generated := extensions[ns]; !generated {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("extensions.%s from the imported package is not carried: ynh generates every extension it emits", ns))
+			// No fix: ynh generates every extension it emits, so none is carried over.
+			result.Warnings = append(result.Warnings, warn.Warning{Message: fmt.Sprintf("extensions.%s from the imported package is not carried: ynh generates every extension it emits", ns)})
 		}
 	}
 
@@ -255,7 +260,8 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 		if issue.Fatal {
 			return nil, fmt.Errorf("exported package does not conform: %s", issue)
 		}
-		result.Warnings = append(result.Warnings, "conformance: "+issue.String())
+		// No fix: a conformance issue in ynh's own output is a ynh bug, not an edit the user makes.
+		result.Warnings = append(result.Warnings, warn.Warning{Message: "conformance: " + issue.String()})
 	}
 
 	return []ExportResult{result}, nil
@@ -311,9 +317,9 @@ var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 // keeping only the entries the format can express. It validates its own
 // output through the same reader a client would use, so a server that would
 // be skipped on load is left out here, with the reason as a warning.
-func writePortableMCP(out string, servers map[string]plugin.MCPServer, adapters []vendor.Adapter) ([]string, error) {
+func writePortableMCP(out string, servers map[string]plugin.MCPServer, adapters []vendor.Adapter) ([]warn.Warning, error) {
 	cfg := agentplugin.MCPConfig{Schema: agentplugin.MCPSchemaID, Servers: map[string]agentplugin.Server{}}
-	var warnings []string
+	var warnings []warn.Warning
 	names := make([]string, 0, len(servers))
 	for n := range servers {
 		names = append(names, n)
@@ -358,13 +364,17 @@ func writePortableMCP(out string, servers map[string]plugin.MCPServer, adapters 
 			for _, k := range keys {
 				for _, m := range envRef.FindAllStringSubmatch(field.m[k], -1) {
 					if v := m[1]; v != agentplugin.EnvRoot && v != agentplugin.EnvData {
-						warnings = append(warnings, fmt.Sprintf("mcp server %q: %s.%s references ${%s}; Agent Plugins clients expand only ${PLUGIN_ROOT} and ${PLUGIN_DATA}, so the server will receive it literally", n, field.label, k, v))
+						warnings = append(warnings, warn.Warning{
+							Message: fmt.Sprintf("mcp server %q: %s.%s references ${%s}; Agent Plugins clients expand only ${PLUGIN_ROOT} and ${PLUGIN_DATA}, so the server will receive it literally", n, field.label, k, v),
+							Fix:     fmt.Sprintf("set %s.%s of mcp server %q to a literal value, or to one that uses ${PLUGIN_ROOT} or ${PLUGIN_DATA}", field.label, k, n),
+						})
 					}
 				}
 			}
 		}
 		if cursorSelected && usesPlaceholders(ps) {
-			warnings = append(warnings, fmt.Sprintf("mcp server %q uses ${PLUGIN_ROOT} or ${PLUGIN_DATA}, which Cursor does not expand in an Agent Plugin's mcp.json", n))
+			// No fix: Cursor does not expand them, so no edit makes them work there.
+			warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("mcp server %q uses ${PLUGIN_ROOT} or ${PLUGIN_DATA}, which Cursor does not expand in an Agent Plugin's mcp.json", n)})
 		}
 	}
 
@@ -377,10 +387,11 @@ func writePortableMCP(out string, servers map[string]plugin.MCPServer, adapters 
 		return nil, fmt.Errorf("portable mcp.json: %w", err)
 	}
 	for _, d := range diags {
-		warnings = append(warnings, "mcp server not portable, left out of mcp.json: "+strings.TrimPrefix(d.String(), agentplugin.MCPFile+" server "))
+		// No fix: the diagnostic's own reason says what the format cannot express.
+		warnings = append(warnings, warn.Warning{Message: "mcp server not portable, left out of mcp.json: " + strings.TrimPrefix(d.String(), agentplugin.MCPFile+" server ")})
 	}
 	if len(parsed.Servers) == 0 {
-		return append(warnings, "no MCP server could be expressed portably; mcp.json not written"), nil
+		return append(warnings, warn.Warning{Message: "no MCP server could be expressed portably; mcp.json not written"}), nil
 	}
 	if len(parsed.Servers) != len(cfg.Servers) {
 		if data, err = json.MarshalIndent(parsed, "", "  "); err != nil {
@@ -417,8 +428,8 @@ func usesPlaceholders(s agentplugin.Server) bool {
 // receive from this package: agents, rules, commands, delegates and hooks are
 // client-specific in Agent Plugins, so they travel only inside a namespace a
 // selected client has published, or in a compatibility layer.
-func uncarriedWarnings(p *harness.Harness, content []resolver.ResolvedContent, carried map[string]bool, hooksCarried bool, vendors []string) []string {
-	var warnings []string
+func uncarriedWarnings(p *harness.Harness, content []resolver.ResolvedContent, carried map[string]bool, hooksCarried bool, vendors []string) []warn.Warning {
+	var warnings []warn.Warning
 	for _, t := range []string{"agents", "rules", "commands"} {
 		if carried[t] {
 			continue
@@ -428,14 +439,15 @@ func uncarriedWarnings(p *harness.Harness, content []resolver.ResolvedContent, c
 			n += countDir(filepath.Join(rc.BasePath, t))
 		}
 		if n > 0 {
-			warnings = append(warnings, fmt.Sprintf("%d %s not portable: no selected vendor (%s) carries them in an Agent Plugin", n, t, strings.Join(vendors, ", ")))
+			// No fix on the three below: no selected vendor can carry them in an Agent Plugin.
+			warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("%d %s not portable: no selected vendor (%s) carries them in an Agent Plugin", n, t, strings.Join(vendors, ", "))})
 		}
 	}
 	if len(p.DelegatesTo) > 0 && !carried["delegates"] {
-		warnings = append(warnings, fmt.Sprintf("%d delegates not portable: no selected vendor (%s) carries them in an Agent Plugin", len(p.DelegatesTo), strings.Join(vendors, ", ")))
+		warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("%d delegates not portable: no selected vendor (%s) carries them in an Agent Plugin", len(p.DelegatesTo), strings.Join(vendors, ", "))})
 	}
 	if len(p.Hooks) > 0 && !hooksCarried {
-		warnings = append(warnings, fmt.Sprintf("hooks not portable: no selected vendor (%s) loads them from an Agent Plugin", strings.Join(vendors, ", ")))
+		warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("hooks not portable: no selected vendor (%s) loads them from an Agent Plugin", strings.Join(vendors, ", "))})
 	}
 	return warnings
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdRun(args []string) (runErr error) {
@@ -384,9 +385,7 @@ func cmdRun(args []string) (runErr error) {
 		if err != nil {
 			return err
 		}
-		for _, w := range hookWarnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, hookWarnings...)
 
 		// Generate vendor-native MCP config files. The servers are the
 		// root's and those of every included harness, composed.
@@ -782,10 +781,8 @@ func delegateQuietArgs(vendorName string, vendorArgs []string, handle string) []
 // servers, printing the vendor's warning when it cannot isolate fully.
 func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
 	if e, ok := adapter.(vendor.MCPEnvIsolator); ok {
-		env, warning := e.IsolateMCPEnv(runDir)
-		if warning != "" {
-			_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
-		}
+		env, warnings := e.IsolateMCPEnv(runDir)
+		warn.Print(stderr, warnings...)
 		// The vendor inherits ynh's environment when it is launched.
 		for _, kv := range env {
 			if k, v, ok := strings.Cut(kv, "="); ok {
@@ -794,10 +791,8 @@ func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer
 		}
 		return nil
 	}
-	args, warning := adapter.IsolateMCP(runDir)
-	if warning != "" {
-		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
-	}
+	args, warnings := adapter.IsolateMCP(runDir)
+	warn.Print(stderr, warnings...)
 	return args
 }
 

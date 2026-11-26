@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // CursorBackend implements WorkerBackend for Cursor's headless agent CLI.
@@ -32,9 +33,7 @@ func (b *CursorBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	// The worker runs Cursor in print mode, which skips beforeSubmitPrompt and
 	// stop hooks.
 	if opts.ConfigPath != "" {
-		for _, w := range vendor.CursorPrintModeWarnings(opts.ConfigPath) {
-			_, _ = fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, vendor.CursorPrintModeWarnings(opts.ConfigPath)...)
 	}
 
 	// Resume token = cursor chatId. cursor already persists chats on disk and
