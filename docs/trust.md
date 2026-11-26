@@ -2,7 +2,7 @@
 
 Why ynh asks you to review a harness before it runs, what the review covers, and what it leaves to you. This page explains; the commands are in the [CLI reference](reference.md) and the JSON in [`trust.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust.schema.json).
 
-> **Status.** The digest, the gate and folder runs are built (digest scheme 3, [ynh #949](https://github.com/eyelock/ynh/issues/949); the gate, [ynh #950](https://github.com/eyelock/ynh/pull/970)). The acceptance routes (`--trust` on `install`, `run`, `agent run`, `update` and `include`) and the full-SHA rule land with part C ([ynh #951](https://github.com/eyelock/ynh/pull/973)) and are marked **landing with part C** where they appear. `ynh image` does not check trust yet (part E, [ynh #953](https://github.com/eyelock/ynh/issues/953)).
+> **Status.** All of it is built: the digest (scheme 3, [ynh #949](https://github.com/eyelock/ynh/issues/949)), the gate ([ynh #950](https://github.com/eyelock/ynh/pull/970)), the acceptance routes and the full-SHA rule ([ynh #951](https://github.com/eyelock/ynh/pull/973)), pre-approval that follows trust ([ynh #952](https://github.com/eyelock/ynh/pull/974)) and `ynh image` ([ynh #953](https://github.com/eyelock/ynh/pull/976)).
 
 ## What trust is for
 
@@ -88,20 +88,25 @@ A record carries the digest scheme it was made under. A harness accepted under a
 
 `ynh run`, `ynh agent run` (and its `--resume`) and `ynh check` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
 
-A refusal exits 1 and prints, on stderr:
+A refusal exits 1 and prints, on stderr (a harness installed from `/home/you/acme`, with a hook, a sensor and two requested workspace folders):
 
 ```
 Error: refusing to run local/acme: you have not accepted what it executes.
 It executes:
-  hook PreToolUse: ./hooks/guard.sh
+  hook before_tool: ./hooks/guard.sh
   sensor lint (command): gofmt -l .
+It requests workspace folders:
+  ../ynh (resolves to /home/you/ynh)
+  ~/code/shared (resolves to /home/you/code/shared)
 Review them: ynh trust show local/acme
 Then accept:  ynh trust accept local/acme
 ```
 
+The `It requests workspace folders:` list appears only when the harness requests some, and shows each entry as written and where it resolves to; accepting grants them.
+
 For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` writes the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
 
-What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance.
+What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `It requests workspace folders:` list and the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance.
 
 Three refusals are not "you have not accepted this":
 
@@ -123,16 +128,20 @@ A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`,
 
 - The folder's **own commands run unchecked**, and ynh says so once on stderr: `ynh: <name> runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.`
 - The commands a **remote include** brings are refused unless accepted. A remote include is a Git include of another repository, at any depth; a local include and an include of the harness's own repository are the folder's own files. Each remote include that brings commands needs a record of its own, keyed by repository, subpath and ref, over that include's own commands, so the record means the same to every folder that includes it and accepting one folder never changes another's. An include whose commands cannot be read is refused, naming `ynh update`.
-- **Accept them with `ynh trust accept <dir>`**, which records each remote include and prints how many commands. With none to accept it says so. Whether a run's MCP tools are pre-approved is a separate part of the design ([ynh #952](https://github.com/eyelock/ynh/issues/952)); it is not built yet, and a folder run is not meant to get it.
+- **Accept them with `ynh trust accept <dir>`**, which records each remote include and prints how many commands. With none to accept it says so. A folder run gets none of the [pre-approvals that follow trust](#what-follows-trust): its MCP tools are not pre-approved, a one-shot Copilot run is refused and `--auto-approve` is refused.
 - A script the digest could not read in full blocks a remote include's run exactly as it blocks an installed harness.
 
 ## The full-SHA rule and trust flags
 
-> **Landing with part C** ([ynh #951](https://github.com/eyelock/ynh/pull/973)). Written to the decisions made for that part; check `ynh <command> --help` on a build that has it.
-
 Accepting by hand needs a review, and no pin: `ynh trust accept` takes a harness at whatever ref it has, and a harness installed from a folder needs no Git checkout. With `--trust`, only its remote includes that bring commands must be at full SHAs. `--trust` accepts in the same step as the action, so it asks for something in return: **everything that runs must be pinned to a commit that cannot move.**
 
-A **full SHA** is a 40-character commit hash. A tag, a branch, a short SHA or no ref at all is not one: each can name another commit tomorrow, so an acceptance of it would cover code you never saw. `--trust` is refused, with the reason named, unless the harness's own ref (for a Git or registry install) and the ref of every remote include that brings commands is a full SHA. A local folder is your own files and needs no pin for them, but its remote includes still do. The refusal ends with the way out: pin it, or review it and accept it by hand with `ynh trust accept`.
+A **full SHA** is a 40-character commit hash. A tag, a branch, a short SHA or no ref at all is not one: each can name another commit tomorrow, so an acceptance of it would cover code you never saw. `--trust` is refused, with the reason named, unless the harness's own ref (for a Git or registry install) and the ref of every remote include that brings commands is a full SHA. A local folder is your own files and needs no pin for them, but its remote includes still do. The refusal ends with the way out: pin it, or review it and accept it by hand with `ynh trust accept`:
+
+```
+Error: --trust refuses to accept this install: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
+  /home/you/inc//@main: "main" is a tag or branch, which can move
+Pin it to a 40-character commit SHA, or review it and accept it by hand with 'ynh trust accept'
+```
 
 | Route | What it accepts | When the pin is checked |
 |---|---|---|
@@ -155,11 +164,51 @@ Notes on the routes:
 
 ### How an acceptance was made
 
-A trust record carries `via`: `accept` (`ynh trust accept`), `install --trust`, `run --trust`, `update --trust` or `include --trust`. A further value, `image`, is reserved for part E. `ynh trust show` and `ynh trust` print it, and `--format json` carries it as `accepted_via`. It records how you accepted, not what was safe: an acceptance by `--trust` is as strong as the pins it required.
+A trust record carries `via`: `accept` (`ynh trust accept`), `install --trust`, `run --trust`, `update --trust` or `include --trust`. A further value, `image`, is written by [`ynh image`](#ynh-image) into the record it bakes. `ynh trust show` and `ynh trust` print it, and `--format json` carries it as `accepted_via`. It records how you accepted, not what was safe: an acceptance by `--trust` is as strong as the pins it required.
+
+## What follows trust
+
+Some approvals let a run act without asking you. ynh gives them only to a harness that passed the gate as **trusted**: installed, and accepted or with nothing to accept. A harness run from a folder is never trusted, because the gate does not check its own commands.
+
+| What | A trusted harness | A folder run, or an installed harness you have not accepted |
+|---|---|---|
+| MCP tools of the harness's own servers on a one-shot run or an `ynh agent run` worker (Codex's `default_tools_approval_mode` for each server) | pre-approved | not pre-approved; the vendor asks as it always did. When there are servers to approve, ynh says so once on stderr |
+| A one-shot Copilot run, which approves every tool (`--allow-all-tools`) | runs | refused before launch, exit 1 |
+| `ynh agent run --auto-approve` with a `--harness` | runs | refused, exit 1, error code `untrusted` |
+
+An installed harness you have not accepted is refused by the gate before any of this is reached, so in practice the right-hand column is the folder run. Copilot has no narrower grant than "every tool", so ynh refuses the run rather than approve it. A run with no `--harness` runs no harness commands, so `--auto-approve` there is your own grant. See [MCP Servers](mcp.md), [Agent Loop](agent.md) and [Vendors](vendors.md).
+
+A one-shot Copilot run of a folder harness, and `--auto-approve` on one, as ynh prints them:
+
+```
+ynh: acme runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
+Error: refusing to run acme one-shot on copilot: a run from a folder is not trust-checked, and copilot's one-shot mode approves every tool.
+Install it and accept what it executes (ynh install <folder>, then ynh trust accept local/acme), run it interactively, or use another vendor.
+```
+
+```
+ynh: acme runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
+Error: refusing --auto-approve edits: acme runs from a folder, which is not trust-checked, so nothing it executes is vouched for.
+Install it and accept what it executes (ynh install <folder>, ynh trust accept local/<name>), or run without --auto-approve.
+```
 
 ## `ynh image`
 
-`ynh image` does not check trust yet (part E, [ynh #953](https://github.com/eyelock/ynh/issues/953)). Until it does, an image bakes whatever the harness holds, accepted or not; run `ynh trust show` first.
+`ynh image <name>` applies the same gate as a run. An installed harness that is unreviewed, changed or unavailable, or that carries a script the digest could not read, is refused, with the same list and the same `Review them` and `Then accept` lines, worded as a build:
+
+```
+Error: refusing to build an image of local/acme: you have not accepted what it executes.
+It executes:
+  hook before_tool: ./hooks/guard.sh
+  sensor lint (command): gofmt -l .
+It requests workspace folders:
+  ../ynh (resolves to /home/you/ynh)
+  ~/code/shared (resolves to /home/you/code/shared)
+Review them: ynh trust show local/acme
+Then accept:  ynh trust accept local/acme
+```
+
+An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one. `--from`, which builds from a harness folder rather than an installed harness, is not checked and bakes no record and no label. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
 
 ## Related
 

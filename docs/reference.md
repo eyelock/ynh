@@ -100,7 +100,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors run <harness-id\|path> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh check <harness-id\|path>` (refuses an installed harness that is not accepted; see [Trust](trust.md#the-gate)) | `--only <a,b>`, `--profile <name>` (flag only; `YNH_PROFILE` is not read), `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>`; `accept` also takes a folder, to accept its remote includes. See [Trust](trust.md) |
-| `ynh agent run` | refuses an installed harness that is not accepted (see [Trust](trust.md#the-gate)). `--harness <id\|path>`, `--trust` (a folder run only; [part C](trust.md#the-full-sha-rule-and-trust-flags)), `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--label`, `--telemetry-relay`. See [Agent Loop](agent.md) |
+| `ynh agent run` | refuses an installed harness that is not accepted (see [Trust](trust.md#the-gate)). `--harness <id\|path>`, `--trust` (a folder run only; see [Trust](trust.md#the-full-sha-rule-and-trust-flags)); refuses `--auto-approve` for a harness that is not trusted (see [what follows trust](trust.md#what-follows-trust)), `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--label`, `--telemetry-relay`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
@@ -111,7 +111,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh backend add <name> <vendor>` | `--base-url` (required), `--auth-token`, `--type`, `--env KEY=VALUE` (repeatable) |
 | `ynh backend list` | `--format <text\|json>` |
 | `ynh backend remove <name> [<vendor>]` | |
-| `ynh image <name>` (does not check trust yet, [part E](trust.md#ynh-image)) | `--tag`, `--base`, `--from`, `--path`, `--entrypoint <run\|agent>`, `--dry-run` |
+| `ynh image <name>` (refuses a harness that is not accepted and bakes the accepted record; see [Trust](trust.md#ynh-image)) | `--tag`, `--base`, `--from`, `--path`, `--entrypoint <run\|agent>`, `--dry-run` |
 | `ynh paths` | `--format <text\|json>` |
 | `ynh telemetry registry` | `--format <text\|json>`. See [Telemetry: The registry](telemetry.md#the-registry) |
 | `ynh status` | |
