@@ -139,6 +139,20 @@ func TestChildResult(t *testing.T) {
 	}
 }
 
+// A child ended by a signal says which, so `ynh run`'s record can tell a kill
+// from a child that exited with the same number.
+func TestChildResultNamesTheSignal(t *testing.T) {
+	var ee *ExitError
+	err := childResult(exec.Command("sh", "-c", "kill -TERM $$").Run())
+	if !errors.As(err, &ee) || ee.Signal != syscall.SIGTERM || ee.Code != 128+int(syscall.SIGTERM) {
+		t.Fatalf("killed child = %#v, want signal SIGTERM, code 143", err)
+	}
+	err = childResult(exec.Command("sh", "-c", "exit 143").Run())
+	if !errors.As(err, &ee) || ee.Signal != 0 || ee.Code != 143 {
+		t.Fatalf("child exiting 143 = %#v, want no signal", err)
+	}
+}
+
 // Ctrl-C and Ctrl-\ reach the vendor from the terminal. ynh must neither die
 // from them (Go's default for SIGQUIT dumps every goroutine and exits 2) nor
 // forward a second copy, and must not leave the vendor deaf to them.
