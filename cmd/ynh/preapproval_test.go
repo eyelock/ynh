@@ -129,6 +129,48 @@ func TestRunOneShotMCPApprovalFollowsTrust(t *testing.T) {
 	})
 }
 
+func TestRunOneShotNoteOnlyWithMCPServers(t *testing.T) {
+	run := func(t *testing.T, name, manifest string) string {
+		isolateRun(t)
+		t.Chdir(t.TempDir())
+		t.Setenv("CODEX_HOME", t.TempDir())
+		dir := filepath.Join(t.TempDir(), name)
+		writeSkillHarness(t, dir, name)
+		if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		captureLaunch(t)
+		// Codex needs its symlinks consented to once; --install records it.
+		if err := cmdRun([]string{dir, "-v", "codex", "--install", "--", "hi"}); err != nil {
+			t.Fatal(err)
+		}
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		old := os.Stderr
+		os.Stderr = w
+		runErr := cmdRun([]string{dir, "-v", "codex", "--", "hi"})
+		os.Stderr = old
+		_ = w.Close()
+		out, _ := io.ReadAll(r)
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		return string(out)
+	}
+	t.Run("harness with servers is told", func(t *testing.T) {
+		if out := run(t, "mcp", mcpCodexHarness); !strings.Contains(out, "MCP tools are not pre-approved") {
+			t.Errorf("no note in %q", out)
+		}
+	})
+	t.Run("harness with no servers is not", func(t *testing.T) {
+		if out := run(t, "nomcp", `{"name":"nomcp","version":"0.1.0","default_vendor":"codex"}`); strings.Contains(out, "not pre-approved") {
+			t.Errorf("note printed with no MCP servers: %q", out)
+		}
+	})
+}
+
 func TestRunCopilotOneShotFollowsTrust(t *testing.T) {
 	t.Run("folder run is refused before launch", func(t *testing.T) {
 		isolateRun(t)

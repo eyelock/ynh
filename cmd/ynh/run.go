@@ -687,7 +687,10 @@ func cmdRun(args []string) (runErr error) {
 		// the vendor asks as it always did.
 		if a, ok := adapter.(vendor.MCPToolApprover); ok && oneShot && !p.MCPManualApproval {
 			if !trusted {
-				fmt.Fprintf(os.Stderr, "ynh: MCP tools are not pre-approved for %s: a harness is pre-approved only when installed and accepted (ynh trust accept)\n", p.Name)
+				// Say so only when there is something to approve.
+				if len(vendor.CodexMCP(runDir).Servers) > 0 {
+					fmt.Fprintf(os.Stderr, "ynh: MCP tools are not pre-approved for %s: a harness is pre-approved only when installed and accepted (ynh trust accept)\n", p.Name)
+				}
 			} else {
 				vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
 			}

@@ -345,7 +345,8 @@ writes.
 `--auto-approve` is refused, exit 1 with error code `untrusted`, for a harness
 that did not pass the trust gate as trusted: a harness run from a folder, or an
 installed one you have not accepted. Install it and run `ynh trust accept <id>`
-first.
+first. A run with no `--harness` runs no harness commands, so there is nothing
+to vouch for and `--auto-approve` is the caller's own grant for it.
 
 It exists for runs inside containment you own: a container, an egress policy,
 a diff gate, human review of what lands. Outside that, it hands an unattended
