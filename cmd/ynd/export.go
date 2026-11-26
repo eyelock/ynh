@@ -207,8 +207,7 @@ func cmdExport(args []string) error {
 		} else {
 			fmt.Printf("Exported for %s → %s (%d skills, %d agents)\n", r.Vendor, r.OutputDir, r.Skills, r.Agents)
 		}
-		// Stdout until ynd's warnings move to stderr (ynw-pmd9).
-		warn.Print(os.Stdout, r.Warnings...)
+		warn.Print(os.Stderr, r.Warnings...)
 	}
 
 	return nil
