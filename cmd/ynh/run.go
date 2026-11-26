@@ -18,6 +18,7 @@ import (
 	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/parentmcp"
@@ -27,9 +28,10 @@ import (
 	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
-func cmdRun(args []string) error {
+func cmdRun(args []string) (runErr error) {
 	if err := config.EnsureDirs(); err != nil {
 		return fmt.Errorf("ensuring directories: %w", err)
 	}
@@ -120,6 +122,13 @@ func cmdRun(args []string) error {
 	// against it.
 	loaded := p
 
+	// The trust gate: an installed harness whose commands are not accepted is
+	// refused before anything launches, and a folder run says it is not
+	// checked (ynh #950).
+	if err := trustGate(harnessID, loaded, os.Stderr); err != nil {
+		return err
+	}
+
 	// A resume continues a task, so only a prompt typed on the command line
 	// travels with it; a focus prompt starts one. Captured before the focus
 	// overwrites ra.Prompt. (--focus and a trailing prompt are exclusive.)
@@ -167,10 +176,12 @@ func cmdRun(args []string) error {
 	// precedence chain, so a local model backend is just another vendor
 	// spec, not a separate flag.
 	// The run's labels, refused here when they break the rule. They go to
-	// every process this run starts as YNH_LABELS. `ynh run` writes no record
-	// of its own yet, so nothing else carries them (docs/telemetry.md).
+	// every process this run starts as YNH_LABELS, and the launch's own
+	// record (docs/telemetry.md) carries them as resource attributes.
+	var runLabels labels.Set
 	if action == "" {
-		if _, err := resolveRunLabels(ra.Labels, loaded); err != nil {
+		var err error
+		if runLabels, err = resolveRunLabels(ra.Labels, loaded); err != nil {
 			return err
 		}
 	}
@@ -191,6 +202,16 @@ func cmdRun(args []string) error {
 	}
 	if err := p.CheckDelegateTransports(vendorName); err != nil {
 		return err
+	}
+
+	// The launch's own record, for every vendor: ynh.session.started now, and
+	// ynh.session.finished however the launch ends. With no destination this
+	// writes nothing and the vendor's environment is untouched. A launch ynh
+	// refuses from here on still shows, as refused.
+	var launchRec *launchRecord
+	if action == "" {
+		launchRec = startLaunchRecord(adapter.Name(), loaded, harnessID, ra.FocusFlag, profileName, ra.Resume, runLabels, os.Stderr)
+		defer func() { launchRec.end(runErr) }()
 	}
 
 	// A vendor that cannot take a first message starts bare, and says so.
@@ -271,6 +292,14 @@ func cmdRun(args []string) error {
 		// Inline/discovered harness: use a hash-based stable dir name
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
+	}
+	// A live session of this harness: warn, refuse or say nothing, as the
+	// harness and --on-live decide (docs/presence.md). A delegate's own run is
+	// not checked: it is started by a parent for this harness on purpose.
+	if ra.Action == "" && !delegationNamesHarness(runDirName) {
+		if err := checkOnLive(runDirName, harnessRunRef(harnessID, harnessDir), p.OnLive, ra.OnLive, os.Stderr); err != nil {
+			return err
+		}
 	}
 	var runDir string // the snapshot, or a baked image's vendor dir
 	// The stable path of the run dir: the link <run>/<name> that always
@@ -368,9 +397,7 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		for _, w := range hookWarnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, hookWarnings...)
 
 		// Generate vendor-native MCP config files. The servers are the
 		// root's and those of every included harness, composed.
@@ -728,8 +755,13 @@ func cmdRun(args []string) error {
 		// releases it. Every vendor runs as a child of ynh, and the deferred
 		// snap.Release holds the shared lock on the snapshot until the child
 		// has exited.
-		removeHook := vendor.OnChildStart(unlockRun)
+		removeHook := vendor.OnChildStart(func() {
+			unlockRun()
+			launchRec.markStarted()
+		})
 		defer removeHook()
+		endPresence := startPresence(adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession)
+		defer endPresence()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
 }
@@ -761,10 +793,8 @@ func delegateQuietArgs(vendorName string, vendorArgs []string, handle string) []
 // servers, printing the vendor's warning when it cannot isolate fully.
 func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
 	if e, ok := adapter.(vendor.MCPEnvIsolator); ok {
-		env, warning := e.IsolateMCPEnv(runDir)
-		if warning != "" {
-			_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
-		}
+		env, warnings := e.IsolateMCPEnv(runDir)
+		warn.Print(stderr, warnings...)
 		// The vendor inherits ynh's environment when it is launched.
 		for _, kv := range env {
 			if k, v, ok := strings.Cut(kv, "="); ok {
@@ -773,10 +803,8 @@ func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer
 		}
 		return nil
 	}
-	args, warning := adapter.IsolateMCP(runDir)
-	if warning != "" {
-		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
-	}
+	args, warnings := adapter.IsolateMCP(runDir)
+	warn.Print(stderr, warnings...)
 	return args
 }
 
@@ -1184,6 +1212,7 @@ type runArgs struct {
 	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
+	OnLive       string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
 	Relay        bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
@@ -1194,7 +1223,7 @@ type runArgs struct {
 var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
-	"--label": true,
+	"--label": true, "--on-live": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1269,6 +1298,11 @@ func parseRunArgs(args []string) runArgs {
 		case strings.HasPrefix(flagArgs[i], "--resume="):
 			ra.Resume = true
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
+		case flagArgs[i] == "--on-live" && i+1 < len(flagArgs):
+			ra.OnLive = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--on-live="):
+			ra.OnLive = strings.TrimPrefix(flagArgs[i], "--on-live=")
 		case flagArgs[i] == "--no-workspace":
 			ra.NoWorkspace = true
 		case flagArgs[i] == "--telemetry-relay":

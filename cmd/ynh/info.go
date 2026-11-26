@@ -16,6 +16,7 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -301,7 +302,7 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if name == "" {
-		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh info <harness-name>")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh info <harness-id|path>")
 	}
 
 	switch format {
@@ -320,7 +321,7 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 }
 
 func printInfoText(w io.Writer, name string, profiles []string, focus string) error {
-	loaded, err := harness.LoadQualified(name)
+	loaded, err := harness.LoadIDOrPath(name)
 	if err != nil {
 		return err
 	}
@@ -342,7 +343,12 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 	// accepts. Surface it first so users copying from info land on the
 	// form that works against run/installed/uninstall/update. Name stays
 	// for human readability but is intentionally secondary.
-	_, _ = fmt.Fprintf(w, "ID:           %s\n", name)
+	id := name
+	if namespace.Classify(name) != namespace.RefID {
+		// A path was given: show the id the harness would have, not the path.
+		id = canonicalIDForHarness(loaded)
+	}
+	_, _ = fmt.Fprintf(w, "ID:           %s\n", id)
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", p.Name)
 	_, _ = fmt.Fprintf(w, "Vendor:       %s\n", vendorName)
 	if len(loaded.Labels) > 0 {
@@ -413,6 +419,9 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 			}
 			if len(inc.Pick) > 0 {
 				line += "  pick=[" + strings.Join(inc.Pick, ", ") + "]"
+			}
+			if !inc.IsLocal() {
+				line += "  (" + includePinState(inc.Ref) + ")"
 			}
 			_, _ = fmt.Fprintln(w, line)
 		}
@@ -566,16 +575,16 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 }
 
 func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, focus string, checkUpdates bool) error {
-	p, err := harness.LoadQualified(name)
+	p, err := harness.LoadIDOrPath(name)
 	if err != nil {
 		code := errCodeNotFound
-		if !strings.Contains(err.Error(), "not found") {
+		if !strings.Contains(err.Error(), "not found") && !strings.Contains(err.Error(), "no harness at") {
 			code = errCodeIOError
 		}
 		return cliError(stderr, true, code, err.Error())
 	}
 
-	// Migration chain has run (harness.LoadQualified was called above), so the
+	// Migration chain has run (harness.LoadIDOrPath was called above, which runs the format chain for a path and LoadByID for an id), so the
 	// manifest is a plugin.json in one of the manifest directories. A harness
 	// derived from an Agent Plugins package has no file to read; its manifest
 	// is the one the loader built.
@@ -655,4 +664,19 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 	}
 	_, err = fmt.Fprintln(stdout, string(data))
 	return err
+}
+
+// includePinState says what an include's ref does on `ynh update`: "pinned"
+// for a full commit SHA, "floating" for a branch, a tag or no ref (each moves
+// or is re-resolved), and a plain statement for a short SHA, which ynh cannot
+// fetch.
+func includePinState(ref string) string {
+	switch {
+	case harness.IsPinnedRef(ref):
+		return "pinned"
+	case harness.IsShortSHARef(ref):
+		return "floating: short SHA is not pinned, use the full 40 characters"
+	default:
+		return "floating"
+	}
 }

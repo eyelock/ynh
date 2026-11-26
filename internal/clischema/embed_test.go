@@ -190,6 +190,7 @@ func TestSearchGolden(t *testing.T)   { validateGolden(t, "search", "search.json
 func TestSourcesGolden(t *testing.T)  { validateGolden(t, "sources", "sources.json") }
 func TestRegistryGolden(t *testing.T) { validateGolden(t, "registry", "registry.json") }
 func TestPathsGolden(t *testing.T)    { validateGolden(t, "paths", "paths.json") }
+func TestPsGolden(t *testing.T)       { validateGolden(t, "ps", "ps.json") }
 func TestVendorsGolden(t *testing.T)  { validateGolden(t, "vendors", "vendors.json") }
 func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json") }
 
@@ -294,9 +295,15 @@ func validateGolden(t *testing.T, schemaName, goldenName string) {
 // the error schema, exercising the cross-cutting failure shape every command
 // can return.
 func TestErrorEnvelopeGolden(t *testing.T) {
-	goldenPath := findGolden(t, "error.json")
+	for _, name := range []string{"error.json", "error-untrusted.json"} {
+		t.Run(name, func(t *testing.T) { validateErrorGolden(t, name) })
+	}
+}
+
+func validateErrorGolden(t *testing.T, name string) {
+	goldenPath := findGolden(t, name)
 	if goldenPath == "" {
-		t.Skip("test/golden/error.json not found")
+		t.Skip("test/golden/" + name + " not found")
 	}
 	data, err := os.ReadFile(goldenPath)
 	if err != nil {

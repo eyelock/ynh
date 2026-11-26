@@ -6,7 +6,8 @@
 //
 // It exposes one tool for each delegate the parent names, delegate_to_<name>,
 // and five handle tools every parent gets: delegate_list, delegate_status,
-// delegate_result, delegate_cancel and delegate_reply. A delegate's tool
+// delegate_result, delegate_cancel and delegate_reply, and ynh_ps, the
+// presence listing (docs/presence.md). A delegate's tool
 // starts a task through the delegate's localhost A2A endpoint (with its
 // bearer token) and returns at once with its handle; an optional wait lets it
 // hold the call a bounded time. The server keeps no state that matters: the
@@ -32,6 +33,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/presence"
 )
 
 const (
@@ -374,7 +376,7 @@ func (s *Server) tools() []any {
 	names := make([]Delegate, len(s.cfg.Delegates))
 	copy(names, s.cfg.Delegates)
 	sort.Slice(names, func(i, j int) bool { return names[i].Name < names[j].Name })
-	waitProp := map[string]any{"type": "integer", "minimum": 0, "description": fmt.Sprintf("seconds to hold the call for the delegate to finish or ask something, at most %d (the default is to return at once)", int(s.cfg.MaxWait.Seconds()))}
+	waitProp := map[string]any{"type": "integer", "minimum": 0, "description": fmt.Sprintf("seconds to hold the call for the delegate to finish or ask something, at most %d (with none the call returns at once; a client that offers MCP Tasks is given a task at once whatever the wait)", int(s.cfg.MaxWait.Seconds()))}
 	handleProp := map[string]any{"type": "string", "description": "the task_id of a delegation"}
 	tool := func(name, desc string, props map[string]any, required []string) map[string]any {
 		schema := map[string]any{"type": "object", "properties": props}
@@ -385,13 +387,16 @@ func (s *Server) tools() []any {
 	}
 	for _, d := range names {
 		out = append(out, tool(ToolName(d.Name),
-			fmt.Sprintf("Start the delegate %q as its own session on a task. It returns at once with a task_id (state working); poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
+			fmt.Sprintf("Start the delegate %q as its own session on a task. With no wait it returns at once with a task_id (state working); with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
 			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp},
 			[]string{"task"}))
 	}
 	list := tool("delegate_list", "List this session's delegations with their state.", map[string]any{}, nil)
 	list["outputSchema"] = listSchema
-	out = append(out, list,
+	ps := tool("ynh_ps", "List the sessions ynh has launched that are live or orphaned, with harness, vendor, launch mode, pids, start time and address (the same listing as `ynh ps --json`). all=true adds ended and dead sessions.",
+		map[string]any{"all": map[string]any{"type": "boolean", "description": "include ended and dead sessions"}}, nil)
+	ps["outputSchema"] = map[string]any{"type": "object", "properties": map[string]any{"sessions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}}, "required": []string{"sessions"}}
+	out = append(out, list, ps,
 		tool("delegate_status", "The state of a delegation: working, input-required (message holds its question), completed, failed or canceled.",
 			map[string]any{"task_id": handleProp, "wait": waitProp}, []string{"task_id"}),
 		tool("delegate_result", "A delegation's result once it has completed; for one still going, its state.",
@@ -413,6 +418,7 @@ type toolArgs struct {
 	TaskID  string `json:"task_id"`
 	Message string `json:"message"`
 	Wait    *int   `json:"wait"`
+	All     bool   `json:"all"`
 }
 
 func (s *Server) callTool(ctx context.Context, req rpc) {
@@ -453,6 +459,13 @@ func (s *Server) callTool(ctx context.Context, req rpc) {
 			out.Delegations = append(out.Delegations, s.resultOf(r))
 		}
 		s.reply(req.ID, toolResult(out, false))
+	case "ynh_ps":
+		es, err := presence.List(a.All)
+		if err != nil {
+			s.reply(req.ID, toolError(err.Error()))
+			return
+		}
+		s.reply(req.ID, toolResult(map[string]any{"sessions": es}, false))
 	case "delegate_status", "delegate_result":
 		path, err := s.find(a.TaskID)
 		if err != nil {

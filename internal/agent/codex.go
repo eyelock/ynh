@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // CodexBackend implements WorkerBackend for OpenAI Codex CLI.
@@ -49,9 +50,7 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		if !opts.MCPManualApproval {
 			_ = (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, opts.Stderr)
 		}
-		for _, msg := range warnings {
-			_, _ = fmt.Fprintf(opts.Stderr, "warning: %s\n", msg)
-		}
+		warn.Print(opts.Stderr, warnings...)
 	}
 	// codex reports the thread's running token totals, so each turn's usage
 	// is the difference from the totals already counted. A fresh thread starts

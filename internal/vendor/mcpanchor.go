@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // mcpPluginRootVar names, per vendor, the variable its plugin loader expands
@@ -34,15 +35,18 @@ var mcpPluginRootVar = map[string]string{
 // plugin, so a bare "./scripts/x.sh" would not find the script the export
 // ships. The input is not modified. A vendor with no documented placeholder
 // keeps the server as written and gets a warning naming it.
-func AnchorMCPServers(vendorName string, servers map[string]plugin.MCPServer) (map[string]plugin.MCPServer, []string) {
+func AnchorMCPServers(vendorName string, servers map[string]plugin.MCPServer) (map[string]plugin.MCPServer, []warn.Warning) {
 	rootVar, known := mcpPluginRootVar[vendorName]
 	out := make(map[string]plugin.MCPServer, len(servers))
-	var warnings []string
+	var warnings []warn.Warning
 	for _, name := range slices.Sorted(maps.Keys(servers)) {
 		s := servers[name]
 		if s.Transport() == plugin.MCPTypeStdio && (strings.HasPrefix(s.Command, "./") || strings.HasPrefix(s.Cwd, "./")) {
 			if !known {
-				warnings = append(warnings, fmt.Sprintf("mcp server %q runs a ./ path, which %s documents no plugin-root placeholder for, so it is written as is and will not find the script", name, vendorName))
+				warnings = append(warnings, warn.Warning{
+					Message: fmt.Sprintf("mcp server %q runs a ./ path, which %s documents no plugin-root placeholder for, so it is written as is and will not find the script", name, vendorName),
+					Fix:     fmt.Sprintf("give mcp server %q an absolute command path, or a command on PATH", name),
+				})
 			} else {
 				if rest, ok := strings.CutPrefix(s.Command, "./"); ok {
 					s.Command = "${" + rootVar + "}/" + rest

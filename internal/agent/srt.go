@@ -80,8 +80,8 @@ type srtNetwork struct {
 	DeniedDomains  []string `json:"deniedDomains"`
 }
 
-// srtFilesystem leaves reads as srt allows them (everywhere, an empty
-// denyRead) and writes allow-only: srt denies every write outside allowWrite
+// srtFilesystem denies reads of the credential paths SrtReadPolicy names
+// (everything else stays readable, as srt allows by default) and writes allow-only: srt denies every write outside allowWrite
 // and, inside it, the paths it always protects (shell rc files, .git/hooks,
 // .git/config, .claude/commands, .claude/agents and others).
 type srtFilesystem struct {
@@ -100,6 +100,73 @@ type srtPolicy struct {
 	// weakNetwork asks for srt's enableWeakerNetworkIsolation: the CLI cannot
 	// verify TLS under the sandbox without trustd.
 	weakNetwork bool
+	// denyRead are the absolute paths the worker may not read.
+	denyRead []string
+}
+
+// defaultSrtDenyRead returns the credential paths a worker is denied reading
+// under --sandbox srt unless the operator allows them: SSH and GPG keys,
+// cloud and GitHub CLI credentials, the Linux keyring and ynh's own trust
+// record. home is the worker's home; ynhHome holds trust.json.
+//
+// ~/Library/Keychains is deliberately absent: Claude Code reads its claude.ai
+// login from the login keychain, and srt can deny only a whole path, not one
+// keychain item, so denying the folder makes that login "not found" (exit 44)
+// and the worker cannot run a turn. An operator who signs in with an API key
+// or token can add it back with srt_deny_read.
+func defaultSrtDenyRead(home, ynhHome string) []string {
+	return []string{
+		filepath.Join(home, ".ssh"),
+		filepath.Join(home, ".aws"),
+		filepath.Join(home, ".gnupg"),
+		filepath.Join(home, ".config", "gh"),
+		filepath.Join(home, ".local", "share", "keyrings"),
+		filepath.Join(ynhHome, "trust.json"),
+	}
+}
+
+// expandSrtPath expands a leading "~/" (or a lone "~") to home.
+func expandSrtPath(p, home string) string {
+	switch {
+	case p == "~":
+		return home
+	case strings.HasPrefix(p, "~/"):
+		return filepath.Join(home, p[2:])
+	}
+	return filepath.Clean(p)
+}
+
+// SrtReadPolicy resolves the read-deny list for one run: ynh's defaults,
+// minus any path cfg.SrtAllowRead names, plus cfg.SrtDenyRead. The result is
+// never nil and has no duplicates.
+func SrtReadPolicy(cfg *config.Config, env []string) []string {
+	home := homeOf(env)
+	out := []string{}
+	var allow, extra []string
+	if cfg != nil {
+		allow, extra = cfg.SrtAllowRead, cfg.SrtDenyRead
+	}
+	allowed := map[string]bool{}
+	for _, a := range allow {
+		allowed[expandSrtPath(a, home)] = true
+	}
+	seen := map[string]bool{}
+	for _, p := range append(defaultSrtDenyRead(home, config.HomeDir()), expandAll(extra, home)...) {
+		if allowed[p] || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
+}
+
+func expandAll(paths []string, home string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, expandSrtPath(p, home))
+	}
+	return out
 }
 
 // claudeSrtPolicy is what Claude Code needs: its API, and the two hosts
@@ -150,13 +217,17 @@ func buildSrtSettings(worktree, settingsPath string, p srtPolicy) srtSettings {
 	for _, path := range p.state {
 		allow = append(allow, realPath(path))
 	}
+	deny := make([]string, 0, len(p.denyRead))
+	for _, path := range p.denyRead {
+		deny = append(deny, realPath(path))
+	}
 	return srtSettings{
 		Network: srtNetwork{
 			AllowedDomains: append([]string{}, p.domains...),
 			DeniedDomains:  []string{},
 		},
 		Filesystem: srtFilesystem{
-			DenyRead:   []string{},
+			DenyRead:   deny,
 			AllowWrite: allow,
 			DenyWrite:  []string{realPath(settingsPath)},
 		},
@@ -274,6 +345,11 @@ func srtCommand(ctx context.Context, opts StartOptions, p srtPolicy, bin string,
 	dir, cleanup, err := srtSettingsDir(opts.SessionDir)
 	if err != nil {
 		return nil, nil, err
+	}
+	p.denyRead = opts.SrtDenyRead
+	if p.denyRead == nil {
+		cfg, _ := config.Load()
+		p.denyRead = SrtReadPolicy(cfg, workerEnvFor(opts.Env))
 	}
 	settings := buildSrtSettings(worktree, filepath.Join(dir, srtSettingsFile), p)
 	path, err := writeSrtSettings(dir, settings)

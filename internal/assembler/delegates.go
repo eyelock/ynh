@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // DelegateMCPCarrier is implemented by a vendor adapter whose subagent
@@ -98,9 +99,12 @@ type DelegateOptions struct {
 
 // DelegateMCPWarning is the warning for a delegate whose MCP servers a
 // vendor's subagents cannot carry.
-func DelegateMCPWarning(delegate string, servers []string, vendorName string) string {
-	return fmt.Sprintf("delegate %s declares MCP servers (%s) that %s subagents cannot carry; they are not available to it",
-		delegate, strings.Join(servers, ", "), vendorName)
+//
+// No fix: the vendor's subagents cannot carry MCP servers, so no edit makes
+// them available there.
+func DelegateMCPWarning(delegate string, servers []string, vendorName string) warn.Warning {
+	return warn.Warning{Message: fmt.Sprintf("delegate %s declares MCP servers (%s) that %s subagents cannot carry; they are not available to it",
+		delegate, strings.Join(servers, ", "), vendorName)}
 }
 
 // DelegateServers is the MCP servers a delegate carries.
@@ -261,9 +265,9 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		return nil, err
 	}
 
-	warn := opts.Warn
-	if warn == nil {
-		warn = os.Stderr
+	warnW := opts.Warn
+	if warnW == nil {
+		warnW = os.Stderr
 	}
 	carrier, _ := adapter.(DelegateMCPCarrier)
 	encoder, _ := adapter.(DelegateAgentEncoder)
@@ -290,7 +294,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	}
 	for _, fd := range flat {
 		for _, n := range fd.Notes {
-			_, _ = fmt.Fprintf(warn, "  note: %s\n", n)
+			_, _ = fmt.Fprintf(warnW, "  note: %s\n", n)
 		}
 		basePath, delHarness, focus := fd.BasePath, fd.Harness, fd.Focus
 		included, _, err := resolver.ResolveSelectedFromCache(delHarness, opts.Config, harness.Selection{})
@@ -329,7 +333,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 					launch = append(launch, agent)
 				}
 			} else {
-				_, _ = fmt.Fprintf(warn, "  warning: %s\n", DelegateMCPWarning(delHarness.Name, names, vendorName))
+				warn.Print(warnW, DelegateMCPWarning(delHarness.Name, names, vendorName))
 			}
 		}
 

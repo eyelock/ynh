@@ -13,7 +13,22 @@ import (
 var (
 	childStartMu   sync.Mutex
 	childStartHook func()
+	childPIDHook   func(pid int)
 )
+
+// OnChildPID registers fn to run with the vendor child's pid once it has
+// started (the presence record's vendor_pid). Like OnChildStart it has one
+// slot; the returned function removes the registration.
+func OnChildPID(fn func(pid int)) (remove func()) {
+	childStartMu.Lock()
+	childPIDHook = fn
+	childStartMu.Unlock()
+	return func() {
+		childStartMu.Lock()
+		childPIDHook = nil
+		childStartMu.Unlock()
+	}
+}
 
 // OnChildStart registers fn to run in the launch of every vendor child, just
 // before the child starts and after the launch has finished reading ynh's own
@@ -51,6 +66,9 @@ func fireChildStart() {
 // lets deferred cleanup run first.
 type ExitError struct {
 	Code int
+	// Signal is the signal that ended the child, or 0 when it exited by
+	// itself. Code is then 128+Signal, as a shell reports it.
+	Signal syscall.Signal
 }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("vendor CLI exited with code %d", e.Code) }
@@ -110,6 +128,12 @@ func runChildProcess(cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	childStartMu.Lock()
+	pidHook := childPIDHook
+	childStartMu.Unlock()
+	if pidHook != nil {
+		pidHook(cmd.Process.Pid)
+	}
 	stopWatchdog := startWatchdog(os.Getpid(), cmd.Process.Pid)
 	defer stopWatchdog()
 
@@ -142,7 +166,7 @@ func childResult(err error) error {
 		return err
 	}
 	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
-		return &ExitError{Code: 128 + int(ws.Signal())}
+		return &ExitError{Code: 128 + int(ws.Signal()), Signal: ws.Signal()}
 	}
 	return &ExitError{Code: exitErr.ExitCode()}
 }

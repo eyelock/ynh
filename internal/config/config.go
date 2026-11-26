@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.10.0"
+const CapabilitiesVersion = "0.11.0"
 
 // features names the capabilities a consumer can gate on without parsing a
 // version, reported by `ynh version --format json` and `ynd version --format
@@ -131,6 +131,14 @@ type Config struct {
 	// run` carries, the lowest-precedence source: the harness manifest,
 	// YNH_LABELS and --label override them per key (docs/telemetry.md).
 	Labels map[string]string `json:"labels,omitempty"`
+	// SrtDenyRead adds paths to the ones `ynh agent run --sandbox srt` denies
+	// the worker reading, beside ynh's default credential paths
+	// (docs/agent.md). "~/" expands to the worker's home.
+	SrtDenyRead []string `json:"srt_deny_read,omitempty"`
+	// SrtAllowRead removes paths from ynh's default read-deny list, so a
+	// worker that must read one (a deploy key, say) can. A path is removed
+	// when it equals a default after "~/" expands.
+	SrtAllowRead []string `json:"srt_allow_read,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

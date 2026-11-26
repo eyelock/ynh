@@ -126,7 +126,7 @@ the two must be set.
 |-------|----------|-------------|
 | `git` | one of git/local | Git URL (see formats below) |
 | `local` | one of git/local | Local filesystem path. Absolute, or relative to the harness root. |
-| `ref` | no | Git tag, branch, or commit (Git sources only) |
+| `ref` | no | Git tag, branch, or a full 40-character commit SHA (Git sources only). A short SHA is refused at install; only a full SHA pins. See [What Pinning Means Here](factory-pattern.md#what-pinning-means-here) |
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include, in `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`), or a top-level skill folder by its name alone (see [Skills at the top level of a repository](#skills-at-the-top-level-of-a-repository)). If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
@@ -308,7 +308,7 @@ Other harnesses this one can invoke as subagents.
 | Field | Required | Description |
 |-------|----------|-------------|
 | `git` | yes | Git URL (same formats as includes) |
-| `ref` | no | Git tag/branch |
+| `ref` | no | Git tag, branch, or a full 40-character commit SHA. A short SHA is refused at install. See [What Pinning Means Here](factory-pattern.md#what-pinning-means-here) |
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
@@ -351,7 +351,7 @@ A delegate is resolved as a harness: its own `includes` are followed, against it
 Delegates form a graph too, and ynh flattens it: starting from the root's `delegates_to`, it follows each delegate's own `delegates_to` and makes every harness it reaches **one top-level agent, exactly once**. An agent does not nest inside another. They all sit beside one another in the session's agents, so any of them can be asked for.
 
 - **A diamond is one agent.** When B and C both name D as a delegate, D is one agent, and both B's and C's prompts list it.
-- **A cycle ends.** When A names B and B names A, each is one agent and each lists the other.
+- **A cycle ends.** When A names B and B names A, each is one agent and each lists the other. This is how the agent list is built for `native` delegates and `ynh doctor`, and **it is not a runtime guard**: an `a2a` delegate is its own session, so a loop in `delegates_to` is stopped at runtime, by [limits on delegation](delegate-sessions.md#limits-on-delegation) (a return to a harness already in the chain, a depth of 4 and 16 live delegate sessions by default).
 - **The root is never its own delegate.** A `delegates_to` entry that reaches the root harness, however far down, is skipped, and a `ynh run`, `ynd preview` or image build prints a `note:` line naming the harness that declared it. The root is the session itself, not an agent. It is recognised the way any delegate is (by source, below) or by its name. A root with uncommitted changes, or at a commit its clone does not hold, differs in source, so there it is recognised by its name.
 - **What makes two routes one agent.** A delegate is known by its source: the repository it comes from, the commit and its path in that repository, not the folder it was fetched into. The same repository, commit and path is one agent however it is reached, including a seat that names a sibling by a relative `git` source such as `"../.."` from inside a clone of the root's repository (that is cloned again, into another folder, from the first clone). The same repository and path at two commits is two harnesses, so it is the name clash below. A harness in no git repository is known by its folder.
 - **A harness naming itself is skipped** the same way.
@@ -421,6 +421,10 @@ Boolean, default `false`. When `true`, `ynh run` and `ynh agent run` launch the 
 ### mcp_manual_approval (optional)
 
 Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or an `ynh agent run --backend codex` worker) has no one to approve an MCP tool call, and Codex refuses it. By default ynh approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. The same setting stops the allow rule ynh gives a delegate's one-shot Claude Code session for those servers, which it adds only to a delegate's session and never to a harness run directly ([ynh #858](https://github.com/eyelock/ynh/issues/858); see [Claude Code Format](mcp.md#claude-code-format)). A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
+
+### on_live (optional)
+
+`"refuse"` or `"allow"`; absent by default. What `ynh run` does when a session of this harness is already live (see [`ynh ps`](presence.md)): `refuse` stops the second run, naming the live session and giving a Fix line; `allow` starts it with no warning; absent warns, naming the live session, and starts it. `ynh run --on-live=refuse|allow` overrides it for one run. See [When a session of the harness is already live](presence.md#when-a-session-of-the-harness-is-already-live).
 
 ### workspace (optional)
 

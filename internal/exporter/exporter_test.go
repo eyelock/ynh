@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // manifestJSON is used to unmarshal the vendor-specific plugin.json output.
@@ -40,7 +41,7 @@ func TestExportSingleVendorCursor(t *testing.T) {
 	}
 
 	cursorWarned := false
-	for _, w := range results[0].Warnings {
+	for _, w := range warn.Messages(results[0].Warnings) {
 		if strings.Contains(w, "cursor: plugins cannot carry instructions") {
 			cursorWarned = true
 		}

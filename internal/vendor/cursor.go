@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // cursorPluginJSON is the Cursor plugin.json schema: identity fields, plus a
@@ -89,9 +90,7 @@ func (c *Cursor) LaunchInteractive(configPath string, extraArgs []string) error 
 }
 
 func (c *Cursor) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
-	for _, w := range CursorPrintModeWarnings(configPath) {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, CursorPrintModeWarnings(configPath)...)
 	args := append([]string{"-p", prompt}, extraArgs...)
 	return launchCursor(configPath, args)
 }
@@ -118,9 +117,7 @@ func (c *Cursor) SupportsResume() bool { return true }
 // `cursor-agent -p --resume <id> "<prompt>"`.
 func (c *Cursor) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
 	if prompt != "" && !interactive {
-		for _, w := range CursorPrintModeWarnings(configPath) {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, CursorPrintModeWarnings(configPath)...)
 	}
 	return launchCursor(configPath, cursorResumeArgs(sessionID, prompt, interactive, extraArgs))
 }
@@ -152,8 +149,9 @@ func cursorResumeArgs(sessionID, prompt string, interactive bool, extraArgs []st
 // `agent mcp disable <name>` persists to the user's own state, which a launch
 // must not rewrite. From Cursor's documentation and the CLI's own help, not a
 // live run (docs/vendor-parity.md, L6). ynh says so and launches normally.
-func (c *Cursor) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation is not supported by Cursor: servers in ~/.cursor/mcp.json and .cursor/mcp.json will still load"
+// No fix: the limit is Cursor's, and no edit of the harness lifts it.
+func (c *Cursor) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	return nil, []warn.Warning{{Message: "MCP isolation is not supported by Cursor: servers in ~/.cursor/mcp.json and .cursor/mcp.json will still load"}}
 }
 
 func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
@@ -488,7 +486,9 @@ func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (stri
 //
 //   - description: the source's, else the humanised file name.
 //   - globs: the source's globs, else its paths (Claude Code's rule scoping),
-//     comma-joined the way Cursor writes them. A globs scalar is already
+//     comma-joined the way Cursor writes them, in double quotes so the
+//     frontmatter stays valid YAML (an unquoted `*` starts an alias, a
+//     leading `{` a flow mapping). A globs scalar is already
 //     Cursor's form and is kept verbatim.
 //   - alwaysApply: the source's when it is a valid boolean; otherwise false
 //     for a rule with globs, which Cursor would ignore under alwaysApply:
@@ -533,7 +533,7 @@ func cursorRule(stem string, data []byte) []byte {
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "description: %s\n", strconv.Quote(description))
 	if len(globs) > 0 {
-		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
+		fmt.Fprintf(&b, "globs: %s\n", strconv.Quote(strings.Join(globs, ",")))
 	}
 	fmt.Fprintf(&b, "alwaysApply: %t\n", alwaysApply)
 	b.WriteString("---\n\n")

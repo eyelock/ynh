@@ -41,6 +41,7 @@ func runProfileCheck(t *testing.T, args ...string) (gate.Envelope, string, strin
 	t.Setenv("YNH_AGENT_SESSION", "")
 	t.Setenv("YNH_PROFILE", "")
 	installListTestHarness(t, home, "pc", profileCheckHarnessJSON)
+	skipCheckTrustGate(t)
 	return runProfileCheckIn(t, t.TempDir(), args...)
 }
 
@@ -136,6 +137,7 @@ func TestCheck_IgnoresYNHProfile(t *testing.T) {
 	t.Setenv("YNH_AGENT_SESSION", "")
 	t.Setenv("YNH_PROFILE", "factory")
 	installListTestHarness(t, home, "pc", profileCheckHarnessJSON)
+	skipCheckTrustGate(t)
 	_, _, _, err := runProfileCheckIn(t, t.TempDir(), "--format", "json", "--only", "red")
 	if !errors.Is(err, errCheckBlocked) {
 		t.Fatalf("YNH_PROFILE must not soften the gate; got %v", err)
@@ -158,6 +160,7 @@ func TestCheck_UpdateBaselineWithProfileRecordsTheSame(t *testing.T) {
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
 	installListTestHarness(t, home, "pc", profileCheckHarnessJSON)
+	skipCheckTrustGate(t)
 
 	cwd := t.TempDir()
 	if _, _, stderr, err := runProfileCheckIn(t, cwd, "--only", "red", "--profile", "factory", "--update-baseline"); err != nil {

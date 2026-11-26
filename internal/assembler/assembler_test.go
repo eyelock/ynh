@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 type mockAdapter struct{}
@@ -67,7 +68,9 @@ func (m *mockAdapter) MarketplaceManifestDir() string        { return ".mock-plu
 func (m *mockAdapter) GenerateMarketplaceIndex(cfg vendor.MarketplaceIndexConfig, plugins []vendor.MarketplacePluginInfo) ([]byte, error) {
 	return nil, nil
 }
-func (m *mockAdapter) IsolateMCP(configPath string) ([]string, string) { return nil, "" }
+func (m *mockAdapter) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	return nil, nil
+}
 func (m *mockAdapter) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	return nil, nil
 }

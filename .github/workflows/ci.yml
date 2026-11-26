@@ -118,7 +118,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - run: make build
@@ -130,7 +130,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       # The telemetry relay test against the real ynr (TestAgentRun_RealRelayJoinsRunTrace)
@@ -165,6 +165,38 @@ jobs:
       - name: Dockerfile Go matches go.mod toolchain
         run: make check-go-pin
 
+  srt:
+    name: Test (real srt, Linux)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+      # srt on Linux needs bubblewrap, socat and ripgrep, and bubblewrap needs
+      # unprivileged user namespaces, which Ubuntu 24.04 restricts by default.
+      - name: Install srt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap socat ripgrep
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo npm install -g @anthropic-ai/sandbox-runtime@0.0.83
+          srt --version
+          lsb_release -d; uname -r; bwrap --version
+          sysctl -a 2>/dev/null | grep -E 'userns|unprivileged' || true
+      # Runs the tests that skip without srt, so ynh #920's Done-when (a
+      # credential read is refused, the worktree still readable) is shown on
+      # Linux on every change. They must run, not skip: -v output is checked.
+      - name: Test against real srt
+        env:
+          YNH_SRT_TEST_NO_SECCOMP: '1'
+        run: |
+          go test -v -run 'TestSrt_' ./internal/agent/ | tee srt-test.log
+          grep -q -- '--- PASS: TestSrt_DeniesCredentialRead' srt-test.log
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -172,7 +204,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9
@@ -184,7 +216,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - name: Install goimports
@@ -206,7 +238,7 @@ jobs:
     if: needs.changes.outputs.artifacts == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - name: Validate and lint harness artifacts
@@ -330,12 +362,12 @@ jobs:
       # archives the job runs, pinned beside it: the release's checksums.txt
       # must list the same digests, and the downloads must match them, before
       # anything is extracted or run. Move all three together.
-      YNR_VERSION: 0.3.2
-      YNR_SHA256: 2b090aa3449988fed220490e0483401b1fd9b02bd2e2aa3e7def24dc693a6d12
-      YNR_STUB_SHA256: 56272956659f1b4ef5f49899089743f99288112fa02aad4a6bfeb68cbe130e32
+      YNR_VERSION: 0.5.1
+      YNR_SHA256: 615bffc870d12973ffacfe11da82f3c45c24c04352664d9faabcbeeb233bdc2e
+      YNR_STUB_SHA256: ed96fe26f9488cc0db8d2ec79f6d9a2a83c75cad61d50340a5805bda96a6a657
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - name: Install ynr and its stub vendor, checked against their pinned checksums
@@ -364,7 +396,7 @@ jobs:
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry, conformance]
+    needs: [changes, build, test, srt, lint, format, artifacts, skill-security, packaging, registry, conformance]
     if: always()
     steps:
       - name: Check results
@@ -373,6 +405,7 @@ jobs:
           echo "  changes: ${{ needs.changes.result }}"
           echo "  build: ${{ needs.build.result }}"
           echo "  test: ${{ needs.test.result }}"
+          echo "  srt: ${{ needs.srt.result }}"
           echo "  lint: ${{ needs.lint.result }}"
           echo "  format: ${{ needs.format.result }}"
           echo "  artifacts: ${{ needs.artifacts.result }}"

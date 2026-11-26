@@ -140,7 +140,8 @@ find /tmp/ynh-tutorial/hook-harness-cursor -name hooks.json
 Expected: the Cursor matcher warning from above and a `Preview written to` line from `ynd preview`, then exactly one line from `find`, ending in `.cursor/hooks.json`:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 Preview written to /tmp/ynh-tutorial/hook-harness-cursor
 /tmp/ynh-tutorial/hook-harness-cursor/.cursor/hooks.json
 ```
@@ -295,7 +296,8 @@ grep -A8 SessionEnd /tmp/ynh-tutorial/end-codex/.codex/hooks.json
 Expected: the warning, then the `Preview written to` line, then the `SessionEnd` entry with `"timeout": 3`:
 
 ```
-  warning: hook timeout 10s on on_session_end exceeds the 3s codex allows for it, so 3s is written
+warning: hook timeout 10s on on_session_end exceeds the 3s codex allows for it, so 3s is written
+  Fix: set the hook's timeout to 3 or less
 Preview written to /tmp/ynh-tutorial/end-codex
 ```
 
@@ -310,7 +312,8 @@ ynd preview /tmp/ynh-tutorial/end-harness -v cursor -o /tmp/ynh-tutorial/end-cur
 Expected output begins with the warning, then the `Preview written to` line:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 ```
 
 Change the matcher to `Shell` for Cursor and the warning goes away.
@@ -324,7 +327,8 @@ ynd export /tmp/ynh-tutorial/end-harness -v claude -o /tmp/ynh-tutorial/end-expo
 Expected: after the `Exported for claude` line, a warning that names the variable to set when you launch Claude Code with the exported plugin:
 
 ```
-  warning: claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s; set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000 in the environment that launches Claude Code
+warning: claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s
+  Fix: set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000 in the environment that launches Claude Code
 ```
 
 ## Export hooks in a plugin
@@ -342,9 +346,10 @@ Expected: one `Exported for` line per vendor, with the Cursor matcher warning fr
 ```
 Exported for claude → /tmp/ynh-tutorial/hook-export/claude (0 skills, 0 agents)
 Exported for cursor → /tmp/ynh-tutorial/hook-export/cursor (0 skills, 0 agents)
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 Exported for codex → /tmp/ynh-tutorial/hook-export/codex (0 skills, 0 agents)
-  warning: codex: skipping 1 rules (not supported)
+warning: codex: skipping 1 rules (not supported)
 ```
 
 Then exactly three hook files, one per vendor, and no `hooks/hooks.json` or session path such as `.claude/hooks/hooks.json`:
@@ -414,7 +419,8 @@ ynd diff /tmp/ynh-tutorial/hook-harness claude cursor codex
 Expected: the Cursor matcher warning from above comes first:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 ```
 
 Then the three comparisons, which show:

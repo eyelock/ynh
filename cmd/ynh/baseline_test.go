@@ -26,7 +26,7 @@ func baselineFixture(t *testing.T) string {
 	t.Setenv("YNH_HOME", home)
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
-	installListTestHarness(t, home, "blr", baselineReadHarness)
+	installTrustedTestHarness(t, home, "blr", baselineReadHarness)
 	work := t.TempDir()
 	if err := cmdCheck([]string{"local/blr", "--cwd", work, "--update-baseline"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("recording the baseline: %v", err)

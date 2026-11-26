@@ -126,7 +126,14 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return checkExecErr(cliError(stderr, structured, errCodeNotFound, err.Error()))
 	}
-	warnIfTrustChanged(stderr, harnessName, p)
+	// The trust gate, on the harness as loaded (a profile reshapes p, and the
+	// trust record covers the harness before it).
+	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
+		if gerr := checkTrustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
+			// Exit 1, a refusal, not 2: the check was not unable to run, it was not allowed to.
+			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
+		}
+	}
 	if cwd == "" {
 		cwd, _ = os.Getwd()
 	}

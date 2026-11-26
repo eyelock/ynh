@@ -44,9 +44,10 @@ const (
 	// DestinationSpool writes OTLP JSON lines into a spool folder.
 	DestinationSpool Destination = "spool"
 	// DestinationOTLP is an operator's OTEL_EXPORTER_OTLP_* endpoint, sent to
-	// over OTLP/HTTP with JSON bodies. A setting that exporter cannot honour
+	// over OTLP/HTTP with JSON or protobuf bodies, as OTEL_EXPORTER_OTLP_PROTOCOL
+	// asks (http/json or http/protobuf). A setting that exporter cannot honour
 	// (custom certificates, compression) writes nothing and says so; a protocol it
-	// cannot speak (http/protobuf, grpc) goes to the spool instead.
+	// cannot speak (grpc) goes to the spool instead.
 	DestinationOTLP Destination = "otlp"
 )
 
@@ -88,11 +89,11 @@ func spoolFolder() string {
 }
 
 // protocolUnsupported reports whether the operator's OTLP protocol (general or
-// per-signal) is one the JSON exporter cannot speak, http/protobuf or grpc, and
-// names the first such variable.
+// per-signal) is one the exporter cannot speak (anything but http/json and
+// http/protobuf, in practice grpc), and names the first such variable.
 func protocolUnsupported(getenv func(string) string) (string, bool) {
 	for _, name := range []string{"OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"} {
-		if v := strings.TrimSpace(getenv(name)); v != "" && !strings.EqualFold(v, "http/json") {
+		if v := strings.TrimSpace(getenv(name)); v != "" && !strings.EqualFold(v, "http/json") && !strings.EqualFold(v, "http/protobuf") {
 			return name, true
 		}
 	}
@@ -134,6 +135,7 @@ type Options struct {
 type Telemetry struct {
 	version string
 	opts    Options
+	stderr  io.Writer // for the one note about dropped operator labels; may be nil
 	errors  atomic.Int64
 	// abandoned is set once a flush has run out of time: the destination is
 	// stuck, so later flushes give up at once rather than wait again, and the
@@ -172,9 +174,15 @@ type Telemetry struct {
 // minute). An agent run can last an hour; a `ynr serve` started after it
 // still receives it. Shutdown stops the search.
 func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
-	stripOperatorLabels(stderr)
 	dest, dir := ChooseDestination()
+	if dest != DestinationNone {
+		// With no destination the process's environment is left exactly as
+		// it was. A spool that appears later is handled in activate, which
+		// filters the resource instead.
+		stripOperatorLabels(stderr)
+	}
 	t := &Telemetry{
+		stderr:       stderr,
 		version:      version,
 		opts:         opts,
 		dest:         dest,
@@ -187,19 +195,19 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 		// The operator chose; ynh does not look for a spool behind them.
 		opts, _, unsupported := spool.HTTPOptionsFromEnv(os.Getenv)
 		if unsupported != "" {
-			// A protocol the exporter cannot speak (http/protobuf is what
-			// Claude Code's setup and ynh's own relay export) is not a reason
+			// A protocol the exporter cannot speak (grpc, say; http/json and
+			// http/protobuf are both spoken) is not a reason
 			// to lose the run: it goes to the spool, as it would had the
 			// operator set nothing. The other unsupported settings
 			// (certificates, compression) still write nothing.
 			if name, ok := protocolUnsupported(os.Getenv); ok {
 				if dir := spoolFolder(); dir != "" {
-					_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json, and ynh sends only OTLP/HTTP with JSON bodies; writing this run to the spool instead\n", name)
+					_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json or http/protobuf, and ynh sends only OTLP/HTTP; writing this run to the spool instead\n", name)
 					t.dest = DestinationSpool
 					t.activate(dir, nil)
 					break
 				}
-				_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json, and ynh sends only OTLP/HTTP with JSON bodies; there is no spool (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local), so nothing was recorded for this run\n", name)
+				_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json or http/protobuf, and ynh sends only OTLP/HTTP; there is no spool (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local), so nothing was recorded for this run\n", name)
 				break
 			}
 			_, _ = fmt.Fprintf(stderr, "ynh: %s; no telemetry is written for this run\n", unsupported)
@@ -305,6 +313,7 @@ func (t *Telemetry) recheck(interval time.Duration) {
 // them. They write to the spool folder dir, or, when sender is not nil, post
 // to the operator's OTLP endpoint and write no spool.
 func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
+	stripOperatorLabels(t.stderr)
 	instanceID := newInstanceID()
 	// The operator's OTEL_RESOURCE_ATTRIBUTES are honoured, but ynh's own
 	// identity wins: service.name and service.version say which registry
@@ -314,8 +323,14 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 		semconv.ServiceVersion(t.version),
 		semconv.ServiceInstanceID(instanceID),
 	}
-	// The labels are ynh's too. Only these were validated; Setup already
-	// removed every operator ynh.label.* from OTEL_RESOURCE_ATTRIBUTES.
+	// The labels are ynh's too. Only these were validated. The SDK merges
+	// the process environment into every provider's resource, so every
+	// operator ynh.label.* must be out of OTEL_RESOURCE_ATTRIBUTES before the
+	// providers are built. Setup did that when it started with a
+	// destination; a spool that appeared mid-launch has not, so it is done
+	// here (a no-op when already done). It happens once, at the moment
+	// telemetry starts, which is also when ynh puts the trace context into
+	// the environment, so it never changes under a process already started.
 	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),

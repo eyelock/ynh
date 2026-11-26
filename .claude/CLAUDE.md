@@ -30,6 +30,7 @@ make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .c
 make check-vendor-parity # every vendor documented, assembles the same artifacts, stubbed in evals (needs jq)
 make check-marketplace  # committed marketplace indexes agree with the plugin manifests (needs python3)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Docker)
+make evals              # tutorial evals headless via claude (the release gate; costs model calls)
 make vulncheck          # govulncheck over the Go code (needs network)
 make conformance        # ynr conformance against ynh's telemetry (needs ynr and ynr-stub-vendor on PATH)
 ```

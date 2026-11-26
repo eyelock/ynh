@@ -635,8 +635,8 @@ rm -rf /tmp/ynh-edge/e16
 
 ```bash
 ynh info nonexistent
-# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>'. Run 'ynh ls' to see installed ids
-# (no './<path>': `ynh info` takes only an installed id, unlike `ynh run` in E6)
+# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+# (`ynh info` takes an installed id or a './<path>', as `ynh run` does in E6)
 
 ynh info local/nonexistent
 # Expected: Error: harness "local/nonexistent": harness not found
@@ -646,7 +646,7 @@ ynh info local/nonexistent
 
 ```bash
 ynh info
-# Expected: Error: usage: ynh info <harness-name>
+# Expected: Error: usage: ynh info <harness-id|path>
 ```
 
 ### E19: Focus and profile mutual exclusivity

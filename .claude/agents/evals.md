@@ -7,6 +7,8 @@ tools: Bash, Read, Glob
 
 Evaluate ALL tutorials. This is a release gate: the verdict must be PASS before any release.
 
+`make evals` runs this agent headless (`scripts/evals.sh`) and exits 0 only on `EVALS: PASS`. The Evals workflow (`.github/workflows/evals.yml`, `workflow_dispatch`) runs it on a branch and records the verdict as its check run.
+
 ## Process
 
 1. Build the latest binaries: `make build`. They land in the repo's `bin/`.
@@ -127,7 +129,7 @@ own above the block, one line per launch, in order. The line reads
 as the block's expected call. In `first-harness.md` it reads:
 
 ```markdown
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what are you?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--my-harness/.../**) --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```
 
 The command is the program name, then its arguments joined by single spaces,
@@ -387,7 +389,7 @@ which is why this is done below the commands and not in them.
 
 | Repository | What the tutorials take from it |
 |------------|---------------------------------|
-| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tags `v1.0.0`, `@eyelock-assistants/dev-skills@0.2.0`, `@eyelock-assistants/tech-skills@0.2.1`, `@eyelock-assistants/infra-skills@0.2.0` and `@eyelock-assistants/pause-skills@0.1.1` (the pins the real includes carry; a pin moved upstream must move in `scripts/eval-remotes.sh` too) |
 | `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
 | `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
 | `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |

@@ -237,6 +237,57 @@ func TestSetup_OTLPExports(t *testing.T) {
 	}
 }
 
+// With http/protobuf, ynh sends protobuf bodies to the operator's endpoint
+// (ynw-th8o, ynh #816): no warning, nothing in the spool.
+func TestSetup_OTLPProtobufExports(t *testing.T) {
+	clearTelemetryEnv(t)
+	type hit struct {
+		path, ctype string
+		body        []byte
+	}
+	var mu sync.Mutex
+	var hits []hit
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		hits = append(hits, hit{r.URL.Path, r.Header.Get("Content-Type"), body})
+		mu.Unlock()
+	}))
+	defer srv.Close()
+	spoolDir := t.TempDir()
+	t.Setenv("YNR_SPOOL", spoolDir)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	var stderr bytes.Buffer
+	tel := Setup("1.0.0", Options{}, &stderr)
+	tel.StartRun().Finish("converged", true)
+	tel.Shutdown()
+	if !tel.Active() || tel.Destination() != DestinationOTLP {
+		t.Errorf("active=%v destination=%q, want active otlp", tel.Active(), tel.Destination())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	seen := map[string]bool{}
+	for _, h := range hits {
+		seen[h.path] = true
+		if !strings.HasPrefix(h.ctype, "application/x-protobuf") {
+			t.Errorf("%s: Content-Type=%q, want application/x-protobuf", h.path, h.ctype)
+		}
+		if !bytes.Contains(h.body, []byte("ynh")) || bytes.HasPrefix(bytes.TrimSpace(h.body), []byte("{")) {
+			t.Errorf("%s: body is not a protobuf carrying the ynh resource", h.path)
+		}
+	}
+	if !seen["/v1/traces"] || !seen["/v1/logs"] {
+		t.Errorf("posted to %v, want /v1/traces and /v1/logs", seen)
+	}
+	if recs := readSpool(t, spoolDir); len(recs) != 0 {
+		t.Errorf("wrote %d records to the spool", len(recs))
+	}
+}
+
 // A setting the exporter cannot honour (other than the protocol, below) is the
 // operator's choice too: one note naming it, never a header value, and nothing
 // written anywhere.
@@ -273,14 +324,13 @@ func TestSetup_OTLPUnsupported(t *testing.T) {
 	}
 }
 
-// A protocol the exporter cannot speak (http/protobuf, grpc), general or
+// A protocol the exporter cannot speak (grpc), general or
 // per-signal, is warned about once and the run goes to the spool, not nowhere
 // (ynw-46x9, ynh #784). The warning never prints a header value.
 func TestSetup_OTLPProtocolFallsBackToTheSpool(t *testing.T) {
 	for _, env := range []map[string]string{
-		{"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"},
 		{"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"},
-		{"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "http/protobuf"},
+		{"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "grpc"},
 	} {
 		clearTelemetryEnv(t)
 		spoolDir := t.TempDir()
@@ -317,7 +367,7 @@ func TestSetup_OTLPProtocolWithNoSpoolRecordsNothing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
 	var stderr bytes.Buffer
 	tel := Setup("1.0.0", Options{}, &stderr)
 	tel.StartRun().Finish("converged", true)
@@ -788,46 +838,25 @@ func TestLabelAttributes(t *testing.T) {
 	}
 }
 
-// The operator's ynh.label.* are removed from the process environment once,
-// at Setup, before the recheck goroutine exists, and stay removed: a spool
-// that appears mid-run activates telemetry without touching the variable, so
-// a child started in that window never sees it change, and no child ever
-// inherits an unvalidated label.
-func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
+// With no destination, Setup leaves OTEL_RESOURCE_ATTRIBUTES exactly as the
+// operator set it, operator ynh.label.* included, and prints nothing. A spool
+// that appears mid-run removes the operator's ynh.label.* when telemetry
+// starts, so it never reaches the spool.
+func TestOperatorLabelsKeptWithNoDestinationAndFilteredWhenSpoolAppearsMidRun(t *testing.T) {
 	clearTelemetryEnv(t)
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	const operator = "ynh.label.other=/home/me/secret,deployment.environment.name=lab"
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", operator)
 	laptop := filepath.Join(os.Getenv("XDG_STATE_HOME"), "ynr", "spool", "local")
 
 	var note bytes.Buffer
 	tel := Setup("1.0.0", Options{RecheckInterval: 5 * time.Millisecond, Labels: map[string]string{"wheelhouse": "ynw"}}, &note)
-	const stripped = "deployment.environment.name=lab"
+	const stripped = operator
 	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
-		t.Fatalf("after Setup, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+		t.Fatalf("after Setup with no destination, OTEL_RESOURCE_ATTRIBUTES = %q, want it unchanged: %q", got, stripped)
 	}
-	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
-		t.Errorf("note = %q, want the dropped key and no value", n)
+	if n := note.String(); n != "" {
+		t.Errorf("note = %q, want nothing with no destination", n)
 	}
-
-	// Poll the variable from a "child" while the spool appears and
-	// telemetry activates: it never changes.
-	stop := make(chan struct{})
-	changed := make(chan string, 1)
-	go func() {
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
-				select {
-				case changed <- got:
-				default:
-				}
-				return
-			}
-		}
-	}()
 
 	run := tel.StartRun()
 	if err := os.MkdirAll(laptop, 0o755); err != nil {
@@ -842,15 +871,9 @@ func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
 	}
 	run.Finish("converged", true)
 	tel.Shutdown()
-	close(stop)
 
-	select {
-	case got := <-changed:
-		t.Errorf("OTEL_RESOURCE_ATTRIBUTES changed to %q while telemetry started", got)
-	default:
-	}
-	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
-		t.Errorf("after the run, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != "deployment.environment.name=lab" {
+		t.Errorf("after telemetry started, OTEL_RESOURCE_ATTRIBUTES = %q, want the operator label removed", got)
 	}
 
 	seen := 0
@@ -872,5 +895,8 @@ func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Fatal("nothing written to the spool")
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want the dropped key and no value once the spool appeared", n)
 	}
 }

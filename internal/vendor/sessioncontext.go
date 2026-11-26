@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // How an on_session_start hook's output reaches the model differs by vendor:
@@ -56,7 +57,7 @@ func sessionContextMode(vendorName string) string {
 
 // sessionContextWarnings reports a vendor that declares no way for
 // on_session_start output to reach the model.
-func sessionContextWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []string {
+func sessionContextWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []warn.Warning {
 	if len(hooks["on_session_start"]) == 0 {
 		return nil
 	}
@@ -64,7 +65,8 @@ func sessionContextWarnings(vendorName string, hooks map[string][]plugin.HookEnt
 	if !ok {
 		return nil
 	}
-	return []string{fmt.Sprintf("on_session_start output does not reach the model on %s: %s", vendorName, reason)}
+	// No fix: the vendor has no way to carry on_session_start output to the model.
+	return []warn.Warning{{Message: fmt.Sprintf("on_session_start output does not reach the model on %s: %s", vendorName, reason)}}
 }
 
 // sessionCommand renders one hook command for a vendor document. For

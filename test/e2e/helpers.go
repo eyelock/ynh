@@ -180,8 +180,16 @@ func (s *sandbox) mustRunYnh(t *testing.T, args ...string) (stdout, stderr strin
 // runYnhInDirRaw executes the ynh binary with cwd=dir inside sandbox s and
 // returns stdout, stderr, and the resulting error. Used by tests that need
 // to assert behaviour from a project directory rather than a default cwd.
+//
+// A run of an installed harness is preceded by the acceptance a person would
+// give it with `ynh trust accept`, because ynh refuses to run one that is not
+// accepted (ynh #950). The tests of the refusal itself call s.runYnh, which
+// does not.
 func runYnhInDirRaw(t *testing.T, s *sandbox, dir string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
+	if len(args) >= 2 && args[0] == "run" && strings.Contains(args[1], "/") && !strings.HasPrefix(args[1], ".") && !strings.HasPrefix(args[1], "/") {
+		_, _, _ = s.runYnh(t, "trust", "accept", args[1])
+	}
 	cmd := exec.Command(ynhBinary(t), args...)
 	cmd.Env = append(os.Environ(), "YNH_HOME="+s.home)
 	cmd.Dir = dir

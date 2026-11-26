@@ -1,0 +1,184 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"github.com/eyelock/ynh/internal/config"
+)
+
+// #920: the settings file left denyRead empty, so under --sandbox srt a worker
+// with --auto-approve all could read ~/.ssh, cloud credentials and ynh's own
+// trust record.
+func TestSrtReadPolicy_DefaultsNameCredentialPaths(t *testing.T) {
+	home := t.TempDir()
+	ynhHome := t.TempDir()
+	t.Setenv("YNH_HOME", ynhHome)
+	got := SrtReadPolicy(&config.Config{}, []string{"HOME=" + home})
+	for _, want := range []string{
+		filepath.Join(home, ".ssh"),
+		filepath.Join(home, ".aws"),
+		filepath.Join(home, ".config", "gh"),
+		filepath.Join(ynhHome, "trust.json"),
+	} {
+		if !slices.Contains(got, want) {
+			t.Errorf("default deny list lacks %s: %q", want, got)
+		}
+	}
+}
+
+// The login keychain holds Claude Code's claude.ai login, and srt cannot deny
+// one item in it: denying the folder made `security find-generic-password -s
+// "Claude Code-credentials"` exit 44 under srt. So it is not denied by default.
+func TestSrtReadPolicy_KeychainsNotDeniedByDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", t.TempDir())
+	kc := filepath.Join(home, "Library", "Keychains")
+	if slices.Contains(SrtReadPolicy(&config.Config{}, []string{"HOME=" + home}), kc) {
+		t.Errorf("default deny list must not hold %s", kc)
+	}
+	cfg := &config.Config{SrtDenyRead: []string{"~/Library/Keychains"}}
+	if !slices.Contains(SrtReadPolicy(cfg, []string{"HOME=" + home}), kc) {
+		t.Errorf("srt_deny_read should add %s back", kc)
+	}
+}
+
+func TestSrtReadPolicy_ConfigExtendsAndOverrides(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", t.TempDir())
+	env := []string{"HOME=" + home}
+	cfg := &config.Config{
+		SrtDenyRead:  []string{"~/.kube", "/srv/secrets", "~/.kube"},
+		SrtAllowRead: []string{"~/.ssh", "~/.config/gh/"},
+	}
+	got := SrtReadPolicy(cfg, env)
+	for _, want := range []string{filepath.Join(home, ".kube"), "/srv/secrets", filepath.Join(home, ".aws")} {
+		if !slices.Contains(got, want) {
+			t.Errorf("deny list lacks %s: %q", want, got)
+		}
+	}
+	for _, gone := range []string{filepath.Join(home, ".ssh"), filepath.Join(home, ".config", "gh")} {
+		if slices.Contains(got, gone) {
+			t.Errorf("srt_allow_read did not remove %s: %q", gone, got)
+		}
+	}
+	if n := countOf(got, filepath.Join(home, ".kube")); n != 1 {
+		t.Errorf("~/.kube listed %d times, want 1", n)
+	}
+	if got := SrtReadPolicy(nil, env); len(got) == 0 {
+		t.Errorf("nil config must still give the defaults, got %q", got)
+	}
+}
+
+func countOf(s []string, v string) int {
+	n := 0
+	for _, x := range s {
+		if x == v {
+			n++
+		}
+	}
+	return n
+}
+
+// The settings file srt is given carries the deny list, the loop's when it
+// resolved one and ynh's defaults when it did not.
+func TestSrtCommand_WritesDenyRead(t *testing.T) {
+	fakeProgram(t, "srt", "", "", 0)
+	fakeVendor(t, "claude", "", "", 0)
+	home := resolvedTempDir(t)
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", resolvedTempDir(t))
+
+	run := func(deny []string) srtSettings {
+		session := t.TempDir()
+		sess, err := (&ClaudeBackend{}).Start(context.Background(), StartOptions{
+			Sandbox: "srt", WorktreeDir: t.TempDir(), SessionDir: session, SrtDenyRead: deny,
+		})
+		if err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		_ = sess.Close()
+		return readSrtSettings(t, filepath.Join(session, srtSettingsFile))
+	}
+
+	if s := run(nil); !slices.Contains(s.Filesystem.DenyRead, filepath.Join(home, ".ssh")) {
+		t.Errorf("default denyRead lacks ~/.ssh: %q", s.Filesystem.DenyRead)
+	}
+	if s := run([]string{"/srv/only"}); !slices.Equal(s.Filesystem.DenyRead, []string{"/srv/only"}) {
+		t.Errorf("denyRead = %q, want exactly the loop's list", s.Filesystem.DenyRead)
+	}
+	if s := run([]string{}); len(s.Filesystem.DenyRead) != 0 {
+		t.Errorf("an empty list must deny nothing, got %q", s.Filesystem.DenyRead)
+	}
+}
+
+// With srt installed, a worker under the generated settings cannot read a
+// fixture credential and can still read the worktree. Skipped where srt is
+// not installed. The CI job "Test (real srt, Linux)" installs srt and requires
+// this test to pass, so it runs on Linux; on macOS it runs where a developer
+// has srt installed.
+func TestSrt_DeniesCredentialRead(t *testing.T) {
+	srtBin, err := exec.LookPath("srt")
+	if err != nil {
+		t.Skip("srt is not installed")
+	}
+	home := resolvedTempDir(t)
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", filepath.Join(home, ".ynh"))
+	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(home, ".ssh", "id_fixture")
+	if err := os.WriteFile(key, []byte("not a key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	worktree := resolvedTempDir(t)
+	ok := filepath.Join(worktree, "readme")
+	if err := os.WriteFile(ok, []byte("hi\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureSrtTmpdir(srtTmpdir); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	path, err := writeSrtSettings(dir, buildSrtSettings(worktree, filepath.Join(dir, srtSettingsFile),
+		srtPolicy{denyRead: SrtReadPolicy(&config.Config{}, []string{"HOME=" + home})}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Some CI hosts forbid the nested user namespace srt's seccomp helper
+	// needs. YNH_SRT_TEST_NO_SECCOMP=1 turns the helper off (srt's
+	// allowAllUnixSockets) in this test's copy of the settings; the read
+	// policy under test is the same.
+	if os.Getenv("YNH_SRT_TEST_NO_SECCOMP") == "1" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatal(err)
+		}
+		m["network"].(map[string]any)["allowAllUnixSockets"] = true
+		raw, _ = json.Marshal(m)
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cat := func(file string) ([]byte, error) {
+		c := exec.Command(srtBin, "--settings", path, "--", "cat", file)
+		c.Dir = worktree
+		return c.CombinedOutput()
+	}
+	if out, err := cat(ok); err != nil {
+		t.Skipf("srt cannot run a command here: %v: %s", err, out)
+	}
+	if _, err := cat(key); err == nil {
+		t.Errorf("srt let the worker read %s", key)
+	}
+}

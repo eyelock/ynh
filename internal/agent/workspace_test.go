@@ -54,9 +54,9 @@ func TestWorkerArgsRenderWorkspace(t *testing.T) {
 			t.Error("--add-dir without a grant")
 		}
 	})
-	t.Run("claude keeps the staging --add-dir beside the grant", func(t *testing.T) {
+	t.Run("claude reads the staging dir by rule, not --add-dir, beside the grant", func(t *testing.T) {
 		args := buildClaudeStreamArgs(StartOptions{ConfigPath: "/cfg", Workspace: dirs})
-		if !containsRun(args, []string{"--add-dir", "/cfg"}) || !containsRun(args, want) {
+		if containsRun(args, []string{"--add-dir", "/cfg"}) || !slices.Contains(args, "--allowedTools=Read(//cfg/**)") || !containsRun(args, want) {
 			t.Errorf("args %v", args)
 		}
 	})

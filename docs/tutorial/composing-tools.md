@@ -262,7 +262,8 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Error: MCP servers of included harness github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
 ```
 
@@ -276,7 +277,8 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Preview written to out/claude
 
 MCP servers from included harnesses:
@@ -447,7 +449,8 @@ ynd preview my-team -v claude -o out/conflict 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Error: MCP server "tracker" is defined differently by github-lite and other; declare it in the root harness to choose one
 ```
 
@@ -493,7 +496,8 @@ ynd preview my-team -v claude -o out/cycle 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Preview written to out/cycle
 
 MCP servers from included harnesses:
@@ -526,14 +530,14 @@ By default a harness's servers load alongside everything you have already config
 
 Without the flag, this is what ynh hands Claude Code:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... -p list your MCP servers`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers`
 ```bash
 ynh run ./my-team "list your MCP servers"
 ```
 
 With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` pointing at the file ynh generated with the harness's composed servers:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
 ynh run ./my-team --isolated-mcp "list your MCP servers"
 ```
@@ -613,7 +617,7 @@ tracker -> tracker-readonly
 
 A focus brings its prompt and its profile. `triage` binds the `readonly` profile to a prompt, so `--focus github-lite:triage` is a non-interactive run with both. The run's prompt comes from the focus; the profile is applied to `github-lite`:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
 ```bash
 ynh run ./my-team --focus github-lite:triage
 ```
@@ -998,12 +1002,12 @@ ynd preview my-team -v cursor -o out/delegate-cursor 2>&1 >/dev/null
 Expected output:
 
 ```
-  warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
+warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
 ```
 
 Now launch it. Claude Code ignores `mcpServers` in a plugin's agents, so `ynh run` hands the delegate to Claude with `--agents`. A command line is visible to every process on the machine, and Claude does not expand `${VAR}` inside `--agents`, so the token cannot go there. The server is wrapped in `ynh mcp-exec`, which reads the variables from a file in the run directory and starts the real server. The `...` below stands for text that varies between runs or is too long to show:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/.snapshots/_inline-.../.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/.snapshots/_inline-.../.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
 ynh run ./my-team --isolated-mcp "Ask the ops agent to call its whoami tool"
 ```

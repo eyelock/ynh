@@ -136,7 +136,7 @@ Expected (on stderr):
 ```
 
 The envelope has two fields:
-- `code` — a stable identifier safe to branch on in scripts (`invalid_input`, `not_found`, `config_error`, `io_error`)
+- `code` — a stable identifier safe to branch on in scripts (`invalid_input`, `not_found`, `config_error`, `io_error`, `untrusted`)
 - `message` — human-readable, do not parse
 
 Extract the error code in a script:
@@ -203,7 +203,7 @@ ynh ls --format json
 Expected (timestamps and paths will differ):
 ```json
 {
-  "capabilities": "0.10.0",
+  "capabilities": "0.11.0",
   "schema_version": 3,
   "ynh_version": "<version>",
   "harnesses": [
@@ -282,7 +282,7 @@ ynh ls --format json
 Expected (truncated):
 ```json
 {
-  "capabilities": "0.10.0",
+  "capabilities": "0.11.0",
   "schema_version": 3,
   "ynh_version": "<version>",
   "harnesses": []
@@ -378,7 +378,7 @@ ynh installed local/my-harness --format json
 Expected:
 ```json
 {
-  "capabilities": "0.10.0",
+  "capabilities": "0.11.0",
   "ynh_version": "0.3.x",
   "id": "local/my-harness",
   "installed": {

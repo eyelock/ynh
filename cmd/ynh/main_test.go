@@ -611,6 +611,7 @@ func TestResolveVendor(t *testing.T) {
 func TestGenerateLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "") // an exported YNH_HOME would override HOME
 
 	if err := generateLauncher("david", "local/david"); err != nil {
 		t.Fatalf("generateLauncher failed: %v", err)
@@ -1890,8 +1891,8 @@ func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 			if tt.wantWarn != (out != "") {
 				t.Errorf("stderr = %q, want warning %v", out, tt.wantWarn)
 			}
-			if tt.wantWarn && (!strings.HasPrefix(out, "warning: ") || strings.Count(out, "\n") != 1) {
-				t.Errorf("warning %q is not a single 'warning: ' line", out)
+			if tt.wantWarn && (!strings.HasPrefix(out, "warning: ") || !singleWarning(out)) {
+				t.Errorf("warning %q is not one 'warning: ' line, with at most a '  Fix: ' line", out)
 			}
 		})
 	}
@@ -2027,4 +2028,14 @@ func TestStdinIsTerminal_FalseForPipeAndDevNull(t *testing.T) {
 	if stdinIsTerminal() {
 		t.Error("/dev/null is not a terminal")
 	}
+}
+
+// singleWarning reports whether out is one "warning: " line, optionally
+// followed by one "  Fix: " line.
+func singleWarning(out string) bool {
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(lines) < 1 || len(lines) > 2 || !strings.HasPrefix(lines[0], "warning: ") {
+		return false
+	}
+	return len(lines) == 1 || strings.HasPrefix(lines[1], "  Fix: ")
 }

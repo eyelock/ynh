@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // writeIncludedHooksHarness writes a root that includes the harness "guard"
@@ -99,10 +100,10 @@ func TestExport_IncludedHooksWithoutConsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `included harness guard declares hooks (before_tool) that are not active; add "hooks": true to its include to run them`
+	want := `included harness guard declares hooks (before_tool) that are not active`
 	n := 0
 	for _, r := range results {
-		for _, w := range r.Warnings {
+		for _, w := range warn.Messages(r.Warnings) {
 			if w == want {
 				n++
 			}

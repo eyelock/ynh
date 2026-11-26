@@ -29,6 +29,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ExitError carries a specific exit code for non-zero loop termination.
@@ -36,6 +37,10 @@ import (
 type ExitError struct {
 	Code    int
 	Message string
+	// ErrorCode is the structured error code a refusal carries into the
+	// result's error_code ("untrusted" for a trust-gate refusal). Empty for
+	// every other exit.
+	ErrorCode string
 }
 
 func (e *ExitError) Error() string {
@@ -120,6 +125,14 @@ type RunOptions struct {
 	// reports a refusal itself. Nil trusts nothing; the decision needs the
 	// operator's trust record, which this package does not read.
 	HookTrust func(h *harness.Harness, id, backend, configDir string) bool
+	// TrustGate decides whether the harness may run at all (ynh #950). It is
+	// handed the harness as loaded and the installed id ("" for a harness
+	// given by path) before anything is assembled or started, and a non-nil
+	// error refuses the run with exit 1 and error_code "untrusted". On
+	// --resume it is handed the harness the checkpoint names, and a
+	// checkpoint that names none is refused. Nil runs ungated, which only
+	// tests do: the CLI always sets it.
+	TrustGate func(h *harness.Harness, id string) error
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -274,9 +287,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// checkConvergence declines to converge on an empty result set, so the
 		// run can end un-converged but never falsely converged.
 		if opts.HarnessName == "" {
-			_, _ = fmt.Fprintln(opts.Stderr,
-				"warning: this checkpoint records no harness, so no sensors will run. "+
-					"This run cannot converge — pass --harness <name> to resume with verification.")
+			warn.Print(opts.Stderr, warn.Warning{
+				Message: "this checkpoint records no harness, so no sensors will run. This run cannot converge.",
+				Fix:     "pass --harness <name> to resume with verification",
+			})
 		}
 	}
 
@@ -389,6 +403,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if namespace.Classify(opts.HarnessName) == namespace.RefID {
 			loadedID = opts.HarnessName
 		}
+		if opts.TrustGate != nil {
+			if gerr := opts.TrustGate(harnessObj, loadedID); gerr != nil {
+				return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: gerr.Error()}
+			}
+		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
 			id := loadedID
 			workspaceDirs = opts.WorkspaceGrant(harnessObj, id, opts.Backend, opts.WorktreeDir)
@@ -484,6 +503,13 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, &ExitError{Code: ExitResumeError, Message: fmt.Sprintf(
 				"checkpoint %q records no task, and a run interrupted before acting starts again from it: pass --task",
 				checkpointPath(opts.Resume))}
+		}
+		// A resume re-checks the trust gate for the harness its checkpoint
+		// names (decision 13), so one that names none has nothing to check
+		// and is refused rather than run unchecked.
+		if opts.HarnessName == "" && opts.TrustGate != nil {
+			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode,
+				Message: "refusing to resume: the checkpoint names no harness, so there is nothing to check against what you accepted"}
 		}
 	}
 
@@ -739,16 +765,30 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	case "claude", "codex", "opencode":
 	default:
 		if isolatedMCP {
-			_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is not supported by the %s backend: it will load your own MCP servers\n", wb.Name())
+			warn.Print(opts.Stderr, warn.Warning{
+				Message: fmt.Sprintf("MCP isolation is not supported by the %s backend: it will load your own MCP servers", wb.Name()),
+				Fix:     "use the claude, codex or opencode backend",
+			})
 		}
 	}
 	trustedHooks := opts.HookTrust != nil && loadedHarness != nil && opts.HookTrust(loadedHarness, loadedID, wb.Name(), configPath)
+	var srtDenyRead []string
+	if opts.Sandbox == "srt" {
+		cfg, cfgErr := config.Load()
+		if cfgErr != nil {
+			return result, fmt.Errorf("loading config: %w", cfgErr)
+		}
+		srtDenyRead = SrtReadPolicy(cfg, workerEnvFor(workerEnv))
+		result.Sandbox = "srt"
+		result.SandboxDenyRead = srtDenyRead
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		TrustedHooks: trustedHooks,
 		WorktreeDir:  opts.WorktreeDir,
 		Workspace:    workspaceDirs,
 		ConfigPath:   configPath,
 		Sandbox:      opts.Sandbox,
+		SrtDenyRead:  srtDenyRead,
 		SessionDir:   sessionDir,
 		AutoApprove:  opts.AutoApprove,
 		Model:        opts.Model,
@@ -1748,9 +1788,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 		_ = os.RemoveAll(dir)
 		return "", nil, hookErr
 	}
-	for _, w := range hookWarnings {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, hookWarnings...)
 
 	// Generate vendor-native MCP config: the harness's own servers and those
 	// of its included harnesses, composed.

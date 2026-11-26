@@ -15,6 +15,7 @@ import (
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/warn"
 	"github.com/eyelock/ynh/internal/workspace"
 )
 
@@ -145,14 +146,9 @@ func validateFile(path string) error {
 	case base == plugin.PluginFile:
 		issues = lintPluginJSON(path)
 	case base == "marketplace.json":
-		// Registry index (inside a manifest directory) validates against the
-		// schema. Build config (anywhere else) validates via LoadConfig
-		// programmatic checks.
-		if plugin.InManifestDir(path) {
-			issues = lintRegistryMarketplace(path)
-		} else {
-			issues = lintMarketplaceConfig(path)
-		}
+		// Three shapes share this name (marketplace_shapes.go): each is
+		// validated as itself, and a file that is none of them is refused.
+		issues = lintMarketplaceFile(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -427,7 +423,7 @@ func validateHarness(dir string) error {
 	}
 
 	// Hooks a targeted vendor cannot carry are warnings: the manifest is valid.
-	var warnings []string
+	var warnings []warn.Warning
 	var hjw map[string]any
 	if data != nil && json.Unmarshal(data, &hjw) == nil {
 		warnings = hookVendorWarnings(hjw)
@@ -454,10 +450,9 @@ func validateHarness(dir string) error {
 }
 
 // printWarnings lists findings that do not fail validation.
-func printWarnings(warnings []string) {
-	for _, w := range warnings {
-		fmt.Printf("  warning: %s\n", w)
-	}
+// They go to stderr through the shared printer, like every other warning.
+func printWarnings(warnings []warn.Warning) {
+	warn.Print(os.Stderr, warnings...)
 }
 
 // printChecked lists what validation looked at, so "valid" is never a claim the reader has to

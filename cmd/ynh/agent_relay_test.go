@@ -202,8 +202,9 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 		{name: "no ynr", setting: "env", spool: "spool", note: "ynr is not on PATH"},
 		{name: "no spool", relay: "serve", setting: "env", spool: "none", note: "there is no spool folder"},
 		{name: "operator's OTLP", relay: "serve", setting: "env", spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
-		// ynh's own record goes to the spool for a protocol its exporter cannot
-		// speak, but the vendor's telemetry is still the operator's.
+		// ynh's own record goes to the operator's endpoint (http/protobuf) or,
+		// for grpc, which its exporter cannot speak, to the spool; the vendor's
+		// telemetry is the operator's either way.
 		{name: "operator's OTLP over http/protobuf", relay: "serve", setting: "env", spool: "otlp-protobuf", note: "OTEL_EXPORTER_OTLP_* is set"},
 		{name: "operator's OTLP over grpc", relay: "serve", setting: "env", spool: "otlp-grpc", note: "OTEL_EXPORTER_OTLP_* is set"},
 		{name: "srt", relay: "serve", setting: "env", spool: "spool", backend: "srt", note: "--sandbox srt would block the worker", code: agent.ExitWorkerError},
@@ -241,7 +242,7 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 			// the relay's settings must still win.
 			t.Setenv("OTEL_LOG_USER_PROMPTS", "1")
 			t.Setenv("OTEL_LOG_TOOL_CONTENT", "1")
-			installListTestHarness(t, home, "relayprobe",
+			installTrustedTestHarness(t, home, "relayprobe",
 				`{"name":"relayprobe","version":"0.1.0","default_vendor":"claude","env_passthrough":["OTEL_LOG_USER_PROMPTS","OTEL_LOG_TOOL_CONTENT"]}`)
 
 			var envFile, argsFile string

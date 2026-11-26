@@ -101,6 +101,8 @@ Install a harness from a Git URL, a registry id, or a local path.
 Flags:
   --path <subdir>    Install from a subdirectory of the repository
   --ref <ref>        Pin to a tag, branch or commit
+  --allow-shadow     Install even when the harness's name matches a command on PATH
+                     (its launcher would replace that command; refused by default)
 
 Examples:
   ynh install github.com/myorg/david
@@ -156,6 +158,10 @@ Flags:
   --resume=<id>            Continue one specific session by id
                            A trailing prompt is sent to the resumed session,
                            a --focus prompt is not; some vendors refuse it
+  --on-live refuse|allow   When a session of the harness is already live (ynh ps):
+                           refuse stops this run, allow starts it quietly. Without
+                           it the harness's on_live applies; unset, ynh warns
+                           and starts it
   --no-workspace           Grant none of the harness's requested workspace folders
                            for this run (see docs/workspace.md)
   --label key:value        A label for the run (repeatable; key: removes one).
@@ -213,7 +219,10 @@ On a terminal, a row wider than the terminal is cut to fit: INCLUDES and
 DELEGATES TO first (ending "… (+N)"), then SOURCE, then LABELS. Piped output is
 never cut. An empty INCLUDES or DELEGATES TO shows "-".`,
 
-	"info": `ynh info <name> [flags]
+	"info": `ynh info <harness-id|path> [flags]
+
+Takes an installed harness id, or a path to a harness folder ("." for the
+current one), as ynh run, ynh check and ynh delegate add do.
 
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
@@ -295,6 +304,19 @@ Show symlink installations across projects.
 Flags:
   --format text|json   Output format (default text)`,
 
+	"ps": `ynh ps [flags]
+
+List the sessions ynh has launched that are live or orphaned (a delegate whose
+owner session is gone). Each row has the harness, vendor, launch mode
+(interactive, one-shot, delegate), wrapper and vendor pid, start time and
+address. A session whose process is gone, or whose pid now belongs to another
+process, is dead and is not listed without --all.
+
+Flags:
+  --all                Include ended and dead sessions (history)
+  --format text|json   Output format (default text)
+  --json               Same as --format json`,
+
 	"search": `ynh search <term> [flags]
 
 Search configured registries and sources for a harness.
@@ -325,7 +347,9 @@ Run 'ynh backend <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"delegate": `ynh delegate <add|remove|update> <harness> <url> [flags]
 
-Manage a harness's Git delegates.
+Manage a harness's Git delegates. <harness> is an installed harness id, or a
+path to a harness folder ("." for the current one), the same forms ynh info
+takes.
 
   ynh delegate add <harness> <url>      Add a delegate
   ynh delegate remove <harness> <url>   Remove a delegate
@@ -491,8 +515,11 @@ States:
   changed      The commands differ from what you accepted.
 
 This reports; it does not block. Nothing refuses to run because a harness is
-unreviewed. The record earns its place by pinning the exact command set you
-read, so that "changed" can be reported when an update alters it.
+unreviewed or changed. The record earns its place by pinning the exact command
+set you read, so that "changed" can be reported when an update alters it:
+'ynh check' reports it, and 'ynh run' warns on stderr before launch, naming the
+kinds of command the harness declares (not which one moved) and any workspace
+folders left ungranted.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising

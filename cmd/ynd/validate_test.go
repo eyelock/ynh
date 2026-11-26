@@ -722,7 +722,7 @@ func TestHookVendorWarnings_Timeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := hookVendorWarnings(hj)
-	if len(got) != 1 || !strings.Contains(got[0], "on_session_end") || !strings.Contains(got[0], "codex") || !strings.Contains(got[0], "30s") {
+	if len(got) != 1 || !strings.Contains(got[0].Message, "on_session_end") || !strings.Contains(got[0].Message, "codex") || !strings.Contains(got[0].Message, "30s") {
 		t.Fatalf("warnings = %q", got)
 	}
 }
@@ -735,7 +735,7 @@ func TestHookVendorWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := hookVendorWarnings(hj)
-	if len(got) != 2 || !strings.Contains(got[0], "on_session_start") || !strings.HasPrefix(got[1], `profile "ci": `) {
+	if len(got) != 2 || !strings.Contains(got[0].Message, "on_session_start") || !strings.HasPrefix(got[1].Message, `profile "ci": `) {
 		t.Fatalf("warnings = %q", got)
 	}
 

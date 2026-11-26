@@ -16,6 +16,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/mcpexec"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // claudePluginJSON is the Claude Code plugin.json schema: identity fields,
@@ -234,8 +235,8 @@ func claudeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []st
 // plugin still load. The harness's servers then arrive as <server> rather
 // than plugin:<harness>:<server>. The "=" spelling keeps --mcp-config, which
 // is variadic, from swallowing a positional that follows it.
-func (c *Claude) IsolateMCP(configPath string) ([]string, string) {
-	return claudeIsolationArgs(configPath), ""
+func (c *Claude) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	return claudeIsolationArgs(configPath), nil
 }
 
 // ClaudeIsolationArgs is IsolateMCP for callers that launch Claude without an
@@ -270,11 +271,15 @@ func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string
 	}
 
 	// Load assembled artifacts (skills, agents, rules, commands) via --plugin-dir.
-	// Also --add-dir to grant read access so Claude doesn't prompt for permission
-	// when reading plugin files at runtime (the staging dir is outside the project).
+	// Read access to the run dir, which is outside the project, is an allow
+	// rule and not --add-dir: Claude Code asks to trust every --add-dir folder
+	// that is new to it, and the run dir is a content-addressed snapshot whose
+	// path changes whenever the harness does, so it would ask on every start.
+	// An --add-dir folder's .claude/agents also load as project agents, whose
+	// own mcpServers Claude blocks as an untrusted agent origin (ynh #898).
 	pluginDir := filepath.Join(configPath, ".claude")
 	args = append(args, "--plugin-dir", pluginDir)
-	args = append(args, "--add-dir", configPath)
+	args = append(args, ClaudeRunDirReadArgs(configPath)...)
 
 	// Inject harness instructions if present.
 	instructionsPath := filepath.Join(configPath, "CLAUDE.md")
@@ -820,9 +825,7 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	args := buildClaudeArgs(configPath, initialPrompt, extraArgs)
 	env := os.Environ()
 	extra, warnings := ClaudeSessionEndEnv(configPath, os.LookupEnv)
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, warnings...)
 	return execVendor(claudeBin, args, append(env, extra...))
 }
 
@@ -848,4 +851,25 @@ func (c *Claude) GeneratePluginHookConfigForCopilot(hooks map[string][]plugin.Ho
 	files := map[string][]byte{pluginHookFile(c.Name()): data}
 	sessionContextFiles(files, SessionContextScript, sessionContextBoth, hooks)
 	return files, nil
+}
+
+// ClaudeRunDirReadArgs returns the argument that lets Claude Code read the run
+// directory without asking: an allow rule for the directory, and for what it
+// resolves to when it is a link. Not --add-dir, which makes Claude Code ask to
+// trust a folder it has not seen (a snapshot's path changes with its content)
+// and load the folder's own agents (ynh #898). An absolute path in a rule
+// starts with a second slash, so the path is made absolute first.
+func ClaudeRunDirReadArgs(configPath string) []string {
+	if abs, err := filepath.Abs(configPath); err == nil {
+		configPath = abs
+	}
+	paths := []string{configPath}
+	if abs, err := filepath.EvalSymlinks(configPath); err == nil && abs != configPath {
+		paths = append(paths, abs)
+	}
+	rules := make([]string, 0, len(paths))
+	for _, p := range paths {
+		rules = append(rules, "Read(/"+filepath.ToSlash(p)+"/**)")
+	}
+	return []string{"--allowedTools=" + strings.Join(rules, ",")}
 }

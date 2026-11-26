@@ -21,7 +21,7 @@ Relative entries resolve against the harness's own directory, like other relativ
 A requested folder is granted in one of two ways, decided in this order:
 
 1. **The operator allow-list.** If one is set, a folder that resolves inside one of its roots is granted, with no trust step. A folder outside the roots is refused with a warning that names the allow-list. **Trust cannot override the allow-list.**
-2. **Trust.** With no allow-list, a folder is granted only while the harness is accepted with `ynh trust accept <harness>`, and the accepted digest covers its current `workspace` entries. Anything else is skipped with a warning that says to run `ynh trust accept`. A harness run from a path rather than installed has no trust record, so it needs an allow-list.
+2. **Trust.** With no allow-list, a folder is granted only while the harness is accepted with `ynh trust accept <harness>`, and the accepted digest covers its current `workspace` entries. Anything else is skipped with a warning that says to run `ynh trust accept`. A harness run from a path rather than installed has no trust record, so it needs an allow-list. When a harness's trust state is `changed`, `ynh run` warns before launch and names its ungranted folders.
 
 ### The allow-list
 
@@ -82,7 +82,7 @@ Each granted folder becomes the vendor's own flag, or needs none. `ynh run` and 
 
 A vendor with no equivalent is never silently dropped: `scripts/workspace-parity.sh` (run by `make check-vendor-parity`) requires every vendor adapter to declare its flag, the reason it has none, or why it needs none.
 
-ynh already passes `--add-dir` for its own assembled directory on Claude and Copilot. The granted folders are additional `--add-dir` flags beside it.
+ynh passes `--add-dir` for its own assembled directory on Copilot. On Claude Code it grants the directory an allow rule for reading instead (`--allowedTools=Read(//<dir>/**)`), because Claude Code asks to trust each `--add-dir` folder it has not seen and loads that folder's agents, and a run directory's path changes with its content. The granted folders are `--add-dir` flags.
 
 ## Switching it off
 

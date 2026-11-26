@@ -16,6 +16,7 @@ import (
 	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/presence"
 )
 
 // The delegate's session is this test binary in a helper mode: its "ynh run"
@@ -185,6 +186,19 @@ func TestStartReturnsAtOnceWithHandle(t *testing.T) {
 	s.call("delegate_cancel", map[string]any{"task_id": got.TaskID})
 }
 
+// delegate_to_<name> holds the call for its wait, as delegate_status does: a
+// call that comes back at once with a wait set came from a client that
+// offers MCP Tasks (TestTasksPath), which is given a task at once (ynh #902).
+func TestStartHoldsTheCallForItsWait(t *testing.T) {
+	s := newSession(t, setup(t), "", nil)
+	started := time.Now()
+	r := s.call("delegate_to_reviewer", map[string]any{"task": "sleep 30", "wait": 2})
+	if d := time.Since(started); d < 1500*time.Millisecond {
+		t.Errorf("delegate_to_reviewer with wait 2 returned after %v, want it held for about 2s", d)
+	}
+	s.call("delegate_cancel", map[string]any{"task_id": r.StructuredContent.TaskID})
+}
+
 func TestBoundedWaitRunsOut(t *testing.T) {
 	s := newSession(t, setup(t), "", nil)
 	r := s.call("delegate_to_reviewer", map[string]any{"task": "sleep 30", "wait": 1})
@@ -286,7 +300,7 @@ func TestToolsDeclareOutputSchemas(t *testing.T) {
 			t.Errorf("%s: schemas %v / %v", tl.Name, tl.InputSchema, tl.OutputSchema)
 		}
 	}
-	want := "delegate_cancel delegate_list delegate_reply delegate_result delegate_status delegate_to_reviewer"
+	want := "delegate_cancel delegate_list delegate_reply delegate_result delegate_status delegate_to_reviewer ynh_ps"
 	if strings.Join(sorted(names), " ") != want {
 		t.Errorf("tools = %v, want %s", names, want)
 	}
@@ -615,5 +629,46 @@ func TestAQuestionNobodyAnswersStaysOpenAfterTheDelegatesWait(t *testing.T) {
 	rec, _ := delegation.Load(path)
 	if len(rec.Questions) != 1 || rec.Questions[0].Answer != nil {
 		t.Errorf("questions = %+v", rec.Questions)
+	}
+}
+
+func TestYnhPsListsLiveSessions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	s := newSession(t, setup(t), "", nil)
+	ps, err := presence.Start(presence.Record{SessionID: "ps-1", Harness: "seat", Vendor: "claude", Mode: presence.ModeInteractive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ps.End()
+	raw := s.call("ynh_ps", nil).Raw
+	if !strings.Contains(string(raw), `ps-1`) || !strings.Contains(string(raw), `ynh:ps-1`) {
+		t.Errorf("ynh_ps = %s", raw)
+	}
+}
+
+// A refusal the guard decides before the session starts reaches the parent
+// with its reason and Fix line every time, not only when the failed status
+// arrives before the parent reads the task (ynh #955). Depth zero and a
+// self-loop, repeated.
+func TestARefusedDelegationAlwaysCarriesItsReasonAndFixLine(t *testing.T) {
+	cases := []struct {
+		name, env, val, want string
+	}{
+		{"depth zero", delegation.MaxDepthEnv, "0", delegation.MaxDepthEnv},
+		{"self-loop", delegation.ChainEnv, "local/reviewer", "loop"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv(c.env, c.val)
+			s := newSession(t, setup(t), "", nil)
+			for i := 0; i < 20; i++ {
+				r := s.call("delegate_to_reviewer", map[string]any{"task": "echo should-not-run"})
+				got := r.StructuredContent
+				if got.State != "failed" || !strings.Contains(got.Message, c.want) || !strings.Contains(got.Message, "Fix:") {
+					t.Fatalf("refusal %d: state %q, message %q; want the reason (%s) and a Fix line", i, got.State, got.Message, c.want)
+				}
+			}
+		})
 	}
 }

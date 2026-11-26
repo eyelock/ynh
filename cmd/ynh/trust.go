@@ -20,6 +20,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -121,10 +122,11 @@ func saveTrustStore(s trustStore) error {
 }
 
 // trustScheme is the digest scheme. 1 (recorded as absent) covered sensor
-// commands only; 2 adds hook commands and MCP servers. A digest from an older
+// commands only; 2 adds hook commands and MCP servers; 3 adds the contents of
+// the scripts those commands run (see scriptRef). A digest from an older
 // scheme can never equal a current one, because the current input is prefixed
 // with the scheme, so an old acceptance fails closed as "changed".
-const trustScheme = 2
+const trustScheme = 3
 
 // executable is one sensor string a harness can get run through a shell.
 type executable struct {
@@ -139,6 +141,8 @@ type executable struct {
 	// runs, which is the publishing harness and not this one.
 	Source     string `json:"source,omitempty"`
 	HarnessDir string `json:"harness_dir,omitempty"`
+	// Script is the script the command runs, when it names one.
+	Script *scriptRef `json:"script,omitempty"`
 }
 
 // hookExec is one hook command. Profile is empty for the harness's own hooks,
@@ -151,6 +155,8 @@ type hookExec struct {
 	// Source names the included harness that supplied the hook, which has to
 	// have consented to it with "hooks": true. Empty for the harness's own.
 	Source string `json:"source,omitempty"`
+	// Script is the script the command runs, when it names one.
+	Script *scriptRef `json:"script,omitempty"`
 }
 
 // mcpValue is an env or header entry of an MCP server. The raw value feeds the
@@ -178,6 +184,8 @@ type mcpExec struct {
 	Cwd       string     `json:"cwd,omitempty"`
 	Env       []mcpValue `json:"env,omitempty"`
 	Headers   []mcpValue `json:"headers,omitempty"`
+	// Script is the script a stdio server's command runs, when it names one.
+	Script *scriptRef `json:"script,omitempty"`
 }
 
 // trustSet is everything the operator is asked to review, grouped by kind.
@@ -296,6 +304,13 @@ type runView struct {
 	// HookSources maps each event of H.Hooks to the include chain that
 	// supplied each entry, "" for the harness's own.
 	HookSources map[string][]string
+	// HookDirs runs parallel to HookSources: the directory of the harness that
+	// declared each hook, "" for the harness's own. HookScripts maps a rewritten
+	// "./" script of an included harness to where it comes from. MCPDirs maps
+	// each MCP server of H to the directory of the harness that declared it.
+	HookDirs    map[string][]string
+	HookScripts map[string]assembler.ScriptOrigin
+	MCPDirs     map[string]string
 }
 
 // runViews is the single place that says which resolved views of a harness
@@ -317,6 +332,8 @@ type delegateView struct {
 	Source  string
 	Servers map[string]plugin.MCPServer
 	Sources map[string]string
+	// Dirs maps each server to the directory of the harness that declared it.
+	Dirs map[string]string
 	// Focus is the focus the delegates_to entry selects, nil for none. Its
 	// prompt is the delegate's standing instructions.
 	Focus *harness.DelegateFocus
@@ -325,7 +342,10 @@ type delegateView struct {
 // runSources is where the servers and hooks of a view came from.
 type runSources struct {
 	mcp       map[string]string
+	mcpDirs   map[string]string
 	hooks     map[string][]string
+	hookDirs  map[string][]string
+	scripts   map[string]assembler.ScriptOrigin
 	delegates []delegateView
 	entries   []string
 }
@@ -335,7 +355,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 	// MCP servers of every harness they reach, composed as a run composes them,
 	// with their sources. h itself is not changed.
 	fold := func(h *harness.Harness, sel harness.Selection) (*harness.Harness, runSources, []resolver.ResolveResult, error) {
-		src := runSources{mcp: map[string]string{}}
+		src := runSources{mcp: map[string]string{}, mcpDirs: map[string]string{}}
 		delegates, entries, err := delegateViews(h)
 		if err != nil {
 			return nil, src, nil, err
@@ -363,8 +383,11 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 		c.MCPServers = servers
 		c.Hooks = hs.Hooks
 		src.hooks = hs.Sources
+		src.hookDirs = hs.Dirs
+		src.scripts = hs.Scripts
 		for _, pr := range provenance {
 			src.mcp[pr.Server] = pr.Source
+			src.mcpDirs[pr.Server] = pr.Dir
 		}
 		return &c, src, resolved, nil
 	}
@@ -386,7 +409,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, HookSources: src.hooks, Delegates: src.delegates, DelegateEntries: src.entries})
+		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, MCPDirs: src.mcpDirs, HookSources: src.hooks, HookDirs: src.hookDirs, HookScripts: src.scripts, Delegates: src.delegates, DelegateEntries: src.entries})
 		if profile != "" {
 			return
 		}
@@ -416,7 +439,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 					problems = append(problems, fmt.Sprintf("profile %s: %v", qualified, err))
 					continue
 				}
-				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, HookSources: vSrc.hooks, Delegates: vSrc.delegates, DelegateEntries: vSrc.entries})
+				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, MCPDirs: vSrc.mcpDirs, HookSources: vSrc.hooks, HookDirs: vSrc.hookDirs, HookScripts: vSrc.scripts, Delegates: vSrc.delegates, DelegateEntries: vSrc.entries})
 			}
 		}
 	}
@@ -476,9 +499,10 @@ func delegateViews(h *harness.Harness) ([]delegateView, []string, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
 		}
-		dv := delegateView{Name: dh.Name, Source: entrySourceKey(fd.Entry), Servers: servers, Sources: map[string]string{}, Focus: focus}
+		dv := delegateView{Name: dh.Name, Source: entrySourceKey(fd.Entry), Servers: servers, Sources: map[string]string{}, Dirs: map[string]string{}, Focus: focus}
 		for _, pr := range provenance {
 			dv.Sources[pr.Server] = pr.Source
+			dv.Dirs[pr.Server] = pr.Dir
 		}
 		out = append(out, dv)
 	}
@@ -509,6 +533,7 @@ func collectSensors(profile string, p *harness.Harness, base map[string]bool, fa
 		if s.Origin != "" {
 			e.HarnessDir = s.Dir(fallbackDir)
 		}
+		e.Script = sensorScript(value, s.Dir(fallbackDir))
 		if profile != "" && base[sensorKey(e)] {
 			return
 		}
@@ -540,7 +565,8 @@ func hookKey(h hookExec) string { return h.Event + "\x00" + h.Matcher + "\x00" +
 // lists only entries the harness's own hooks do not already carry: the rest
 // are reviewed once, at the top level, and repeating them per profile would
 // bury what a profile actually adds.
-func collectHooks(profile string, v *harness.Harness, sources map[string][]string, base map[string]bool) []hookExec {
+func collectHooks(profile string, v *harness.Harness, vw runView, fallbackDir string, base map[string]bool) []hookExec {
+	sources := vw.HookSources
 	var out []hookExec
 	for _, event := range slices.Sorted(maps.Keys(v.Hooks)) {
 		for i, e := range v.Hooks[event] {
@@ -548,6 +574,11 @@ func collectHooks(profile string, v *harness.Harness, sources map[string][]strin
 			if i < len(sources[event]) {
 				h.Source = sources[event][i]
 			}
+			dir := fallbackDir
+			if i < len(vw.HookDirs[event]) && vw.HookDirs[event][i] != "" {
+				dir = vw.HookDirs[event][i]
+			}
+			h.Script = hookScriptRef(e.Command, dir, vw.HookScripts)
 			if profile != "" && base[hookKey(h)] {
 				continue
 			}
@@ -557,8 +588,8 @@ func collectHooks(profile string, v *harness.Harness, sources map[string][]strin
 	return out
 }
 
-func mcpFromServer(profile, name, source string, s plugin.MCPServer) mcpExec {
-	return mcpExec{
+func mcpFromServer(profile, name, source, dir string, s plugin.MCPServer) mcpExec {
+	return mcpExec{Script: mcpScript(s.Command, s.Args, dir),
 		Profile: profile, Name: name, Source: source, Transport: s.Transport(),
 		Command: s.Command, Args: s.Args, URL: s.URL, Cwd: s.Cwd,
 		Env: mcpValues(s.Env), Headers: mcpValues(s.Headers),
@@ -574,14 +605,18 @@ func mcpKey(m mcpExec) string {
 
 // collectMCP lists the MCP servers of one resolved view, with the same
 // profile-delta rule as collectHooks.
-func collectMCP(profile string, v *harness.Harness, sources map[string]string, base map[string]bool) []mcpExec {
+func collectMCP(profile string, v *harness.Harness, sources, dirs map[string]string, fallbackDir string, base map[string]bool) []mcpExec {
 	var out []mcpExec
 	for _, name := range slices.Sorted(maps.Keys(v.MCPServers)) {
 		src := sources[name]
 		if src == harness.MCPSourceRoot {
 			src = ""
 		}
-		m := mcpFromServer(profile, name, src, v.MCPServers[name])
+		dir := fallbackDir
+		if d := dirs[name]; d != "" {
+			dir = d
+		}
+		m := mcpFromServer(profile, name, src, dir, v.MCPServers[name])
 		if profile != "" && base[mcpKey(m)] {
 			continue
 		}
@@ -592,7 +627,7 @@ func collectMCP(profile string, v *harness.Harness, sources map[string]string, b
 
 // collectDelegateMCP lists the servers the delegates of one view carry, with
 // the same profile-delta rule as collectMCP.
-func collectDelegateMCP(profile string, delegates []delegateView, base map[string]bool) []mcpExec {
+func collectDelegateMCP(profile string, delegates []delegateView, fallbackDir string, base map[string]bool) []mcpExec {
 	var out []mcpExec
 	for _, d := range delegates {
 		for _, name := range slices.Sorted(maps.Keys(d.Servers)) {
@@ -600,7 +635,11 @@ func collectDelegateMCP(profile string, delegates []delegateView, base map[strin
 			if src == harness.MCPSourceRoot {
 				src = ""
 			}
-			m := mcpFromServer(profile, name, src, d.Servers[name])
+			dir := fallbackDir
+			if dd := d.Dirs[name]; dd != "" {
+				dir = dd
+			}
+			m := mcpFromServer(profile, name, src, dir, d.Servers[name])
 			m.Delegate = d.Name
 			if profile != "" && base[mcpKey(m)] {
 				continue
@@ -630,9 +669,9 @@ func harnessExecutables(p *harness.Harness) trustSet {
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, v := range views {
 		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
-		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, v.HookSources, baseHooks)...)
-		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, baseMCP)...)
-		set.MCPServers = append(set.MCPServers, collectDelegateMCP(v.Profile, v.Delegates, baseMCP)...)
+		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, v, p.Dir, baseHooks)...)
+		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, v.MCPDirs, p.Dir, baseMCP)...)
+		set.MCPServers = append(set.MCPServers, collectDelegateMCP(v.Profile, v.Delegates, p.Dir, baseMCP)...)
 		if v.Profile != "" {
 			continue
 		}
@@ -689,6 +728,7 @@ func writeMCP(w io.Writer, m mcpExec) {
 		field(w, "delegate")
 		field(w, m.Delegate)
 	}
+	m.Script.write(w)
 }
 
 // executablesDigest fingerprints everything the operator reviews.
@@ -707,6 +747,7 @@ func executablesDigest(set trustSet) string {
 		field(h, e.Sensor)
 		field(h, e.Field)
 		field(h, e.Value)
+		e.Script.write(h)
 	}
 	for _, e := range set.Hooks {
 		field(h, "hook")
@@ -714,6 +755,7 @@ func executablesDigest(set trustSet) string {
 		field(h, e.Event)
 		field(h, e.Matcher)
 		field(h, e.Command)
+		e.Script.write(h)
 		// Only when set, so a harness without includes keeps the digest an
 		// earlier ynh recorded for it.
 		if e.Source != "" {
@@ -834,6 +876,21 @@ const legacyDigestNote = "Your acceptance predates the digest covering hooks and
 	"sensor commands only), so this harness reads as changed even if nothing in it\n" +
 	"has. Review the hooks and MCP servers above, then accept again."
 
+// scriptDigestNote explains the one-time "changed" on a record accepted under
+// scheme 2, which covered what a command says and not the script it runs.
+const scriptDigestNote = "Your acceptance predates the digest covering the contents of the scripts that\n" +
+	"hooks, MCP servers and sensors run (it covered only the command text), so this\n" +
+	"harness reads as changed even if nothing in it has. Review the scripts above,\n" +
+	"then accept again."
+
+// legacyNote is the explanation for a record accepted under the given scheme.
+func legacyNote(scheme int) string {
+	if scheme < 2 {
+		return legacyDigestNote
+	}
+	return scriptDigestNote
+}
+
 // trustStatus is the report for one harness.
 type trustStatus struct {
 	Harness     string       `json:"harness"`
@@ -875,6 +932,9 @@ type trustStatus struct {
 	DelegateFocuses []delegateFocusReport `json:"delegate_focuses,omitempty"`
 	// delegateFocuses is the set's, for `trust show` to fill the field.
 	delegateFocuses []delegateFocusReport
+	// acceptedScheme is the digest scheme of the record, for the note that
+	// explains why a legacy record reads as changed.
+	acceptedScheme int
 }
 
 const (
@@ -917,6 +977,7 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 	if rec, ok := store.Harnesses[id]; ok {
 		st.AcceptedDigest, st.AcceptedAt = rec.Digest, rec.AcceptedAt
 		st.LegacyDigest = rec.Scheme < trustScheme
+		st.acceptedScheme = rec.Scheme
 		if rec.Digest == st.Digest {
 			st.State = trustAccepted
 		} else {
@@ -1061,6 +1122,11 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			"usage: ynh trust accept <harness>")
 	}
+	// A folder (./dir) has no install id: accepting it records the remote
+	// includes' commands, the only part of a folder run the gate checks.
+	if namespace.Classify(name) == namespace.RefPath {
+		return acceptFolderIncludes(name, format, structured, stdout, stderr)
+	}
 	p, err := harness.LoadQualified(name)
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
@@ -1172,6 +1238,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 			if e.Source != "" {
 				_, _ = fmt.Fprintf(w, "    from %s; $YNH_HARNESS_DIR is %s\n", e.Source, e.HarnessDir)
 			}
+			writeScriptLine(w, e.Script)
 		}
 	}
 	if len(s.Hooks) > 0 {
@@ -1182,6 +1249,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 				m = " [" + h.Matcher + "]"
 			}
 			_, _ = fmt.Fprintf(w, "  %s%s%s%s\n    %s\n", h.Event, m, fromSuffix(h.Source), scopeSuffix(h.Profile), h.Command)
+			writeScriptLine(w, h.Script)
 		}
 	}
 	if len(s.MCPServers) > 0 {
@@ -1190,6 +1258,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, delegateSuffix(m.Delegate)+fromSuffix(m.Source), scopeSuffix(m.Profile))
 			if m.Command != "" {
 				_, _ = fmt.Fprintf(w, "    command: %s\n", strings.Join(append([]string{m.Command}, m.Args...), " "))
+				writeScriptLine(w, m.Script)
 			}
 			if m.URL != "" {
 				_, _ = fmt.Fprintf(w, "    url:     %s\n", m.URL)
@@ -1229,7 +1298,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "\nNot yet reviewed. 'ynh trust accept %s' records that you have read the above.\n", s.Harness)
 	case trustChanged:
 		if s.LegacyDigest {
-			_, _ = fmt.Fprintf(w, "\n%s\n", legacyDigestNote)
+			_, _ = fmt.Fprintf(w, "\n%s\n", legacyNote(s.acceptedScheme))
 		}
 		_, _ = fmt.Fprintf(w, "\nThese commands have changed since you accepted them.\n"+
 			"'ynh trust accept %s' records the new set.\n", s.Harness)
@@ -1277,6 +1346,58 @@ func warnIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
 			"  accepted %s, now %s. Review with 'ynh trust show %s'.\n",
 		id, rec.AcceptedAt, rec.Digest, digest, id)
 	if rec.Scheme < trustScheme {
-		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyDigestNote, "\n", "\n  "))
+		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyNote(rec.Scheme), "\n", "\n  "))
+	}
+}
+
+// warnRunIfTrustChanged prints one warning on stderr before `ynh run` launches
+// a harness whose trust state is "changed": its hooks, MCP servers or sensor
+// commands differ from what the operator accepted. It never refuses; whether a
+// changed harness should be blocked is a separate decision. Any other state
+// (accepted, unreviewed, no-commands, unavailable) prints nothing, so a
+// harness that is in order launches with no new output.
+//
+// The record keeps only a digest, so it cannot say which command moved: the
+// warning names the kinds of command the harness declares that the digest
+// covers. When the harness requests workspace folders and no allow-list is
+// set, trust is what grants them, so it also names the folders left ungranted.
+func warnRunIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
+	if stderr == nil || p == nil || id == "" {
+		return
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return
+	}
+	st := trustStatusFor(id, p, store, nil)
+	if st.State != trustChanged {
+		return
+	}
+	var kinds []string
+	if len(st.Hooks) > 0 {
+		kinds = append(kinds, "hooks")
+	}
+	if len(st.MCPServers) > 0 {
+		kinds = append(kinds, "MCP servers")
+	}
+	if len(st.Executables) > 0 {
+		kinds = append(kinds, "sensors")
+	}
+	what := "its commands"
+	if len(kinds) > 0 {
+		what = strings.Join(kinds, ", ")
+	}
+	_, _ = fmt.Fprintf(stderr,
+		"warning: %s has changed since you accepted it on %s (%s). The changed commands are active.\n"+
+			"  Review with 'ynh trust show %s', then 'ynh trust accept %s'.\n",
+		id, st.AcceptedAt, what, id, id)
+	if st.LegacyDigest {
+		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyNote(st.acceptedScheme), "\n", "\n  "))
+	}
+	if len(p.Workspace) > 0 {
+		home, _ := os.UserHomeDir()
+		if !workspaceAllowlist(home).Set {
+			_, _ = fmt.Fprintf(stderr, "  workspace folders not granted until you accept: %s\n", strings.Join(p.Workspace, ", "))
+		}
 	}
 }

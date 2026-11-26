@@ -11,6 +11,7 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // No delegates must write nothing at all, not an empty agents/ directory. An
@@ -133,7 +134,7 @@ func TestDelegateMCPWarnings(t *testing.T) {
 	}
 	warnings := DelegateMCPWarnings(ds, cursor)
 	want := "delegate docs-helper declares MCP servers (docs) that Cursor subagents cannot carry; they are not available to it"
-	if len(warnings) != 1 || warnings[0] != want {
+	if len(warnings) != 1 || warnings[0].Message != want {
 		t.Errorf("warnings = %q, want [%q]", warnings, want)
 	}
 
@@ -142,7 +143,7 @@ func TestDelegateMCPWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantClaude := "delegate docs-helper declares MCP servers (docs); Claude Code ignores mcpServers in plugin agents, so they will not load when this plugin is installed"
-	if got := DelegateMCPWarnings(ds, claude); len(got) != 1 || got[0] != wantClaude {
+	if got := DelegateMCPWarnings(ds, claude); len(got) != 1 || got[0].Message != wantClaude {
 		t.Errorf("Claude warnings = %q, want [%q]", got, wantClaude)
 	}
 
@@ -261,7 +262,7 @@ func TestExport_LeavesA2ADelegatesOutWithOneWarning(t *testing.T) {
 		t.Errorf("only the native delegate is exported, got %v", names)
 	}
 	var left []string
-	for _, w := range results[0].Warnings {
+	for _, w := range warn.Messages(results[0].Warnings) {
 		if strings.Contains(w, "left out of the export") {
 			left = append(left, w)
 		}
@@ -288,7 +289,7 @@ func TestExport_NoA2AWarningWhenNoVendorCarriesDelegates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(results[0].Warnings, "\n")
+	joined := strings.Join(warn.Messages(results[0].Warnings), "\n")
 	if !strings.Contains(joined, "opencode: skipping 1 delegates") || strings.Contains(joined, "left out of the export") {
 		t.Errorf("want the vendor's skip warning alone, got %q", joined)
 	}

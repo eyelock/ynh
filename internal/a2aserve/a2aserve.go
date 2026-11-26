@@ -98,7 +98,7 @@ func Open(o Options) (*Endpoint, error) {
 	}
 	ex := &executor{o: o, paths: map[a2a.TaskID]string{}}
 	mux := http.NewServeMux()
-	mux.Handle("/a2a", a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(ex)))
+	mux.Handle("/a2a", a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(ex, a2asrv.WithCallInterceptors(bearerUser{}))))
 	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(card))
 	e := &Endpoint{Opts: o, CardURL: base, Token: token, ex: ex,
 		srv: &http.Server{Handler: bearer(token, mux), ReadHeaderTimeout: 10 * time.Second}}
@@ -134,6 +134,19 @@ func bearer(token string, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// bearerUser names the caller the bearer check let in. The task store keeps each task under its
+// caller and lists only the caller's own, refusing a call with no named user as unauthenticated;
+// the bearer wrapper authenticates at the HTTP layer and names nobody, so without this the
+// listing of tasks was refused even with the right token. One token means one caller.
+type bearerUser struct {
+	a2asrv.PassthroughCallInterceptor
+}
+
+func (bearerUser) Before(ctx context.Context, callCtx *a2asrv.CallContext, _ *a2asrv.Request) (context.Context, any, error) {
+	callCtx.User = a2asrv.NewAuthenticatedUser("delegate", nil)
+	return ctx, nil, nil
 }
 
 type executor struct {
@@ -176,14 +189,17 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
 			})
 			sub := a2a.NewSubmittedTask(ec, ec.Message)
-			if err == nil {
-				sub.Metadata = map[string]any{MetaHandle: rec.Handle}
-			}
-			if !yield(sub, nil) {
+			if err != nil {
+				// A refusal decided before start is the task itself, already
+				// failed and carrying its reason: a client that takes the
+				// first event (ReturnImmediately) must not see a bare
+				// submitted task and lose the reason to a later event.
+				sub.Status = a2a.TaskStatus{State: a2a.TaskStateFailed, Message: agentMessage(ec, err.Error())}
+				yield(sub, nil)
 				return
 			}
-			if err != nil {
-				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateFailed, agentMessage(ec, err.Error())), nil)
+			sub.Metadata = map[string]any{MetaHandle: rec.Handle}
+			if !yield(sub, nil) {
 				return
 			}
 			path = p

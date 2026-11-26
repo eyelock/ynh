@@ -5,15 +5,15 @@ each sensor check, and an event when the run starts and when it ends. A factory
 can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
-It is the only ynh command that does. The commands that launch a vendor CLI
-(`ynh run` and the like) emit no ynh telemetry of their own, whatever the vendor
-(with the [relay](#vendor-telemetry-through-the-relay) on, a Copilot CLI `ynh run`
-does collect Copilot's own records), and what ynh does with its own process
-differs by vendor:
+`ynh run` writes a record of its own too, for every launch and every vendor:
+a `ynh.session` span with a started and a finished event ([What a launch
+emits](#what-a-launch-emits)). It carries no tokens, cost, paths or content;
+a vendor's own telemetry is a separate matter ([Vendor telemetry through the
+relay](#vendor-telemetry-through-the-relay), `ynh agent run`, and `ynh run` for Codex and Copilot CLI).
+The other commands that launch a vendor CLI emit nothing.
 
-- **Every vendor:** ynh stays the parent process while the vendor CLI runs as
-  its child, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
-  It is running throughout, but these commands still emit no telemetry of ynh's own.
+ynh stays the parent process while the vendor CLI runs as its child, on every
+vendor, and exits with the child's exit code ([Supervision](vendors.md#supervision)).
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
@@ -26,7 +26,8 @@ ynh chooses when the run starts, in this order:
 1. **`OTEL_EXPORTER_OTLP_*`.** An OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`
    or a per-signal one), or a setting ynh cannot honour (below), means the
    operator chose, and that choice wins. ynh posts its spans and logs to the
-   endpoint over OTLP/HTTP with JSON bodies, in the same batches, with the same
+   endpoint over OTLP/HTTP, with JSON or protobuf bodies as
+   `OTEL_EXPORTER_OTLP_PROTOCOL` asks, in the same batches, with the same
    resource and the same 2-second bound on every flush as the spool, and writes
    nothing to the spool. Settings that name no endpoint, such as a lone
    `OTEL_EXPORTER_OTLP_TIMEOUT`, ask for nothing, and the order goes on.
@@ -48,9 +49,10 @@ operator's `OTEL_EXPORTER_OTLP_*` stops the search, since that choice is theirs.
 
 ### Exporting to an OTLP endpoint
 
-ynh uses a small OTLP/HTTP exporter with JSON bodies from ynr's
-`spoolexporter`, not the standard OpenTelemetry exporters, which would bring in
-gRPC and protobuf and about sixty-five more modules. It reads these variables:
+ynh uses a small OTLP/HTTP exporter from ynr's `spoolexporter`, with JSON or
+protobuf bodies as `OTEL_EXPORTER_OTLP_PROTOCOL` asks, not the standard
+OpenTelemetry exporters, which would bring in gRPC and about sixty-five more
+modules. The protobuf bodies come from a small encoder inside `spoolexporter`. It reads these variables:
 
 | Variable | Used |
 |---|---|
@@ -58,16 +60,18 @@ gRPC and protobuf and about sixty-five more modules. It reads these variables:
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | each signal's full URL, as given |
 | `OTEL_EXPORTER_OTLP_HEADERS` and the per-signal `_HEADERS` | sent with each request; the per-signal list wins by name |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` and the per-signal `_TIMEOUT` | milliseconds, but each export is bounded by at least 2 seconds regardless |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | only `http/json` (or unset); another protocol sends the run to the spool, see below |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` (or unset) or `http/protobuf`; another protocol (`grpc`) sends the run to the spool, see below |
 
-`OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) other than `http/json`, including
-`http/protobuf` and `grpc`, is not spoken. The ynr how-to for Claude Code exports `http/protobuf`,
-and ynh's own relay sets it in the environment of the worker it starts, so this is a common
-setting. ynh does not drop the run for it: it prints one note on stderr naming the setting
-(never a header value) and writes the run to the spool, `YNR_SPOOL` or the standing spool, as if
-the endpoint had not been set. With no spool, the note says so, `nothing was recorded for this run`,
-and nothing is written. Nothing is sent to the endpoint either way. To export to the endpoint, set
-the protocol to `http/json`.
+`OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) set to `http/protobuf` sends protobuf
+bodies (`application/x-protobuf`) that a standard OTLP/HTTP receiver accepts; `http/json`
+or unset sends JSON. The ynr how-to for Claude Code exports `http/protobuf`, and ynh's own
+relay sets it in the environment of the worker it starts, so this is a common setting.
+
+`grpc`, or any other value, is not spoken. ynh does not drop the run for it: it prints one note
+on stderr naming the setting (never a header value) and writes the run to the spool, `YNR_SPOOL`
+or the standing spool, as if the endpoint had not been set. With no spool, the note says so,
+`nothing was recorded for this run`, and nothing is written. Nothing is sent to the endpoint
+either way. To export to the endpoint, set the protocol to `http/json` or `http/protobuf`.
 
 These other settings are not supported. When one is set, ynh prints one note on stderr naming
 the setting, never a header value, and writes nothing for the run: not to the endpoint, and not
@@ -217,6 +221,62 @@ Outcomes, one per [exit code](agent.md#exit-codes): `converged`, `refused`,
 `user_aborted`, `interrupted`. The span's status is ok for `converged` and an
 error otherwise, described by the outcome word alone.
 
+## What a launch emits
+
+`ynh run` records each launch of a vendor CLI, whichever of the five vendors
+runs (`claude`, `codex`, `cursor`, `copilot`, `opencode`) and whether or not
+the vendor has telemetry of its own. It uses the same machinery as `ynh agent
+run`: the [destination order](#where-it-goes), the [spool](#the-spool) writer,
+the once-a-minute look for the spool, the resource and the [run
+labels](#run-labels). `ynh.run` stays `ynh agent run`'s alone.
+
+| Name | Kind | When |
+|---|---|---|
+| `ynh.session.started` | event (log record) | the launch begins, before the vendor CLI starts, written at once |
+| `ynh.session` | span | the launch, from start to end |
+| `ynh.session.finished` | event (log record) | the vendor CLI has ended |
+
+A `ynh run` that is not a launch (`--install`, `--clean`) and an argument or
+harness error before the vendor is known emit nothing. After that, a launch
+ynh refuses still emits all three, with the outcome `refused`.
+
+| Attribute | On | Meaning |
+|---|---|---|
+| `ynh.session.id` | all | a new random id for each launch (32 hex digits) |
+| `ynh.session.outcome` | span, finished | `exited` (the vendor exited 0), `failed` (it exited non-zero), `signalled` (a signal ended it) or `refused` (ynh did not start it) |
+| `process.exit.code` | span, finished | the code `ynh run` exits with: the vendor's, `128+n` for a signal as a shell reports it, `1` for `refused` |
+| `ynh.session.signal` | span, finished | the signal's name, such as `SIGTERM`, when `signalled` |
+| `ynh.session.vendor` | all | the vendor CLI |
+| `ynh.harness.name` | all | the harness's canonical id, absent for a harness given by path |
+| `ynh.harness.version`, `ynh.harness.commit` | all | the declared version, and the commit it was installed from |
+| `ynh.run.focus`, `ynh.run.profile` | all | the focus and profile given |
+| `ynh.run.resumed` | all | `true` for a `--resume` |
+
+The span is ok for `exited` and an error otherwise, described by the outcome
+word alone. There are no tokens or cost, because an interactive vendor reports
+none to ynh, and no paths or content (ADR-006): those come from the vendor's
+own records.
+
+When telemetry is on, every process `ynh run` starts, the vendor CLI and what
+it launches, gets:
+
+- `TRACEPARENT` (and `TRACESTATE`, if any) naming the `ynh.session` span. A
+  launch under a factory step or another session joins the trace in the
+  `TRACEPARENT` it was given. Whether a vendor honours it differs: Codex does,
+  interactive Claude Code ignores it.
+- `ynh.session.id` appended to `OTEL_RESOURCE_ATTRIBUTES`, percent-encoded,
+  with an operator's value kept (an earlier `ynh.session.id`, from a session
+  that launched this one, is replaced), so a vendor's own records name the
+  launch they belong to.
+
+ynh sets these in its own environment before the launch, so they reach the
+vendor on every vendor. `YNR_SPOOL` is not set. When there is no destination,
+the vendor's environment is exactly what it was, an operator's `ynh.label.*` in
+`OTEL_RESOURCE_ATTRIBUTES` included (it is removed only once telemetry has a
+destination, [below](#where-they-go)). A spool that appears mid-launch does not
+reach a vendor already running, as for `ynh agent run`; when it appears, ynh
+removes the operator's `ynh.label.*` before it writes the first record.
+
 ## Run labels
 
 A label is a short `key:value` id the user chooses for a run, such as
@@ -266,10 +326,14 @@ these is yours.
 ### Where they go
 
 - **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
-  record `ynh agent run` writes (the registry declares the template
-  `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment when the run starts (with a note on stderr naming the keys), since only these were validated; on `ynh agent run` the vendor and `ynh check` never inherit one. `ynh run` does not strip them yet, so its vendor still inherits an operator `ynh.label.*`: the strip belongs with the vendor's `OTEL_RESOURCE_ATTRIBUTES` that bead ynw-17g.17 writes on `ynh run`.
-  `ynh run` writes no record of its own yet: when it does, it carries the
-  same labels.
+  record `ynh agent run` and `ynh run` write (the registry declares the
+  template `ynh.label`). When telemetry has a destination, every `ynh.label.*`
+  in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment (with a note
+  on stderr naming the keys), since only these were validated; the vendor and
+  `ynh check` started after that never inherit one. When a spool appears only
+  after the run began, the removal happens at that moment, before the first
+  record is written. With no destination at all, nothing is removed and no
+  note is printed: the environment is the operator's own.
 - **Child processes:** ynh sets `YNH_LABELS` to the merged set in the
   environment of every process it starts: the vendor CLI (including past
   `env_passthrough`, which does not apply to it) and each `ynh check`. With no
@@ -325,8 +389,8 @@ too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
 folder. Under `ynh agent run` that is beside ynh's own records and in the same
-trace; under `ynh run` ynh writes no records of its own, and Copilot CLI starts
-its own trace (see below).
+trace; under `ynh run` ynh's own record is the `ynh.session` span, and whether
+Copilot CLI's spans join its trace has not been checked (see below).
 
 ### Turning it on
 
@@ -348,8 +412,9 @@ before the worker starts:
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write. This holds whatever protocol
-  the operator names: with `http/protobuf` or `grpc`, ynh's own record of the
-  run still goes to the spool (see above), but the relay does not start, under
+  the operator names: with `grpc`, ynh's own record of the run still goes to
+  the spool (see above), and with `http/protobuf` it goes to their endpoint,
+  but the relay does not start, under
   `ynh run` and `ynh agent run` alike
 - `ynr` is on `PATH`
 - the run is not under `--sandbox srt`. srt's settings can allow the relay's
@@ -580,19 +645,22 @@ environment, which Copilot inherits (`copilot help monitoring`, Copilot CLI 1.0.
 
 `COPILOT_OTEL_FILE_EXPORTER_PATH` is removed, since it would send the telemetry to a file.
 An `OTEL_EXPORTER_OTLP_*` already in the environment means the telemetry is the operator's,
-so no relay starts. `ynh run` writes no run span, so Copilot is given no `TRACEPARENT`; it
-does not join one anyway, and its spans start their own trace.
+so no relay starts. When telemetry has a destination, `ynh run` puts a `TRACEPARENT` naming its
+`ynh.session` span into the environment Copilot inherits ([What a launch emits](#what-a-launch-emits)).
+The verification below predates that record, when there was no `TRACEPARENT` and Copilot's spans
+started their own trace; whether Copilot now joins the `ynh.session` trace has not been checked.
 
 Verified on 2026-11-07 with Copilot CLI 1.0.106 against a real `ynr relay`: `ynh run
 --telemetry-relay -v copilot` with a one-shot prompt wrote `invoke_agent` and `chat` spans and
 the `gen_ai.*` metrics into the spool (model, token counts, cost), with no prompt text and no
 path, and no relay was left running. The relay is not yet started for Claude Code under
-`ynh run` ([vendor parity, L13](vendor-parity.md#l13-ynh-run-emits-no-telemetry)).
+`ynh run` ([vendor parity, L13](vendor-parity.md#l13-ynh-run-does-not-wire-every-vendor-s-own-telemetry)).
 
 Codex under `ynh run` is given the same `-c` overrides as under `ynh agent run` ([What Codex
 receives](#what-codex-receives)), added to its command line, since Codex reads nothing from
-`OTEL_*` variables; ynh's environment is left as it was. `ynh run` writes no run span, so there is
-no `TRACEPARENT` to join and `codex.exec` starts its own trace. The relay lives as long as the
+`OTEL_*` variables; ynh's environment is left as it was. This was verified before `ynh run` wrote
+its own `ynh.session` span, when there was no `TRACEPARENT` to join and `codex.exec` started its
+own trace; whether Codex's records now join the `ynh.session` trace has not been checked. The relay lives as long as the
 Codex child and is stopped when it exits.
 
 Verified on 2026-11-07 with codex-cli 0.166.0, signed in with ChatGPT, against a real `ynr
