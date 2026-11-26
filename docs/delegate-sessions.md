@@ -140,7 +140,7 @@ travels as an A2A task in state `input-required`. By default it comes back in th
 delegate's tool result says which delegate asked, what, and how long the question has waited, and the
 parent's model puts it to the person and answers with a reply on the same task. A harness that would
 rather have the client's own elicitation or Tasks UI sets
-[`delegate_questions`](harnesses.md#delegate_questions-optional) to `client`; a client that has none, or
+[`delegate_questions`](harnesses.md#delegate-questions-optional) to `client`; a client that has none, or
 declines, falls back to the result. While a question is open, `ynh ps` lists it under the session it
 belongs to, with its age, and `delegate_list` shows `asked_at` and `waiting_seconds` on the delegation.
 

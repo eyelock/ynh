@@ -61,6 +61,7 @@ func TestPsTextAndBadFlag(t *testing.T) {
 
 func TestPsListsOpenQuestionsWithAgeAgainstTheOwningSession(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_TEST_SUPERVISE", "1")
 	cwd, _ := os.Getwd()
 	s, err := presence.Start(presence.Record{SessionID: "seat1", Harness: "seat", Vendor: "claude", Mode: presence.ModeInteractive, Cwd: cwd})
 	if err != nil {

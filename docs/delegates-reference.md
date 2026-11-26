@@ -233,7 +233,7 @@ that name is refused at run.
 `ask_parent` (`question`, optional `wait`) writes the question to the delegation record and waits, at most 45
 seconds (`YNH_PARENT_ASK_MAX_WAIT`, in seconds). The record puts the delegate's A2A task into
 `input-required`, with the question as its message. The parent sees it by its route. The two client
-routes below apply only when the parent harness sets [`delegate_questions`](harnesses.md#delegate_questions-optional)
+routes below apply only when the parent harness sets [`delegate_questions`](harnesses.md#delegate-questions-optional)
 to `client`; by default every MCP parent gets the headless route, whatever its client offers:
 
 | Route | What the parent sees | How it answers |
