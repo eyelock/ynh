@@ -297,7 +297,7 @@ It begins:
 local/reviewer
   source:   /tmp/ynh-tutorial/reviewer
   state:    unreviewed
-  digest:   sha256:3d35eeebcbc2283a
+  digest:   sha256:...
 ```
 
 and lists the hook:
@@ -325,10 +325,10 @@ ynh trust accept local/reviewer
 ```
 
 ```
-Recorded local/reviewer: 1 command(s), sha256:3d35eeebcbc2283a
+Recorded local/reviewer: 1 command(s), sha256:...
 ```
 
-The `sha256:` value is the one `ynh trust show` printed as `digest:`. This trust is recorded in `/tmp/ynh-tutorial/home`, not in your usual ynh home.
+The `sha256:` value is the one `ynh trust show` printed as `digest:`. It depends on your ynh's digest scheme as well as on the reviewer, so it is not shown here: a build of `develop` from 2026-11-26 prints `sha256:abab6f64cd7a3573`. This trust is recorded in `/tmp/ynh-tutorial/home`, not in your usual ynh home.
 
 ## Get a review
 
