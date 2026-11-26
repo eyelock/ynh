@@ -133,6 +133,12 @@ type RunOptions struct {
 	// checkpoint that names none is refused. Nil runs ungated, which only
 	// tests do: the CLI always sets it.
 	TrustGate func(h *harness.Harness, id string) error
+	// Trusted reports whether the harness passed the gate as trusted: an
+	// installed harness whose commands are accepted, never a folder run
+	// (ynh #952). Pre-approval follows it: the MCP tools of the harness's
+	// servers are approved, and --auto-approve is accepted, only when it
+	// reports true. Nil reports false.
+	Trusted func(h *harness.Harness, id string) bool
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -383,6 +389,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// the harness as loaded, before any focus or profile, as for workspaces.
 	var loadedHarness *harness.Harness
 	var loadedID string
+	var harnessTrusted bool
 
 	if opts.HarnessName != "" {
 		// An installed id or a local harness directory, resolved exactly as
@@ -407,6 +414,13 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			if gerr := opts.TrustGate(harnessObj, loadedID); gerr != nil {
 				return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: gerr.Error()}
 			}
+		}
+		harnessTrusted = opts.Trusted != nil && opts.Trusted(harnessObj, loadedID)
+		// --auto-approve widens what the harness's commands may do without
+		// asking, so a harness the gate did not vouch for does not get it
+		// (decision 5c).
+		if opts.TrustGate != nil && opts.AutoApprove != "" && !harnessTrusted {
+			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: autoApproveRefusal(harnessObj, loadedID, opts.AutoApprove)}
 		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
 			id := loadedID
@@ -783,17 +797,18 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		result.SandboxDenyRead = srtDenyRead
 	}
 	sess, err := wb.Start(ctx, StartOptions{
-		TrustedHooks: trustedHooks,
-		WorktreeDir:  opts.WorktreeDir,
-		Workspace:    workspaceDirs,
-		ConfigPath:   configPath,
-		Sandbox:      opts.Sandbox,
-		SrtDenyRead:  srtDenyRead,
-		SessionDir:   sessionDir,
-		AutoApprove:  opts.AutoApprove,
-		Model:        opts.Model,
-		Effort:       opts.Effort,
-		IsolatedMCP:  isolatedMCP,
+		TrustedHooks:   trustedHooks,
+		TrustedHarness: harnessTrusted,
+		WorktreeDir:    opts.WorktreeDir,
+		Workspace:      workspaceDirs,
+		ConfigPath:     configPath,
+		Sandbox:        opts.Sandbox,
+		SrtDenyRead:    srtDenyRead,
+		SessionDir:     sessionDir,
+		AutoApprove:    opts.AutoApprove,
+		Model:          opts.Model,
+		Effort:         opts.Effort,
+		IsolatedMCP:    isolatedMCP,
 		// The profile's mcp_manual_approval is already resolved into harnessObj.
 		MCPManualApproval: harnessObj != nil && harnessObj.MCPManualApproval,
 		ResumeToken:       resumeToken,

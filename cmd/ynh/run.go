@@ -250,6 +250,16 @@ func cmdRun(args []string) (runErr error) {
 		prompt = nsFocus.Prompt
 	}
 
+	// Pre-approval follows trust (ynh #952): MCP tools, and Copilot's
+	// one-shot approval of every tool, are given only to a harness the gate
+	// vouched for. Copilot's one-shot has no narrower grant, so an untrusted
+	// harness is refused before anything launches.
+	trusted := gateTrusted(harnessID, loaded)
+	oneShot := prompt != "" && !ra.Interactive
+	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
+		return copilotOneShotRefusal(harnessID, loaded)
+	}
+
 	// Print per-source status
 	for _, r := range resolved {
 		source := r.Source
@@ -672,9 +682,15 @@ func cmdRun(args []string) (runErr error) {
 
 		// One-shot runs have no one to approve an MCP tool call: approve the
 		// tools of the harness's own servers on the vendors that refuse them,
-		// unless the harness opts out (mcp_manual_approval).
-		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
-			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		// unless the harness opts out (mcp_manual_approval). Only for a
+		// trusted harness: a folder run, or one not accepted, gets none and
+		// the vendor asks as it always did.
+		if a, ok := adapter.(vendor.MCPToolApprover); ok && oneShot && !p.MCPManualApproval {
+			if !trusted {
+				fmt.Fprintf(os.Stderr, "ynh: MCP tools are not pre-approved for %s: a harness is pre-approved only when installed and accepted (ynh trust accept)\n", p.Name)
+			} else {
+				vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+			}
 		}
 
 		// Claude Code ignores a project allow rule while the workspace is

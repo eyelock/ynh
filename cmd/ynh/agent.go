@@ -307,6 +307,8 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		return trustGate(id, h, stderr)
 	}
 
+	opts.Trusted = func(h *harness.Harness, id string) bool { return gateTrusted(id, h) }
+
 	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {
 		return codexHooksTrusted(h, id, backend, configDir, stderr)
 	}
