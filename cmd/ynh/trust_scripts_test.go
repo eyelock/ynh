@@ -63,7 +63,7 @@ func TestIncludedHookScriptBodyMovesTheDigest(t *testing.T) {
 	root := t.TempDir()
 	writeIncludedHarness(t, root, "up", hookFields("./hooks/up.sh"))
 	writeScript(t, filepath.Join(root, "up"), "hooks/up.sh", "#!/bin/sh\nexit 0\n")
-	h := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: true}}}
+	h := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: hooksOn(true)}}}
 
 	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
 	if len(st.Hooks) != 1 || st.Hooks[0].Script == nil || !st.Hooks[0].Script.Covered || st.Hooks[0].Script.Path != "./hooks/up.sh" {

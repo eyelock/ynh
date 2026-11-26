@@ -361,7 +361,7 @@ func writeHookExportInclude(t *testing.T, proj, command string, consent bool) st
 	hdir := filepath.Join(proj, "h")
 	if err := plugin.SavePluginJSON(hdir, &plugin.HarnessJSON{
 		Name: "h", Version: "0.1.0",
-		Includes: []plugin.IncludeMeta{{Local: "guard", Hooks: consent}},
+		Includes: []plugin.IncludeMeta{{Local: "guard", Hooks: &consent}},
 		Hooks:    map[string][]plugin.HookEntry{"on_stop": {{Command: "make check"}}},
 	}); err != nil {
 		t.Fatal(err)

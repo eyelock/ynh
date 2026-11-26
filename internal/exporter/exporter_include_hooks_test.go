@@ -16,9 +16,13 @@ import (
 func writeIncludedHooksHarness(t *testing.T, consent bool) string {
 	t.Helper()
 	root := t.TempDir()
+	inc := map[string]any{"local": "guard"}
+	if consent {
+		inc["hooks"] = true
+	}
 	writeJSON(t, filepath.Join(root, plugin.PluginDir, plugin.PluginFile), map[string]any{
 		"name": "root", "version": "0.1.0",
-		"includes": []any{map[string]any{"local": "guard", "hooks": consent}},
+		"includes": []any{inc},
 		"hooks": map[string]any{
 			"before_tool": []any{map[string]string{"command": "./scripts/mark.sh"}},
 		},
@@ -114,5 +118,32 @@ func TestExport_IncludedHooksWithoutConsent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(outputDir, "claude", "scripts", "_include")); !os.IsNotExist(err) {
 		t.Errorf("an unconsented include's script was exported, stat err = %v", err)
+	}
+}
+
+// An explicit "hooks": false carries nothing of the include's and says
+// nothing: it is a choice, not an oversight.
+func TestExport_IncludedHooksExplicitFalseNoWarning(t *testing.T) {
+	srcDir := writeIncludedHooksHarness(t, false)
+	path := filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile)
+	writeJSON(t, path, map[string]any{
+		"name": "root", "version": "0.1.0",
+		"includes": []any{map[string]any{"local": "guard", "hooks": false}},
+		"hooks": map[string]any{
+			"before_tool": []any{map[string]string{"command": "./scripts/mark.sh"}},
+		},
+	})
+	outputDir := t.TempDir()
+	results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: outputDir, Vendors: []string{"claude", "codex"}, Mode: ModePerVendor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if len(r.Warnings) != 0 {
+			t.Errorf("%s warnings = %q, want none", r.Vendor, r.Warnings)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "claude", "scripts", "_include")); !os.IsNotExist(err) {
+		t.Errorf("an include with hooks false had its script exported, stat err = %v", err)
 	}
 }

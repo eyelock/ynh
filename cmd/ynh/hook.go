@@ -251,7 +251,7 @@ func exportableHooks(dir string, own map[string][]plugin.HookEntry) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	if !slices.ContainsFunc(h.Includes, func(inc harness.Include) bool { return inc.Hooks }) {
+	if !slices.ContainsFunc(h.Includes, func(inc harness.Include) bool { return inc.Hooks != nil && *inc.Hooks }) {
 		return own, nil
 	}
 	cfg, err := config.Load()

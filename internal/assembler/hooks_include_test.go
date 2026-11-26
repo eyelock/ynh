@@ -117,7 +117,7 @@ func TestComposeHooks_Consent(t *testing.T) {
 			}
 			want := warn.Warning{
 				Message: `included harness guard declares hooks (before_tool, on_stop) that are not active`,
-				Fix:     `add "hooks": true to its include to run them`,
+				Fix:     `add "hooks": true to its include to run them, or "hooks": false to keep them off`,
 			}
 			if !slices.Equal(hs.Inactive, []warn.Warning{want}) {
 				t.Errorf("warnings = %q, want %q", hs.Inactive, want)
@@ -160,8 +160,8 @@ func TestComposeHooks_TransitiveConsent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			base := t.TempDir()
 			hookHarness(t, filepath.Join(base, "b", "c"), "c", map[string][]string{"on_stop": {"echo c"}}, nil)
-			hookHarness(t, filepath.Join(base, "b"), "b", map[string][]string{"on_stop": {"echo b"}}, []map[string]any{{"local": "c", "hooks": tt.bToC}})
-			hookHarness(t, base, "root", nil, []map[string]any{{"local": "b", "hooks": tt.rootToB}})
+			hookHarness(t, filepath.Join(base, "b"), "b", map[string][]string{"on_stop": {"echo b"}}, []map[string]any{consentInclude("c", tt.bToC)})
+			hookHarness(t, base, "root", nil, []map[string]any{consentInclude("b", tt.rootToB)})
 			p, resolved := resolveHooks(t, base, harness.Selection{})
 			hs, err := ComposeHooks(p.Hooks, resolved)
 			if err != nil {
@@ -481,5 +481,61 @@ func TestWriteComposedSessionHooks_DelegateServers(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `const SERVERS: string[] = ["del_only","own"]`) {
 		t.Errorf("the plugin does not carry the delegate's server once, longest first:\n%s", data)
+	}
+}
+
+// consentInclude is an include of a local harness that says "hooks": true when
+// consent is set and nothing about hooks otherwise.
+func consentInclude(local string, consent bool) map[string]any {
+	inc := map[string]any{"local": local}
+	if consent {
+		inc["hooks"] = true
+	}
+	return inc
+}
+
+// An explicit "hooks": false is a choice: the hooks stay off, they are still
+// listed as not active, and nothing warns. Absent warns (see
+// TestComposeHooks_Consent); a "hooks": false anywhere on the route to a
+// harness silences its warning too.
+func TestComposeHooks_ExplicitFalseNoWarning(t *testing.T) {
+	tests := []struct {
+		name     string
+		rootToB  any
+		bToC     any
+		wantWarn int
+	}{
+		{"direct false", false, nil, 0},
+		{"false above a transitive include", false, true, 0},
+		{"root true, inner false", true, false, 0},
+		{"root true, inner unset", true, nil, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := t.TempDir()
+			hookHarness(t, filepath.Join(base, "b", "c"), "c", map[string][]string{"on_stop": {"echo c"}}, nil)
+			bInc := []map[string]any(nil)
+			if tt.bToC != nil {
+				bInc = []map[string]any{{"local": "c", "hooks": tt.bToC}}
+			} else {
+				bInc = []map[string]any{{"local": "c"}}
+			}
+			hookHarness(t, filepath.Join(base, "b"), "b", map[string][]string{"on_stop": {"echo b"}}, bInc)
+			hookHarness(t, base, "root", nil, []map[string]any{{"local": "b", "hooks": tt.rootToB}})
+			p, resolved := resolveHooks(t, base, harness.Selection{})
+			hs, err := ComposeHooks(p.Hooks, resolved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.rootToB == false && len(commandsOf(hs, "on_stop")) != 0 {
+				t.Errorf("hooks ran despite hooks false: %q", commandsOf(hs, "on_stop"))
+			}
+			if len(hs.NotActive) == 0 {
+				t.Errorf("NotActive is empty, want the hooks listed as not active")
+			}
+			if len(hs.Inactive) != tt.wantWarn {
+				t.Errorf("warnings = %q, want %d", hs.Inactive, tt.wantWarn)
+			}
+		})
 	}
 }
