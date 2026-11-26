@@ -42,15 +42,18 @@ cd /tmp/ynh-tutorial/ws/project
 ynh run local/seat -- "hello"
 ```
 
-Expected on stderr:
+Expected on stderr (paths shown are where they resolve; on macOS `/tmp` is `/private/tmp`):
 
 ```
-Error: refusing to run local/seat: you have not accepted what it executes.
+Error: refusing to run local/seat: you have not accepted what it asks for.
+It requests workspace folders:
+  ../ynh (resolves to /tmp/ynh-tutorial/ws/ynh)
+  ../../elsewhere (resolves to /tmp/ynh-tutorial/elsewhere)
 Review them: ynh trust show local/seat
 Then accept:  ynh trust accept local/seat
 ```
 
-The harness runs no commands, so the refusal lists none; what there is to review is the folders. An allow-list does not get past the gate either: `YNH_WORKSPACE_ROOTS=/tmp/ynh-tutorial/ws ynh run local/seat -- "hello"` is refused the same way. The allow-list decides which folders an accepted harness is granted, not whether it runs.
+The harness runs no commands, so what the refusal lists, and what there is to review, is the two folders it requests. An allow-list does not get past the gate either: `YNH_WORKSPACE_ROOTS=/tmp/ynh-tutorial/ws ynh run local/seat -- "hello"` is refused the same way. The allow-list decides which folders an accepted harness is granted, not whether it runs.
 
 ## Review the request
 
