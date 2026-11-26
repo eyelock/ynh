@@ -169,7 +169,7 @@ func TestCmdAgentRun_LabelsReachWorkerSensorAndSpool(t *testing.T) {
 		t.Fatal(err)
 	}
 	sensorEnvFile := filepath.Join(t.TempDir(), "sensor-env")
-	installListTestHarness(t, home, "probe", `{"name":"probe","version":"0.1.0","default_vendor":"claude",`+
+	installTrustedTestHarness(t, home, "probe", `{"name":"probe","version":"0.1.0","default_vendor":"claude",`+
 		`"labels":{"wheelhouse":"ynw","site":"manifest"},`+
 		`"sensors":{"probe":{"category":"maintainability","source":{"command":"env > '`+sensorEnvFile+`'"},"output":{"format":"text"}}}}`)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())

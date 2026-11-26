@@ -186,7 +186,7 @@ func TestCmdAgentRun_RefusalExitCodeMatchesResult(t *testing.T) {
 				if err := json.Unmarshal([]byte(tt.harness), &m); err != nil {
 					t.Fatal(err)
 				}
-				installListTestHarness(t, home, m.Name, tt.harness)
+				installTrustedTestHarness(t, home, m.Name, tt.harness)
 			}
 			worktree := t.TempDir()
 			for rel, content := range tt.files {

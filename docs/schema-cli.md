@@ -26,7 +26,7 @@ ynh ls --format json | ynd validate-output --schema list
 
 ## Capability versioning
 
-Every structured response that uses the success envelope carries a `capabilities` field (the bare-shape commands listed under [Envelope shape](#envelope-shape) do not): `config.CapabilitiesVersion`, currently `0.10.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
+Every structured response that uses the success envelope carries a `capabilities` field (the bare-shape commands listed under [Envelope shape](#envelope-shape) do not): `config.CapabilitiesVersion`, currently `0.11.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
 
 **Capability bumps:**
 - Removing a field; renaming a field; changing a field's type
@@ -70,7 +70,7 @@ When a structured command fails, stderr carries one JSON object:
 ```
 
 Fields:
-- `code` (string, required) — stable identifier. Closed enum in `shared/enums.schema.json#/$defs/ErrorCode`: `invalid_input`, `not_found`, `config_error`, `io_error`. New codes are a schema PR.
+- `code` (string, required) — stable identifier. Closed enum in `shared/enums.schema.json#/$defs/ErrorCode`: `invalid_input`, `not_found`, `config_error`, `io_error`, `untrusted`. New codes are a schema PR.
 - `message` (string, required) — human-readable. Do not parse.
 - `category`, `retryable`, `hint` — additive fields planned for a future capabilities bump. Consumers MUST tolerate either shape today.
 

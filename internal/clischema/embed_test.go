@@ -295,9 +295,15 @@ func validateGolden(t *testing.T, schemaName, goldenName string) {
 // the error schema, exercising the cross-cutting failure shape every command
 // can return.
 func TestErrorEnvelopeGolden(t *testing.T) {
-	goldenPath := findGolden(t, "error.json")
+	for _, name := range []string{"error.json", "error-untrusted.json"} {
+		t.Run(name, func(t *testing.T) { validateErrorGolden(t, name) })
+	}
+}
+
+func validateErrorGolden(t *testing.T, name string) {
+	goldenPath := findGolden(t, name)
 	if goldenPath == "" {
-		t.Skip("test/golden/error.json not found")
+		t.Skip("test/golden/" + name + " not found")
 	}
 	data, err := os.ReadFile(goldenPath)
 	if err != nil {

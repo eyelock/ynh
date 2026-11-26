@@ -1,6 +1,6 @@
 {
   "version": "0.3.1",
-  "capabilities": "0.10.0",
+  "capabilities": "0.11.0",
   "features": [
     "agent-run-fetches-includes",
     "agent-run-harness-path",

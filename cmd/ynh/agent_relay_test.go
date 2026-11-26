@@ -241,7 +241,7 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 			// the relay's settings must still win.
 			t.Setenv("OTEL_LOG_USER_PROMPTS", "1")
 			t.Setenv("OTEL_LOG_TOOL_CONTENT", "1")
-			installListTestHarness(t, home, "relayprobe",
+			installTrustedTestHarness(t, home, "relayprobe",
 				`{"name":"relayprobe","version":"0.1.0","default_vendor":"claude","env_passthrough":["OTEL_LOG_USER_PROMPTS","OTEL_LOG_TOOL_CONTENT"]}`)
 
 			var envFile, argsFile string

@@ -122,8 +122,12 @@ func cmdRun(args []string) (runErr error) {
 	// against it.
 	loaded := p
 
-	// A changed trust state is warned about once, before anything launches.
-	warnRunIfTrustChanged(os.Stderr, harnessID, loaded)
+	// The trust gate: an installed harness whose commands are not accepted is
+	// refused before anything launches, and a folder run says it is not
+	// checked (ynh #950).
+	if err := trustGate(harnessID, loaded, os.Stderr); err != nil {
+		return err
+	}
 
 	// A resume continues a task, so only a prompt typed on the command line
 	// travels with it; a focus prompt starts one. Captured before the focus

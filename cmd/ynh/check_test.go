@@ -67,7 +67,7 @@ func runCheck(t *testing.T, args ...string) (gate.Envelope, string, error) {
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
 
-	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	installTrustedTestHarness(t, home, "ch", checkHarnessJSON)
 
 	// Always run against a scratch directory. Without --cwd, cmdCheck falls
 	// back to os.Getwd() — the package directory — so the suite would read
@@ -315,7 +315,7 @@ func setupBaselineRepo(t *testing.T, issues string) (home, work string) {
 	home = t.TempDir()
 	work = t.TempDir()
 	t.Setenv("YNH_HOME", home)
-	installListTestHarness(t, home, "bl", baselineHarnessJSON)
+	installTrustedTestHarness(t, home, "bl", baselineHarnessJSON)
 	writeIssues(t, work, issues)
 	return home, work
 }
@@ -651,7 +651,7 @@ func TestCheck_OverlayDoesNotClaimDebtIsFixed(t *testing.T) {
 	// it this passes on a laptop and fails in CI.
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
-	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	installTrustedTestHarness(t, home, "ch", checkHarnessJSON)
 	cwd := t.TempDir()
 
 	var rec bytes.Buffer
@@ -690,7 +690,7 @@ func TestCheck_UnreadableBaselineIsFatalEvenWithNoBaseline(t *testing.T) {
 	// baseline being unreadable, not about the environment.
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
-	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	installTrustedTestHarness(t, home, "ch", checkHarnessJSON)
 	cwd := t.TempDir()
 
 	// Record real debt for a sensor this run will not look at.
@@ -737,7 +737,7 @@ func TestCheck_RecordsDeclaredToolVersion(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
-	installListTestHarness(t, home, "tv", harnessJSON)
+	installTrustedTestHarness(t, home, "tv", harnessJSON)
 
 	var out bytes.Buffer
 	if err := cmdCheck([]string{"local/tv", "--cwd", t.TempDir(), "--format", "json"},
@@ -790,7 +790,7 @@ func TestCheck_CountRatchetCatchesADuplicateSuppression(t *testing.T) {
 		t.Setenv("YNH_HOME", home)
 		t.Setenv("CI", "")
 		t.Setenv("YNH_AGENT_SESSION", "")
-		installListTestHarness(t, home, name, fmt.Sprintf(manifest, name, ratchetField))
+		installTrustedTestHarness(t, home, name, fmt.Sprintf(manifest, name, ratchetField))
 
 		work := t.TempDir()
 		one := "package a\n\n//nolint:errcheck\nfunc A() {}\n"
@@ -831,7 +831,7 @@ func TestCheck_CountRatchetAllowsFewer(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
-	installListTestHarness(t, home, "supless", `{
+	installTrustedTestHarness(t, home, "supless", `{
       "name": "supless", "version": "0.1.0", "default_vendor": "claude",
       "sensors": {"suppressions": {
         "tolerance": "blocking", "ratchet": "count",

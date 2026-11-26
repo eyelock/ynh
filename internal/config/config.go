@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.10.0"
+const CapabilitiesVersion = "0.11.0"
 
 // features names the capabilities a consumer can gate on without parsing a
 // version, reported by `ynh version --format json` and `ynd version --format

@@ -27,7 +27,8 @@
         "invalid_input",
         "not_found",
         "config_error",
-        "io_error"
+        "io_error",
+        "untrusted"
       ]
     }
   }
