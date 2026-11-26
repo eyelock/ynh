@@ -990,6 +990,22 @@ func TestLoadDir_MCPManualApproval(t *testing.T) {
 	}
 }
 
+func TestLoadDir_OnLive(t *testing.T) {
+	for _, declared := range []string{"", "refuse", "allow"} {
+		dir := t.TempDir()
+		if err := plugin.SavePluginJSON(dir, &plugin.HarnessJSON{Name: "ol", Version: "0.1.0", OnLive: declared}); err != nil {
+			t.Fatal(err)
+		}
+		p, err := LoadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.OnLive != declared {
+			t.Errorf("OnLive = %q, want %q", p.OnLive, declared)
+		}
+	}
+}
+
 func TestResolveProfile_MCPManualApproval(t *testing.T) {
 	yes, no := true, false
 	for _, tt := range []struct {
