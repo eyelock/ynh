@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"syscall"
@@ -28,16 +29,64 @@ func (d runDestination) Destination() telemetry.Destination { return d.dest }
 func (d runDestination) SpoolDir() string                   { return d.dir }
 func (d runDestination) OperatorOTLP() bool                 { return d.dest == telemetry.DestinationOTLP }
 
-// startRunRelay starts the telemetry relay for a `ynh run` when the setting is
-// on (--telemetry-relay, YNH_TELEMETRY_RELAY or config.json) and the vendor is
-// one ynh configures under `ynh run` (agent.SupportsRunRelay), then points the
-// vendor at it through ynh's own environment, which the vendor child inherits.
-// The conditions and the notes are those of `ynh agent run`
-// (docs/telemetry.md). It returns the function that stops the relay, safe to
-// defer and to call when no relay started, and the vendor arguments that
-// point a vendor configured on its command line (Codex) at the relay.
-func startRunRelay(backend string, flag bool, stderr io.Writer) (func(), []string) {
-	if !telemetryRelaySetting(flag, stderr) {
+// telemetryRelayEndpointEnv names the standing relay endpoint setting's
+// variable.
+const telemetryRelayEndpointEnv = "YNH_TELEMETRY_RELAY_ENDPOINT"
+
+// standingRelayEndpoint resolves the standing relay endpoint: the
+// --telemetry-relay-endpoint flag, else YNH_TELEMETRY_RELAY_ENDPOINT, else
+// "telemetry_relay_endpoint" in config.json, else "" (off). It must be plain
+// http on a loopback address; anything else is a note, and off, so a
+// vendor's telemetry is never sent off the host by this setting. An
+// unreadable config.json leaves it off, as for the relay switch.
+func standingRelayEndpoint(flag string, stderr io.Writer) string {
+	raw, from := flag, "--telemetry-relay-endpoint"
+	if raw == "" {
+		if v, ok := os.LookupEnv(telemetryRelayEndpointEnv); ok {
+			raw, from = v, telemetryRelayEndpointEnv
+		}
+	}
+	if raw == "" {
+		cfg, err := config.Load()
+		if err != nil {
+			return ""
+		}
+		raw, from = cfg.TelemetryRelayEndpoint, `"telemetry_relay_endpoint"`
+	}
+	if raw == "" {
+		return ""
+	}
+	endpoint, err := telemetry.ParseRelayEndpoint(raw)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "ynh: %s: %v; the vendor's telemetry is not pointed at it\n", from, err)
+		return ""
+	}
+	return endpoint
+}
+
+// startRunRelay points a `ynh run` vendor's own telemetry at a relay, by one
+// of two routes, then through ynh's own environment (which the vendor child
+// inherits) and the vendor arguments it returns.
+//
+//   - A standing relay endpoint is configured (--telemetry-relay-endpoint,
+//     YNH_TELEMETRY_RELAY_ENDPOINT or config.json): the vendor is pointed at
+//     it and no relay starts. The endpoint is the operator's opt-in, so the
+//     relay switch is not needed.
+//   - Otherwise, when the relay switch is on (--telemetry-relay,
+//     YNH_TELEMETRY_RELAY or config.json), ynh starts its own per-launch relay
+//     for the vendor's lifetime.
+//
+// Either way it applies only to a vendor ynh configures under `ynh run`
+// (agent.SupportsRunRelay), and an operator's OTEL_EXPORTER_OTLP_* wins over
+// both. With neither route on, nothing changes and nothing starts: ynr being
+// installed starts nothing (ynr ADR-006, rule 14). The conditions and the
+// notes are those of `ynh agent run` (docs/telemetry.md). It returns the
+// function that stops the relay, safe to defer and to call when no relay
+// started, and the vendor arguments that point a vendor configured on its
+// command line (Claude Code, Codex) at the relay.
+func startRunRelay(backend string, flag bool, endpointFlag string, stderr io.Writer) (func(), []string) {
+	standing := standingRelayEndpoint(endpointFlag, stderr)
+	if standing == "" && !telemetryRelaySetting(flag, stderr) {
 		return func() {}, nil
 	}
 	dest, dir := telemetry.ChooseDestination()
@@ -45,6 +94,7 @@ func startRunRelay(backend string, flag bool, stderr io.Writer) (func(), []strin
 		tel:       runDestination{dest: dest, dir: dir},
 		stderr:    stderr,
 		supported: agent.SupportsRunRelay,
+		standing:  standing,
 	}
 	endpoint := r.endpoint(backend)
 	if endpoint == "" {
