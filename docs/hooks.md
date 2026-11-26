@@ -95,7 +95,7 @@ Per vendor:
 
 ## Hooks Cursor's CLI does not run
 
-Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`ynh run -v cursor --trust -- "<prompt>"`, cursor-agent 2026.10.01-e373342, 2026-10-30, [ynh #621](https://github.com/eyelock/ynh/pull/621)) with all six events in `.cursor/hooks.json`:
+Cursor's docs do not say which hooks the CLI runs. Tested live in print mode (`ynh run -v cursor --trust -- "<prompt>"`, recorded before `ynh run --trust` became ynh's own flag for a folder run's remote includes; today, install and accept the harness so Cursor's workspace trust is granted by the gate, cursor-agent 2026.10.01-e373342, 2026-10-30, [ynh #621](https://github.com/eyelock/ynh/pull/621)) with all six events in `.cursor/hooks.json`:
 
 | Canonical event | Cursor event | Print mode |
 |-----------------|--------------|------------|

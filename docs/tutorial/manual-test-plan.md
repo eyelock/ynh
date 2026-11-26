@@ -1070,14 +1070,15 @@ Confirm `SessionEnd` fires after `Stop`. `ynh run` sets `CLAUDE_CODE_SESSIONEND_
 
 ### L5: Cursor, print mode
 
-Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. `--trust` trusts this workspace for the one run:
+Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. Cursor's own workspace trust has to be granted, and `ynh run --trust` is not it: that flag is ynh's, and accepts a folder run's remote includes. Cursor's `--trust` is passed only for an installed harness that passed the gate, so install and accept the probe harness first (`ynh install /tmp/ynh-live/probe-harness --trust`, then run it by id):
 
 *Your output will differ: it shows what the model did.*
 
 ```bash
 cd /tmp/ynh-live/project
 mkdir -p .cursor && echo '{"permissions":{"allow":["Shell(ls)"],"deny":[]}}' > .cursor/cli.json
-ynh run /tmp/ynh-live/probe-harness -v cursor --trust -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
+ynh install /tmp/ynh-live/probe-harness --trust
+ynh run local/probe-harness -v cursor -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 

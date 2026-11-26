@@ -40,11 +40,13 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 	}
 	args = append([]string{args[0]}, rest...)
 	id, before := "", ""
-	if trustFlag && (len(args) < 2 || gateRef(args[1]) == "") {
+	// The harness is the first positional, wherever the flags sit.
+	ref := includeHarnessRef(args[1:])
+	if trustFlag && gateRef(ref) == "" {
 		return fmt.Errorf("--trust is for an installed harness id, not a path")
 	}
-	if len(args) > 1 && gateRef(args[1]) != "" {
-		id = args[1]
+	if gateRef(ref) != "" {
+		id = ref
 		before = trustStateOf(id)
 	}
 	if err := run(args[1:], stdout); err != nil {

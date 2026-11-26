@@ -161,6 +161,14 @@ func acceptFolderRun(ref string, p *harness.Harness, stdout io.Writer) error {
 	if namespace.Classify(ref) != namespace.RefPath {
 		return fmt.Errorf("--trust is for a run from a folder; an installed harness is accepted with 'ynh trust accept %s', or at install with 'ynh install --trust'", ref)
 	}
+	return acceptFolderRunOf(p, stdout)
+}
+
+// acceptFolderRunOf accepts the remote includes of p, a harness already known
+// to be a folder run: one found by path, by --harness-file (whose directory is
+// not always a path ref, "hs" for example) or by a manifest in the current
+// folder.
+func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 	remote, err := remoteIncludes(p)
 	if err != nil {
 		return err
@@ -235,6 +243,23 @@ func trustStateOf(id string) string {
 		return ""
 	}
 	return trustStatusFor(id, p, store, nil).State
+}
+
+// includeHarnessRef is the harness argument of ynh include add or update: the
+// first word that is neither a flag nor a flag's value, wherever the flags sit.
+func includeHarnessRef(args []string) string {
+	// Flags that take a value, for include add and include update.
+	valued := map[string]bool{"--path": true, "--pick": true, "--ref": true, "--as": true, "--from-path": true}
+	for i := 0; i < len(args); i++ {
+		switch {
+		case valued[args[i]]:
+			i++
+		case strings.HasPrefix(args[i], "-"):
+		default:
+			return args[i]
+		}
+	}
+	return ""
 }
 
 // takeTrustFlag removes every --trust from args and reports whether there was

@@ -101,6 +101,11 @@ Install a harness from a Git URL, a registry id, or a local path.
 Flags:
   --path <subdir>    Install from a subdirectory of the repository
   --ref <ref>        Pin to a tag, branch or commit
+  --trust            Accept what the harness executes as part of the install; only
+                     at a full 40-character commit SHA, with every remote include
+                     that brings commands pinned to one too. Recorded as
+                     'install --trust'. Without it, the harness runs only after
+                     'ynh trust accept'
   --allow-shadow     Install even when the harness's name matches a command on PATH
                      (its launcher would replace that command; refused by default)
 
@@ -157,6 +162,10 @@ Flags:
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
+  --trust                  For a run from a folder only: accept the commands its
+                           remote includes bring, if each is pinned to a full
+                           commit SHA. An installed harness refuses it (accept
+                           it with 'ynh trust accept' or 'ynh install --trust')
   --session-name <name>    Claude: bind --resume to this name's session (a fresh
                            launch starts a new one). Other vendors: a label
   --resume                 Continue the previous session in this directory
@@ -574,6 +583,10 @@ Flags:
   --sandbox none|srt          Wrap the worker in srt with ynh's network and
                               write allowlist (claude, codex, cursor; opencode
                               on Linux only, refused on macOS); none by default
+  --trust                     For a run from a folder only (--harness <path>):
+                              accept the commands its remote includes bring, if
+                              each is pinned to a full commit SHA. Refused for
+                              an installed harness
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor, opencode). Only for runs inside

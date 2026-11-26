@@ -380,3 +380,62 @@ func TestUpdateTrust_RefusesFloatingInclude(t *testing.T) {
 		t.Error("a refused --trust accepted the harness")
 	}
 }
+
+// The harness of ynh include add is its first positional, wherever the flags
+// sit: --trust and the "no longer trusted" note find it either way.
+func TestIncludeHarnessRef(t *testing.T) {
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"local/h", "src"}, "local/h"},
+		{[]string{"--ref", "abc", "local/h", "src", "--hooks"}, "local/h"},
+		{[]string{"--pick", "a,b", "--as", "x", "local/h", "src"}, "local/h"},
+		{[]string{"--from-path", "p", "local/h", "src"}, "local/h"},
+		{[]string{"--hooks"}, ""},
+	} {
+		if got := includeHarnessRef(tt.args); got != tt.want {
+			t.Errorf("includeHarnessRef(%v) = %q, want %q", tt.args, got, tt.want)
+		}
+	}
+}
+
+func TestIncludeAddTrust_FlagsBeforeTheHarness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	id := installTrustedTestHarness(t, home, "incf", `{"name":"incf","version":"0.1.0","default_vendor":"claude"}`)
+	dir := harness.InstalledDirByID(id)
+	writeIncludedHarness(t, dir, "extra", hookFields("echo extra"))
+	var out bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", "--hooks", "--trust", id, filepath.Join(dir, "extra")}, &out); err != nil {
+		t.Fatalf("include add with flags first: %v\n%s", err, out.String())
+	}
+	if got := trustStateOf(id); got != trustAccepted {
+		t.Errorf("state = %q, want accepted", got)
+	}
+
+	// Without --trust, the note still appears with the flags first.
+	id2 := installTrustedTestHarness(t, home, "incg", `{"name":"incg","version":"0.1.0","default_vendor":"claude"}`)
+	dir2 := harness.InstalledDirByID(id2)
+	writeIncludedHarness(t, dir2, "extra", hookFields("echo extra"))
+	out.Reset()
+	if err := cmdIncludeTo([]string{"add", "--hooks", id2, filepath.Join(dir2, "extra")}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "no longer trusted") {
+		t.Errorf("no note with flags first:\n%s", out.String())
+	}
+}
+
+// A run from a folder found by --harness-file, with a relative path whose
+// directory is not a path ref ("hs"), is a folder run for --trust.
+func TestRunTrust_RelativeHarnessFileIsAFolderRun(t *testing.T) {
+	isolateRun(t)
+	root := t.TempDir()
+	t.Chdir(root)
+	writeSkillHarness(t, filepath.Join(root, "hs"), "hsx")
+	err := cmdRun([]string{"--harness-file", "hs/.agents/harness/plugin.json", "--trust", "-v", "cursor", "--install"})
+	if err != nil && strings.Contains(err.Error(), "--trust is for a run from a folder") {
+		t.Fatalf("a folder run was refused as an installed harness: %v", err)
+	}
+}

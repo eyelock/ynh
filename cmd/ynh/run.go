@@ -131,7 +131,7 @@ func cmdRun(args []string) (runErr error) {
 		if harnessID != "" {
 			return fmt.Errorf("--trust is for a run from a folder; an installed harness is accepted with 'ynh trust accept %s', or at install with 'ynh install --trust'", harnessID)
 		}
-		if err := acceptFolderRun(harnessDir, loaded, os.Stderr); err != nil {
+		if err := acceptFolderRunOf(loaded, os.Stderr); err != nil {
 			return err
 		}
 	}
