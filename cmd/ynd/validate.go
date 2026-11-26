@@ -15,6 +15,7 @@ import (
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/warn"
 	"github.com/eyelock/ynh/internal/workspace"
 )
 
@@ -422,7 +423,7 @@ func validateHarness(dir string) error {
 	}
 
 	// Hooks a targeted vendor cannot carry are warnings: the manifest is valid.
-	var warnings []string
+	var warnings []warn.Warning
 	var hjw map[string]any
 	if data != nil && json.Unmarshal(data, &hjw) == nil {
 		warnings = hookVendorWarnings(hjw)
@@ -449,10 +450,9 @@ func validateHarness(dir string) error {
 }
 
 // printWarnings lists findings that do not fail validation.
-func printWarnings(warnings []string) {
-	for _, w := range warnings {
-		fmt.Printf("  warning: %s\n", w)
-	}
+// They go to stderr through the shared printer, like every other warning.
+func printWarnings(warnings []warn.Warning) {
+	warn.Print(os.Stderr, warnings...)
 }
 
 // printChecked lists what validation looked at, so "valid" is never a claim the reader has to
