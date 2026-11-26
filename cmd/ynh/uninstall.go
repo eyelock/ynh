@@ -11,6 +11,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // uninstallTarget is an installed harness that has been resolved but not yet
@@ -165,8 +166,8 @@ func (t uninstallTarget) remove() error {
 	case surErr != nil:
 		// Can't tell whether the name is still claimed, so leave the shared
 		// resources in place rather than risk orphaning a surviving install.
-		fmt.Fprintf(os.Stderr, "warning: could not check for other installs named %q: %v\n", t.bareName, surErr)
-		fmt.Fprintf(os.Stderr, "  launcher, run alias and sources entry left in place\n")
+		// No Fix: the cause is the filesystem error; what was left in place is part of the message.
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not check for other installs named %q: %v\nlauncher, run alias and sources entry left in place", t.bareName, surErr)})
 	case len(survivors) == 0:
 		// Remove launcher script
 		launcherPath := filepath.Join(config.BinDir(), t.bareName)
@@ -190,7 +191,8 @@ func (t uninstallTarget) remove() error {
 			if len(remaining) != len(cfg.Sources) {
 				cfg.Sources = remaining
 				if err := cfg.Save(); err != nil {
-					fmt.Fprintf(os.Stderr, "warning: could not update config after uninstall: %v\n", err)
+					// No Fix: the cause is the filesystem error writing the config.
+					warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not update config after uninstall: %v", err)})
 				}
 			}
 		}

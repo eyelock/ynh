@@ -6,6 +6,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // codexHookTrustLaunchArgs is the Codex overrides that trust the run
@@ -36,9 +37,15 @@ func codexHooksTrusted(loaded *harness.Harness, id, vendorName, runDir string, s
 		return true
 	}
 	if id == "" {
-		_, _ = fmt.Fprintln(stderr, "  warning: codex: hooks not trusted, so Codex will skip them: a harness run from a path has no trust record; install it and run 'ynh trust accept local/<name>'")
+		warn.Print(stderr, warn.Warning{
+			Message: "codex: hooks not trusted, so Codex will skip them: a harness run from a path has no trust record",
+			Fix:     "install the harness, then run 'ynh trust accept local/<name>'",
+		})
 	} else {
-		_, _ = fmt.Fprintf(stderr, "  warning: codex: hooks not trusted, so Codex will skip them: run 'ynh trust accept %s'\n", id)
+		warn.Print(stderr, warn.Warning{
+			Message: "codex: hooks not trusted, so Codex will skip them",
+			Fix:     fmt.Sprintf("ynh trust accept %s", id),
+		})
 	}
 	return false
 }
