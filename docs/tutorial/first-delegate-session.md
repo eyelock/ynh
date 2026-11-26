@@ -439,11 +439,12 @@ github.com/eyelock/ynh/librarian
   source:   github.com/eyelock/ynh (develop)
   commit:   <the commit ynh fetched>
   state:    unreviewed
-  digest:   sha256:ba038f58317449ef
+  digest:   sha256:...
 ```
 
 `(develop)` is the branch ynh fetched, ynh's default. The `commit:` line names the commit it fetched;
-yours will differ. Then
+yours will differ. So does the digest, which depends on your ynh's digest scheme: a build of `develop`
+from 2026-11-26 prints `sha256:8ed89d1ee6cd8c32`. Then
 it lists the hook:
 
 ```
@@ -468,7 +469,7 @@ ynh trust accept github.com/eyelock/ynh/librarian
 ```
 
 ```
-Recorded github.com/eyelock/ynh/librarian: 1 command(s), sha256:ba038f58317449ef
+Recorded github.com/eyelock/ynh/librarian: 1 command(s), sha256:...
 ```
 
 Now name it in the team lead, writing the whole manifest again:
