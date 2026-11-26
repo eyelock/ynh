@@ -20,16 +20,43 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ynh include <add|remove|update>")
 	}
+	// An include change can move what an installed harness executes, which
+	// leaves an accepted harness refused until it is accepted again: say so
+	// (ynh #951, decision 14).
+	var run func([]string, io.Writer) error
 	switch args[0] {
 	case "add":
-		return cmdIncludeAdd(args[1:], stdout)
+		run = cmdIncludeAdd
 	case "remove":
-		return cmdIncludeRemove(args[1:], stdout)
+		run = cmdIncludeRemove
 	case "update":
-		return cmdIncludeUpdate(args[1:], stdout)
+		run = cmdIncludeUpdate
 	default:
 		return fmt.Errorf("unknown include subcommand: %s\nUsage: ynh include <add|remove|update>", args[0])
 	}
+	rest, trustFlag := takeTrustFlag(args[1:])
+	if trustFlag && args[0] == "remove" {
+		return fmt.Errorf("--trust goes with ynh include add or update: removing an include needs no acceptance")
+	}
+	args = append([]string{args[0]}, rest...)
+	id, before := "", ""
+	if trustFlag && (len(args) < 2 || gateRef(args[1]) == "") {
+		return fmt.Errorf("--trust is for an installed harness id, not a path")
+	}
+	if len(args) > 1 && gateRef(args[1]) != "" {
+		id = args[1]
+		before = trustStateOf(id)
+	}
+	if err := run(args[1:], stdout); err != nil {
+		return err
+	}
+	if trustFlag {
+		return acceptAfterChange(id, viaIncludeTrus, stdout)
+	}
+	if id != "" && !trustFlag {
+		noteUntrustedAfterChange(id, before, stdout)
+	}
+	return nil
 }
 
 func cmdIncludeAdd(args []string, stdout io.Writer) error {
@@ -78,7 +105,7 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	}
 
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace]")
+		return fmt.Errorf("usage: ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace] [--trust]")
 	}
 
 	harnessRef, url := positional[0], positional[1]

@@ -124,9 +124,14 @@ Examples:
   ynh uninstall local/david
   ynh uninstall local/david github.com/org/repo/planner`,
 
-	"update": `ynh update <name>
+	"update": `ynh update <name> [--trust]
 
-Refresh the cached Git repositories a harness resolves from.`,
+Refresh the cached Git repositories a harness resolves from.
+
+An update can move what the harness executes, which leaves an accepted harness
+refused until it is accepted again. --trust accepts it again in one step, only
+when the harness and every include that brings commands are pinned to a full
+commit SHA, and records the acceptance as 'update --trust'.`,
 
 	"run": `ynh run [<harness-id|path>] [flags] [prompt]
 
@@ -372,6 +377,10 @@ Manage a harness's Git includes.
   ynh include add <harness> <url|path> Add an include (Git URL or local path)
   ynh include remove <harness> <url>   Remove an include
   ynh include update <harness> <url>   Change an include's path, picks or ref
+
+add and update take --trust, which accepts the harness again after the change in
+one step, only when everything that runs is pinned to a full commit SHA, and
+records it as 'include --trust'.
 
 Run 'ynh include <subcommand> --help' for a subcommand's arguments and flags.`,
 

@@ -23,7 +23,7 @@ import (
 
 func cmdInstall(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow] [--trust]")
 	}
 
 	if err := config.EnsureDirs(); err != nil {
@@ -32,11 +32,13 @@ func cmdInstall(args []string) error {
 
 	// Parse --path and --ref flags from args
 	var pathFlag, refFlag string
-	var allowShadow bool
+	var allowShadow, trustFlag bool
 	var remaining []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--allow-shadow" {
 			allowShadow = true
+		} else if args[i] == "--trust" {
+			trustFlag = true
 		} else if args[i] == "--path" && i+1 < len(args) {
 			pathFlag = args[i+1]
 			i++ // skip value
@@ -48,7 +50,7 @@ func cmdInstall(args []string) error {
 		}
 	}
 	if len(remaining) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow] [--trust]")
 	}
 
 	source := remaining[0]
@@ -211,6 +213,17 @@ func cmdInstall(args []string) error {
 	// ignore, once, here, rather than on every later load.
 	for _, d := range p.Diagnostics {
 		fmt.Printf("  note: %s\n", d)
+	}
+
+	// --trust records the acceptance as well as installing, so it refuses, with
+	// nothing written, unless what runs is pinned: a git or registry install at
+	// a full SHA, and every remote include that brings commands at one too
+	// (decisions 4b and 4c).
+	if trustFlag {
+		isLocalInstall := resolved.sourceType == "local" || resolved.sourceType == "source"
+		if err := checkInstallTrust(p, cfg, isLocalInstall, resolved.ref); err != nil {
+			return err
+		}
 	}
 
 	// A delegate set to transport: native needs a vendor with subagents; the
@@ -464,6 +477,12 @@ func cmdInstall(args []string) error {
 
 	if p.DefaultVendor != "" {
 		fmt.Printf("  Vendor:   %s\n", p.DefaultVendor)
+	}
+
+	if trustFlag {
+		if err := acceptInstalled(canonID, os.Stdout); err != nil {
+			return fmt.Errorf("installed %q, but --trust could not record its acceptance: %w", p.Name, err)
+		}
 	}
 
 	return nil
