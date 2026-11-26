@@ -7,11 +7,14 @@
   "$defs": {
     "ScriptRef": {
       "type": "object",
-      "description": "The script this command runs, when it names one: its first word, or its first argument when that is bash, sh, python3 or node. covered is true for a file of the declaring harness named by ./x or $YNH_HARNESS_DIR/x, whose contents are part of digest (scheme 3); anything else (bash scripts/wake.sh) is project code, reported with covered false and left out of the digest. What a covered script sources or runs in turn is not covered either.",
+      "description": "The script this command runs, when it names one: its first word, or its first argument when that is bash, sh, python3 or node. covered is true for a file of the declaring harness named by ./x, $YNH_HARNESS_DIR/x (or ${PLUGIN_ROOT}/x for an MCP server), after any leading env and NAME=value words and any interpreter (bash, sh, zsh, python, python3, node, with or without a path) and its flags; the whole folder of that script, subfolders included, is part of digest (scheme 3); anything else (bash scripts/wake.sh) is project code, reported with covered false and left out of the digest. Only regular files inside the harness are read.",
       "properties": {
         "path": { "type": "string", "description": "The script as the command names it." },
         "covered": { "type": "boolean" },
-        "digest": { "type": "string", "description": "sha256: and the hex of the script's contents, or missing or unreadable. Present only when covered." }
+        "folder": { "type": "string", "description": "The folder the digest reads, relative to the declaring harness: the script's own, with every file in it and its subfolders. Present only when covered." },
+        "files": { "type": "integer", "description": "How many files the digest read." },
+        "skipped": { "type": "array", "items": { "type": "string" }, "description": "What the walk refused to read or follow, each with why: a link out of the harness, a device, a link that loops. A refused script is not covered." },
+        "digest": { "type": "string", "description": "sha256: and the hex of every file in folder (names and contents), or missing or unreadable. Present only when covered." }
       },
       "required": ["path", "covered"],
       "additionalProperties": false

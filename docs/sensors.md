@@ -390,16 +390,23 @@ are not in the output: a `${VAR}` reference is shown as written, and any other
 value is printed as `(literal, not shown)`, because a literal may be a
 credential. Read the manifest in the harness directory to see one.
 
-**Scripts.** From digest scheme 3 the digest also covers the contents of the script a hook, MCP server
-or sensor command runs, so changing a script's body alone makes the harness read `changed`. A script is
-covered when the command's first word, or the first argument of `bash`, `sh`, `python3` or `node`, is
-`./x` or `$YNH_HARNESS_DIR/x` and the file is in the harness (or the include) that declares the command.
-A sensor reads `$YNH_HARNESS_DIR/x` only: its `./x` runs in the measured tree. `ynh trust show` prints a
-`script:` line under each such command, with the start of the file's digest. A path into the project
-(`bash scripts/wake.sh`) is project code, like `make check`: `trust show` says it is not covered and the
-digest leaves it out, and so is anything a covered script sources or runs in turn. A script that is not
-there is recorded as missing, so creating it later changes the digest too. A harness accepted under
-scheme 2 shows `changed` once, with a note saying why, until you review and accept it again.
+**Scripts.** From digest scheme 3 the digest also covers the script a hook, MCP server or sensor command
+runs, so changing it alone makes the harness read `changed`. The script is the command's first word after
+any leading `env` and `NAME=value` words, or, when that is an interpreter (`sh`, `bash`, `zsh`, `python`,
+`python3`, `node`, with or without a path such as `/bin/bash`), the first word after its flags
+(`bash -e ./x`; `-c` and `-m` name code, not a file). It is covered when it is `./x` or
+`$YNH_HARNESS_DIR/x` (an MCP server also takes `${PLUGIN_ROOT}/x`) and the file is in the harness or
+include that declares the command. A sensor reads `$YNH_HARNESS_DIR/x` only: its `./x` runs in the
+measured tree. What is covered is the script's whole folder, every file in it and its subfolders, so code
+the script builds or reads beside itself (a sensor's `test-trust/` checker, say) is in the digest; a
+`.git` folder is left out. Only regular files inside the harness are read: a link to a file inside the
+harness is read through, and a link that leaves the harness, loops, dangles or points at a device is
+never opened. `ynh trust show` lists each as `skipped`, and a script that is itself refused is reported as
+not covered. A link to a folder is not followed. A path into the project (`bash scripts/wake.sh`) is
+project code, like `make check`: `trust show` says it is not covered and the digest leaves it out, and so
+is whatever a covered script reaches outside its own folder. `trust show` prints a `script:` line under
+each command. A harness accepted under scheme 2 shows `changed` once, with a note saying why, until you
+review and accept it again.
 
 **Upgrading.** Until hooks and MCP servers were covered (#577), the digest covered sensor commands only. A harness
 you accepted then shows `changed` once, even if nothing in it has, and says so.

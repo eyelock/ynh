@@ -3,15 +3,16 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // scriptRef is the script a hook, MCP server or sensor command runs, as the
@@ -19,23 +20,34 @@ import (
 //
 // Covered is true when the script is a file of the harness or include that
 // declares the command, named by "./x" or "$YNH_HARNESS_DIR/x": its contents
-// are then part of the digest, so changing the file alone changes it. A script
+// are then part of the digest, and so is every file in its folder, subfolders
+// included (a script that builds or reads code beside it is only as reviewed as
+// that code), so changing any of them alone changes the digest. A script
 // anywhere else (`bash scripts/wake.sh`, an absolute path) is project code, as
 // `make check` is: it is reported as not covered and the digest leaves it
-// out. Whatever a covered script sources or runs in turn is not covered either.
+// out. What a covered script reaches outside its own folder is not covered.
 type scriptRef struct {
 	// Path is the script as the command names it.
 	Path    string `json:"path"`
 	Covered bool   `json:"covered"`
-	// Digest is "sha256:" and the hex of the file's contents, "missing" when
-	// the file is not there and "unreadable" when it cannot be read. Present
-	// only when Covered.
+	// Folder is the folder the digest reads: the script's own, relative to the
+	// declaring harness ("." for the harness's root). Files is how many files
+	// it holds, subfolders included. Present only when Covered.
+	Folder string `json:"folder,omitempty"`
+	Files  int    `json:"files,omitempty"`
+	// Skipped lists what the walk refused to read or follow, each with why: a
+	// link out of the harness, a device, a link that loops. Never read, never
+	// silently dropped.
+	Skipped []string `json:"skipped,omitempty"`
+	// Digest is "sha256:" and the hex of every file in Folder (names and
+	// contents), "missing" when the script's folder is not there and
+	// "unreadable" when it cannot be read. Present only when Covered.
 	Digest string `json:"digest,omitempty"`
 }
 
-// scriptInterpreters are the commands whose first argument is the script they
-// run.
-var scriptInterpreters = map[string]bool{"bash": true, "sh": true, "python3": true, "node": true}
+// scriptInterpreters are the commands whose first non-flag argument is the
+// script they run.
+var scriptInterpreters = map[string]bool{"sh": true, "bash": true, "zsh": true, "python": true, "python3": true, "node": true}
 
 // harnessDirVars are the spellings of the variable that resolves to the
 // declaring harness's directory.
@@ -53,24 +65,86 @@ func unquoteToken(s string) string {
 // says which, because an interpreter's argument is a file whether or not it
 // holds a slash.
 func scriptToken(fields []string) (tok string, fromInterp bool) {
+	fields = skipEnvWords(fields)
+	// A leading env, with its NAME=value words, is a wrapper, not the command.
+	for len(fields) > 0 && filepath.Base(unquoteToken(fields[0])) == "env" {
+		fields = skipEnvWords(fields[1:])
+	}
 	if len(fields) == 0 {
 		return "", false
 	}
 	first := unquoteToken(fields[0])
-	if scriptInterpreters[first] {
-		if len(fields) < 2 {
+	if !scriptInterpreters[filepath.Base(first)] {
+		return first, false
+	}
+	// An interpreter, with or without a path (/bin/bash), then its flags
+	// (bash -e): the script is the first word after them. -c and -m take code
+	// or a module, not a file, so nothing is named.
+	for _, f := range fields[1:] {
+		f = unquoteToken(f)
+		if f == "-c" || f == "-m" {
 			return "", true
 		}
-		return unquoteToken(fields[1]), true
+		if strings.HasPrefix(f, "-") {
+			continue
+		}
+		return f, true
 	}
-	return first, false
+	return "", true
 }
 
+// isEnvWord reports whether w is a NAME=value assignment.
+func isEnvWord(w string) bool {
+	name, _, ok := strings.Cut(w, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i, r := range name {
+		if r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (i > 0 && r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// skipEnvWords drops the NAME=value words a shell command starts with
+// (CI=1 ./run.sh), including a quoted value that holds spaces, so the script
+// word is the one that runs.
+func skipEnvWords(fields []string) []string {
+	for len(fields) > 0 && isEnvWord(fields[0]) {
+		_, v, _ := strings.Cut(fields[0], "=")
+		i := 1
+		if v != "" && (v[0] == '"' || v[0] == '\'') && (len(v) == 1 || v[len(v)-1] != v[0]) {
+			for i < len(fields) && !strings.HasSuffix(fields[i-1], string(v[0])) {
+				i++
+			}
+		}
+		if i > len(fields) {
+			i = len(fields)
+		}
+		fields = fields[i:]
+	}
+	return fields
+}
+
+// pluginRootVars are the spellings of the MCP placeholder for the declaring
+// harness's directory.
+var pluginRootVars = []string{plugin.MCPPlaceholderRoot + "/", `"` + plugin.MCPPlaceholderRoot + `"/`}
+
 // harnessRelative reports the path inside the declaring harness that tok
-// names, when it is "./x" (allowDot) or "$YNH_HARNESS_DIR/x".
-func harnessRelative(tok string, allowDot bool) (string, bool) {
+// names, when it is "./x" (allowDot) or, for an MCP server only, ${PLUGIN_ROOT}/x (allowPluginRoot,
+// the placeholder for the same directory) or "$YNH_HARNESS_DIR/x".
+func harnessRelative(tok string, allowDot, allowPluginRoot bool) (string, bool) {
 	if allowDot && strings.HasPrefix(tok, "./") {
 		return tok[2:], true
+	}
+	if allowPluginRoot {
+		for _, v := range pluginRootVars {
+			if strings.HasPrefix(tok, v) {
+				return tok[len(v):], true
+			}
+		}
 	}
 	for _, v := range harnessDirVars {
 		if strings.HasPrefix(tok, v) {
@@ -96,33 +170,135 @@ func otherScript(tok string, fromInterp bool) *scriptRef {
 	return &scriptRef{Path: tok}
 }
 
-// hashScript reads rel under dir and returns the covered reference. A path
-// that climbs out of dir, or no known dir, is left uncovered rather than read.
+// hashScript reads the folder of rel under dir and returns the covered
+// reference. A path that climbs out of dir, or no known dir, is left uncovered
+// rather than read.
+//
+// The digest is over every file under the script's folder, subfolders
+// included, by path and contents, in sorted order; a .git folder is left out,
+// since a fetch changes it without changing anything that runs.
+//
+// Only regular files inside the harness are read. A symlink is followed only
+// to a regular file that is itself inside the harness; one that points
+// outside, at a device or other non-regular file, that loops or dangles, is
+// never opened and is listed in Skipped (and in the digest, so a change to it
+// is noticed). A symlinked directory is not followed: its target text is
+// digested. If the script itself is refused this way the script is not
+// covered.
 func hashScript(dir, rel, shown string) *scriptRef {
 	clean := filepath.Clean(filepath.FromSlash(rel))
 	if dir == "" || !filepath.IsLocal(clean) {
 		return &scriptRef{Path: shown}
 	}
-	ref := &scriptRef{Path: shown, Covered: true}
-	f, err := os.Open(filepath.Join(dir, clean))
+	folder := filepath.Dir(clean)
+	ref := &scriptRef{Path: shown, Covered: true, Folder: filepath.ToSlash(folder)}
+	realRoot, err := filepath.EvalSymlinks(dir)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			ref.Digest = "missing"
-		} else {
-			ref.Digest = "unreadable"
-		}
+		ref.Digest = "missing"
 		return ref
 	}
-	defer func() { _ = f.Close() }()
+	root := filepath.Join(dir, folder)
+	realFolder, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		ref.Digest = "missing"
+		return ref
+	}
+	if fi, err := os.Stat(realFolder); err != nil || !fi.IsDir() {
+		ref.Digest = "missing"
+		return ref
+	}
+	if !within(realRoot, realFolder) {
+		ref.Covered = false
+		ref.Skipped = append(ref.Skipped, folder2(folder)+": the folder is a link that leads outside the harness")
+		return ref
+	}
+	scriptName := filepath.Base(clean)
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		// A directory, or a read that failed part way: never a digest of a
-		// part, which could equal the whole.
+	field(h, "script")
+	field(h, scriptName)
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" && path != root {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		r, _ := filepath.Rel(root, path)
+		name := filepath.ToSlash(r)
+		field(h, name)
+		skip := func(reason string) {
+			field(h, "skipped")
+			field(h, reason)
+			ref.Skipped = append(ref.Skipped, name+": "+reason)
+			if r == scriptName {
+				ref.Covered = false
+			}
+		}
+		src := path
+		switch {
+		case d.Type()&fs.ModeSymlink != 0:
+			real, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				skip("a link that does not resolve (dangling or looping), not read")
+				return nil
+			}
+			if !within(realRoot, real) {
+				skip("a link that leads outside the harness, not read")
+				return nil
+			}
+			fi, err := os.Stat(real)
+			switch {
+			case err != nil:
+				skip("a link that cannot be read, not read")
+				return nil
+			case fi.IsDir():
+				target, _ := os.Readlink(path)
+				field(h, "dir-link")
+				field(h, target)
+				ref.Skipped = append(ref.Skipped, name+": a link to a folder, not followed")
+				return nil
+			case !fi.Mode().IsRegular():
+				skip("a link to something that is not a regular file, not read")
+				return nil
+			}
+			src = real
+		case !d.Type().IsRegular():
+			skip("not a regular file, not read")
+			return nil
+		}
+		f, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
+		fh := sha256.New()
+		if _, err := io.Copy(fh, f); err != nil {
+			return err
+		}
+		field(h, hex.EncodeToString(fh.Sum(nil)))
+		ref.Files++
+		return nil
+	})
+	if err != nil {
+		// Never a digest of a part, which could equal the whole.
 		ref.Digest = "unreadable"
+		ref.Files = 0
 		return ref
 	}
 	ref.Digest = "sha256:" + hex.EncodeToString(h.Sum(nil))
+	sort.Strings(ref.Skipped)
 	return ref
+}
+
+func folder2(f string) string { return filepath.ToSlash(f) }
+
+// within reports whether path is root or below it, both already resolved.
+func within(root, path string) bool {
+	r, err := filepath.Rel(root, path)
+	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
 }
 
 // shortDigest is a script digest as shown to a person.
@@ -142,6 +318,7 @@ func (s *scriptRef) write(w io.Writer) {
 	}
 	field(w, "script")
 	field(w, s.Path)
+	field(w, s.Folder)
 	field(w, s.Digest)
 }
 
@@ -150,7 +327,7 @@ func (s *scriptRef) write(w io.Writer) {
 // "./x" is the tree's own.
 func sensorScript(command, dir string) *scriptRef {
 	tok, interp := scriptToken(strings.Fields(command))
-	if rel, ok := harnessRelative(tok, false); ok {
+	if rel, ok := harnessRelative(tok, false, false); ok {
 		return hashScript(dir, rel, tok)
 	}
 	return otherScript(tok, interp)
@@ -165,7 +342,7 @@ func hookScriptRef(command, dir string, scripts map[string]assembler.ScriptOrigi
 	if o, ok := scripts[tok]; ok {
 		return hashScript(o.Dir, strings.TrimPrefix(o.Script, "./"), o.Script)
 	}
-	if rel, ok := harnessRelative(tok, true); ok {
+	if rel, ok := harnessRelative(tok, true, false); ok {
 		return hashScript(dir, rel, tok)
 	}
 	return otherScript(tok, interp)
@@ -177,7 +354,7 @@ func mcpScript(command string, args []string, dir string) *scriptRef {
 		return nil
 	}
 	tok, interp := scriptToken(append([]string{command}, args...))
-	if rel, ok := harnessRelative(tok, true); ok {
+	if rel, ok := harnessRelative(tok, true, true); ok {
 		return hashScript(dir, rel, tok)
 	}
 	return otherScript(tok, interp)
@@ -189,8 +366,25 @@ func writeScriptLine(w io.Writer, s *scriptRef) {
 		return
 	}
 	if !s.Covered {
+		if len(s.Skipped) > 0 {
+			_, _ = fmt.Fprintf(w, "    script:  %s (NOT covered: refused)\n", s.Path)
+			writeSkipped(w, s)
+			return
+		}
 		_, _ = fmt.Fprintf(w, "    script:  %s (not covered: project code, outside what this digest reads)\n", s.Path)
 		return
 	}
-	_, _ = fmt.Fprintf(w, "    script:  %s (contents %s)\n", s.Path, shortDigest(s.Digest))
+	if s.Digest == "missing" || s.Digest == "unreadable" {
+		_, _ = fmt.Fprintf(w, "    script:  %s (covered, but its folder %s is %s)\n", s.Path, s.Folder, s.Digest)
+		return
+	}
+	_, _ = fmt.Fprintf(w, "    script:  %s (covered with its folder %s: %d file(s), %s)\n", s.Path, s.Folder, s.Files, shortDigest(s.Digest))
+	writeSkipped(w, s)
+}
+
+// writeSkipped says what the folder walk did not read.
+func writeSkipped(w io.Writer, s *scriptRef) {
+	for _, k := range s.Skipped {
+		_, _ = fmt.Fprintf(w, "             skipped %s\n", k)
+	}
 }
