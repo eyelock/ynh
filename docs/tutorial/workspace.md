@@ -37,7 +37,7 @@ Expected output includes `Installed harness "seat"`.
 
 Run it from the `project` folder. No allow-list is set and the harness has not been accepted, so both folders are skipped, with the reason on stderr:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --add-dir ~/.ynh/run/.snapshots/local--seat/... -p hello`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--seat/.../**) -p hello`
 
 ```bash
 cd /tmp/ynh-tutorial/ws/project
@@ -52,13 +52,13 @@ Expected on stderr:
 Launching claude...
 ```
 
-The only `--add-dir` is the one ynh always passes for its own assembled directory.
+No `--add-dir` is passed for ynh's own assembled directory: Claude Code reads it through an allow rule (`--allowedTools=Read(//<dir>/**)`), because it asks to trust every `--add-dir` folder it has not seen, and the directory's path changes with the harness. Nothing is granted yet, so there is no `--add-dir` at all.
 
 ## Grant with an allow-list
 
 `YNH_WORKSPACE_ROOTS` (or `workspace_roots` in `~/.ynh/config.json`) is a boundary the operator draws. A requested folder that resolves inside one of its roots is granted without any trust step. One outside it is refused:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --add-dir ~/.ynh/run/.snapshots/local--seat/... -p hello --add-dir .../ynh-tutorial/ws/ynh`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--seat/.../**) -p hello --add-dir .../ynh-tutorial/ws/ynh`
 
 ```bash
 cd /tmp/ynh-tutorial/ws/project
@@ -104,7 +104,7 @@ ynh trust accept local/seat
 
 Expected output: `Recorded local/seat: 0 command(s), 2 workspace folder(s), sha256:...`
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --add-dir ~/.ynh/run/.snapshots/local--seat/... -p hello --add-dir .../ynh-tutorial/ws/ynh --add-dir .../ynh-tutorial/elsewhere`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--seat/.../**) -p hello --add-dir .../ynh-tutorial/ws/ynh --add-dir .../ynh-tutorial/elsewhere`
 
 ```bash
 cd /tmp/ynh-tutorial/ws/project
@@ -117,7 +117,7 @@ Expected on stderr: a `workspace: granted ... (harness trust-accepted)` line for
 
 Some paths are refused whatever the allow-list or trust say: the filesystem root, your home directory, a folder that contains the harness or the project, and one that does not exist. A harness that asks for your home directory gets nothing, even when the allow-list covers it:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --add-dir ~/.ynh/run/.snapshots/_inline-.../... -p hello`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) -p hello`
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/ws/greedy/.agents/harness
@@ -179,7 +179,7 @@ OpenCode has no flag. ynh instead adds an `external_directory` allow rule for ea
 
 `--no-workspace` grants none of the requested folders for that run, and says so:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --add-dir ~/.ynh/run/.snapshots/local--seat/... -p hello`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--seat/.../**) -p hello`
 
 ```bash
 cd /tmp/ynh-tutorial/ws/project

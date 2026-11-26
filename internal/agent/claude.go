@@ -164,7 +164,8 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 
 	if opts.ConfigPath != "" {
 		pluginDir := filepath.Join(opts.ConfigPath, (&vendor.Claude{}).ConfigDir())
-		args = append(args, "--plugin-dir", pluginDir, "--add-dir", opts.ConfigPath)
+		args = append(args, "--plugin-dir", pluginDir)
+		args = append(args, vendor.ClaudeRunDirReadArgs(opts.ConfigPath)...)
 
 		instructionsPath := filepath.Join(opts.ConfigPath, "CLAUDE.md")
 		if data, err := os.ReadFile(instructionsPath); err == nil && len(data) > 0 {

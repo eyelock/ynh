@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"io"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -51,9 +52,13 @@ func TestClaudeGrantReachesEveryLaunchPath(t *testing.T) {
 		if !hasPair(args, "--add-dir", grantedDir) {
 			t.Errorf("%s: no --add-dir %s in %v", name, grantedDir, args)
 		}
-		// The run directory's own --add-dir must still be there beside it.
-		if !hasPair(args, "--add-dir", cfg) {
-			t.Errorf("%s: lost the run directory --add-dir in %v", name, args)
+		// The run directory is read through an allow rule, never --add-dir
+		// (ynh #898): the grant is the only --add-dir.
+		if hasPair(args, "--add-dir", cfg) {
+			t.Errorf("%s: run directory passed with --add-dir in %v", name, args)
+		}
+		if !slices.ContainsFunc(args, func(a string) bool { return strings.HasPrefix(a, "--allowedTools=Read(/") }) {
+			t.Errorf("%s: no read rule for the run directory in %v", name, args)
 		}
 	}
 	// Without a grant (--no-workspace) the folder never appears.

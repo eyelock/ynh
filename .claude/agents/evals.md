@@ -129,7 +129,7 @@ own above the block, one line per launch, in order. The line reads
 as the block's expected call. In `first-harness.md` it reads:
 
 ```markdown
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --add-dir ~/.ynh/run/.snapshots/local--my-harness/... --append-system-prompt You are a tutorial test harness. ... -p what are you?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--my-harness/.../**) --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```
 
 The command is the program name, then its arguments joined by single spaces,
