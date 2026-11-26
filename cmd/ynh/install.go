@@ -23,7 +23,7 @@ import (
 
 func cmdInstall(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow]")
 	}
 
 	if err := config.EnsureDirs(); err != nil {
@@ -32,9 +32,12 @@ func cmdInstall(args []string) error {
 
 	// Parse --path and --ref flags from args
 	var pathFlag, refFlag string
+	var allowShadow bool
 	var remaining []string
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--path" && i+1 < len(args) {
+		if args[i] == "--allow-shadow" {
+			allowShadow = true
+		} else if args[i] == "--path" && i+1 < len(args) {
 			pathFlag = args[i+1]
 			i++ // skip value
 		} else if args[i] == "--ref" && i+1 < len(args) {
@@ -45,7 +48,7 @@ func cmdInstall(args []string) error {
 		}
 	}
 	if len(remaining) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow]")
 	}
 
 	source := remaining[0]
@@ -226,6 +229,15 @@ func cmdInstall(args []string) error {
 	// (it would overwrite the ynh binary in ~/.ynh/bin/).
 	// Users invoke it with: ynh run ynh
 	reservedName := p.Name == "ynh"
+
+	// A launcher goes into ~/.ynh/bin, which the getting-started guide puts first on PATH, so a
+	// harness named like a command already there would silently replace that command in every
+	// shell. Refuse unless --allow-shadow says that is meant.
+	if !reservedName && !allowShadow {
+		if shadowed := findShadowedCommand(p.Name, config.BinDir()); shadowed != "" {
+			return fmt.Errorf("harness %q would shadow the command %s on your PATH: its launcher in %s would replace it in any shell that puts that directory first; rename the harness, or pass --allow-shadow to install it anyway", p.Name, shadowed, config.BinDir())
+		}
+	}
 
 	// Install dir: schema 2 — id-keyed flat layout under HarnessesDir.
 	// The canonical id is derived from the recorded source URL plus the
@@ -479,6 +491,21 @@ func bareNameSurvivors(bareName string, uninstalledIDs map[string]bool) ([]strin
 		}
 	}
 	return ids, nil
+}
+
+// findShadowedCommand returns the path of an executable called name in a PATH directory other
+// than binDir (ynh's own launcher directory), or "" when the name shadows nothing.
+func findShadowedCommand(name, binDir string) string {
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		if dir == "" || filepath.Clean(dir) == filepath.Clean(binDir) {
+			continue
+		}
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // repointLauncher keeps the bare-name launcher usable for the installs that

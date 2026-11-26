@@ -101,6 +101,8 @@ Install a harness from a Git URL, a registry id, or a local path.
 Flags:
   --path <subdir>    Install from a subdirectory of the repository
   --ref <ref>        Pin to a tag, branch or commit
+  --allow-shadow     Install even when the harness's name matches a command on PATH
+                     (its launcher would replace that command; refused by default)
 
 Examples:
   ynh install github.com/myorg/david

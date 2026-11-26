@@ -16,6 +16,8 @@ echo 'export PATH="$HOME/.ynh/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
+Because `~/.ynh/bin` comes first on `PATH`, a harness's launcher takes precedence over any command of the same name. `ynh install` therefore refuses a harness named like a command already on your `PATH` (a harness named `git`, say), naming the command it would shadow. To install it anyway, pass `--allow-shadow`; otherwise rename the harness.
+
 The `~/.ynh/` directory is created automatically on first use. To customize the location, set `YNH_HOME`:
 
 ```bash

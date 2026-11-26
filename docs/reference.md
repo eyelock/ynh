@@ -57,7 +57,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh init` | Show the resolved ynh home and setup instructions; creates `~/.ynh` and its subdirectories if missing |
-| `ynh install <source>` | `--path <subdir>`, `--ref <ref>` (there is no `-v`) |
+| `ynh install <source>` | `--path <subdir>`, `--ref <ref>`, `--allow-shadow` (there is no `-v`) |
 | `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--label <key:value>` (repeatable; `key:` removes a [run label](telemetry.md#run-labels)), `--telemetry-relay` (see [telemetry](telemetry.md#vendor-telemetry-through-the-relay)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
 | `ynh update <harness>` | (the harness name is required) |
