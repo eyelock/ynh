@@ -20,6 +20,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -1120,6 +1121,11 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	if name == "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			"usage: ynh trust accept <harness>")
+	}
+	// A folder (./dir) has no install id: accepting it records the remote
+	// includes' commands, the only part of a folder run the gate checks.
+	if namespace.Classify(name) == namespace.RefPath {
+		return acceptFolderIncludes(name, format, structured, stdout, stderr)
 	}
 	p, err := harness.LoadQualified(name)
 	if err != nil {

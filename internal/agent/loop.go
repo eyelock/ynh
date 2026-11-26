@@ -37,6 +37,10 @@ import (
 type ExitError struct {
 	Code    int
 	Message string
+	// ErrorCode is the structured error code a refusal carries into the
+	// result's error_code ("untrusted" for a trust-gate refusal). Empty for
+	// every other exit.
+	ErrorCode string
 }
 
 func (e *ExitError) Error() string {
@@ -121,6 +125,14 @@ type RunOptions struct {
 	// reports a refusal itself. Nil trusts nothing; the decision needs the
 	// operator's trust record, which this package does not read.
 	HookTrust func(h *harness.Harness, id, backend, configDir string) bool
+	// TrustGate decides whether the harness may run at all (ynh #950). It is
+	// handed the harness as loaded and the installed id ("" for a harness
+	// given by path) before anything is assembled or started, and a non-nil
+	// error refuses the run with exit 1 and error_code "untrusted". On
+	// --resume it is handed the harness the checkpoint names, and a
+	// checkpoint that names none is refused. Nil runs ungated, which only
+	// tests do: the CLI always sets it.
+	TrustGate func(h *harness.Harness, id string) error
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -391,6 +403,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if namespace.Classify(opts.HarnessName) == namespace.RefID {
 			loadedID = opts.HarnessName
 		}
+		if opts.TrustGate != nil {
+			if gerr := opts.TrustGate(harnessObj, loadedID); gerr != nil {
+				return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: gerr.Error()}
+			}
+		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
 			id := loadedID
 			workspaceDirs = opts.WorkspaceGrant(harnessObj, id, opts.Backend, opts.WorktreeDir)
@@ -486,6 +503,13 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, &ExitError{Code: ExitResumeError, Message: fmt.Sprintf(
 				"checkpoint %q records no task, and a run interrupted before acting starts again from it: pass --task",
 				checkpointPath(opts.Resume))}
+		}
+		// A resume re-checks the trust gate for the harness its checkpoint
+		// names (decision 13), so one that names none has nothing to check
+		// and is refused rather than run unchecked.
+		if opts.HarnessName == "" && opts.TrustGate != nil {
+			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode,
+				Message: "refusing to resume: the checkpoint names no harness, so there is nothing to check against what you accepted"}
 		}
 	}
 

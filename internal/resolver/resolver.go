@@ -63,6 +63,15 @@ type ResolveResult struct {
 	// cycle is not an error; ynh info and ynd preview show the note.
 	Notes []string
 
+	// Remote is true for a git include of another repository, at any depth.
+	// A local include, and a git include of the harness's own repository
+	// (IsOwnRepoSource), are the harness's own files and are not remote.
+	Remote bool
+	// RemoteKey names a remote include for a trust record: its repository and
+	// subpath, then "@" and the ref as written ("" when it floats). Empty
+	// unless Remote.
+	RemoteKey string
+
 	// node is the include's identity in the include graph (see
 	// includeResolver.parents), empty for a plain artifact package.
 	node string
@@ -733,9 +742,16 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 	}
 	sourceKey := ShortGitURL(GitSourceURL(inc.Git, p.Dir)) + "//" + inc.Path
 	id := sourceKey + "@" + version
+	remote := !IsOwnRepoSource(inc.GitSource, p.Dir)
+	remoteKey := ""
+	if remote {
+		remoteKey = sourceKey + "@" + inc.Ref
+	}
 	return ResolveResult{
 		sourceKey: sourceKey,
 		version:   version,
+		Remote:    remote,
+		RemoteKey: remoteKey,
 		Content: ResolvedContent{
 			BasePath:       basePath,
 			Paths:          inc.Pick,

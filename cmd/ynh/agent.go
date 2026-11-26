@@ -303,6 +303,10 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		return workspaceGrant(h, id, backend, worktree, false, stderr)
 	}
 
+	opts.TrustGate = func(h *harness.Harness, id string) error {
+		return trustGate(id, h, stderr)
+	}
+
 	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {
 		return codexHooksTrusted(h, id, backend, configDir, stderr)
 	}

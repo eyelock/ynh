@@ -49,7 +49,7 @@ func includedSensorSetup(t *testing.T, includeExtra string) (publisher, tree str
 	if includeExtra != "" {
 		incStr = strings.TrimSuffix(incStr, "}") + "," + includeExtra + "}"
 	}
-	installListTestHarness(t, home, "con",
+	installTrustedTestHarness(t, home, "con",
 		`{"name":"con","version":"0.1.0","default_vendor":"claude","includes":[`+incStr+`]}`)
 	return publisher, t.TempDir()
 }

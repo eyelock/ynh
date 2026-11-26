@@ -474,7 +474,7 @@ func writeScriptLine(w io.Writer, s *scriptRef) {
 	}
 	if !s.Covered {
 		if len(s.Skipped) > 0 {
-			_, _ = fmt.Fprintf(w, "    script:  %s (NOT covered: refused)\n", s.Path)
+			_, _ = fmt.Fprintf(w, "    script:  %s (NOT covered: refused; this blocks a run)\n", s.Path)
 			writeSkipped(w, s)
 			return
 		}
@@ -482,7 +482,7 @@ func writeScriptLine(w io.Writer, s *scriptRef) {
 		return
 	}
 	if s.Digest == "missing" || s.Digest == "unreadable" {
-		_, _ = fmt.Fprintf(w, "    script:  %s (covered, but its folder %s is %s)\n", s.Path, s.Folder, s.Digest)
+		_, _ = fmt.Fprintf(w, "    script:  %s (covered, but its folder %s is %s; this blocks a run)\n", s.Path, s.Folder, s.Digest)
 		return
 	}
 	_, _ = fmt.Fprintf(w, "    script:  %s (covered with its folder %s: %d file(s), %s)\n", s.Path, s.Folder, s.Files, shortDigest(s.Digest))
@@ -492,6 +492,6 @@ func writeScriptLine(w io.Writer, s *scriptRef) {
 // writeSkipped says what the folder walk did not read.
 func writeSkipped(w io.Writer, s *scriptRef) {
 	for _, k := range s.Skipped {
-		_, _ = fmt.Fprintf(w, "             skipped %s\n", k)
+		_, _ = fmt.Fprintf(w, "             skipped %s (this blocks a run)\n", k)
 	}
 }
