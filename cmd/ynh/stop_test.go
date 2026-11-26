@@ -141,3 +141,63 @@ func TestReapStopsOrphansAndClearsHistory(t *testing.T) {
 		t.Error("--history touched a live session")
 	}
 }
+
+// A recorded vendor pid that now belongs to another process is never
+// signalled: the stop goes through the wrapper, whose identity is checked.
+func TestStopNeverSignalsAReusedVendorPID(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	stopWait = 5 * time.Second
+	// The stand-in for a process that is not the vendor but whose pid the
+	// record names (the vendor's pid was reused).
+	bystander := exec.Command("sleep", "60")
+	if err := bystander.Start(); err != nil {
+		t.Skipf("sleep unavailable: %v", err)
+	}
+	go func() { _ = bystander.Wait() }()
+	t.Cleanup(func() { _ = bystander.Process.Kill() })
+
+	sleeper(t, "s1", "local--a", presence.ModeInteractive, "")
+	e, err := presence.Find("s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Name the bystander as the vendor, with a start time that is not its own.
+	start, _ := presence.ProcessStart(bystander.Process.Pid)
+	e.VendorPID, e.VendorStart = bystander.Process.Pid, start+12345
+	if err := presence.Save(e.Record); err != nil {
+		t.Fatal(err)
+	}
+	e, _ = presence.Find("s1")
+
+	var out, errb bytes.Buffer
+	if err := cmdStopTo([]string{"s1"}, &out, &errb); err != nil {
+		t.Fatalf("%v (%s)", err, errb.String())
+	}
+	if liveIDs(t)["s1"] {
+		t.Error("the session was not stopped through its wrapper")
+	}
+	if now, err := presence.ProcessStart(bystander.Process.Pid); err != nil || now != start {
+		t.Fatalf("the bystander was disturbed: start %v err %v", now, err)
+	}
+	if bystander.ProcessState != nil {
+		t.Error("the bystander process ended")
+	}
+	// And a vendor whose start does match is the one signalled.
+	sleeper(t, "s2", "local--b", presence.ModeInteractive, "")
+	v := exec.Command("sleep", "60")
+	if err := v.Start(); err != nil {
+		t.Skip(err)
+	}
+	go func() { _ = v.Wait() }()
+	t.Cleanup(func() { _ = v.Process.Kill() })
+	vs, _ := presence.ProcessStart(v.Process.Pid)
+	e2, _ := presence.Find("s2")
+	e2.VendorPID, e2.VendorStart = v.Process.Pid, vs
+	if err := presence.Save(e2.Record); err != nil {
+		t.Fatal(err)
+	}
+	e2, _ = presence.Find("s2")
+	if got := presence.StopTarget(e2.Record); got != v.Process.Pid {
+		t.Errorf("a matching vendor is not the target: %d, want %d", got, v.Process.Pid)
+	}
+}

@@ -54,6 +54,7 @@ type Record struct {
 	Harness      string    `json:"harness"`
 	Vendor       string    `json:"vendor"`
 	VendorPID    int       `json:"vendor_pid,omitempty"`
+	VendorStart  int64     `json:"vendor_start,omitempty"` // vendor process start (ProcessStart), so a reused pid is not mistaken for it
 	WrapperPID   int       `json:"wrapper_pid"`
 	StartTime    int64     `json:"start_time"` // wrapper process start, an opaque per-OS number (ProcessStart)
 	StartedAt    time.Time `json:"started_at"` // wall clock, for people; liveness uses StartTime
@@ -168,6 +169,13 @@ func (s *Session) SetVendorPID(pid int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rec.VendorPID = pid
+	// The vendor's start time, read as soon as it has a pid: Stop signals the
+	// vendor only while the process at the pid still started then. Absent when
+	// it cannot be read, and Stop then goes through the wrapper.
+	s.rec.VendorStart = 0
+	if start, err := ProcessStart(pid); err == nil {
+		s.rec.VendorStart = start
+	}
 	s.rec.LastBeat = time.Now().UTC()
 	_ = Save(s.rec)
 }

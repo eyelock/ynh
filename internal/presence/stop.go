@@ -38,10 +38,7 @@ func Stop(e Entry, wait time.Duration) error {
 	if e.Ended || !Alive(e.Record) {
 		return fmt.Errorf("%s: %w", e.Address, ErrNotLive)
 	}
-	pid := e.VendorPID
-	if pid <= 1 {
-		pid = e.WrapperPID
-	}
+	pid := StopTarget(e.Record)
 	if err := signalTerm(pid); err != nil {
 		return fmt.Errorf("stopping %s: %w", e.Address, err)
 	}
@@ -62,6 +59,20 @@ func Stop(e Entry, wait time.Duration) error {
 		}
 	}
 	return nil
+}
+
+// StopTarget is the process Stop signals: the vendor, but only while the
+// process at its pid is still the one recorded (it started when the record
+// says). A vendor pid that was never given a start time, is gone, or now
+// belongs to another process is not signalled; the wrapper, whose identity the
+// caller has just verified, is, and it ends its session when its child exits.
+func StopTarget(r Record) int {
+	if r.VendorPID > 1 && r.VendorStart != 0 {
+		if start, err := ProcessStart(r.VendorPID); err == nil && start == r.VendorStart {
+			return r.VendorPID
+		}
+	}
+	return r.WrapperPID
 }
 
 // signalTerm asks the process to terminate, where the OS has a way to ask, and
