@@ -56,12 +56,14 @@ Only regular files inside the harness are read:
 
 `ynh trust show` reports every refusal as a `skipped` line under the command, with the reason. A script that is itself refused reads as **not covered**. A skipped entry is recorded in the digest, so adding, removing or changing one is noticed, but what it points at is not read.
 
+**A skipped script blocks the run** once the gate lands (decision on part B, [ynh #970](https://github.com/eyelock/ynh/pull/970), *waits on that PR merging*). The run is refused, naming the script, the reason it was skipped and a Fix line, and `ynh trust show` says that a skipped entry will block. Until then a skipped script is only reported: the digest could not read it, so nothing vouches for it either way.
+
 ### What the digest leaves out
 
 - **Project code.** A script in the project (`bash scripts/wake.sh`, a sensor's `./lint.sh`) is the project's, like `make check`. `ynh trust show` says it is not covered.
 - **Anything a covered script reaches outside its own folder.** A script that sources `../lib/common.sh`, or runs another script elsewhere, is covered for its own folder only.
 - **Tools found on `PATH`.** A command such as `gofmt`, `golangci-lint` or `go` has its command string covered, not the binary.
-- **What a skipped link points at**, as above.
+- **What a skipped link points at**, as above. A skipped script is not silently accepted: it blocks the run once the gate lands (see [Links and other files](#links-and-other-files)).
 
 The digest is a review aid, not a sandbox: it tells you when what you reviewed has moved, and the list above is what it cannot tell you.
 
@@ -91,6 +93,11 @@ A record carries the digest scheme it was made under. A harness accepted under a
 > **Not built yet** ([ynh #950](https://github.com/eyelock/ynh/issues/950), part B). This section is a placeholder, to be written from what ships.
 
 To cover: which commands refuse (`ynh run`, `ynh agent run`, `ynh check`, `--resume`), what a refusal prints and its structured error code, an unreadable include refusing and naming `ynh update`, and the one-line notice a folder run prints.
+
+Two decisions already made for the gate, to be written out in full here when it ships:
+
+- **A skipped script blocks the run.** A script the digest had to skip (a link out of the harness, a loop, a device; see [Links and other files](#links-and-other-files)) cannot be reviewed, so the gate refuses the run rather than launch it. The refusal names the script with its reason and ends in a Fix line, and `ynh trust show` says a skipped entry will block. *Marked as landing with [ynh #970](https://github.com/eyelock/ynh/pull/970).*
+- **An invalid profile refuses the whole harness.** The digest resolves every profile of a harness, so one that cannot be resolved leaves the set incomplete, and `ynh run` and `ynh check` refuse the harness as a whole, not only that profile. This is intended: a profile nobody can resolve is a profile nobody reviewed. *Marked as landing with ynh #970.*
 
 ## Folder runs
 
