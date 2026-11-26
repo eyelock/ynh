@@ -43,6 +43,7 @@ JSON output is `{"sessions": [...]}`, oldest first; an empty listing is `{"sessi
 | `cwd` | The folder the session was launched from. |
 | `mode` | `interactive`, `one-shot` (a prompt and no interactive session) or `delegate` (a run started for a parent's `delegates_to`). |
 | `owner_session` | For a delegate, the live session of the parent harness in the same folder that started it. Empty when it cannot be found. |
+| `accepts_tasks` | True for an interactive session that can take a task a parent delegated to its harness: it was given the `ynh-inbox` MCP server and its allow rule, on Claude Code, Codex or Copilot CLI, and the harness does not set `mcp_manual_approval`. False for everything else, so a delegation to such a harness starts a headless session ([Delegating to a live session](delegate-sessions.md#delegating-to-a-live-session)). |
 | `address` | How the session is named: `ynh:<session_id>`. |
 | `state` | `alive`, `busy`, `idle` or `unknown`. A session reports `alive`; `busy` and `idle` are reserved for vendors whose hooks can say so, and none do yet. |
 | `last_beat` | When the wrapper last refreshed the record, every 15 seconds. |

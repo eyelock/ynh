@@ -41,11 +41,27 @@ const (
 	// StatusCancelled: the delegation was cancelled. Final, whatever the
 	// run did next.
 	StatusCancelled Status = "cancelled"
+	// StatusQueued: the task sits in the mailbox of a live interactive session
+	// of the delegate harness, which has not taken it yet (RouteLive). Not
+	// final: a session takes it (running), or it falls back to a headless
+	// session when no live session is left.
+	StatusQueued Status = "queued"
+	// StatusRejected: the live session declined the task, so it never ran.
+	// Final; the sender may resend it headless.
+	StatusRejected Status = "rejected"
+)
+
+// Where a task went (Record.Route).
+const (
+	// RouteHeadless: a detached session of its own, started for the task.
+	RouteHeadless = "headless"
+	// RouteLive: the mailbox of a live interactive session of the harness.
+	RouteLive = "live"
 )
 
 // Final reports whether s is a state a delegation never leaves.
 func (s Status) Final() bool {
-	return s == StatusSucceeded || s == StatusFailed || s == StatusCancelled
+	return s == StatusSucceeded || s == StatusFailed || s == StatusCancelled || s == StatusRejected
 }
 
 // Change is one move of the status, with when it happened.
@@ -96,6 +112,24 @@ type Record struct {
 
 	Status  Status   `json:"status"`
 	History []Change `json:"history"`
+
+	// Route says where the task went: RouteLive or RouteHeadless. Session is
+	// the live interactive session it was queued at (and, once taken, the one
+	// that took it) and SessionCwd that session's working folder; all three
+	// are in every result so the sender knows which session it talks to.
+	Route      string `json:"route,omitempty"`
+	Session    string `json:"session,omitempty"`
+	SessionCwd string `json:"session_cwd,omitempty"`
+	// QueuedAt and TakeBy: when the task was queued, and the time after which
+	// the sender is told it is still waiting and may choose (cancel and resend
+	// with on_live headless). Nothing switches to headless by itself while the
+	// live session is alive.
+	QueuedAt *time.Time `json:"queued_at,omitempty"`
+	TakeBy   *time.Time `json:"take_by,omitempty"`
+	// Supervisor is the command that starts a headless session on this
+	// record, kept so that a queued task whose live session is gone can fall
+	// back to headless wherever its status is read.
+	Supervisor []string `json:"supervisor,omitempty"`
 
 	Questions []Question `json:"questions,omitempty"`
 

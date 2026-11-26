@@ -50,15 +50,19 @@ const BeatEvery = 15 * time.Second
 
 // Record is one session's presence.
 type Record struct {
-	SessionID    string    `json:"session_id"`
-	Harness      string    `json:"harness"`
-	Vendor       string    `json:"vendor"`
-	VendorPID    int       `json:"vendor_pid,omitempty"`
-	WrapperPID   int       `json:"wrapper_pid"`
-	StartTime    int64     `json:"start_time"` // wrapper process start, an opaque per-OS number (ProcessStart)
-	StartedAt    time.Time `json:"started_at"` // wall clock, for people; liveness uses StartTime
-	Cwd          string    `json:"cwd"`
-	Mode         string    `json:"mode"`
+	SessionID  string    `json:"session_id"`
+	Harness    string    `json:"harness"`
+	Vendor     string    `json:"vendor"`
+	VendorPID  int       `json:"vendor_pid,omitempty"`
+	WrapperPID int       `json:"wrapper_pid"`
+	StartTime  int64     `json:"start_time"` // wrapper process start, an opaque per-OS number (ProcessStart)
+	StartedAt  time.Time `json:"started_at"` // wall clock, for people; liveness uses StartTime
+	Cwd        string    `json:"cwd"`
+	Mode       string    `json:"mode"`
+	// AcceptsTasks is true for an interactive session that can take a task a
+	// parent delegated to its harness: it has the ynh-inbox MCP server and an
+	// allow rule for it, on a vendor that supports it (docs/delegate-sessions.md).
+	AcceptsTasks bool      `json:"accepts_tasks"`
 	OwnerSession string    `json:"owner_session,omitempty"`
 	Address      string    `json:"address"`
 	State        string    `json:"state"`

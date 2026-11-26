@@ -133,6 +133,33 @@ token comes from a small credential helper that ynh writes for the run. ynh does
 binary. Which route the parent uses is its choice: ynh states no preference. The commands, the doctor's
 checks and the Codex sandbox cost are in the [reference](delegates-reference.md#the-a2a-cli-route).
 
+## Delegating to a live session
+
+`delegate_to_<name>` used to start a new headless session of the delegate every time, even when you had that harness open in a window. Now the parent's endpoint first asks presence ([Session presence](presence.md)) whether an **interactive session of the delegate's installed harness is live and accepts tasks** (`accepts_tasks`), in any folder of the same `YNH_HOME`. A seat is the same seat wherever it sits.
+
+- **A live session accepts:** the task goes into that harness's **mailbox** and nothing is started. The result says `route: live`, the `session` and its `cwd`.
+- **None does:** a headless session starts as before, `route: headless`.
+- **Choose per call:** `on_live` on `delegate_to_<name>` is `queue` (the default) or `headless`, for work that must not land in a person's window. The a2a CLI sends it as the message metadata `ynh.on_live`.
+
+The mailbox is a delegation record in state `queued` (A2A `submitted`) under `$YNH_HOME/inbox/<harness>/`. Nothing listens in the session: the live session takes the task through the **`ynh-inbox`** MCP server that `ynh run` adds to an interactive session on Claude Code, Codex and Copilot CLI:
+
+| Tool | What it does |
+|---|---|
+| `inbox_list` | The tasks waiting for this harness. |
+| `inbox_take` | Take one (the oldest with no `task_id`). **Atomic:** the first live session of the harness to take a task owns it; it is then `working`. |
+| `inbox_ask` | Ask the sender a question about a task taken; the task goes `input-required`, answered with `delegate_reply`. |
+| `inbox_done` | Report the result and complete the task. |
+| `inbox_decline` | Refuse it with a reason: state `rejected`, and the sender may resend it headless. |
+
+`ynh run` allows these tools at launch, so there is no approval prompt: Claude Code `--allowedTools=mcp__plugin_<harness>_ynh-inbox`, Codex `-c mcp_servers.ynh-inbox.default_tools_approval_mode="approve"`, Copilot CLI `--allow-tool=ynh-inbox`. A harness that sets `mcp_manual_approval` takes no tasks (its sessions have `accepts_tasks: false`), and neither does OpenCode, whose generated plugin drops hook output, nor Cursor, which has not been run this way: a delegation to those starts a headless session, as before. Telling a session a task is waiting (hooks, the terminal bell) is not part of this: a person asks the session to look at its inbox.
+
+### When it goes wrong
+
+- **Queued, not taken within take-by (5 minutes):** the task stays `submitted` and the result says `queued at live session <id>, ... not taken yet`. Nothing switches to headless by itself while that session is alive: the sender may wait, or cancel and resend with `on_live: headless`.
+- **Queued, then the live session exits:** the next status call finds no live session and starts a headless session with the same task. Nothing is lost.
+- **Taken, then the session dies:** `failed`, "the live session ended; resend". It is never re-run by itself, since the work may be half done.
+- **Two parents, one seat:** the mailbox is per harness and the take is atomic, so each task is taken once, by one session.
+
 ## Questions from a delegate
 
 A delegate session gets one extra tool, `ask_parent`, from an MCP server named `ynh-parent`. A question

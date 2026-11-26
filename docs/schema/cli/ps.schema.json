@@ -17,6 +17,7 @@
         "started_at": {"type": "string", "description": "ISO 8601 UTC wall-clock start, for people."},
         "cwd": {"type": "string"},
         "mode": {"type": "string", "description": "interactive, one-shot or delegate."},
+        "accepts_tasks": {"type": "boolean", "description": "True for an interactive session that can take a task delegated to its harness (it has the ynh-inbox MCP server and its allow rule)."},
         "owner_session": {"type": "string", "description": "For a delegate, the session that started it; omitted otherwise."},
         "address": {"type": "string", "description": "The name the session answers to, `ynh:<session_id>`."},
         "state": {"type": "string", "description": "alive, busy, idle or unknown."},

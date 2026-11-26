@@ -110,6 +110,8 @@ func main() {
 		err = cmdDelegateMCP(os.Args[2:])
 	case "parent-mcp":
 		err = cmdParentMCP(os.Args[2:])
+	case "inbox-mcp":
+		err = cmdInboxMCP(os.Args[2:])
 	case "mcp-headers":
 		err = cmdMCPHeaders(os.Args[2:], os.Stdout)
 	case "sensors":

@@ -14,20 +14,15 @@ import (
 
 	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/presence"
-	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // startPresence records the session this run is about to launch and returns
 // the function that ends it. The record is best effort: a failure to write it
 // is reported on stderr and never stops the launch.
-func startPresence(vendorName, harness string, oneShot, isDelegate bool) func() {
-	id, err := sessions.NewID()
-	if err != nil {
-		return func() {}
-	}
+func startPresence(id, vendorName, harness string, oneShot, isDelegate, acceptsTasks bool) func() {
 	cwd, _ := os.Getwd()
-	rec := presence.Record{SessionID: id, Harness: harness, Vendor: vendorName, Cwd: cwd, Mode: presence.ModeInteractive}
+	rec := presence.Record{SessionID: id, Harness: harness, Vendor: vendorName, Cwd: cwd, Mode: presence.ModeInteractive, AcceptsTasks: acceptsTasks && !isDelegate && !oneShot}
 	switch {
 	case isDelegate:
 		rec.Mode = presence.ModeDelegate

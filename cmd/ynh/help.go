@@ -82,6 +82,19 @@ delegate"). The question goes on the delegation record at --record.
 ynh run writes the entry that calls this, for a delegate's session; it is not
 meant to be typed.`,
 
+	"inbox-mcp": `ynh inbox-mcp --harness <run name> [--session <session id>]
+
+Internal. The MCP server a vendor starts over stdio for an interactive session:
+inbox_list, inbox_take, inbox_ask, inbox_done and inbox_decline, for a task
+another session delegated to this harness and that this session takes
+(docs/delegate-sessions.md, "Delegating to a live session").
+
+  --harness <run name>  The harness's run name: the key of its mailbox.
+  --session <id>        This session's id (its presence record); YNH_SESSION_ID when not given.
+
+ynh run writes the entry that calls this, for an interactive session; it is not
+meant to be typed.`,
+
 	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
 
 Internal. Print the headers of a remote MCP server as a JSON object, with
