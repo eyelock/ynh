@@ -208,7 +208,7 @@ func TestTrustGate_FolderRunRefusesAnUnacceptedRemoteInclude(t *testing.T) {
 	}
 
 	gerr := trustGate("", p, io.Discard)
-	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "file://") || !strings.Contains(gerr.Error(), "remote-sensor") ||
+	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "/remote//") || !strings.Contains(gerr.Error(), "remote-sensor") ||
 		!strings.Contains(gerr.Error(), "ynh trust accept "+folder) {
 		t.Fatalf("err = %v, want a refusal naming the include, its sensor and the accept command", gerr)
 	}
@@ -482,5 +482,83 @@ func mustSymlink(t *testing.T, target, dir, rel string) {
 	}
 	if err := os.Symlink(target, path); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
+	}
+}
+
+// A record for a remote include covers that include's commands alone, so two
+// folders that share it share one acceptance: accepting the second does not
+// undo the first (ynw-5l7hc).
+func TestTrustGate_FoldersSharingARemoteIncludeShareItsRecord(t *testing.T) {
+	a, src := remoteIncludeFolder(t)
+	b := filepath.Join(filepath.Dir(a), "folderb")
+	if err := os.MkdirAll(b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// B includes the same remote and has a local include with a hook of its own.
+	writeIncludedHarness(t, b, "localinc", hookFields("echo local"))
+	manifest := `{"name":"folderb","version":"0.1.0","includes":[{"git":"file://` + src + `"},{"local":"localinc","hooks":true}]}`
+	if err := writePluginJSONFile(b, []byte(manifest)); err != nil {
+		t.Fatal(err)
+	}
+	pa, err := harness.LoadDir(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pb, err := harness.LoadDir(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if aerr := cmdTrustTo([]string{"accept", a}, io.Discard, io.Discard); aerr != nil {
+		t.Fatal(aerr)
+	}
+	if gerr := trustGate("", pa, io.Discard); gerr != nil {
+		t.Fatalf("A after accepting A: %v", gerr)
+	}
+	// B shares A's acceptance of the remote include: its local hook needs none.
+	if gerr := trustGate("", pb, io.Discard); gerr != nil {
+		t.Fatalf("B reads A's record of the shared include, and its local include is its own: %v", gerr)
+	}
+	if aerr := cmdTrustTo([]string{"accept", b}, io.Discard, io.Discard); aerr != nil {
+		t.Fatal(aerr)
+	}
+	if gerr := trustGate("", pa, io.Discard); gerr != nil {
+		t.Fatalf("accepting B undid A's acceptance: %v", gerr)
+	}
+}
+
+// A folder whose remote include brings no commands is not refused because a
+// local include has a hook (ynw-5l7hc).
+func TestTrustGate_LocalIncludeCommandsAreNotTheRemoteIncludesRecord(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := t.TempDir()
+	remote := filepath.Join(root, "remote")
+	if err := os.MkdirAll(remote, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(remote, []byte(`{"name":"inc","version":"1.0.0"}`)); err != nil {
+		t.Fatal(err)
+	}
+	runGitInDir(t, remote, "init", "-q", "-b", "main")
+	runGitInDir(t, remote, "add", "-A")
+	runGitInDir(t, remote, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init")
+	if _, err := resolver.EnsureRepo("file://"+remote, ""); err != nil {
+		t.Fatal(err)
+	}
+	folder := filepath.Join(root, "folder")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIncludedHarness(t, folder, "localinc", hookFields("echo local"))
+	manifest := `{"name":"folderh","version":"0.1.0","includes":[{"git":"file://` + remote + `"},{"local":"localinc","hooks":true}]}`
+	if err := writePluginJSONFile(folder, []byte(manifest)); err != nil {
+		t.Fatal(err)
+	}
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gerr := trustGate("", p, io.Discard); gerr != nil {
+		t.Fatalf("a remote include with no commands, and a local hook: %v", gerr)
 	}
 }

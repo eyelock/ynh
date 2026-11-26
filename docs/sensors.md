@@ -423,14 +423,20 @@ acceptance does not cover them. Review them with `ynh trust show`, then
 | `no-commands` | The harness executes nothing. Most harnesses. |
 | `unavailable` | What the harness executes could not be read in full, because an include is not in the cache. Nothing can be accepted; run `ynh update`. |
 
-**This reports; it does not block.** Nothing refuses to run because a harness is
-unreviewed or changed. `ynh check` and `ynh run` warn only on `changed`, never on
-`unreviewed`: a warning that appears on almost every run is one nobody reads.
-`ynh run` prints its warning on stderr before launch, and still launches. It
-names the kinds of command the harness declares (hooks, MCP servers, sensors),
-not which one moved, because the record keeps only a digest. When the harness
-requests workspace folders and no allow-list is set, it also lists the folders
-left ungranted until you accept.
+**It blocks.** `ynh run`, `ynh agent run` (and `--resume`) and `ynh check`
+refuse an installed harness that is `unreviewed`, `changed` or `unavailable`,
+before any vendor starts: exit 1, with the error code `untrusted` under
+`--format json`. The refusal lists what the harness executes and names
+`ynh trust show` and `ynh trust accept`. A harness that executes nothing
+(`no-commands`) needs no acceptance. A script the digest cannot read in full (a
+link out of the harness, to a device, dangling or looping, a link to a folder, or
+a missing script or script folder) blocks the run too, accepted or not, because
+accepting cannot make it reviewable; `ynh trust show` marks each such entry
+"this blocks a run". A run from a folder (`ynh run ./dir`) says on stderr that
+its own commands are not trust-checked and launches, but the commands a remote
+include of another repository brings are refused until `ynh trust accept <dir>`
+records them, per include and ref. When the harness requests workspace folders
+and no allow-list is set, accepting is also what grants the folders.
 
 The record lives in `$YNH_HOME/trust.json`, deliberately outside the harness
 directory. A harness carrying its own trust record would be authorising itself.

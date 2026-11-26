@@ -143,21 +143,17 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	if stderr != nil {
 		_, _ = fmt.Fprintf(stderr, "ynh: %s runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.\n", p.Name)
 	}
-	brought, remote, err := remoteIncludeSet(p)
+	remote, err := remoteIncludes(p)
 	if err != nil {
 		return err
 	}
-	if brought.count() == 0 || len(remote) == 0 {
-		return nil
-	}
-	if blockers := scriptBlockers(brought.Sensors, brought.Hooks, brought.MCPServers); len(blockers) > 0 {
-		return unreadableScriptsError(p.Name, blockers)
-	}
-	digest := executablesDigest(brought)
-	var unaccepted []string
-	for _, key := range remote {
-		if rec, ok := store.Harnesses[includeRecordPrefix+key]; !ok || rec.Digest != digest || rec.Scheme != trustScheme {
-			unaccepted = append(unaccepted, key)
+	var unaccepted []remoteInclude
+	for _, r := range remote {
+		if blockers := scriptBlockers(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers); len(blockers) > 0 {
+			return unreadableScriptsError(p.Name, blockers)
+		}
+		if rec, ok := store.Harnesses[includeRecordPrefix+r.Key]; !ok || rec.Digest != executablesDigest(r.Set) || rec.Scheme != trustScheme {
+			unaccepted = append(unaccepted, r)
 		}
 	}
 	if len(unaccepted) == 0 {
@@ -165,54 +161,56 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "refusing to run %s: its remote includes bring commands you have not accepted:\n", p.Name)
-	for _, k := range unaccepted {
-		fmt.Fprintf(&b, "  %s\n", k)
+	for _, r := range unaccepted {
+		fmt.Fprintf(&b, "  %s\n", r.Key)
+		b.WriteString(listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
 	}
-	b.WriteString(listExecutables(brought.Sensors, brought.Hooks, brought.MCPServers))
 	fmt.Fprintf(&b, "Accept them for this folder: ynh trust accept %s", p.Dir)
 	return &untrustedError{msg: b.String()}
 }
 
-// remoteIncludeSet returns the commands the includes of p bring, and the
-// record keys of its remote includes (repository, subpath and ref). The
-// commands are every one an include supplied, local ones too, because the
-// record for a remote include covers what its run carries from includes: a
-// change to any of them asks again, never the other way round. An include
-// that cannot be read is refused, naming `ynh update` (decision 15).
-func remoteIncludeSet(p *harness.Harness) (trustSet, []string, error) {
-	set := harnessExecutables(p)
-	if len(set.Problems) > 0 {
-		return trustSet{}, nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, set.Problems))
+// remoteInclude is one remote include a folder run reaches and the commands
+// that include brings by itself: its own sensors, hooks and MCP servers, and
+// those of its own local includes, never those of the folder or of another
+// include, so the record for it means the same to every folder that includes it.
+type remoteInclude struct {
+	// Key is the include's repository, subpath and ref (RemoteKey).
+	Key string
+	Set trustSet
+}
+
+// remoteIncludes returns the remote includes of p that bring commands, each
+// with its own commands, sorted by key. An include whose commands cannot be
+// read is refused, naming `ynh update` (decision 15). Hooks are counted
+// whether or not the include is consented to, so the record never covers less
+// than the include could run.
+func remoteIncludes(p *harness.Harness) ([]remoteInclude, error) {
+	if set := harnessExecutables(p); len(set.Problems) > 0 {
+		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, set.Problems))
 	}
 	resolved, err := resolver.ResolveIncludesLocal(p, harness.Selection{})
 	if err != nil {
-		return trustSet{}, nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, []string{err.Error()}))
+		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, []string{err.Error()}))
 	}
-	var remote []string
+	seen := map[string]bool{}
+	var out []remoteInclude
 	for _, r := range resolved {
-		if r.Remote && !slices.Contains(remote, r.RemoteKey) {
-			remote = append(remote, r.RemoteKey)
+		if !r.Remote || r.Harness == nil || seen[r.RemoteKey] {
+			continue
 		}
-	}
-	slices.Sort(remote)
-
-	var brought trustSet
-	for _, e := range set.Sensors {
-		if e.Source != "" {
-			brought.Sensors = append(brought.Sensors, e)
+		seen[r.RemoteKey] = true
+		own := harnessExecutables(r.Harness)
+		if len(own.Problems) > 0 {
+			return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, own.Problems))
 		}
-	}
-	for _, h := range set.Hooks {
-		if h.Source != "" {
-			brought.Hooks = append(brought.Hooks, h)
+		set := trustSet{Sensors: own.Sensors, Hooks: own.Hooks, MCPServers: own.MCPServers}
+		if set.count() == 0 {
+			continue
 		}
+		out = append(out, remoteInclude{Key: r.RemoteKey, Set: set})
 	}
-	for _, m := range set.MCPServers {
-		if m.Source != "" && m.Delegate == "" {
-			brought.MCPServers = append(brought.MCPServers, m)
-		}
-	}
-	return brought, remote, nil
+	slices.SortFunc(out, func(a, b remoteInclude) int { return strings.Compare(a.Key, b.Key) })
+	return out, nil
 }
 
 func includesUnreadable(p *harness.Harness, problems []string) string {
@@ -228,10 +226,11 @@ func gateRef(ref string) string {
 	return ""
 }
 
-// acceptFolderIncludes records the commands the remote includes of the folder
-// harness at path bring, one record per remote include (its repository,
-// subpath and ref), so a run of that folder passes the gate until an include
-// brings something else.
+// acceptFolderIncludes records the commands of each remote include of the
+// folder harness at path, one record per include (its repository, subpath and
+// ref) over that include's own commands. A record is shared by every folder
+// that includes the same repository at the same ref, and accepting one folder
+// never changes another's.
 func acceptFolderIncludes(path, format string, structured bool, stdout, stderr io.Writer) error {
 	p, err := harness.LoadIDOrPath(path)
 	if err != nil {
@@ -241,33 +240,37 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
-	brought, remote, err := remoteIncludeSet(p)
+	remote, err := remoteIncludes(p)
 	if err != nil {
 		return cliError(stderr, structured, errCodeConfigError, err.Error())
 	}
-	if brought.count() == 0 || len(remote) == 0 {
+	if len(remote) == 0 {
 		if format == "json" {
 			return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": []string{}})
 		}
 		_, err = fmt.Fprintf(stdout, "Nothing to accept: %s has no remote include that brings commands.\n", p.Dir)
 		return err
 	}
-	rec := trustRecord{
-		Digest:     executablesDigest(brought),
-		Commands:   brought.count(),
-		Scheme:     trustScheme,
-		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	for _, key := range remote {
-		store.Harnesses[includeRecordPrefix+key] = rec
+	now := time.Now().UTC().Format(time.RFC3339)
+	var keys []string
+	commands := 0
+	for _, r := range remote {
+		store.Harnesses[includeRecordPrefix+r.Key] = trustRecord{
+			Digest:     executablesDigest(r.Set),
+			Commands:   r.Set.count(),
+			Scheme:     trustScheme,
+			AcceptedAt: now,
+		}
+		keys = append(keys, r.Key)
+		commands += r.Set.count()
 	}
 	if err := saveTrustStore(store); err != nil {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
 	if format == "json" {
-		return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": remote, "digest": rec.Digest, "commands": rec.Commands})
+		return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": keys, "commands": commands})
 	}
-	_, err = fmt.Fprintf(stdout, "Recorded %d remote include(s) of %s: %d command(s), %s\n", len(remote), p.Dir, rec.Commands, rec.Digest)
+	_, err = fmt.Fprintf(stdout, "Recorded %d remote include(s) of %s: %d command(s)\n", len(keys), p.Dir, commands)
 	return err
 }
 
