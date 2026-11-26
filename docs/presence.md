@@ -68,6 +68,20 @@ A session whose harness has A2A delegates gets ynh's delegate MCP server (see [D
 
 Records live in `$YNH_HOME/presence/<session_id>.json`. Ended and dead records stay as history and are shown only by `--all`. They are not removed automatically yet, and the older `$YNH_HOME/sessions` files (which bind a `--session-name` to a vendor session) are a separate thing and are untouched.
 
+## Stopping sessions
+
+```
+ynh stop <session>
+ynh stop --owner <session>
+ynh reap [--history] [--dry-run]
+```
+
+A session is named by its `session_id` or its `address` (`ynh:<id>`), as `ynh ps` shows them. [ynh #895](https://github.com/eyelock/ynh/issues/895).
+
+- `ynh stop <session>` stops one live session. The record is checked against the process table first, so a pid that now belongs to another process is never signalled. ynh asks the vendor process to terminate (the wrapper, its parent, then ends the record cleanly), or the wrapper itself when no vendor process was recorded, and kills it if it has not gone within five seconds. A session that is not live is refused, with a Fix line.
+- `ynh stop --owner <session>` stops every live session that session started: its delegates (a record's `owner_session`).
+- `ynh reap` stops every `orphaned` session: a delegate keeps running when its owner exits, `ynh ps` lists it as orphaned, and reap clears it. `--history` also deletes the records of ended and dead sessions, which `ynh ps --all` otherwise keeps; `--dry-run` says what would be done and does nothing. A live session is never removed.
+
 ## Not covered
 
-Delegates' A2A endpoints are not yet queried as a second source, and there is no `ynh stop`, reap, live-session cap or `--on-live` option; those are [ynh #895](https://github.com/eyelock/ynh/issues/895) and [ynh #896](https://github.com/eyelock/ynh/issues/896). Presence is per machine and per `YNH_HOME`.
+Delegates' A2A endpoints are not yet queried as a second source, and there is no `--on-live` option ([ynh #896](https://github.com/eyelock/ynh/issues/896)). Reuse of a live delegate by name is not built either ([ynh #895](https://github.com/eyelock/ynh/issues/895)). Presence is per machine and per `YNH_HOME`.
