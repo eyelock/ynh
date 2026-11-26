@@ -1078,7 +1078,7 @@ Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` 
 cd /tmp/ynh-live/project
 mkdir -p .cursor && echo '{"permissions":{"allow":["Shell(ls)"],"deny":[]}}' > .cursor/cli.json
 ynh install /tmp/ynh-live/probe-harness --trust
-ynh run local/probe-harness -v cursor -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
+ynh run local/probe -v cursor -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 
