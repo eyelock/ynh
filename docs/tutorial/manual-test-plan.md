@@ -1043,7 +1043,7 @@ Confirm a line for each of the six events, the `pwd` being the project root (ynh
 
 ### L2: Copilot, matcher and timeout
 
-Change the matchers to `Edit`, reinstall (`ynh install /tmp/ynh-live/probe-harness`), accept again (`ynh trust accept local/probe`) and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured).
+Change the matchers to `Edit`, reinstall (`ynh install /tmp/ynh-live/probe-harness`), accept again (`ynh trust accept local/probe`) and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured). This second change alters the hook commands too, so reinstall and accept again (`ynh install /tmp/ynh-live/probe-harness`, `ynh trust accept local/probe`) before the rerun; otherwise ynh refuses it as changed since accepted.
 
 ### L3: Copilot, export layouts
 
