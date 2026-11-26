@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // MCP isolation on the vendors that have no "only these servers" switch.
@@ -33,7 +35,7 @@ import (
 // the vendor inherits them. It replaces IsolateMCP for that adapter; the
 // warning has the same meaning.
 type MCPEnvIsolator interface {
-	IsolateMCPEnv(configPath string) (env []string, warning string)
+	IsolateMCPEnv(configPath string) (env []string, warnings []warn.Warning)
 }
 
 // mcpListTimeout bounds a vendor's server listing, which a wedged install
@@ -268,7 +270,7 @@ func envValue(env []string, name string) string {
 // IsolateMCPEnv turns off, for one launch, the servers OpenCode would load
 // besides the harness's: OPENCODE_CONFIG_CONTENT is the highest-precedence
 // config source a launch can set, and it needs no write to the user's config.
-func (o *OpenCode) IsolateMCPEnv(configPath string) ([]string, string) {
+func (o *OpenCode) IsolateMCPEnv(configPath string) ([]string, []warn.Warning) {
 	return o.IsolateMCPEnvIn(configPath, nil, "")
 }
 
@@ -276,11 +278,14 @@ func (o *OpenCode) IsolateMCPEnv(configPath string) ([]string, string) {
 // ynh's own (a `ynh agent run` worker gets a smaller one): the vendor is asked
 // which servers it would load under that environment, in dir (the project's
 // directory; empty is the current one). A nil env is ynh's.
-func (o *OpenCode) IsolateMCPEnvIn(configPath string, env []string, dir string) ([]string, string) {
+func (o *OpenCode) IsolateMCPEnvIn(configPath string, env []string, dir string) ([]string, []warn.Warning) {
 	const fail = "MCP isolation could not be applied on OpenCode (%v): servers in your OpenCode config will still load"
 	bin, err := exec.LookPath(opencodeCLI)
 	if err != nil {
-		return nil, fmt.Sprintf(fail, err)
+		return nil, []warn.Warning{{
+			Message: fmt.Sprintf(fail, err),
+			Fix:     "install the opencode CLI, or put it on PATH",
+		}}
 	}
 	base := env
 	if base == nil {
@@ -288,12 +293,18 @@ func (o *OpenCode) IsolateMCPEnvIn(configPath string, env []string, dir string) 
 	}
 	listed, err := opencodeListedServers(bin, base, dir)
 	if err != nil {
-		return nil, fmt.Sprintf(fail, err)
+		return nil, []warn.Warning{{
+			Message: fmt.Sprintf(fail, err),
+			Fix:     "run `opencode debug config` and fix the error it reports",
+		}}
 	}
 	keep := harnessMCPNames(filepath.Join(configPath, ".opencode", "opencode.json"), true)
 	content, err := opencodeIsolationContent(listed, keep, envValue(env, "OPENCODE_CONFIG_CONTENT"))
 	if err != nil {
-		return nil, fmt.Sprintf(fail, err)
+		return nil, []warn.Warning{{
+			Message: fmt.Sprintf(fail, err),
+			Fix:     "make OPENCODE_CONFIG_CONTENT a JSON object, or unset it",
+		}}
 	}
-	return []string{"OPENCODE_CONFIG_CONTENT=" + content}, ""
+	return []string{"OPENCODE_CONFIG_CONTENT=" + content}, nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ErrUnknownVendor is returned when a vendor name is not registered.
@@ -68,7 +69,7 @@ type LaunchPreparer interface {
 // config already settles. Copilot needs no such capability: ynh adds
 // --allow-all-tools there.
 type MCPToolApprover interface {
-	ApproveMCPTools(runDir string, callerArgs []string, warn io.Writer) []string
+	ApproveMCPTools(runDir string, callerArgs []string, w io.Writer) []string
 }
 
 // SessionBinder is an optional capability for vendors whose CLI accepts a
@@ -208,11 +209,11 @@ type Adapter interface {
 
 	// IsolateMCP returns the extra launch arguments that restrict the vendor
 	// CLI to the MCP servers the harness composes (the assembled config in
-	// configPath), and a one-line warning when the vendor cannot do that
+	// configPath), and a warning when the vendor cannot do that
 	// fully. Either may be empty. The arguments are safe to append after a
 	// positional prompt. It never fails a run: a vendor that cannot isolate
 	// says so in the warning and the run goes ahead.
-	IsolateMCP(configPath string) (args []string, warning string)
+	IsolateMCP(configPath string) (args []string, warnings []warn.Warning)
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to

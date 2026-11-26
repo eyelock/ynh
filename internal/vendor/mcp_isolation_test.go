@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // stubMCPList puts empty executables named bins on PATH and makes the listing
@@ -45,7 +47,8 @@ func TestCodexIsolateMCP_TurnsOffEveryServerTheHarnessDoesNotCompose(t *testing.
 	dir := t.TempDir()
 	writeIsoFile(t, filepath.Join(dir, ".mcp.json"), `{"mcpServers":{"harnesssrv":{"command":"x"}}}`)
 
-	args, warning := (&Codex{}).IsolateMCP(dir)
+	args, warnings := (&Codex{}).IsolateMCP(dir)
+	warning := firstMessage(warnings)
 
 	want := []string{"-c", "mcp_servers.usersrv.enabled=false"}
 	if !reflect.DeepEqual(args, want) {
@@ -61,7 +64,8 @@ func TestCodexIsolateMCP_TurnsOffEveryServerTheHarnessDoesNotCompose(t *testing.
 
 func TestCodexIsolateMCP_ListingFailsWarnsAndAddsNothing(t *testing.T) {
 	stubMCPList(t, "", os.ErrInvalid, "codex")
-	args, warning := (&Codex{}).IsolateMCP(t.TempDir())
+	args, warnings := (&Codex{}).IsolateMCP(t.TempDir())
+	warning := firstMessage(warnings)
 	if len(args) != 0 || !strings.Contains(warning, "could not be applied on Codex") {
 		t.Errorf("args = %v, warning = %q", args, warning)
 	}
@@ -72,7 +76,8 @@ func TestCopilotIsolateMCP_DisablesListedServersAndBuiltins(t *testing.T) {
 	dir := t.TempDir()
 	writeIsoFile(t, filepath.Join(dir, ".copilot", ".mcp.json"), `{"mcpServers":{"harnesssrv":{}}}`)
 
-	args, warning := (&Copilot{}).IsolateMCP(dir)
+	args, warnings := (&Copilot{}).IsolateMCP(dir)
+	warning := firstMessage(warnings)
 
 	want := []string{"--disable-builtin-mcps", "--disable-mcp-server", "computer-use", "--disable-mcp-server", "usersrv"}
 	if !reflect.DeepEqual(args, want) {
@@ -85,7 +90,8 @@ func TestCopilotIsolateMCP_DisablesListedServersAndBuiltins(t *testing.T) {
 
 func TestCopilotIsolateMCP_ListingFailsFallsBackToBuiltinsOnly(t *testing.T) {
 	stubMCPList(t, "", os.ErrInvalid, "copilot")
-	args, warning := (&Copilot{}).IsolateMCP(t.TempDir())
+	args, warnings := (&Copilot{}).IsolateMCP(t.TempDir())
+	warning := firstMessage(warnings)
 	if !reflect.DeepEqual(args, []string{"--disable-builtin-mcps"}) {
 		t.Errorf("args = %v", args)
 	}
@@ -104,7 +110,8 @@ func TestOpenCodeIsolateMCPEnv_DisablesACopyOfEachOtherServer(t *testing.T) {
 	writeIsoFile(t, filepath.Join(dir, ".opencode", "opencode.json"), `{"mcp":{"servers":{"harnesssrv":{"type":"local","command":["h"]}}}}`)
 	t.Setenv("OPENCODE_CONFIG_CONTENT", `{"model":"x/y"}`)
 
-	env, warning := (&OpenCode{}).IsolateMCPEnv(dir)
+	env, warnings := (&OpenCode{}).IsolateMCPEnv(dir)
+	warning := firstMessage(warnings)
 	if warning != "" || len(env) != 1 || !strings.HasPrefix(env[0], "OPENCODE_CONFIG_CONTENT=") {
 		t.Fatalf("env = %v, warning = %q", env, warning)
 	}
@@ -142,15 +149,25 @@ func TestOpenCodeIsolateMCPEnv_DisablesACopyOfEachOtherServer(t *testing.T) {
 func TestOpenCodeIsolateMCPEnv_BadExistingContentWarns(t *testing.T) {
 	stubMCPList(t, `[]`, nil, "opencode")
 	t.Setenv("OPENCODE_CONFIG_CONTENT", "not json")
-	env, warning := (&OpenCode{}).IsolateMCPEnv(t.TempDir())
+	env, warnings := (&OpenCode{}).IsolateMCPEnv(t.TempDir())
+	warning := firstMessage(warnings)
 	if len(env) != 0 || !strings.Contains(warning, "could not be applied on OpenCode") {
 		t.Errorf("env = %v, warning = %q", env, warning)
 	}
 }
 
 func TestCursorIsolateMCP_IsNotSupportedAndSaysSo(t *testing.T) {
-	args, warning := (&Cursor{}).IsolateMCP(t.TempDir())
+	args, warnings := (&Cursor{}).IsolateMCP(t.TempDir())
+	warning := firstMessage(warnings)
 	if len(args) != 0 || !strings.Contains(warning, "not supported") || strings.Contains(warning, "\n") {
 		t.Errorf("args = %v, warning = %q", args, warning)
 	}
+}
+
+// firstMessage is the message of the first warning, or "" when there is none.
+func firstMessage(ws []warn.Warning) string {
+	if len(ws) == 0 {
+		return ""
+	}
+	return ws[0].Message
 }

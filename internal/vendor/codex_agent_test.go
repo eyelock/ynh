@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func TestCodexDelegateAgentFile(t *testing.T) {
@@ -175,7 +177,7 @@ func TestCodexArtifactWarnings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			src := "---\nname: probe\ndescription: d\n" + tc.frontmatter + "\n---\nBody.\n"
 			got := c.ArtifactWarnings("agents", "file.md", []byte(src))
-			if !slices.Equal(got, tc.want) {
+			if !slices.Equal(warn.Messages(got), tc.want) {
 				t.Errorf("got %q\nwant %q", got, tc.want)
 			}
 		})
@@ -187,7 +189,7 @@ func TestCodexArtifactWarnings(t *testing.T) {
 func TestCodexArtifactWarnings_NameAndPassthrough(t *testing.T) {
 	c := &Codex{}
 	got := c.ArtifactWarnings("agents", "helper.md", []byte("---\ntools: Read\n---\nHelp.\n"))
-	if len(got) != 1 || !strings.HasPrefix(got[0], `agent "helper": `) {
+	if len(got) != 1 || !strings.HasPrefix(got[0].Message, `agent "helper": `) {
 		t.Errorf("got %q, want one warning naming helper", got)
 	}
 	for _, tc := range []struct{ typ, name string }{{"rules", "style.md"}, {"skills", "SKILL.md"}, {"agents", "notes.txt"}} {

@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // codexSkipGitRepoCheck lets `codex exec` start outside a git repository.
@@ -42,7 +44,7 @@ var codexAgentNameKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 // The description is the file's own TOML string, passed as written. A name
 // that cannot be a -c key (one with a '.', for instance) is not registered,
 // and a warning says so. A missing directory registers nothing.
-func CodexAgentArgs(runDir string) (args []string, warnings []string) {
+func CodexAgentArgs(runDir string) (args []string, warnings []warn.Warning) {
 	if runDir == "" {
 		return nil, nil
 	}
@@ -58,13 +60,19 @@ func CodexAgentArgs(runDir string) (args []string, warnings []string) {
 	for _, file := range files {
 		data, err := os.ReadFile(file)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("Codex agent file %s: %v", file, err))
+			warnings = append(warnings, warn.Warning{
+				Message: fmt.Sprintf("Codex agent file %s: %v", file, err),
+				Fix:     fmt.Sprintf("make %s readable", file),
+			})
 			continue
 		}
 		nameLit, descLit := codexAgentHeader(string(data))
 		name, ok := unquoteSimpleName(nameLit)
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("agent %s: Codex cannot register it, since its name must use only letters, digits, '-' and '_' to be passed with -c (a '.' would split the key); it is still written to %s", nameLit, file))
+			warnings = append(warnings, warn.Warning{
+				Message: fmt.Sprintf("agent %s: Codex cannot register it, since its name must use only letters, digits, '-' and '_' to be passed with -c (a '.' would split the key); it is still written to %s", nameLit, file),
+				Fix:     "rename the agent to use only letters, digits, '-' and '_'",
+			})
 			continue
 		}
 		args = append(args, "-c", "agents."+name+".config_file="+tomlString(file))
