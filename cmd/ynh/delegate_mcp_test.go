@@ -98,3 +98,44 @@ func TestDelegatesFromEnv(t *testing.T) {
 		t.Error("no delegates should be refused")
 	}
 }
+
+// delegate_questions unset is auto by session: an interactive parent's
+// client gets the question, a headless parent's model does; a harness that
+// sets one keeps it in either session.
+func TestDelegateQuestionsFor_AutoBySession(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		declared string
+		oneShot  bool
+		want     string
+	}{
+		{"interactive, unset: client", "", false, "client"},
+		{"headless, unset: model", "", true, "model"},
+		{"interactive, forced model", "model", false, "model"},
+		{"headless, forced client", "client", true, "client"},
+		{"interactive, forced client", "client", false, "client"},
+		{"headless, forced model", "model", true, "model"},
+	} {
+		if got := delegateQuestionsFor(tt.declared, tt.oneShot); got != tt.want {
+			t.Errorf("%s: got %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+// The entry `ynh run` writes carries the resolved route, so the server gets
+// client in an interactive session and model in a headless one.
+func TestDelegateMCPEntry_ResolvedBySession(t *testing.T) {
+	parent, store := endpointSetup(t, "a2a")
+	t.Setenv(delegateMaxWaitEnv, "")
+	o, err := openEndpointsWith(parent, "local/parent", t.TempDir(), &store, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.close()
+	for oneShot, want := range map[bool]string{false: "--questions client", true: "--questions model"} {
+		e, err := delegateMCPEntry(o.eps, "local/parent", "/work", delegateQuestionsFor("", oneShot))
+		if err != nil || !strings.HasSuffix(strings.Join(e.Args, " "), want) {
+			t.Errorf("oneShot=%v: args = %v, err %v, want ...%s", oneShot, e, err, want)
+		}
+	}
+}

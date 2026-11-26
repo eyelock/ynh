@@ -209,8 +209,8 @@ type Harness struct {
 	// OnLive is what `ynh run` does when a session of this harness is already
 	// live: "refuse", "allow" or empty to warn (on_live).
 	OnLive string
-	// DelegateQuestions is where a delegate's question goes: "model" (or empty,
-	// the default) or "client" (delegate_questions).
+	// DelegateQuestions is where a delegate's question goes: "model", "client" or
+	// empty, which is auto by session (delegate_questions).
 	DelegateQuestions string
 	// Workspace is the manifest's requested workspace folders, as written.
 	Workspace []string

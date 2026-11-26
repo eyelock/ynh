@@ -74,9 +74,10 @@ type Config struct {
 	// Version is reported as the server's version.
 	Version string
 	// Questions is where a delegate's question goes: QuestionsModel (the
-	// default) leaves it in the tool result for the parent's model to put to
-	// the person; QuestionsClient first puts it to a client that offers
-	// elicitation.
+	// default of this server on its own) leaves it in the tool result for the
+	// parent's model to put to the person; QuestionsClient first puts it to a
+	// client that offers elicitation or Tasks. `ynh run` always passes one,
+	// resolving an unset delegate_questions by session.
 	Questions string
 }
 
@@ -87,8 +88,8 @@ const (
 	QuestionsClient = "client"
 )
 
-// ValidQuestions reports whether v is a delegate_questions value; empty is the
-// default, model.
+// ValidQuestions reports whether v is a delegate_questions value; empty is auto
+// by session, which `ynh run` resolves to model or client before it gets here.
 func ValidQuestions(v string) bool { return v == "" || v == QuestionsModel || v == QuestionsClient }
 
 // Server is the MCP server.

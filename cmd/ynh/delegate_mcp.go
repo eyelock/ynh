@@ -106,6 +106,24 @@ func delegatesFromEnv(get func(string) string) ([]delegatemcp.Delegate, error) {
 	return out, nil
 }
 
+// delegateQuestionsFor resolves delegate_questions for a session. Unset, it
+// is auto by session: an interactive parent has a person at its client, so
+// the question goes to the client's own prompts (elicitation, Claude Code
+// Tasks) where the client has them; a headless parent (oneShot: a prompt and
+// no --interactive, `claude -p` and the like) has no one to ask, so the
+// question comes back in the tool result for its model. A harness that sets
+// model or client keeps its choice.
+func delegateQuestionsFor(declared string, oneShot bool) string {
+	switch {
+	case declared != "":
+		return declared
+	case oneShot:
+		return delegatemcp.QuestionsModel
+	default:
+		return delegatemcp.QuestionsClient
+	}
+}
+
 // delegateMCPEntry is the server `ynh run` adds to the parent's MCP config
 // for its open endpoints: ynh itself, with the endpoints in its environment.
 // It is nil when there are none. maxWait comes from YNH_DELEGATE_MAX_WAIT.

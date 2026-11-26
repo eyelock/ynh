@@ -34,7 +34,8 @@ func offersElicitation(caps map[string]any) bool {
 }
 
 // elicits reports whether a question goes to the client: only when the harness
-// asked for it (delegate_questions: client) and the client offers elicitation.
+// asked for it (delegate_questions: client, or auto resolved to it for an
+// interactive parent) and the client offers elicitation.
 func (s *Server) elicits(caps map[string]any) bool {
 	return s.cfg.Questions == QuestionsClient && offersElicitation(caps)
 }

@@ -428,7 +428,7 @@ Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or 
 
 ### delegate_questions (optional)
 
-`"model"` or `"client"`; `"model"` when absent. Where a question from one of this harness's delegates goes. `model` returns it in the delegate tool's result (state `input-required`, the delegate's name, how long it has waited), and the harness's model puts it to the person in the parent's chat and answers with `delegate_reply`. `client` first puts it to the client's own elicitation UI, for a client that has one; a client with none, or one that declines, falls back to the result. See [Questions from a delegate](delegate-sessions.md#questions-from-a-delegate).
+`"model"` or `"client"`; auto by session when absent. Where a question from one of this harness's delegates goes. Absent, an interactive parent gets `client` and a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) gets `model`. `model` returns it in the delegate tool's result (state `input-required`, the delegate's name, how long it has waited), and the harness's model puts it to the person in the parent's chat and answers with `delegate_reply`. `client` first puts it to the client's own question prompts (elicitation, and Claude Code's Tasks), for a client that has them; a client with none, or one that declines, falls back to the result. Set `model` or `client` to force one whatever the session. See [Questions from a delegate](delegate-sessions.md#questions-from-a-delegate).
 
 ### workspace (optional)
 

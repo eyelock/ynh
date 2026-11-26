@@ -453,7 +453,7 @@ func cmdRun(args []string) (runErr error) {
 			if err := writeLiveA2ACLICompanion(adapter, runDir, opened.eps); err != nil {
 				return fmt.Errorf("assembling delegates: %w", err)
 			}
-			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder, p.DelegateQuestions)
+			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder, delegateQuestionsFor(p.DelegateQuestions, oneShot))
 			if eErr != nil {
 				return eErr
 			}

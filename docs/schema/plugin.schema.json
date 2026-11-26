@@ -140,7 +140,7 @@
       "enum": ["refuse", "allow"]
     },
     "delegate_questions": {
-      "description": "Where a question from one of this harness's delegates goes. `model` (the default): the question comes back in the delegate tool's result, naming the delegate that asked, and the harness's model puts it to the person in the parent's chat. `client`: ynh first puts it to the client's own elicitation UI, for a client that has one (Codex, Copilot CLI and OpenCode in their interactive UIs); a client with none, or one that declines, falls back to the result. A launch-time setting; it does not change an export.",
+      "description": "Where a question from one of this harness's delegates goes. Absent, it is auto by session: an interactive parent gets `client` and a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) gets `model`. `model`: the question comes back in the delegate tool's result, naming the delegate that asked, and the harness's model puts it to the person in the parent's chat. `client`: ynh first puts it to the client's own question prompts, for a client that has them (Claude Code's Tasks, and elicitation in the interactive UIs of Codex, Copilot CLI and OpenCode); a client with none, or one that declines, falls back to the result. Set either to force it whatever the session. A launch-time setting; it does not change an export.",
       "enum": ["model", "client"]
     },
     "profiles": {
