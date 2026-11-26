@@ -11,8 +11,7 @@ import (
 // hand, each for a stated reason. Everything else in cmd/ynh goes through
 // internal/warn, so a new warning gets the box, NO_COLOR and plain forms free.
 var handPrintedWarningAllowed = map[string]string{
-	// The trust-gate pull requests rewrite these trust warnings (ynw-wj4j left them alone to avoid conflicts).
-	"trust.go": "warnIfTrustChanged and warnRunIfTrustChanged, being reworked by the trust gate",
+	// None: the trust gate has landed and the old trust warnings are gone.
 }
 
 func TestNoHandPrintedWarnings(t *testing.T) {

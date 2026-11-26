@@ -117,7 +117,7 @@ YNH_WORKSPACE_ROOTS=/tmp/ynh-tutorial/ws ynh run local/seat -- "hello"
 Expected on stderr:
 
 ```
-  warning: workspace: "../../elsewhere" not granted: /tmp/ynh-tutorial/elsewhere is outside the YNH_WORKSPACE_ROOTS allow-list (/tmp/ynh-tutorial/ws)
+warning: workspace: "../../elsewhere" not granted: /tmp/ynh-tutorial/elsewhere is outside the YNH_WORKSPACE_ROOTS allow-list (/tmp/ynh-tutorial/ws)
   workspace: granted /tmp/ynh-tutorial/ws/ynh (inside the YNH_WORKSPACE_ROOTS allow-list)
 Launching claude...
 ```
@@ -150,8 +150,8 @@ Expected on stderr:
 
 ```
 ynh: greedy runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
-  warning: workspace: "~" not granted: ... is your home directory
-  warning: workspace: "/" not granted: / is the filesystem root
+warning: workspace: "~" not granted: ... is your home directory
+warning: workspace: "/" not granted: / is the filesystem root
 Launching claude...
 ```
 
