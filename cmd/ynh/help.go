@@ -532,12 +532,16 @@ States:
   accepted     The commands match what you accepted.
   changed      The commands differ from what you accepted.
 
-This reports; it does not block. Nothing refuses to run because a harness is
-unreviewed or changed. The record earns its place by pinning the exact command
-set you read, so that "changed" can be reported when an update alters it:
-'ynh check' reports it, and 'ynh run' warns on stderr before launch, naming the
-kinds of command the harness declares (not which one moved) and any workspace
-folders left ungranted.
+This blocks. 'ynh run', 'ynh agent run' (and --resume) and 'ynh check' refuse an
+installed harness that is unreviewed, changed or unavailable, before any vendor
+starts: exit 1, with the error code untrusted under --format json. The refusal
+lists what the harness executes and names 'ynh trust show' and 'ynh trust
+accept'. A script the digest cannot read in full blocks the run even once
+accepted. A run from a folder ('ynh run ./dir', 'ynh check ./dir') does not
+check the folder's own commands, but refuses the commands its remote includes
+bring until you run 'ynh trust accept <dir>'. A harness with nothing to review
+(no-commands) needs no acceptance. 'ynh install --trust' accepts in the same step,
+at full commit SHAs. See docs/trust.md.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising

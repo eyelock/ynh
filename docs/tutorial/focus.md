@@ -245,7 +245,7 @@ Expected first line:
 /tmp/ynh-tutorial/wake-harness: valid
 ```
 
-The `live` profile carries a hook, so `ynh run` refuses this harness until you accept it: the [trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed harness that runs commands you have not reviewed. Review it, then accept it:
+The `live` profile carries a hook, so `ynh run` refuses this harness until you accept it: the [trust gate](../trust.md#the-gate) refuses an installed harness that runs commands you have not reviewed. Review it, then accept it:
 
 ```bash
 ynh trust show local/wake-demo

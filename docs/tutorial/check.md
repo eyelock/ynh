@@ -48,7 +48,7 @@ ynh install ./gate-demo
 
 The three command sensors run shell commands on your machine, so `ynh check`
 refuses this harness until you have reviewed and accepted them: the
-[trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed
+[trust gate](../trust.md#the-gate) refuses an installed
 harness whose commands you have not accepted, with exit 1. Review, then accept:
 
 ```bash

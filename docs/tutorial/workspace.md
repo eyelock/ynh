@@ -35,7 +35,7 @@ Expected output includes `Installed harness "seat"`.
 
 ## An unaccepted harness does not run
 
-Run it from the `project` folder. The harness requests folders, and a request is part of what you review, so the [trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed harness that asks for folders until you have accepted it. Nothing launches, and the command exits 1:
+Run it from the `project` folder. The harness requests folders, and a request is part of what you review, so the [trust gate](../trust.md#the-gate) refuses an installed harness that asks for folders until you have accepted it. Nothing launches, and the command exits 1:
 
 ```bash
 cd /tmp/ynh-tutorial/ws/project

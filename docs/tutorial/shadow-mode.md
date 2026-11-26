@@ -191,7 +191,7 @@ ynh install /tmp/shadow/pinned
 
 The `claims` sensor runs a script on your machine, so `ynh check` and
 `ynh agent run` refuse the pinned harness until you accept it: the
-[trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed
+[trust gate](../trust.md#the-gate) refuses an installed
 harness whose commands you have not reviewed. Review, then accept. The script
 sits in the harness (`$YNH_HARNESS_DIR`), so the digest covers its body too, and
 changing it later means accepting again:
