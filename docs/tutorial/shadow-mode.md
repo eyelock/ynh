@@ -346,6 +346,14 @@ ynh agent run \
 echo "exit=$?"
 ```
 
+The worker can change the worktree only if your vendor CLI lets it edit. ynh
+passes no permission flag, and a one-shot Claude Code session declines an edit
+it was not allowed to make, so with neither your own settings nor
+`--auto-approve edits` allowing it, the run makes no change and stops `stuck`
+(exit `13`) or at its turn cap (`10`). That is a measurement of nothing, not a
+failed attempt. See [The controls a run does not have](agent-loop.md#the-controls-a-run-does-not-have)
+before choosing which to use.
+
 **Nothing merges.** `--auto-commit` is opt-in, so never-merging is already the
 default — there is no flag to remember and no mistake to make. The loop leaves
 its work in the worktree as uncommitted changes.

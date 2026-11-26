@@ -78,9 +78,16 @@ Exit code `1`.
 
 ## Run the loop
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --session-id ...`
+The worker has to be allowed to edit `notes.txt`. ynh passes no permission flag
+of its own, and a one-shot Claude Code session asks before each edit, with nobody
+there to answer, so without one the write is declined and the loop runs to its
+cap (see [The controls a run does not have](#the-controls-a-run-does-not-have)).
+`--auto-approve edits` allows file edits, and only those, for this one run. Here
+it edits a scratch folder you just made:
+
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --permission-mode acceptEdits --session-id ...`
 ```bash
-ynh agent run --harness local/demo --focus tidy --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
+ynh agent run --harness local/demo --focus tidy --auto-approve edits --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
 echo "exit=$?"
 ```
 
@@ -379,8 +386,9 @@ Error: no checkpoint found in "deadbeef": open deadbeef/checkpoint.json: no such
 `ynh agent run` starts a worker. It does not contain one.
 
 By default the worker gets whatever permissions your vendor CLI and the project
-grant it, and ynh passes no permission flag. On a machine where the CLI denies
-edits, the loop runs to its cap with the sensor failing identically every turn:
+grant it, and ynh passes no permission flag. Where the CLI denies edits, as a
+one-shot Claude Code session does unless your own settings allow them, the loop
+runs to its cap with the sensor failing identically every turn:
 the trajectory shows the agent reporting a blocked write, and the exit code is
 `10`, not `0`.
 
