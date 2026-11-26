@@ -389,7 +389,7 @@ which is why this is done below the commands and not in them.
 
 | Repository | What the tutorials take from it |
 |------------|---------------------------------|
-| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tags `v1.0.0`, `@eyelock-assistants/dev-skills@0.2.0`, `@eyelock-assistants/tech-skills@0.2.1`, `@eyelock-assistants/infra-skills@0.2.0` and `@eyelock-assistants/pause-skills@0.1.1` (the pins the real includes carry; a pin moved upstream must move in `scripts/eval-remotes.sh` too) |
 | `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
 | `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
 | `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |
