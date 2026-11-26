@@ -306,7 +306,7 @@ rm -rf /tmp/ynh-tutorial
 - A harness is a directory with `.agents/harness/plugin.json`
 - Four artifact types: skills, agents, rules, commands
 - `instructions.md` becomes vendor-specific project instructions
-- `ynh install` copies the harness and generates a launcher script
+- `ynh install` of a Git source copies the harness (a local folder is pointed at, not copied) and generates a launcher script
 - The launcher is a shell script that calls `ynh run`
 - `ynh run` assembles artifacts into a snapshot under `~/.ynh/run/.snapshots/` and launches the vendor CLI from it. `~/.ynh/run/<id>` (the canonical id with `/` as `--`, e.g. `local--my-harness`) is a symlink to the newest snapshot; a later run deletes a snapshot that is neither the newest nor held by a live session
 

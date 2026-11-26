@@ -48,7 +48,7 @@ passing it every time is what makes a run reproducible.
 
 The `lint` sensor runs `sh check.sh` on your machine, so `ynh check` and
 `ynh agent run` refuse this harness until you accept it: the
-[trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed
+[trust gate](../trust.md#the-gate) refuses an installed
 harness whose commands you have not reviewed. Review, then accept:
 
 ```bash
