@@ -95,6 +95,7 @@ Run flags:
   --resume=<id>                Continue one specific session by id
                                A trailing prompt is sent to the resumed session
                                (not a --focus prompt); some vendors refuse it
+  --on-live refuse|allow       What to do when a session of the harness is already live (docs/presence.md)
   --no-workspace               Grant none of the harness's requested workspace folders for this run
   --label key:value            A label for the run (repeatable; key: removes one); see docs/telemetry.md
   --install                    Install symlinks for the vendor in current project

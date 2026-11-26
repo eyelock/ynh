@@ -289,6 +289,14 @@ func cmdRun(args []string) (runErr error) {
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
 	}
+	// A live session of this harness: warn, refuse or say nothing, as the
+	// harness and --on-live decide (docs/presence.md). A delegate's own run is
+	// not checked: it is started by a parent for this harness on purpose.
+	if ra.Action == "" && !delegationNamesHarness(runDirName) {
+		if err := checkOnLive(runDirName, harnessRunRef(harnessID, harnessDir), p.OnLive, ra.OnLive, os.Stderr); err != nil {
+			return err
+		}
+	}
 	var runDir string // the snapshot, or a baked image's vendor dir
 	// The stable path of the run dir: the link <run>/<name> that always
 	// resolves to the newest snapshot. Project symlinks are planted through
@@ -1200,6 +1208,7 @@ type runArgs struct {
 	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
+	OnLive       string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
 	Relay        bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
@@ -1210,7 +1219,7 @@ type runArgs struct {
 var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
-	"--label": true,
+	"--label": true, "--on-live": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1285,6 +1294,11 @@ func parseRunArgs(args []string) runArgs {
 		case strings.HasPrefix(flagArgs[i], "--resume="):
 			ra.Resume = true
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
+		case flagArgs[i] == "--on-live" && i+1 < len(flagArgs):
+			ra.OnLive = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--on-live="):
+			ra.OnLive = strings.TrimPrefix(flagArgs[i], "--on-live=")
 		case flagArgs[i] == "--no-workspace":
 			ra.NoWorkspace = true
 		case flagArgs[i] == "--telemetry-relay":

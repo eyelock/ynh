@@ -68,6 +68,18 @@ A session whose harness has A2A delegates gets ynh's delegate MCP server (see [D
 
 Records live in `$YNH_HOME/presence/<session_id>.json`. Ended and dead records stay as history and are shown only by `--all`. They are not removed automatically yet, and the older `$YNH_HOME/sessions` files (which bind a `--session-name` to a vendor session) are a separate thing and are untouched.
 
+## When a session of the harness is already live
+
+`ynh run` looks for a live session of the same harness before it assembles anything ([ynh #896](https://github.com/eyelock/ynh/issues/896)), in the same `YNH_HOME`, whatever folder it is in. What it does is the harness's choice, with a flag to override it for one run:
+
+| `on_live` in `plugin.json`, or `--on-live` | A live session exists |
+|---|---|
+| unset (default) | Warns on stderr, naming the live session's `address`, and starts the run. Parallel sessions stay normal. |
+| `refuse` | Refuses, naming the address and a Fix line. Nothing is assembled or started. |
+| `allow` | Starts the run with no warning. |
+
+`ynh run --on-live=refuse|allow` (or `--on-live refuse`) wins over the harness's `on_live`: `--on-live=allow` starts a run that the harness would refuse. A harness that is only dead (a crashed wrapper) or ended is not live, so it never blocks a new run. A Wheelhouse sets `on_live: "refuse"` on every seat without ynh knowing what a seat is. The check is skipped for the run of a delegate (a parent started it for this harness on purpose) and for `--install` and `--clean`. See [`on_live`](harnesses.md#on-live-optional).
+
 ## Not covered
 
-Delegates' A2A endpoints are not yet queried as a second source, and there is no `ynh stop`, reap, live-session cap or `--on-live` option; those are [ynh #895](https://github.com/eyelock/ynh/issues/895) and [ynh #896](https://github.com/eyelock/ynh/issues/896). Presence is per machine and per `YNH_HOME`.
+Delegates' A2A endpoints are not yet queried as a second source, and there is no `ynh stop`, reap or live-session cap; those are [ynh #895](https://github.com/eyelock/ynh/issues/895). Presence is per machine and per `YNH_HOME`.

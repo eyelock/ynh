@@ -134,3 +134,55 @@ func cmdPsTo(args []string, stdout, stderr io.Writer) error {
 	}
 	return tw.Flush()
 }
+
+// liveSessionsOf lists the live sessions recorded for a harness's run name, in
+// this YNH_HOME, oldest first. A dead or ended record is not live, so a
+// crashed session never blocks a new one.
+func liveSessionsOf(runName string) []presence.Entry {
+	live, err := presence.List(false)
+	if err != nil {
+		return nil
+	}
+	var out []presence.Entry
+	for _, e := range live {
+		if e.Harness == runName {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// checkOnLive decides what a run does when a session of its harness is already
+// live (docs/presence.md). flag is --on-live and setting the harness's on_live;
+// the flag wins. "allow" starts the run quietly, "refuse" returns an error
+// naming the live session and the way out, and neither (the default) warns on
+// stderr and lets the run start.
+func checkOnLive(runName, id, setting, flag string, stderr io.Writer) error {
+	mode := setting
+	if flag != "" {
+		mode = flag
+	}
+	switch mode {
+	case "", "refuse", "allow":
+	default:
+		return fmt.Errorf("--on-live and on_live take refuse or allow, not %q", mode)
+	}
+	if mode == "allow" {
+		return nil
+	}
+	live := liveSessionsOf(runName)
+	if len(live) == 0 {
+		return nil
+	}
+	first := live[0]
+	what := fmt.Sprintf("%s already has a live session: %s (%s, started %s, in %s)",
+		id, first.Address, first.Mode, first.StartedAt.Local().Format("15:04:05"), first.Cwd)
+	if len(live) > 1 {
+		what += fmt.Sprintf(" and %d more", len(live)-1)
+	}
+	if mode == "refuse" {
+		return fmt.Errorf("%s\n  Fix: use that session, end it, or run `ynh run --on-live=allow %s` to start another", what, id)
+	}
+	_, _ = fmt.Fprintf(stderr, "warning: %s. Starting another; set on_live to refuse in the harness, or pass --on-live=refuse, to stop this.\n", what)
+	return nil
+}
