@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // writePortableSource builds a harness that exercises every component the
@@ -109,7 +110,7 @@ func listFiles(t *testing.T, dir string) []string {
 }
 
 func hasWarning(r ExportResult, substr string) bool {
-	for _, w := range r.Warnings {
+	for _, w := range warn.Messages(r.Warnings) {
 		if strings.Contains(w, substr) {
 			return true
 		}

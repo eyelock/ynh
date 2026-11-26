@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func init() {
@@ -230,16 +231,23 @@ func copilotResumeArgs(sessionID, prompt string, interactive bool, extraArgs []s
 // --additional-mcp-config and are not in that listing. Verified live on
 // Copilot CLI 1.0.106 (docs/vendor-parity.md, L6). If the listing cannot be
 // read, only the built-ins are dropped and ynh says so.
-func (c *Copilot) IsolateMCP(configPath string) ([]string, string) {
+func (c *Copilot) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	const partial = "MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load"
 	bin, err := exec.LookPath(c.CLIName())
 	if err != nil {
-		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
+		return []string{"--disable-builtin-mcps"}, []warn.Warning{{
+			Message: fmt.Sprintf(partial, err),
+			Fix:     "install the copilot CLI, or put it on PATH",
+		}}
 	}
 	listed, err := copilotMCPListNames(bin, nil, "")
 	if err != nil {
-		return []string{"--disable-builtin-mcps"}, fmt.Sprintf("MCP isolation is partial on Copilot (%v): built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load", err)
+		return []string{"--disable-builtin-mcps"}, []warn.Warning{{
+			Message: fmt.Sprintf(partial, err),
+			Fix:     "run `copilot mcp list --json` and fix the error it reports",
+		}}
 	}
-	return copilotIsolationArgs(listed, harnessMCPNames(filepath.Join(configPath, ".copilot", ".mcp.json"), false)), ""
+	return copilotIsolationArgs(listed, harnessMCPNames(filepath.Join(configPath, ".copilot", ".mcp.json"), false)), nil
 }
 
 // ApplyRuntimeInstructions appends per-invocation text to the assembled
@@ -817,7 +825,10 @@ func warnLegacyProjectMCP(w io.Writer, configPath, projectDir string) {
 	if !holdsLiteralSecret(proj) {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "warning: %s looks like one an older ynh wrote, and may hold your MCP credentials in plain text. ynh no longer writes it and has not touched it. If you did not write it yourself, delete it and rotate those credentials.\n", path)
+	warn.Print(w, warn.Warning{
+		Message: fmt.Sprintf("%s looks like one an older ynh wrote, and may hold your MCP credentials in plain text. ynh no longer writes it and has not touched it.", path),
+		Fix:     fmt.Sprintf("if you did not write %s yourself, delete it and rotate those credentials", path),
+	})
 }
 
 // holdsLiteralSecret reports whether any env or headers value in a Copilot MCP

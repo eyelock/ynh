@@ -70,12 +70,15 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-output
 Expected output:
 ```
 Exported for claude → /tmp/ynh-tutorial/export-output/claude (2 skills, 1 agents)
-  warning: claude: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
+warning: claude: plugins cannot carry instructions, so the harness's are not delivered to it
+  Fix: use `ynh run`, or put the instructions in the project's own instructions file
 Exported for codex → /tmp/ynh-tutorial/export-output/codex (2 skills, 0 agents)
-  warning: codex: skipping 1 agents (not supported)
-  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
+warning: codex: skipping 1 agents (not supported)
+warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it
+  Fix: use `ynh run`, or put the instructions in the project's own instructions file
 Exported for copilot → /tmp/ynh-tutorial/export-output/copilot (2 skills, 1 agents)
-  warning: copilot: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
+warning: copilot: plugins cannot carry instructions, so the harness's are not delivered to it
+  Fix: use `ynh run`, or put the instructions in the project's own instructions file
 Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
 Exported for opencode → /tmp/ynh-tutorial/export-output/opencode (2 skills, 1 agents)
 ```
@@ -195,9 +198,11 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged-codex
 Expected:
 ```
 Exported for merged → /tmp/ynh-tutorial/export-merged-codex (2 skills, 1 agents)
-  warning: codex: skipping 1 agents (not supported)
-  warning: claude: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
-  warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)
+warning: codex: skipping 1 agents (not supported)
+warning: claude: plugins cannot carry instructions, so the harness's are not delivered to it
+  Fix: use `ynh run`, or put the instructions in the project's own instructions file
+warning: codex: plugins cannot carry instructions, so the harness's are not delivered to it
+  Fix: use `ynh run`, or put the instructions in the project's own instructions file
 ```
 
 ## Export as an Agent Plugin
@@ -260,7 +265,7 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/agent-plugin-cursor
 Expected output:
 ```
 Exported Agent Plugin → /tmp/ynh-tutorial/agent-plugin-cursor (2 skills, 0 agents)
-  warning: 1 agents not portable: no selected vendor (cursor) carries them in an Agent Plugin
+warning: 1 agents not portable: no selected vendor (cursor) carries them in an Agent Plugin
 ```
 
 ### Install the package back

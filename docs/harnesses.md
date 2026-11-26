@@ -422,6 +422,10 @@ Boolean, default `false`. When `true`, `ynh run` and `ynh agent run` launch the 
 
 Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or an `ynh agent run --backend codex` worker) has no one to approve an MCP tool call, and Codex refuses it. By default ynh approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. The same setting stops the allow rule ynh gives a delegate's one-shot Claude Code session for those servers, which it adds only to a delegate's session and never to a harness run directly ([ynh #858](https://github.com/eyelock/ynh/issues/858); see [Claude Code Format](mcp.md#claude-code-format)). A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
 
+### on_live (optional)
+
+`"refuse"` or `"allow"`; absent by default. What `ynh run` does when a session of this harness is already live (see [`ynh ps`](presence.md)): `refuse` stops the second run, naming the live session and giving a Fix line; `allow` starts it with no warning; absent warns, naming the live session, and starts it. `ynh run --on-live=refuse|allow` overrides it for one run. See [When a session of the harness is already live](presence.md#when-a-session-of-the-harness-is-already-live).
+
 ### workspace (optional)
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).

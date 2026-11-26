@@ -16,6 +16,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/mcpexec"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // claudePluginJSON is the Claude Code plugin.json schema: identity fields,
@@ -234,8 +235,8 @@ func claudeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []st
 // plugin still load. The harness's servers then arrive as <server> rather
 // than plugin:<harness>:<server>. The "=" spelling keeps --mcp-config, which
 // is variadic, from swallowing a positional that follows it.
-func (c *Claude) IsolateMCP(configPath string) ([]string, string) {
-	return claudeIsolationArgs(configPath), ""
+func (c *Claude) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	return claudeIsolationArgs(configPath), nil
 }
 
 // ClaudeIsolationArgs is IsolateMCP for callers that launch Claude without an
@@ -824,9 +825,7 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	args := buildClaudeArgs(configPath, initialPrompt, extraArgs)
 	env := os.Environ()
 	extra, warnings := ClaudeSessionEndEnv(configPath, os.LookupEnv)
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, warnings...)
 	return execVendor(claudeBin, args, append(env, extra...))
 }
 

@@ -135,6 +135,10 @@
       "description": "Leave approval of the harness's own MCP tools on a one-shot run or an `ynh agent run` worker to the vendor and the caller. Default false: on Codex, whose one-shot runs and workers refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run. A launch-time setting; it does not change an export. No other vendor needs it: Copilot gets --allow-all-tools regardless.",
       "type": "boolean"
     },
+    "on_live": {
+      "description": "What `ynh run` does when a session of this harness is already live (see `ynh ps`). `refuse` stops the second run, naming the live session's address, with a Fix line. `allow` starts it with no warning. Absent: warn, naming the address, and start it, as parallel sessions are normal for most harnesses. A Wheelhouse sets `refuse` on every seat. `ynh run --on-live=refuse|allow` overrides it for one run. A launch-time setting; it does not change an export.",
+      "enum": ["refuse", "allow"]
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",

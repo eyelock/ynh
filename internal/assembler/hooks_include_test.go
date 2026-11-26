@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // hookHarness writes a harness manifest named name into dir, with hooks
@@ -114,8 +115,11 @@ func TestComposeHooks_Consent(t *testing.T) {
 				}
 				return
 			}
-			want := `included harness guard declares hooks (before_tool, on_stop) that are not active; add "hooks": true to its include to run them`
-			if !slices.Equal(hs.Inactive, []string{want}) {
+			want := warn.Warning{
+				Message: `included harness guard declares hooks (before_tool, on_stop) that are not active`,
+				Fix:     `add "hooks": true to its include to run them`,
+			}
+			if !slices.Equal(hs.Inactive, []warn.Warning{want}) {
 				t.Errorf("warnings = %q, want %q", hs.Inactive, want)
 			}
 		})
@@ -330,7 +334,7 @@ func TestWriteComposedSessionHooks_NoConsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(warnings) != 1 || !strings.HasPrefix(warnings[0], "included harness guard declares hooks (on_stop) that are not active") {
+	if len(warnings) != 1 || !strings.HasPrefix(warnings[0].Message, "included harness guard declares hooks (on_stop) that are not active") {
 		t.Errorf("warnings = %q", warnings)
 	}
 	if got := filesUnder(t, runDir); len(got) != 0 {
@@ -425,8 +429,8 @@ func TestWriteComposedSessionHooks_MissingIncludeScript(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "hook script ./scripts/gone.sh is not a file in included harness guard, so the session does not carry it"
-	if !slices.Equal(warnings, []string{want}) {
-		t.Errorf("warnings = %q, want %q", warnings, want)
+	if got := warn.Messages(warnings); !slices.Equal(got, []string{want}) {
+		t.Errorf("warnings = %q, want %q", got, want)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ExportDelegate is a delegate resolved for export: its harness, where it
@@ -113,11 +114,11 @@ func delegateCarrier(a vendor.Adapter) assembler.DelegateMCPCarrier {
 // servers the vendor's subagents cannot carry, or, for Claude, will not load
 // from an installed plugin. A vendor without delegate
 // support in exports has no subagent to warn about.
-func DelegateMCPWarnings(delegates []ExportDelegate, a vendor.Adapter) []string {
+func DelegateMCPWarnings(delegates []ExportDelegate, a vendor.Adapter) []warn.Warning {
 	if !a.SupportsExportDelegates() {
 		return nil
 	}
-	var out []string
+	var out []warn.Warning
 	for _, del := range delegates {
 		if len(del.servers) == 0 {
 			continue
@@ -126,8 +127,9 @@ func DelegateMCPWarnings(delegates []ExportDelegate, a vendor.Adapter) []string 
 		if delegateCarrier(a) != nil {
 			// The field is written, but an installed plugin's agents do not
 			// get it (code.claude.com/docs/en/sub-agents).
-			out = append(out, fmt.Sprintf("delegate %s declares MCP servers (%s); Claude Code ignores mcpServers in plugin agents, so they will not load when this plugin is installed",
-				del.harness.Name, strings.Join(names, ", ")))
+			// No fix: Claude Code ignores mcpServers in plugin agents.
+			out = append(out, warn.Warning{Message: fmt.Sprintf("delegate %s declares MCP servers (%s); Claude Code ignores mcpServers in plugin agents, so they will not load when this plugin is installed",
+				del.harness.Name, strings.Join(names, ", "))})
 			continue
 		}
 		out = append(out, assembler.DelegateMCPWarning(del.harness.Name, names, a.DisplayName()))

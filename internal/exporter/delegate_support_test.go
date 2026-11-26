@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // harnessWithDelegates copies the export fixture into a temp directory and
@@ -75,7 +77,7 @@ func TestExport_WarnsWhenVendorCannotCarryDelegates(t *testing.T) {
 		t.Fatalf("expected one result, got %d", len(results))
 	}
 
-	joined := strings.Join(results[0].Warnings, "\n")
+	joined := strings.Join(warn.Messages(results[0].Warnings), "\n")
 	if !strings.Contains(joined, "delegates") {
 		t.Errorf("expected a warning naming delegates, got: %q", joined)
 	}
@@ -99,7 +101,7 @@ func TestExport_WarnsWhenOpenCodeCannotCarryDelegates(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected one result, got %d", len(results))
 	}
-	joined := strings.Join(results[0].Warnings, "\n")
+	joined := strings.Join(warn.Messages(results[0].Warnings), "\n")
 	if !strings.Contains(joined, "opencode: skipping 1 delegates") {
 		t.Errorf("expected an opencode delegates warning, got: %q", joined)
 	}
@@ -136,7 +138,7 @@ func TestExport_NoDelegatesNoWarning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	for _, w := range results[0].Warnings {
+	for _, w := range warn.Messages(results[0].Warnings) {
 		if strings.Contains(w, "delegates") {
 			t.Errorf("no delegates declared, but warned: %q", w)
 		}

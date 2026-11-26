@@ -158,6 +158,10 @@ Flags:
   --resume=<id>            Continue one specific session by id
                            A trailing prompt is sent to the resumed session,
                            a --focus prompt is not; some vendors refuse it
+  --on-live refuse|allow   When a session of the harness is already live (ynh ps):
+                           refuse stops this run, allow starts it quietly. Without
+                           it the harness's on_live applies; unset, ynh warns
+                           and starts it
   --no-workspace           Grant none of the harness's requested workspace folders
                            for this run (see docs/workspace.md)
   --label key:value        A label for the run (repeatable; key: removes one).

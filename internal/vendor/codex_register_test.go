@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // writeCodexAgents writes agent files into runDir/.codex/agents/ the way a
@@ -86,7 +88,7 @@ func TestCodexAgentArgs_DottedNameIsWarnedNotRegistered(t *testing.T) {
 	if len(args) != 0 {
 		t.Errorf("args = %q, want none for a dotted name", args)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], `"team.dev"`) || !strings.Contains(warnings[0], "'.'") {
+	if len(warnings) != 1 || !strings.Contains(warnings[0].Message, `"team.dev"`) || !strings.Contains(warnings[0].Message, "'.'") {
 		t.Errorf("warnings = %q, want one naming \"team.dev\" and the '.'", warnings)
 	}
 }
@@ -199,10 +201,10 @@ func TestCodexMCP_LoadsEachServerWithoutSecretsOnTheCommandLine(t *testing.T) {
 			t.Errorf("%s was passed:\n%s", name, line)
 		}
 	}
-	if len(got.Warnings) != 2 || !strings.Contains(got.Warnings[0], "bad.name") && !strings.Contains(got.Warnings[1], "bad.name") {
+	if len(got.Warnings) != 2 || !strings.Contains(got.Warnings[0].Message, "bad.name") && !strings.Contains(got.Warnings[1].Message, "bad.name") {
 		t.Errorf("warnings = %v", got.Warnings)
 	}
-	if !strings.Contains(strings.Join(got.Warnings, "\n"), "legacy") {
+	if !strings.Contains(strings.Join(warn.Messages(got.Warnings), "\n"), "legacy") {
 		t.Errorf("no warning names the sse server: %v", got.Warnings)
 	}
 	env := strings.Join(got.Env, "\n")

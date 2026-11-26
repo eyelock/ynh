@@ -113,7 +113,7 @@ Also CONFIRMED there: a `Shell` matcher fires only for shell calls, a `Bash` mat
 So when ynh launches Cursor non-interactively (`ynh run` with a prompt and no `--interactive`, and the Cursor worker of `ynh agent run`, which uses `--print`) and the assembled hooks include `before_prompt` or `on_stop`, it prints a warning naming each event:
 
 ```
-  warning: hook event on_stop: Cursor's CLI does not run stop hooks in print mode (confirmed live), so those hooks will not fire this session
+warning: hook event on_stop: Cursor's CLI does not run stop hooks in print mode (confirmed live), so those hooks will not fire this session
 ```
 
 ## Events a vendor cannot express
@@ -121,7 +121,7 @@ So when ynh launches Cursor non-interactively (`ynh run` with a prompt and no `-
 ynh never drops a hook silently. If a vendor has no equivalent for a canonical event, assembly and export print a warning naming the event and the vendor, and leave that hook out of that vendor's file; every other vendor still gets it:
 
 ```
-  warning: hook event on_session_end has no equivalent on cursor, so it is not written
+warning: hook event on_session_end has no equivalent on cursor, so it is not written
 ```
 
 `ynd validate` and `ynd lint` report the same thing as a **warning**, not an error, for the vendors the harness targets (its `default_vendor`, or every vendor when it sets none). Today all six events map on Claude Code, Codex, Cursor and Copilot; OpenCode maps five and declares `on_session_end` unsupported, so this fires for an `on_session_end` hook on OpenCode and for a matcher the vendor cannot honour (see [Matchers](#matchers)). `make check-vendor-parity` requires every canonical event to be either mapped or declared unsupported, with a reason, for every vendor, so a new event cannot be forgotten on one of them.
@@ -179,7 +179,8 @@ Each hook entry has:
 The 3600-second schema maximum is ynh's own bound; no vendor documents a general one. Where a vendor caps an event below the request, ynd writes the cap and prints a warning naming the event, the vendor, the requested value and the cap, rather than refuse: the hook still runs, with the longest budget the vendor allows, and the other vendors get the value as asked. If a vendor has **no** timeout field, ynd writes none and warns that the vendor's default applies instead; `ynd validate` and `ynd lint` report the same warning for the vendors the harness targets. All five vendors have a field today, and `make check-vendor-parity` requires every vendor to declare whether it does.
 
 ```
-  warning: hook timeout 120s on on_session_end exceeds the 60s claude allows for it, so 60s is written
+warning: hook timeout 120s on on_session_end exceeds the 60s claude allows for it, so 60s is written
+  Fix: set the hook's timeout to 60 or less
 ```
 
 The vendors' own timeouts and `SessionEnd` budgets are described under [on_session_end semantics](#on-session-end-semantics).
@@ -189,7 +190,7 @@ The vendors' own timeouts and `SessionEnd` budgets are described under [on_sessi
 Claude Code ignores the `timeout` of a plugin-provided `SessionEnd` hook when it sets the budget, so writing `timeout` alone does not let an `on_session_end` hook run past about 1.5 s. The override is `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`, in milliseconds (it sets the budget and the timeout of each hook without its own, since Claude Code 2.1.268). ynh handles the two cases differently:
 
 - **Sessions ynh launches** (`ynh run`, `ynd preview`'s launch, and the Claude worker of `ynh agent run`): when any assembled `on_session_end` hook has a `timeout`, ynh sets the variable in Claude's environment to the largest such timeout times 1000, capped at 60000 (CONFIRMED live, Claude Code, 2026-10-30: a 3 s `on_session_end` hook with `timeout: 10` is cancelled at about 1.5 s with the per-hook timeout alone, and runs to completion once ynh sets the variable). The per-hook `timeout` is still written, since it bounds that hook. A value you already set is never overridden; if it is lower than the hooks ask for, ynh warns. (The agent worker's environment is an allowlist, so your value counts there only if you passed it through with `env_passthrough`.)
-- **Exports and marketplace packages**: ynh cannot set an environment, so the export warns when an `on_session_end` hook has a `timeout` above 1.5 s: `claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s; set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000 in the environment that launches Claude Code`. Set it yourself.
+- **Exports and marketplace packages**: ynh cannot set an environment, so the export warns when an `on_session_end` hook has a `timeout` above 1.5 s: `claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s`, with the fix `set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000 in the environment that launches Claude Code`. Set it yourself.
 
 ### Matchers
 
@@ -318,7 +319,8 @@ The variable is quoted so an install path with spaces stays one word, as Claude 
 **In a plugin, a `./` script is part of the plugin.** The plugin is installed somewhere else, away from the harness and from any project, so the only script its hooks can rely on is one that ships inside it. The export therefore copies each `./` script a hook runs from the harness directory to the same path in the plugin, keeping its mode: a harness with `scripts/guard.sh` and the hook `./scripts/guard.sh --strict` exports a plugin carrying `scripts/guard.sh`. Only the command's first word is taken as the script. A `./` script that is not a file in the harness, or that climbs out of it (`./../x.sh`), is not copied, and the export prints a warning naming it:
 
 ```
-  warning: hook script ./scripts/missing.sh is not a file in the harness, so the plugin does not carry it
+warning: hook script ./scripts/missing.sh is not a file in the harness, so the plugin does not carry it
+  Fix: add the script at ./scripts/missing.sh in the harness, or change the hook's command
 ```
 
 The hook is still written, anchored to the plugin root, so it will not find the script. To run a script that belongs to the project rather than to the plugin, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) and it is left alone. `ynd marketplace build` copies scripts the same way and prints the same warnings on stderr, each prefixed with the entry's name (`warning: reviewer: hook script ...`).
@@ -328,7 +330,8 @@ Copilot's documentation does not say whether a plugin-root variable reaches a ho
 **In a session, a `./` script is part of the run directory.** `ynh run`, `ynd preview` and the agent loop copy each `./` script a hook runs into the run directory, by the same rules as an export (first word only, a regular file inside the harness, mode kept), and warn about any they cannot carry:
 
 ```
-  warning: hook script ./scripts/missing.sh is not a file in the harness, so the session does not carry it
+warning: hook script ./scripts/missing.sh is not a file in the harness, so the session does not carry it
+  Fix: add the script at ./scripts/missing.sh in the harness, or change the hook's command
 ```
 
 Where the copy goes follows where each vendor runs session hooks from:
@@ -572,7 +575,8 @@ ynh profile include add <harness> <profile> <url> --hooks
 When an included harness declares hooks and its include does not consent, ynh does not fail. It prints one warning per such harness on stderr, every time the harness is assembled (`ynh run`, `ynh agent run`, `ynd preview`, `ynd export`):
 
 ```
-  warning: included harness guard declares hooks (before_tool, on_stop) that are not active; add "hooks": true to its include to run them
+warning: included harness guard declares hooks (before_tool, on_stop) that are not active
+  Fix: add "hooks": true to its include to run them
 ```
 
 The events are listed sorted. The source is the include's name as shown elsewhere, with the chain (`eyelock/a > eyelock/b`) for a harness reached through another. `ynd preview` also lists them after the assembled tree, under "Hooks from included harnesses:" (active) and "Hooks from included harnesses, not active" (declined), each with the event and its source. `ynd compose` shows the same: its hooks are those a run carries, an included one marked with its source (`source` in JSON, `(from ...)` in text), and the declined ones are in `hooks_not_active`. `ynh info` lists them the same way, for a run with no profile or, with `--profile` or `--focus`, for a run with that selection.

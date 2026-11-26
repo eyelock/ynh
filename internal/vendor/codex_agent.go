@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // DelegateAgentFile writes a delegate as a Codex custom agent: a TOML file in
@@ -44,21 +46,22 @@ func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (strin
 // tools, so both lists are dropped. When tools leaves out Bash, the warning
 // says the shell tool is turned off instead (features.shell_tool = false),
 // the one part of the list Codex can honour. Other artifacts have none.
-func (c *Codex) ArtifactWarnings(artifactType, name string, data []byte) []string {
+func (c *Codex) ArtifactWarnings(artifactType, name string, data []byte) []warn.Warning {
 	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
 		return nil
 	}
 	a := parseCodexAgent(strings.TrimSuffix(name, ".md"), data)
-	var warnings []string
+	var warnings []warn.Warning
 	if a.hasTools {
 		msg := fmt.Sprintf("agent %q: Codex custom agents cannot restrict tools, so its tools list is dropped", a.name)
 		if a.shellOff {
 			msg += "; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)"
 		}
-		warnings = append(warnings, msg)
+		// No fix: Codex custom agents cannot restrict tools, so no edit keeps the list.
+		warnings = append(warnings, warn.Warning{Message: msg})
 	}
 	if a.hasDisallowed {
-		warnings = append(warnings, fmt.Sprintf("agent %q: Codex custom agents cannot restrict tools, so its disallowedTools list is dropped", a.name))
+		warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("agent %q: Codex custom agents cannot restrict tools, so its disallowedTools list is dropped", a.name)})
 	}
 	return warnings
 }

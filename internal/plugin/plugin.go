@@ -44,6 +44,11 @@ type HarnessJSON struct {
 	// (Codex); true leaves approval to the vendor and the caller. A launch
 	// concern, like MCPIsolation.
 	MCPManualApproval bool `json:"mcp_manual_approval,omitempty"`
+	// OnLive says what `ynh run` does when a session of this harness is
+	// already live: "refuse" stops the second run, "allow" starts it quietly,
+	// empty (the default) warns and starts it. `ynh run --on-live` overrides
+	// it for one run. A launch concern, like MCPManualApproval.
+	OnLive string `json:"on_live,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`

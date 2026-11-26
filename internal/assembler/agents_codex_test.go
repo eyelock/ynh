@@ -44,7 +44,7 @@ func TestAssemble_CodexWritesHarnessAgentsAsTOML(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantWarn := "  warning: agent \"reviewer\": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)\n"
+			wantWarn := "warning: agent \"reviewer\": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)\n"
 			if warned.String() != wantWarn {
 				t.Errorf("warnings =\n%q\nwant\n%q", warned.String(), wantWarn)
 			}
@@ -92,7 +92,7 @@ func TestAssemble_CodexAgentWarningsFollowTheStagedCopy(t *testing.T) {
 		}
 		return repo
 	}
-	const toolsWarning = "  warning: agent \"reviewer\": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)\n"
+	const toolsWarning = "warning: agent \"reviewer\": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)\n"
 	for _, tc := range []struct {
 		name, root, wantWarn string
 		shellOff             bool
