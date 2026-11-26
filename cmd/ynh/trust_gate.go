@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/workspace"
 )
 
 // errCodeUntrusted is the structured error code of a trust-gate refusal
@@ -100,10 +102,15 @@ func installedGate(id string, p *harness.Harness, store trustStore) error {
 		if st.LegacyDigest {
 			b.WriteString(legacyNote(st.acceptedScheme) + "\n")
 		}
+	} else if len(st.Executables)+len(st.Hooks)+len(st.MCPServers) == 0 && len(p.Workspace) > 0 {
+		// Only workspace folders: nothing executes, but granting folders is
+		// a permission the operator has not given (ynh #978).
+		fmt.Fprintf(&b, "refusing to run %s: you have not accepted what it asks for.\n", id)
 	} else {
 		fmt.Fprintf(&b, "refusing to run %s: you have not accepted what it executes.\n", id)
 	}
 	b.WriteString(listExecutables(st.Executables, st.Hooks, st.MCPServers))
+	b.WriteString(listWorkspace(p))
 	fmt.Fprintf(&b, "Review them: ynh trust show %s\nThen accept:  ynh trust accept %s", id, id)
 	return &untrustedError{msg: b.String()}
 }
@@ -133,6 +140,27 @@ func listExecutables(sensors []executable, hooks []hookExec, servers []mcpExec) 
 		lines = append(lines[:maxListed], fmt.Sprintf("  ... and %d more", more))
 	}
 	return "It executes:\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// listWorkspace names the workspace folders p requests, as written and as
+// they resolve, for a refusal to show beside what the harness executes. They
+// are covered by the digest, so accepting grants them.
+func listWorkspace(p *harness.Harness) string {
+	if len(p.Workspace) == 0 {
+		return ""
+	}
+	home, _ := os.UserHomeDir()
+	var b strings.Builder
+	b.WriteString("It requests workspace folders:\n")
+	for _, e := range p.Workspace {
+		resolved := workspace.Resolve(e, p.Dir, home)
+		if resolved == e {
+			fmt.Fprintf(&b, "  %s\n", e)
+		} else {
+			fmt.Fprintf(&b, "  %s (resolves to %s)\n", e, resolved)
+		}
+	}
+	return b.String()
 }
 
 // folderGate says a folder run is not trust-checked, then refuses it when a
