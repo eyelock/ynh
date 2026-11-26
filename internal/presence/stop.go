@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// processStart is ProcessStart, replaceable by a test that changes who owns a
+// pid between the two moments Stop reads it.
+var processStart = ProcessStart
+
+// afterTerm is called by Stop after it has signalled and before it waits; nil
+// outside tests.
+var afterTerm func()
+
 // ErrNotLive is returned by Stop for a session that is not running.
 var ErrNotLive = errors.New("the session is not live")
 
@@ -42,6 +50,9 @@ func Stop(e Entry, wait time.Duration) error {
 	if err := signalTerm(pid); err != nil {
 		return fmt.Errorf("stopping %s: %w", e.Address, err)
 	}
+	if afterTerm != nil {
+		afterTerm()
+	}
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		if !Alive(e.Record) {
@@ -50,7 +61,10 @@ func Stop(e Entry, wait time.Duration) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if Alive(e.Record) {
-		if p, err := os.FindProcess(pid); err == nil {
+		// The target is worked out again: the vendor's pid may have gone, or
+		// been reused, during the wait, and then the wrapper (verified just
+		// above) is what is killed, never whatever now has the vendor's pid.
+		if p, err := os.FindProcess(StopTarget(e.Record)); err == nil {
 			_ = p.Kill()
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -68,7 +82,7 @@ func Stop(e Entry, wait time.Duration) error {
 // caller has just verified, is, and it ends its session when its child exits.
 func StopTarget(r Record) int {
 	if r.VendorPID > 1 && r.VendorStart != 0 {
-		if start, err := ProcessStart(r.VendorPID); err == nil && start == r.VendorStart {
+		if start, err := processStart(r.VendorPID); err == nil && start == r.VendorStart {
 			return r.VendorPID
 		}
 	}
