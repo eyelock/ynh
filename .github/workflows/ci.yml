@@ -330,9 +330,9 @@ jobs:
       # archives the job runs, pinned beside it: the release's checksums.txt
       # must list the same digests, and the downloads must match them, before
       # anything is extracted or run. Move all three together.
-      YNR_VERSION: 0.3.2
-      YNR_SHA256: 2b090aa3449988fed220490e0483401b1fd9b02bd2e2aa3e7def24dc693a6d12
-      YNR_STUB_SHA256: 56272956659f1b4ef5f49899089743f99288112fa02aad4a6bfeb68cbe130e32
+      YNR_VERSION: 0.5.1
+      YNR_SHA256: 615bffc870d12973ffacfe11da82f3c45c24c04352664d9faabcbeeb233bdc2e
+      YNR_STUB_SHA256: ed96fe26f9488cc0db8d2ec79f6d9a2a83c75cad61d50340a5805bda96a6a657
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
