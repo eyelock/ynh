@@ -91,6 +91,10 @@ type StartOptions struct {
 	// hooks does. Only codex reads it: its worker runs in the worktree, so it
 	// is handed the hooks ynh wrote to ConfigPath inline, already trusted.
 	TrustedHooks bool
+	// TrustedHarness is set when the harness passed the trust gate as
+	// trusted (ynh #952). A backend pre-approves the MCP tools of the
+	// harness's servers only then.
+	TrustedHarness bool
 	// ConfigPath is the assembled harness directory (contains .claude/, CLAUDE.md, etc.).
 	ConfigPath string
 	// Sandbox is "srt" or "none".

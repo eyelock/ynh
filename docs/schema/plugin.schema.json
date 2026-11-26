@@ -132,7 +132,7 @@
       "type": "boolean"
     },
     "mcp_manual_approval": {
-      "description": "Leave approval of the harness's own MCP tools on a one-shot run or an `ynh agent run` worker to the vendor and the caller. Default false: on Codex, whose one-shot runs and workers refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run. A launch-time setting; it does not change an export. No other vendor needs it: Copilot gets --allow-all-tools regardless.",
+      "description": "Leave approval of the harness's own MCP tools on a one-shot run or an `ynh agent run` worker to the vendor and the caller. Default false: on Codex, whose one-shot runs and workers refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run, and only for a harness that passed the trust gate as trusted (installed and accepted with `ynh trust accept`); a folder run or an unaccepted harness gets no approval. A launch-time setting; it does not change an export. No other vendor needs it: Copilot's one-shot mode approves every tool, so ynh refuses a one-shot Copilot run of a harness that is not trusted rather than approve it.",
       "type": "boolean"
     },
     "on_live": {

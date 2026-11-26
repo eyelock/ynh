@@ -568,11 +568,17 @@ func TestCodexWorkerApprovesMCPTools(t *testing.T) {
 	}
 	const want = `mcp_servers.web.default_tools_approval_mode="approve"`
 	for _, thread := range []string{"", "th_1"} {
-		got := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir}, thread), "\n")
+		got := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir, TrustedHarness: true}, thread), "\n")
 		if !strings.Contains(got, want) {
 			t.Errorf("thread %q: no approval in:\n%s", thread, got)
 		}
-		off := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir, MCPManualApproval: true}, thread), "\n")
+		// Pre-approval follows trust (ynh #952): none for a harness the gate
+		// did not vouch for.
+		untrusted := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir}, thread), "\n")
+		if strings.Contains(untrusted, "default_tools_approval_mode") {
+			t.Errorf("thread %q: an untrusted harness got approval:\n%s", thread, untrusted)
+		}
+		off := strings.Join(buildCodexArgs(StartOptions{ConfigPath: dir, TrustedHarness: true, MCPManualApproval: true}, thread), "\n")
 		if strings.Contains(off, "default_tools_approval_mode") {
 			t.Errorf("thread %q: mcp_manual_approval still approves:\n%s", thread, off)
 		}

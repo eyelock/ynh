@@ -72,6 +72,35 @@ func trustGate(id string, p *harness.Harness, stderr io.Writer) error {
 	return folderGate(p, store, stderr)
 }
 
+// gateTrusted reports whether the harness passed the gate as trusted: an
+// installed harness whose current commands match an accepted record (or that
+// has none). A folder run is never trusted, since the gate does not check its
+// own commands (design decisions 5, 5a, 5c, ynh #952). Every pre-approval
+// (MCP tools, Copilot's --allow-all-tools, --auto-approve) asks this, so none
+// can be given to a harness the gate did not vouch for.
+func gateTrusted(id string, p *harness.Harness) bool {
+	if id == "" || p == nil {
+		return false
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return false
+	}
+	return installedGate(id, p, store) == nil
+}
+
+// copilotOneShotRefusal refuses a one-shot Copilot run of a harness that
+// is not trusted: Copilot's one-shot mode approves every tool, so there is no
+// narrower grant to give (decision 5b).
+func copilotOneShotRefusal(id string, p *harness.Harness) error {
+	if id == "" {
+		return untrustedf("refusing to run %s one-shot on copilot: a run from a folder is not trust-checked, and copilot's one-shot mode approves every tool.\n"+
+			"Install it and accept what it executes (ynh install <folder>, then ynh trust accept local/%s), run it interactively, or use another vendor.", p.Name, p.Name)
+	}
+	return untrustedf("refusing to run %s one-shot on copilot: copilot's one-shot mode approves every tool, and you have not accepted what %s executes.\n"+
+		"Accept it: ynh trust accept %s", id, id, id)
+}
+
 func gateName(id string, p *harness.Harness) string {
 	if id != "" {
 		return id

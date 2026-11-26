@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"sort"
@@ -293,4 +294,18 @@ func harnessProvenance(name string, h *harness.Harness) *RunHarness {
 		}
 	}
 	return rh
+}
+
+// autoApproveRefusal is the refusal of --auto-approve for a harness that did
+// not pass the trust gate as trusted (ynh #952, decision 5c).
+func autoApproveRefusal(h *harness.Harness, id, level string) string {
+	if id == "" {
+		name := "this harness"
+		if h != nil {
+			name = h.Name
+		}
+		return fmt.Sprintf("refusing --auto-approve %s: %s runs from a folder, which is not trust-checked, so nothing it executes is vouched for.\n"+
+			"Install it and accept what it executes (ynh install <folder>, ynh trust accept local/<name>), or run without --auto-approve.", level, name)
+	}
+	return fmt.Sprintf("refusing --auto-approve %s: you have not accepted what %s executes.\nAccept it: ynh trust accept %s, or run without --auto-approve.", level, id, id)
 }
