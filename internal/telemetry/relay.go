@@ -125,12 +125,20 @@ func parseRelayReady(line string) (string, error) {
 	if err := json.Unmarshal([]byte(line), &ready); err != nil {
 		return "", fmt.Errorf("relay's first line is not its endpoint: %q", truncate(line, 120))
 	}
-	u, err := url.Parse(ready.Endpoint)
+	return ParseRelayEndpoint(ready.Endpoint)
+}
+
+// ParseRelayEndpoint checks that endpoint is plain http on a loopback
+// address with a port, and returns it as http://host:port. It is the one
+// rule for where a vendor's telemetry may be sent: the per-launch relay's
+// printed endpoint and the standing endpoint an operator configures.
+func ParseRelayEndpoint(endpoint string) (string, error) {
+	u, err := url.Parse(endpoint)
 	if err != nil || u.Scheme != "http" || u.Port() == "" || u.Path != "" && u.Path != "/" || u.User != nil {
-		return "", fmt.Errorf("relay endpoint %q is not an http://host:port address", truncate(ready.Endpoint, 120))
+		return "", fmt.Errorf("relay endpoint %q is not an http://host:port address", truncate(endpoint, 120))
 	}
 	if ip := net.ParseIP(u.Hostname()); ip == nil || !ip.IsLoopback() {
-		return "", fmt.Errorf("relay endpoint %q is not on a loopback address", truncate(ready.Endpoint, 120))
+		return "", fmt.Errorf("relay endpoint %q is not on a loopback address", truncate(endpoint, 120))
 	}
 	return "http://" + u.Host, nil
 }

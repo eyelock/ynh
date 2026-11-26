@@ -202,6 +202,11 @@ type runRelay struct {
 	// sandbox is the run's --sandbox. Under srt the worker cannot reach a
 	// loopback relay, so none is started.
 	sandbox string
+	// standing is a configured standing relay endpoint. When set, the vendor
+	// is pointed at it and no relay is started.
+	standing string
+	// endpointURL is the standing endpoint once it has passed the checks.
+	endpointURL string
 
 	once  sync.Once
 	relay *telemetry.Relay
@@ -218,6 +223,9 @@ func (r *runRelay) endpoint(backend string) string {
 		return ""
 	}
 	r.once.Do(func() { r.start(backend) })
+	if r.endpointURL != "" {
+		return r.endpointURL
+	}
 	if r.relay == nil {
 		return ""
 	}
@@ -225,8 +233,12 @@ func (r *runRelay) endpoint(backend string) string {
 }
 
 func (r *runRelay) start(backend string) {
+	what := "the telemetry relay is on"
+	if r.standing != "" {
+		what = "a standing relay endpoint is set"
+	}
 	skip := func(why string) {
-		_, _ = fmt.Fprintf(r.stderr, "ynh: the telemetry relay is on, but %s; the run continues without %s's own telemetry\n", why, backend)
+		_, _ = fmt.Fprintf(r.stderr, "ynh: %s, but %s; the run continues without %s's own telemetry\n", what, why, backend)
 	}
 	supported := r.supported
 	if supported == nil {
@@ -254,6 +266,12 @@ func (r *runRelay) start(backend string) {
 	// another protocol it cannot speak), but the vendor's telemetry stays the operator's.
 	if r.tel.OperatorOTLP() {
 		skip("OTEL_EXPORTER_OTLP_* is set, so the vendor's telemetry is left to it")
+		return
+	}
+	if r.standing != "" {
+		// A standing relay writes to its own spool: no spool folder here,
+		// and no relay to start or stop.
+		r.endpointURL = r.standing
 		return
 	}
 	switch r.tel.Destination() {

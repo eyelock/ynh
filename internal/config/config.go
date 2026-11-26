@@ -123,10 +123,16 @@ type Config struct {
 	Sources        []Source              `json:"sources,omitempty"`
 	Backends       map[string]BackendDef `json:"backends,omitempty"`
 	// TelemetryRelay turns on the telemetry relay for every `ynh agent run`
-	// and every `ynh run` (docs/telemetry.md); a Copilot or Codex `ynh run` starts one,
+	// and every `ynh run` (docs/telemetry.md); a Claude Code, Copilot or Codex `ynh run` starts one,
 	// interactive sessions included. --telemetry-relay and YNH_TELEMETRY_RELAY come
 	// first.
 	TelemetryRelay bool `json:"telemetry_relay,omitempty"`
+	// TelemetryRelayEndpoint is a standing relay's loopback endpoint, such as
+	// "http://127.0.0.1:4318". When set, `ynh run` points the vendor's own
+	// telemetry at it and starts no relay of its own. Off by default.
+	// --telemetry-relay-endpoint and YNH_TELEMETRY_RELAY_ENDPOINT come first
+	// (docs/telemetry.md).
+	TelemetryRelayEndpoint string `json:"telemetry_relay_endpoint,omitempty"`
 	// Labels are run labels (key to value) every `ynh run` and `ynh agent
 	// run` carries, the lowest-precedence source: the harness manifest,
 	// YNH_LABELS and --label override them per key (docs/telemetry.md).
