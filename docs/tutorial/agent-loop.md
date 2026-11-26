@@ -46,6 +46,18 @@ ynh install ./
 A **focus** is a named prompt. Declaring the task in the manifest rather than
 passing it every time is what makes a run reproducible.
 
+The `lint` sensor runs `sh check.sh` on your machine, so `ynh check` and
+`ynh agent run` refuse this harness until you accept it: the
+[trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed
+harness whose commands you have not reviewed. Review, then accept:
+
+```bash
+ynh trust show local/demo
+ynh trust accept local/demo
+```
+
+Expected output of the accept: `Recorded local/demo: 1 command(s), sha256:...`
+
 Confirm the gate fails before you start — a loop with nothing to fix teaches
 nothing:
 

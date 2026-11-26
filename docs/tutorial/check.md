@@ -44,6 +44,20 @@ ynh install ./gate-demo
 
 `tolerance` is optional and defaults to `blocking` — the safe default for a gate.
 
+## Accept the harness
+
+The three command sensors run shell commands on your machine, so `ynh check`
+refuses this harness until you have reviewed and accepted them: the
+[trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed
+harness whose commands you have not accepted, with exit 1. Review, then accept:
+
+```bash
+ynh trust show local/gate-demo
+ynh trust accept local/gate-demo
+```
+
+Expected output of the accept: `Recorded local/gate-demo: 3 command(s), sha256:...`
+
 ## A clean run
 
 ```bash
@@ -109,7 +123,8 @@ still describes the code in front of it, and that turns out to be the part that
 matters: an artifact from before your last change is not a weaker answer, it is
 an answer about different code.
 
-Use a separate harness so the counts above stay as they were:
+Use a separate harness so the counts above stay as they were. Its only sensor
+reads files and runs no command, so there is nothing to accept:
 
 ```bash
 cd /tmp/ynh-t20
@@ -507,6 +522,9 @@ echo "exit=$?"          # 1 — the baseline is ignored
 | 0 | every blocking sensor passed |
 | 1 | a blocking sensor failed — the report is on stdout |
 | 2 | ynh could not run the check at all |
+
+A harness you have not accepted is refused with exit 1 too, before any sensor
+runs; under `--format json` its error envelope carries the code `untrusted`.
 
 1 and 2 are deliberately distinct: a red CI job has to distinguish "your code is
 failing" from "the gate itself is broken".

@@ -189,6 +189,20 @@ EOF
 ynh install /tmp/shadow/pinned
 ```
 
+The `claims` sensor runs a script on your machine, so `ynh check` and
+`ynh agent run` refuse the pinned harness until you accept it: the
+[trust gate](../sensors.md#what-a-command-sensor-can-reach) refuses an installed
+harness whose commands you have not reviewed. Review, then accept. The script
+sits in the harness (`$YNH_HARNESS_DIR`), so the digest covers its body too, and
+changing it later means accepting again:
+
+```bash
+ynh trust show local/shadow-pin
+ynh trust accept local/shadow-pin
+```
+
+Expected output of the accept: `Recorded local/shadow-pin: 1 command(s), sha256:...`
+
 *Replace `<pinned-harness>` with the harness you pin (here: `shadow-pin`).*
 
 Run the rest of the page from `/tmp/shadow/repo`.
@@ -261,7 +275,9 @@ ynh install ./
 ynh check local/ynh-guide --only harness-valid --format json
 ```
 
-Expected: the install succeeds, and the check finds no such sensor (exit 2):
+Expected: the install succeeds, and the check finds no such sensor (exit 2).
+At that commit the harness runs no commands, so there is nothing to accept and
+the trust gate lets the check through:
 
 ```
 Installed harness "ynh-guide"
