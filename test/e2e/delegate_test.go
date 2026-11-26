@@ -38,10 +38,7 @@ func TestDelegate_AddRemove(t *testing.T) {
 	s.mustRunYnh(t, "install", sourceDir)
 
 	delegateURL := repo.URL
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
-		"--path", "e2e-fixtures/fork-source",
-		"--ref", repo.SHA,
-	)
+	seedDelegate(t, sourceDir, repo.URL, "e2e-fixtures/fork-source", repo.SHA)
 
 	mf := readManifest(t, sourceDir)
 	if len(mf.DelegatesTo) != 1 {
@@ -134,10 +131,7 @@ func TestDelegate_Update(t *testing.T) {
 	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	s.mustRunYnh(t, "install", sourceDir)
 
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", repo.URL,
-		"--path", "e2e-fixtures/fork-source",
-		"--ref", repo.SHA,
-	)
+	seedDelegate(t, sourceDir, repo.URL, "e2e-fixtures/fork-source", repo.SHA)
 
 	// A delegate is a native subagent, and so gets an agent file, only when
 	// its transport is native; the default is a2a, its own ynh session.
@@ -235,10 +229,7 @@ func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 	s.mustRunYnh(t, "install", sourceDir)
 
 	delegateURL := repo.URL
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
-		"--path", "e2e-fixtures/fork-source",
-		"--ref", repo.SHA,
-	)
+	seedDelegate(t, sourceDir, repo.URL, "e2e-fixtures/fork-source", repo.SHA)
 
 	srcMf := readManifest(t, sourceDir)
 	if len(srcMf.DelegatesTo) != 1 {
@@ -302,6 +293,32 @@ func TestLocalInstall_PluginEditVisibleToInfo(t *testing.T) {
 	infoOut, _ := s.mustRunYnh(t, "info", "local/minimal", "--format", "json")
 	if !strings.Contains(infoOut, "hand-edit-focus") {
 		t.Errorf("hand-edit to source plugin.json not visible to ynh info — schema-3 read path is broken.\noutput:\n%s", infoOut)
+	}
+}
+
+// seedDelegate writes a delegate entry into the harness's plugin.json by hand,
+// as docs/how-to/add-a-delegate Route 1 says. `ynh delegate add` refuses a
+// local path or file:// URL (delegates are remote, ynh #886), and these tests
+// serve their delegate from a local repository, so the entry is written
+// directly; add's own refusal is covered by TestCmdDelegateAdd_RefusesLocalPath.
+func seedDelegate(t *testing.T, harnessDir, git, path, ref string) {
+	t.Helper()
+	file := manifestFile(harnessDir, "plugin.json")
+	body, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("reading plugin.json: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
+	}
+	raw["delegates_to"], _ = json.Marshal([]manifestSourceJSON{{Git: git, Path: path, Ref: ref}})
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, append(out, '\n'), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
