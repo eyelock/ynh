@@ -42,7 +42,8 @@ func hookVendorWarnings(hj map[string]any) []string {
 	for _, s := range scopes {
 		for _, v := range vendors {
 			for _, w := range vendor.HookWarnings(v, s.hooks) {
-				warnings = append(warnings, s.label+w)
+				// ynd prints these as text until its warnings move to the shared printer (ynw-pmd9).
+				warnings = append(warnings, s.label+w.Message)
 			}
 		}
 	}

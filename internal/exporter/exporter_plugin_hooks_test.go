@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // pluginHookCase is what one vendor's plugin must carry for hooks: the file
@@ -309,9 +310,9 @@ func assertHookScripts(t *testing.T, root string, want bool) {
 
 // assertScriptWarnings checks that the export names each "./" script it could
 // not ship, and only those.
-func assertScriptWarnings(t *testing.T, warnings []string) {
+func assertScriptWarnings(t *testing.T, warnings []warn.Warning) {
 	t.Helper()
-	joined := strings.Join(warnings, "\n")
+	joined := strings.Join(warn.Messages(warnings), "\n")
 	for _, s := range []string{"./scripts/missing.sh", "./../outside.sh"} {
 		if !strings.Contains(joined, s) {
 			t.Errorf("warnings %q do not name %s", warnings, s)
@@ -369,7 +370,7 @@ func TestExport_PluginHookScripts(t *testing.T) {
 			t.Fatalf("results = %d, want 1", len(results))
 		}
 		assertScriptWarnings(t, results[0].Warnings)
-		if n := strings.Count(strings.Join(results[0].Warnings, "\n"), "missing.sh"); n != 1 {
+		if n := strings.Count(strings.Join(warn.Messages(results[0].Warnings), "\n"), "missing.sh"); n != 1 {
 			t.Errorf("missing.sh warned %d times, want once", n)
 		}
 	})
@@ -393,11 +394,11 @@ func TestExport_HookWarnings(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mode %v: %v", mode, err)
 		}
-		var warnings []string
+		var warnings []warn.Warning
 		for _, r := range results {
 			warnings = append(warnings, r.Warnings...)
 		}
-		joined := strings.Join(warnings, "\n")
+		joined := strings.Join(warn.Messages(warnings), "\n")
 		if !strings.Contains(joined, "on_session_start") || !strings.Contains(joined, "cursor") {
 			t.Errorf("mode %v: warnings = %q, want one naming on_session_start and cursor", mode, warnings)
 		}
@@ -469,7 +470,7 @@ func TestExport_MCPScripts(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(dir, "scripts", "serve.sh")); err != nil {
 				t.Errorf("script not in the package: %v", err)
 			}
-			joined := strings.Join(results[0].Warnings, "\n")
+			joined := strings.Join(warn.Messages(results[0].Warnings), "\n")
 			if !strings.Contains(joined, "mcp script ./scripts/missing.sh is not a file in the harness") {
 				t.Errorf("no missing-script warning: %q", results[0].Warnings)
 			}
@@ -584,7 +585,7 @@ func TestExport_CopilotHooksCarryCwd(t *testing.T) {
 			t.Errorf("hooks/claude.json: want cwd on both handlers, got %d", n)
 		}
 		for _, r := range res {
-			if slices.ContainsFunc(r.Warnings, func(w string) bool { return strings.Contains(w, "plugin folder") }) {
+			if slices.ContainsFunc(r.Warnings, func(w warn.Warning) bool { return strings.Contains(w.Message, "plugin folder") }) {
 				t.Errorf("unexpected warning: %v", r.Warnings)
 			}
 		}

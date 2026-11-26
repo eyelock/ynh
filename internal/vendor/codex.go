@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // codexPluginJSON is the Codex plugin.json schema: identity fields plus path pointers.
@@ -95,10 +96,7 @@ func codexAgentArgsWarned(runDir string, w io.Writer) []string {
 	args, warnings := CodexAgentArgs(runDir)
 	mcp := CodexMCP(runDir)
 	args = append(args, mcp.Args...)
-	warnings = append(warnings, mcp.Warnings...)
-	for _, msg := range warnings {
-		_, _ = fmt.Fprintf(w, "warning: %s\n", msg)
-	}
+	warn.Print(w, append(warnings, mcp.Warnings...)...)
 	return args
 }
 
@@ -155,7 +153,7 @@ func withCodexRunArgs(resumeArgs, agentArgs []string) []string {
 	return append(out, resumeArgs[n:]...)
 }
 
-func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string, warn io.Writer) ([]string, error) {
+func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string, w io.Writer) ([]string, error) {
 	if prompt != "" && interactive {
 		return nil, ErrResumePromptNotSupported
 	}
@@ -169,7 +167,7 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 		args = append(args, "--last")
 	}
 	if prompt != "" {
-		extraArgs = codexExecResumeExtraArgs(extraArgs, codexUserConfigPath(), warn)
+		extraArgs = codexExecResumeExtraArgs(extraArgs, codexUserConfigPath(), w)
 	}
 	args = append(args, extraArgs...)
 	if prompt != "" {
@@ -186,7 +184,7 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 // 0.166.0 (docs/vendor-parity.md, L6). `codex exec --ignore-user-config`
 // would also do it, but only for a one-shot run, and it drops the rest of the
 // user config (model, approvals) with it.
-func (c *Codex) IsolateMCP(configPath string) ([]string, string) {
+func (c *Codex) IsolateMCP(configPath string) ([]string, []warn.Warning) {
 	return c.IsolateMCPIn(configPath, nil, "")
 }
 
@@ -195,21 +193,30 @@ func (c *Codex) IsolateMCP(configPath string) ([]string, string) {
 // the harness passes it): Codex is asked which servers it would load under
 // that environment, so a name is never disabled that the launch would not
 // see, in dir (the project's directory; empty is the current one). A nil env is ynh's.
-func (c *Codex) IsolateMCPIn(configPath string, env []string, dir string) ([]string, string) {
+func (c *Codex) IsolateMCPIn(configPath string, env []string, dir string) ([]string, []warn.Warning) {
 	const fail = "MCP isolation could not be applied on Codex (%v): servers in your Codex config will still load"
 	bin, err := exec.LookPath(c.CLIName())
 	if err != nil {
-		return nil, fmt.Sprintf(fail, err)
+		return nil, []warn.Warning{{
+			Message: fmt.Sprintf(fail, err),
+			Fix:     "install the codex CLI, or put it on PATH",
+		}}
 	}
 	listed, err := codexMCPListNames(bin, env, dir)
 	if err != nil {
-		return nil, fmt.Sprintf(fail, err)
+		return nil, []warn.Warning{{
+			Message: fmt.Sprintf(fail, err),
+			Fix:     "run `codex mcp list --json` and fix the error it reports",
+		}}
 	}
 	args, skipped := codexIsolationArgs(listed, harnessMCPNames(filepath.Join(configPath, ".mcp.json"), false))
 	if len(skipped) > 0 {
-		return args, fmt.Sprintf("MCP isolation is partial on Codex: %s cannot be turned off, since a name with a '.' cannot be passed with -c", strings.Join(skipped, ", "))
+		return args, []warn.Warning{{
+			Message: fmt.Sprintf("MCP isolation is partial on Codex: %s cannot be turned off, since a name with a '.' cannot be passed with -c", strings.Join(skipped, ", ")),
+			Fix:     "rename those servers in your Codex config to use only letters, digits, '-' and '_'",
+		}}
 	}
-	return args, ""
+	return args, nil
 }
 
 func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {

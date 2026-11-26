@@ -9,6 +9,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // HarnessStorageMigrator moves flat ~/.ynh/harnesses/<name>/ to the namespaced
@@ -44,8 +45,10 @@ func (HarnessStorageMigrator) Run(dir string) error {
 	if err == nil && ins.Source != "" {
 		ns = namespace.DeriveFromURL(ins.Source)
 	} else {
-		fmt.Fprintf(os.Stderr, "warning: harness %q: no provenance found, placing under local/unknown namespace\n", name)
-		fmt.Fprintf(os.Stderr, "  To fix: ynh install %s@org/repo\n", name)
+		warn.Print(os.Stderr, warn.Warning{
+			Message: fmt.Sprintf("harness %q: no provenance found, placing under local/unknown namespace", name),
+			Fix:     fmt.Sprintf("ynh install %s@org/repo", name),
+		})
 	}
 
 	fsName := namespace.ToFSName(ns)

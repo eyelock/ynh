@@ -117,7 +117,8 @@ ynd preview /tmp/ynh-tutorial/preview-harness -v cursor
 Expected output structure, after a warning on stderr: Cursor matches its tool hooks against its own tool types, so the `Bash` matcher will not match there (see [Hooks: Matchers](../hooks.md#matchers)):
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 .cursor/
   agents/
   commands/
@@ -169,7 +170,8 @@ ynd diff /tmp/ynh-tutorial/preview-harness claude cursor
 Expected output, with the same Cursor matcher warning first:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 === claude vs cursor ===
 Only in claude:
   .claude/.mcp.json
@@ -248,7 +250,8 @@ cat /tmp/ynh-tutorial/cursor-output/.cursor/hooks.json
 Expected: the same Cursor matcher warning first, on stderr, and the line `ynd preview` prints when it writes to a directory:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 Preview written to /tmp/ynh-tutorial/cursor-output
 ```
 

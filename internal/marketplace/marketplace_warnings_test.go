@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // writeHookedHarness writes a harness named name under dir/harnesses whose
@@ -69,8 +70,8 @@ func TestBuild_ReturnsEntryExportWarnings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Build: %v", err)
 			}
-			if !reflect.DeepEqual(warnings, tt.want) {
-				t.Errorf("warnings = %q, want %q", warnings, tt.want)
+			if got := warn.Messages(warnings); !reflect.DeepEqual(got, tt.want) && (len(got) != 0 || len(tt.want) != 0) {
+				t.Errorf("warnings = %q, want %q", got, tt.want)
 			}
 		})
 	}

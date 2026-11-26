@@ -19,6 +19,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdHook(args []string) error {
@@ -265,9 +266,7 @@ func exportableHooks(dir string, own map[string][]plugin.HookEntry) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	for _, w := range hs.Inactive {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, hs.Inactive...)
 	if len(hs.Scripts) > 0 {
 		origin := hs.Scripts[slices.Sorted(maps.Keys(hs.Scripts))[0]]
 		return nil, fmt.Errorf("included harness %s runs the script %s from its own directory, which a project settings file cannot reach; use an absolute or $CLAUDE_PROJECT_DIR command in that harness, or run it through ynh run", origin.Source, origin.Script)

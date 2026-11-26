@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/mcpexec"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // CodexEnvPassthroughFile is the run directory file that names the harness's
@@ -49,7 +50,7 @@ func readCodexEnvPassthrough(runDir string) []string {
 type CodexMCPLaunch struct {
 	Args     []string
 	Env      []string // NAME=value entries added to the Codex process's environment
-	Warnings []string
+	Warnings []warn.Warning
 	Servers  []string // the servers the overrides load, in sorted order
 }
 
@@ -122,7 +123,10 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 		} `json:"mcpServers"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
-		out.Warnings = []string{fmt.Sprintf("Codex MCP file %s: %v", file, err)}
+		out.Warnings = []warn.Warning{{
+			Message: fmt.Sprintf("Codex MCP file %s: %v", file, err),
+			Fix:     fmt.Sprintf("make %s valid JSON, or delete it and run ynh again", file),
+		}}
 		return out
 	}
 	names := make([]string, 0, len(doc.MCPServers))
@@ -136,12 +140,18 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 	n := 0
 	for _, name := range names {
 		if !codexAgentNameKey.MatchString(name) {
-			out.Warnings = append(out.Warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since its name must use only letters, digits, '-' and '_' to be passed with -c (a '.' would split the key)", name))
+			out.Warnings = append(out.Warnings, warn.Warning{
+				Message: fmt.Sprintf("MCP server %q: Codex cannot load it, since its name must use only letters, digits, '-' and '_' to be passed with -c (a '.' would split the key)", name),
+				Fix:     fmt.Sprintf("rename mcp server %q to use only letters, digits, '-' and '_'", name),
+			})
 			continue
 		}
 		s := doc.MCPServers[name]
 		if s.Type == "sse" {
-			out.Warnings = append(out.Warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since it speaks the legacy HTTP+SSE transport and Codex supports only stdio and streamable HTTP servers", name))
+			out.Warnings = append(out.Warnings, warn.Warning{
+				Message: fmt.Sprintf("MCP server %q: Codex cannot load it, since it speaks the legacy HTTP+SSE transport and Codex supports only stdio and streamable HTTP servers", name),
+				Fix:     fmt.Sprintf("serve mcp server %q over stdio or streamable HTTP", name),
+			})
 			continue
 		}
 		key := "mcp_servers." + name + "."
@@ -151,7 +161,10 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 			var envTable map[string]string
 			if len(s.Env) > 0 {
 				if containsRef(append([]string{s.Command}, s.Args...)) {
-					out.Warnings = append(out.Warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since its command or args hold a literal ${...} that the launcher keeping its env off the command line would try to expand", name))
+					out.Warnings = append(out.Warnings, warn.Warning{
+						Message: fmt.Sprintf("MCP server %q: Codex cannot load it, since its command or args hold a literal ${...} that the launcher keeping its env off the command line would try to expand", name),
+						Fix:     fmt.Sprintf("remove the ${...} from the command and args of mcp server %q, or give it no env", name),
+					})
 					continue
 				}
 				command, args = mcpexec.Launcher, append([]string{"mcp-exec", "--env-file", filepath.Join(absDir, mcpexec.EnvFileName), "--", s.Command}, s.Args...)
@@ -217,7 +230,10 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 		if err := writeMCPEnvFile(absDir, secrets); err != nil {
 			// Without the file the wrapped servers cannot start; load none of
 			// the stdio servers rather than put their values on the command line.
-			return CodexMCPLaunch{Warnings: append(out.Warnings, fmt.Sprintf("Codex MCP servers not loaded: writing %s: %v", mcpexec.EnvFileName, err))}
+			return CodexMCPLaunch{Warnings: append(out.Warnings, warn.Warning{
+				Message: fmt.Sprintf("Codex MCP servers not loaded: writing %s: %v", mcpexec.EnvFileName, err),
+				Fix:     fmt.Sprintf("make %s writable", absDir),
+			})}
 		}
 	}
 	return out

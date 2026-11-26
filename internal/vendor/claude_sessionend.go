@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ClaudeSessionEndEnvVar is the variable Claude Code reads for the SessionEnd
@@ -33,7 +34,7 @@ const claudeDefaultSessionEndSeconds = 1
 // environment the process will otherwise get. A value the user already set is
 // never overridden; one lower than the hooks ask for produces a warning. Nothing
 // is returned when no SessionEnd hook has a timeout.
-func ClaudeSessionEndEnv(configPath string, lookup func(string) (string, bool)) (env []string, warnings []string) {
+func ClaudeSessionEndEnv(configPath string, lookup func(string) (string, bool)) (env []string, warnings []warn.Warning) {
 	data, err := os.ReadFile(filepath.Join(configPath, (&Claude{}).ConfigDir(), "hooks", "hooks.json"))
 	if err != nil {
 		return nil, nil
@@ -61,7 +62,10 @@ func ClaudeSessionEndEnv(configPath string, lookup func(string) (string, bool)) 
 
 	if v, set := lookup(ClaudeSessionEndEnvVar); set {
 		if have, err := strconv.Atoi(v); err != nil || have < want {
-			warnings = append(warnings, fmt.Sprintf("%s=%s is lower than the %d ms the on_session_end hooks ask for, so Claude Code cancels them early; not overriding your value", ClaudeSessionEndEnvVar, v, want))
+			warnings = append(warnings, warn.Warning{
+				Message: fmt.Sprintf("%s=%s is lower than the %d ms the on_session_end hooks ask for, so Claude Code cancels them early; not overriding your value", ClaudeSessionEndEnvVar, v, want),
+				Fix:     fmt.Sprintf("set %s=%d, or unset it so ynh sets it", ClaudeSessionEndEnvVar, want),
+			})
 		}
 		return nil, warnings
 	}
@@ -72,7 +76,7 @@ func ClaudeSessionEndEnv(configPath string, lookup func(string) (string, bool)) 
 // Claude Code, a plugin's SessionEnd hook timeout does not raise the budget, and
 // ynh sets the environment variable only for sessions it launches, so a
 // packaged hook with a timeout above the 1.5 s default needs the user to set it.
-func ExportHookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []string {
+func ExportHookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []warn.Warning {
 	warnings := HookWarnings(vendorName, hooks)
 	if vendorName != "claude" {
 		return warnings
@@ -82,8 +86,11 @@ func ExportHookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) 
 		longest = max(longest, e.Timeout)
 	}
 	if longest > claudeDefaultSessionEndSeconds {
-		warnings = append(warnings, fmt.Sprintf("claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s; set %s=%d in the environment that launches Claude Code",
-			ClaudeSessionEndEnvVar, min(longest, claudeSessionEndMaxSeconds)*1000))
+		want := min(longest, claudeSessionEndMaxSeconds) * 1000
+		warnings = append(warnings, warn.Warning{
+			Message: "claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s",
+			Fix:     fmt.Sprintf("set %s=%d in the environment that launches Claude Code", ClaudeSessionEndEnvVar, want),
+		})
 	}
 	return warnings
 }

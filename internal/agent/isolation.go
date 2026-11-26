@@ -1,16 +1,16 @@
 package agent
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // workerMCPIsolation returns what keeps the operator's own MCP servers out of
 // a worker: launch arguments, or environment variables for a vendor whose
 // isolation is one (OpenCode), the same adapter methods `ynh run` uses. A
-// vendor that cannot isolate fully says so in one warning line on w. It is
+// vendor that cannot isolate fully says so in a warning on w. It is
 // computed once per session, not per turn: each turn is its own process, and
 // listing the vendor's servers costs one more.
 //
@@ -20,17 +20,17 @@ import (
 // (the worker's carries a minimum of ynh's, so a CODEX_HOME or XDG_CONFIG_HOME
 // of the operator's is not in it unless the harness passes it).
 func workerMCPIsolation(a vendor.Adapter, configPath string, workerEnv []string, dir string, w io.Writer) (args, env []string) {
-	var warning string
+	var warnings []warn.Warning
 	switch v := a.(type) {
 	case *vendor.OpenCode:
-		env, warning = v.IsolateMCPEnvIn(configPath, workerEnv, dir)
+		env, warnings = v.IsolateMCPEnvIn(configPath, workerEnv, dir)
 	case *vendor.Codex:
-		args, warning = v.IsolateMCPIn(configPath, workerEnv, dir)
+		args, warnings = v.IsolateMCPIn(configPath, workerEnv, dir)
 	default:
-		args, warning = a.IsolateMCP(configPath)
+		args, warnings = a.IsolateMCP(configPath)
 	}
-	if warning != "" && w != nil {
-		_, _ = fmt.Fprintf(w, "warning: %s\n", warning)
+	if w != nil {
+		warn.Print(w, warnings...)
 	}
 	return args, env
 }

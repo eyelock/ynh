@@ -29,6 +29,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ExitError carries a specific exit code for non-zero loop termination.
@@ -274,9 +275,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// checkConvergence declines to converge on an empty result set, so the
 		// run can end un-converged but never falsely converged.
 		if opts.HarnessName == "" {
-			_, _ = fmt.Fprintln(opts.Stderr,
-				"warning: this checkpoint records no harness, so no sensors will run. "+
-					"This run cannot converge — pass --harness <name> to resume with verification.")
+			warn.Print(opts.Stderr, warn.Warning{
+				Message: "this checkpoint records no harness, so no sensors will run. This run cannot converge.",
+				Fix:     "pass --harness <name> to resume with verification",
+			})
 		}
 	}
 
@@ -739,7 +741,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	case "claude", "codex", "opencode":
 	default:
 		if isolatedMCP {
-			_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is not supported by the %s backend: it will load your own MCP servers\n", wb.Name())
+			warn.Print(opts.Stderr, warn.Warning{
+				Message: fmt.Sprintf("MCP isolation is not supported by the %s backend: it will load your own MCP servers", wb.Name()),
+				Fix:     "use the claude, codex or opencode backend",
+			})
 		}
 	}
 	trustedHooks := opts.HookTrust != nil && loadedHarness != nil && opts.HookTrust(loadedHarness, loadedID, wb.Name(), configPath)
@@ -1759,9 +1764,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 		_ = os.RemoveAll(dir)
 		return "", nil, hookErr
 	}
-	for _, w := range hookWarnings {
-		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-	}
+	warn.Print(os.Stderr, hookWarnings...)
 
 	// Generate vendor-native MCP config: the harness's own servers and those
 	// of its included harnesses, composed.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // setupAgentPluginMarketplace adds a plugin entry that is already an Agent
@@ -153,7 +154,7 @@ func TestMarketplaceAgentPluginNormalisedName(t *testing.T) {
 	// entry's, prefixed with the entry (#496).
 	want := `odd-name: name "Odd_Name" is not a valid Agent Plugins name; exported as "odd-name"`
 	found := false
-	for _, w := range warnings {
+	for _, w := range warn.Messages(warnings) {
 		if w == want {
 			found = true
 		}

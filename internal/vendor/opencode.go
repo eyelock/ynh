@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func init() {
@@ -608,8 +609,9 @@ func (o *OpenCode) SupportsInitialPrompt() bool { return true }
 // IsolateMCP is OpenCode's isolation as launch arguments, and there are none:
 // OpenCode's isolation is an environment variable, IsolateMCPEnv, which `ynh
 // run` uses in its place. This is what a caller that only reads arguments gets.
-func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation on OpenCode is applied through the environment, not launch arguments: servers in your OpenCode config will still load"
+// No fix: ynh run applies OpenCode isolation through IsolateMCPEnv; nothing the user edits changes what this caller gets.
+func (o *OpenCode) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	return nil, []warn.Warning{{Message: "MCP isolation on OpenCode is applied through the environment, not launch arguments: servers in your OpenCode config will still load"}}
 }
 
 func (o *OpenCode) SupportsResume() bool { return true }

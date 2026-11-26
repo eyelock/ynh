@@ -37,6 +37,16 @@ type Warning struct {
 	Fix     string `json:"fix"`
 }
 
+// Messages returns the message of each warning, in order, for a caller that
+// wants the text alone.
+func Messages(ws []Warning) []string {
+	out := make([]string, len(ws))
+	for i, w := range ws {
+		out[i] = w.Message
+	}
+	return out
+}
+
 // Mode is how a warning is drawn.
 type Mode int
 

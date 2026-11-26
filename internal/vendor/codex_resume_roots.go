@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // codexWritableRootsKey is the config key `codex exec resume` takes granted
@@ -40,7 +42,7 @@ func codexUserConfigPath() string {
 //
 // writable_roots applies only under sandbox_mode workspace-write; under any
 // other mode the grant does nothing, so ynh says so on warn.
-func codexExecResumeExtraArgs(extraArgs []string, userConfig string, warn io.Writer) []string {
+func codexExecResumeExtraArgs(extraArgs []string, userConfig string, w io.Writer) []string {
 	var granted []string
 	rest := make([]string, 0, len(extraArgs))
 	for i := 0; i < len(extraArgs); i++ {
@@ -63,8 +65,11 @@ func codexExecResumeExtraArgs(extraArgs []string, userConfig string, warn io.Wri
 	}
 
 	roots, ok := codexTOMLStringArray(cfg, "sandbox_workspace_write", "writable_roots")
-	if !ok && warn != nil && strings.Contains(cfg, "writable_roots") {
-		_, _ = fmt.Fprintf(warn, "ynh: could not read writable_roots in %s; the folders ynh grants replace it for this resume\n", userConfig)
+	if !ok && w != nil && strings.Contains(cfg, "writable_roots") {
+		warn.Print(w, warn.Warning{
+			Message: fmt.Sprintf("could not read writable_roots in %s; the folders ynh grants replace it for this resume", userConfig),
+			Fix:     fmt.Sprintf("write writable_roots in %s as an array of strings", userConfig),
+		})
 	}
 
 	// A caller's earlier -c on the key would be overridden by ours: fold it in.
@@ -77,17 +82,23 @@ func codexExecResumeExtraArgs(extraArgs []string, userConfig string, warn io.Wri
 					i++
 					continue
 				}
-				if warn != nil {
-					_, _ = fmt.Fprintf(warn, "ynh: could not read the caller's -c %s; the folders ynh grants replace it for this resume\n", codexWritableRootsKey)
+				if w != nil {
+					warn.Print(w, warn.Warning{
+						Message: fmt.Sprintf("could not read the caller's -c %s; the folders ynh grants replace it for this resume", codexWritableRootsKey),
+						Fix:     fmt.Sprintf("pass -c %s as an array of strings", codexWritableRootsKey),
+					})
 				}
 			}
 		}
 		out = append(out, rest[i])
 	}
 
-	if mode := codexSandboxMode(rest, cfg); mode != "workspace-write" && mode != "danger-full-access" && warn != nil {
-		_, _ = fmt.Fprintf(warn, "ynh: workspace folders only take effect under Codex's workspace-write sandbox; %s, so %s is not writable on this resume\n",
-			codexSandboxDescription(mode), strings.Join(granted, ", "))
+	if mode := codexSandboxMode(rest, cfg); mode != "workspace-write" && mode != "danger-full-access" && w != nil {
+		warn.Print(w, warn.Warning{
+			Message: fmt.Sprintf("workspace folders only take effect under Codex's workspace-write sandbox; %s, so %s is not writable on this resume",
+				codexSandboxDescription(mode), strings.Join(granted, ", ")),
+			Fix: "resume with -c sandbox_mode=\"workspace-write\"",
+		})
 	}
 
 	seen := map[string]bool{}
