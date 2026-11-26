@@ -73,7 +73,23 @@ type Config struct {
 	PollEvery time.Duration
 	// Version is reported as the server's version.
 	Version string
+	// Questions is where a delegate's question goes: QuestionsModel (the
+	// default) leaves it in the tool result for the parent's model to put to
+	// the person; QuestionsClient first puts it to a client that offers
+	// elicitation.
+	Questions string
 }
+
+// Where a delegate's question goes (Config.Questions, the harness's
+// delegate_questions).
+const (
+	QuestionsModel  = "model"
+	QuestionsClient = "client"
+)
+
+// ValidQuestions reports whether v is a delegate_questions value; empty is the
+// default, model.
+func ValidQuestions(v string) bool { return v == "" || v == QuestionsModel || v == QuestionsClient }
 
 // Server is the MCP server.
 type Server struct {
@@ -261,6 +277,10 @@ type Result struct {
 	Message string `json:"message"`
 	// Result is the delegate's output, once completed.
 	Result string `json:"result,omitempty"`
+	// AskedAt and WaitingSeconds say, for an input-required delegation, when
+	// the open question was asked and how long it has waited.
+	AskedAt        string `json:"asked_at,omitempty"`
+	WaitingSeconds int    `json:"waiting_seconds,omitempty"`
 	// LogTail is the end of the run's log, when it failed.
 	LogTail string `json:"log_tail,omitempty"`
 }
@@ -273,13 +293,15 @@ type ListResult struct {
 var resultSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
-		"task_id":    map[string]any{"type": "string", "description": "the delegation's handle; pass it to delegate_status, delegate_result, delegate_cancel and delegate_reply"},
-		"context_id": map[string]any{"type": "string"},
-		"delegate":   map[string]any{"type": "string"},
-		"state":      map[string]any{"type": "string", "enum": []string{"working", "input-required", "completed", "failed", "canceled"}},
-		"message":    map[string]any{"type": "string", "description": "what the state means and what to do next; the delegate's question when input-required"},
-		"result":     map[string]any{"type": "string", "description": "the delegate's output, when completed"},
-		"log_tail":   map[string]any{"type": "string", "description": "the end of the run's log, when failed"},
+		"task_id":         map[string]any{"type": "string", "description": "the delegation's handle; pass it to delegate_status, delegate_result, delegate_cancel and delegate_reply"},
+		"context_id":      map[string]any{"type": "string"},
+		"delegate":        map[string]any{"type": "string"},
+		"state":           map[string]any{"type": "string", "enum": []string{"working", "input-required", "completed", "failed", "canceled"}},
+		"message":         map[string]any{"type": "string", "description": "what the state means and what to do next; the delegate's question when input-required"},
+		"result":          map[string]any{"type": "string", "description": "the delegate's output, when completed"},
+		"log_tail":        map[string]any{"type": "string", "description": "the end of the run's log, when failed"},
+		"asked_at":        map[string]any{"type": "string", "description": "when the open question was asked (RFC 3339), when input-required"},
+		"waiting_seconds": map[string]any{"type": "integer", "description": "how long the open question has waited, when input-required"},
 	},
 	"required": []string{"task_id", "state", "message"},
 }
@@ -342,7 +364,10 @@ func (s *Server) resultOf(rec *delegation.Record) Result {
 			r.Message += ": " + rec.Error
 		}
 	case "input-required":
-		r.Message = a2aserve.OpenQuestion(rec).Text
+		q := a2aserve.OpenQuestion(rec)
+		r.Message = fmt.Sprintf("%s asks: %s", r.Delegate, q.Text)
+		r.AskedAt = q.AskedAt.UTC().Format(time.RFC3339)
+		r.WaitingSeconds = int(time.Since(q.AskedAt).Seconds())
 	default:
 		r.Message = "still running: call delegate_status or delegate_result with this task_id, with a wait if you want to hold the call"
 	}
@@ -650,7 +675,7 @@ func (s *Server) startTool(ctx context.Context, req rpc, d Delegate, a toolArgs,
 		return
 	}
 	caps := s.clientCaps(req.Params)
-	if offersTasks(caps) {
+	if s.cfg.Questions == QuestionsClient && offersTasks(caps) {
 		rec, err := delegation.Load(path)
 		if err != nil {
 			s.reply(req.ID, toolError(err.Error()))

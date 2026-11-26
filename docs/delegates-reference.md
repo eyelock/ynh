@@ -232,13 +232,15 @@ that name is refused at run.
 
 `ask_parent` (`question`, optional `wait`) writes the question to the delegation record and waits, at most 45
 seconds (`YNH_PARENT_ASK_MAX_WAIT`, in seconds). The record puts the delegate's A2A task into
-`input-required`, with the question as its message. The parent sees it by its route:
+`input-required`, with the question as its message. The parent sees it by its route. The two client
+routes below apply only when the parent harness sets [`delegate_questions`](harnesses.md#delegate_questions-optional)
+to `client`; by default every MCP parent gets the headless route, whatever its client offers:
 
 | Route | What the parent sees | How it answers |
 |---|---|---|
 | MCP, with Tasks (Claude Code interactive) | the task moves to `input_required` with an `elicitation/create` in `inputRequests` | `tasks/update`; a declined elicitation is recorded as `(the parent declined to answer)` and the delegate's tool says `declined` |
 | MCP, elicitation but no Tasks (interactive Codex, Copilot CLI, OpenCode) | during a call that waits, a server-initiated `elicitation/create`, once per question | the elicitation, or `delegate_reply` (then the elicitation's answer is dropped). A client that refuses, declines or cancels has not answered: Cursor's CLI refuses without asking, Copilot CLI's `-p` declines at once |
-| MCP, headless (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) | state `input-required`, the question as `message` | `delegate_reply` on the same task: the model answers, not a person ([a headless parent's model answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)) |
+| MCP, `delegate_questions` `model` (the default), or a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) | state `input-required`, `message` is `<delegate> asks: <question>`, with `asked_at` and `waiting_seconds` | `delegate_reply` on the same task: the model answers, not a person ([a headless parent's model answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)) |
 | `a2a` CLI | `a2a task get` shows `input-required` with the question as the status message | `a2a send --task-id <id> "<answer>"` |
 
 `ask_parent` returns `answered`, `declined`, `unanswered`, `withdrawn` or `ended` (the delegation was

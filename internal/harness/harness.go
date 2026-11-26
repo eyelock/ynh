@@ -209,6 +209,9 @@ type Harness struct {
 	// OnLive is what `ynh run` does when a session of this harness is already
 	// live: "refuse", "allow" or empty to warn (on_live).
 	OnLive string
+	// DelegateQuestions is where a delegate's question goes: "model" (or empty,
+	// the default) or "client" (delegate_questions).
+	DelegateQuestions string
 	// Workspace is the manifest's requested workspace folders, as written.
 	Workspace []string
 	// Labels is the manifest's run labels, as written; validated when a run
@@ -802,6 +805,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	p.MCPIsolation = hj.MCPIsolation
 	p.MCPManualApproval = hj.MCPManualApproval
 	p.OnLive = hj.OnLive
+	p.DelegateQuestions = hj.DelegateQuestions
 	if len(hj.Workspace) > 0 {
 		p.Workspace = hj.Workspace
 	}
@@ -1093,6 +1097,7 @@ func LoadFile(path string) (*Harness, error) {
 	p.MCPIsolation = hj.MCPIsolation
 	p.MCPManualApproval = hj.MCPManualApproval
 	p.OnLive = hj.OnLive
+	p.DelegateQuestions = hj.DelegateQuestions
 	if len(hj.Workspace) > 0 {
 		p.Workspace = hj.Workspace
 	}

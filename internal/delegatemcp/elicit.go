@@ -33,6 +33,12 @@ func offersElicitation(caps map[string]any) bool {
 	return ok
 }
 
+// elicits reports whether a question goes to the client: only when the harness
+// asked for it (delegate_questions: client) and the client offers elicitation.
+func (s *Server) elicits(caps map[string]any) bool {
+	return s.cfg.Questions == QuestionsClient && offersElicitation(caps)
+}
+
 // handleOfPath is the delegation handle of the record at path.
 func handleOfPath(path string) string {
 	return strings.TrimSuffix(filepath.Base(path), ".json")
@@ -99,7 +105,7 @@ func (s *Server) waitAsking(ctx context.Context, handle, path string, wait time.
 	deadline := time.Now().Add(wait)
 	for {
 		r, err := s.waitFor(ctx, path, time.Until(deadline))
-		if err != nil || r.State != "input-required" || !offersElicitation(caps) {
+		if err != nil || r.State != "input-required" || !s.elicits(caps) {
 			return r, err
 		}
 		if !time.Now().Before(deadline) {

@@ -136,9 +136,13 @@ checks and the Codex sandbox cost are in the [reference](delegates-reference.md#
 ## Questions from a delegate
 
 A delegate session gets one extra tool, `ask_parent`, from an MCP server named `ynh-parent`. A question
-travels as an A2A task in state `input-required`, and the parent sees it by whichever route its client
-offers: as an elicitation or a task where the client takes one, otherwise in the tool result, where the
-parent's model answers it with a reply on the same task.
+travels as an A2A task in state `input-required`. By default it comes back in the parent's chat: the
+delegate's tool result says which delegate asked, what, and how long the question has waited, and the
+parent's model puts it to the person and answers with a reply on the same task. A harness that would
+rather have the client's own elicitation or Tasks UI sets
+[`delegate_questions`](harnesses.md#delegate_questions-optional) to `client`; a client that has none, or
+declines, falls back to the result. While a question is open, `ynh ps` lists it under the session it
+belongs to, with its age, and `delegate_list` shows `asked_at` and `waiting_seconds` on the delegation.
 
 > **Known issue.** In a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) the
 > model answers a delegate's question, not a person

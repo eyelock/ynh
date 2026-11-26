@@ -139,6 +139,10 @@
       "description": "What `ynh run` does when a session of this harness is already live (see `ynh ps`). `refuse` stops the second run, naming the live session's address, with a Fix line. `allow` starts it with no warning. Absent: warn, naming the address, and start it, as parallel sessions are normal for most harnesses. A Wheelhouse sets `refuse` on every seat. `ynh run --on-live=refuse|allow` overrides it for one run. A launch-time setting; it does not change an export.",
       "enum": ["refuse", "allow"]
     },
+    "delegate_questions": {
+      "description": "Where a question from one of this harness's delegates goes. `model` (the default): the question comes back in the delegate tool's result, naming the delegate that asked, and the harness's model puts it to the person in the parent's chat. `client`: ynh first puts it to the client's own elicitation UI, for a client that has one (Codex, Copilot CLI and OpenCode in their interactive UIs); a client with none, or one that declines, falls back to the result. A launch-time setting; it does not change an export.",
+      "enum": ["model", "client"]
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",

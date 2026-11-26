@@ -268,7 +268,7 @@ func TestHandleTools(t *testing.T) {
 func TestReplyAnswersAQuestion(t *testing.T) {
 	s := newSession(t, setup(t), "", nil)
 	r := s.call("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 5}).StructuredContent
-	if r.State != "input-required" || r.Message != "which branch?" {
+	if r.State != "input-required" || r.Message != "reviewer asks: which branch?" {
 		t.Fatalf("asking = %+v", r)
 	}
 	done := s.call("delegate_reply", map[string]any{"task_id": r.TaskID, "message": "main", "wait": 5}).StructuredContent
@@ -366,7 +366,7 @@ func TestRestartedParentAnswersForOldHandles(t *testing.T) {
 	if r := second.call("delegate_result", map[string]any{"task_id": done, "wait": 3}).StructuredContent; r.State != "completed" || !strings.Contains(r.Result, "first") {
 		t.Errorf("old handle's result = %+v", r)
 	}
-	if r := second.call("delegate_status", map[string]any{"task_id": asking.TaskID}).StructuredContent; r.State != "input-required" || r.Message != "which branch?" {
+	if r := second.call("delegate_status", map[string]any{"task_id": asking.TaskID}).StructuredContent; r.State != "input-required" || r.Message != "reviewer asks: which branch?" {
 		t.Errorf("old question = %+v", r)
 	}
 	var wrap struct {
@@ -410,7 +410,7 @@ func (s *session) taskGet(id string) map[string]any {
 }
 
 func TestTasksPath(t *testing.T) {
-	s := newSession(t, setup(t), "", nil)
+	s := newSession(t, setup(t), "", clientQuestions)
 	s.initialize(true)
 	r := s.rpc("tools/call", map[string]any{"name": "delegate_to_reviewer", "arguments": map[string]any{"task": "ask:which branch?"}})
 	var task map[string]any
@@ -461,7 +461,7 @@ func TestTasksPath(t *testing.T) {
 
 func TestTasksClientCapabilitiesPerRequest(t *testing.T) {
 	// A 2026-07-28 client has no initialize: it says what it offers on each request.
-	s := newSession(t, setup(t), "", nil)
+	s := newSession(t, setup(t), "", clientQuestions)
 	r := s.rpc("tools/call", map[string]any{
 		"name": "delegate_to_reviewer", "arguments": map[string]any{"task": "sleep 30"},
 		"_meta": map[string]any{clientCapsMeta: map[string]any{"extensions": map[string]any{TasksExtension: map[string]any{}}}},
@@ -534,8 +534,24 @@ func (s *session) callServing(tool string, args map[string]any, onElicit func(me
 	return toolRes{}, 0
 }
 
-func TestElicitationDuringAWaitAnswersTheQuestion(t *testing.T) {
+// clientQuestions is the harness's delegate_questions: client.
+func clientQuestions(c *Config) { c.Questions = QuestionsClient }
+
+func TestByDefaultAQuestionStaysWithTheModelEvenForAClientThatElicits(t *testing.T) {
 	s := newSession(t, setup(t), "", nil)
+	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 2}, func(string) (any, string) {
+		return map[string]any{"action": "accept", "content": map[string]any{"answer": "main"}}, ""
+	})
+	if asked != 0 || r.StructuredContent.State != "input-required" || r.StructuredContent.Message != "reviewer asks: which branch?" {
+		t.Errorf("asked %d, %+v", asked, r.StructuredContent)
+	}
+	if r.StructuredContent.AskedAt == "" {
+		t.Errorf("no asked_at on %+v", r.StructuredContent)
+	}
+}
+
+func TestElicitationDuringAWaitAnswersTheQuestion(t *testing.T) {
+	s := newSession(t, setup(t), "", clientQuestions)
 	var got string
 	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 10}, func(m string) (any, string) {
 		got = m
@@ -553,12 +569,12 @@ func TestADeclinedElicitationLeavesTheQuestionForTheModel(t *testing.T) {
 	// Copilot CLI's -p declines at once, with no one to ask. That is not the
 	// delegate's answer: the question stays open, and the parent's model
 	// answers it with delegate_reply.
-	s := newSession(t, setup(t), "", nil)
+	s := newSession(t, setup(t), "", clientQuestions)
 	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 10}, func(string) (any, string) {
 		return map[string]any{"action": "decline"}, ""
 	})
 	sc := r.StructuredContent
-	if asked != 1 || sc.State != "input-required" || !strings.HasPrefix(sc.Message, "which branch?") || !strings.Contains(sc.Message, "delegate_reply") {
+	if asked != 1 || sc.State != "input-required" || !strings.HasPrefix(sc.Message, "reviewer asks: which branch?") || !strings.Contains(sc.Message, "delegate_reply") {
 		t.Fatalf("declined: asked %d, %+v", asked, sc)
 	}
 	done := s.call("delegate_reply", map[string]any{"task_id": sc.TaskID, "message": "main", "wait": 5}).StructuredContent
@@ -571,11 +587,11 @@ func TestARefusedElicitationLeavesTheQuestionForTheModel(t *testing.T) {
 	// Cursor's CLI declines elicitation without asking: the request comes back
 	// as an error. The question is not lost: it is in the result, and the
 	// parent's model answers it with delegate_reply on the same task.
-	s := newSession(t, setup(t), "", nil)
+	s := newSession(t, setup(t), "", clientQuestions)
 	r, asked := s.callServing("delegate_to_reviewer", map[string]any{"task": "ask:which branch?", "wait": 10}, func(string) (any, string) {
 		return nil, "elicitation is not supported"
 	})
-	if asked != 1 || r.StructuredContent.State != "input-required" || !strings.HasPrefix(r.StructuredContent.Message, "which branch?") {
+	if asked != 1 || r.StructuredContent.State != "input-required" || !strings.HasPrefix(r.StructuredContent.Message, "reviewer asks: which branch?") {
 		t.Fatalf("refused: asked %d, %+v", asked, r.StructuredContent)
 	}
 	// Waiting again does not put the same question to the client twice.

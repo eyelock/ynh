@@ -75,15 +75,78 @@ func presenceHarnessMatches(recorded, parent string) bool {
 	return recorded != "" && (recorded == parent || strings.HasSuffix(parent, "/"+recorded))
 }
 
-// psResult is the JSON shape of `ynh ps --format json`.
-type psResult struct {
-	Sessions []presence.Entry `json:"sessions"`
+// psSession is one session of `ynh ps`: its presence entry and the questions
+// its delegates have asked it that nobody has answered.
+type psSession struct {
+	presence.Entry
+	OpenQuestions []psQuestion `json:"open_questions,omitempty"`
 }
 
-// PsResult is what the same call returns on the MCP server.
+// psQuestion is an open question from a delegate, with how long it has waited.
+type psQuestion struct {
+	Delegate       string `json:"delegate"`
+	Handle         string `json:"handle"`
+	Question       string `json:"question"`
+	AskedAt        string `json:"asked_at"`
+	WaitingSeconds int    `json:"waiting_seconds"`
+}
+
+// psResult is the JSON shape of `ynh ps --format json`.
+type psResult struct {
+	Sessions []psSession `json:"sessions"`
+}
+
+// listPresence is what `ynh ps` and the ynh_ps MCP tool return. A delegate's
+// open question is listed against the newest live non-delegate session of the
+// parent harness in the folder the delegation ran in: the session whose chat
+// it surfaces in.
 func listPresence(all bool) (psResult, error) {
 	es, err := presence.List(all)
-	return psResult{Sessions: es}, err
+	res := psResult{Sessions: make([]psSession, len(es))}
+	for i, e := range es {
+		res.Sessions[i].Entry = e
+	}
+	if err != nil {
+		return res, err
+	}
+	recs, lerr := delegation.ListAll()
+	if lerr != nil {
+		return res, nil // the questions are extra; the listing stands without them
+	}
+	now := time.Now()
+	for _, rec := range recs {
+		if rec.Status.Final() {
+			continue
+		}
+		var q *delegation.Question
+		for i := range rec.Questions {
+			if rec.Questions[i].Open() {
+				q = &rec.Questions[i]
+				break
+			}
+		}
+		if q == nil {
+			continue
+		}
+		owner := -1
+		for i, e := range es {
+			if e.Status == presence.StatusLive && e.Mode != presence.ModeDelegate && e.Cwd == rec.Folder && presenceHarnessMatches(e.Harness, rec.Parent) {
+				owner = i // oldest first, so the newest wins
+			}
+		}
+		if owner < 0 {
+			continue
+		}
+		name := rec.Delegate
+		if i := strings.LastIndex(name, "/"); i >= 0 {
+			name = name[i+1:]
+		}
+		res.Sessions[owner].OpenQuestions = append(res.Sessions[owner].OpenQuestions, psQuestion{
+			Delegate: name, Handle: rec.Handle, Question: q.Text,
+			AskedAt: q.AskedAt.UTC().Format(time.RFC3339), WaitingSeconds: int(now.Sub(q.AskedAt).Seconds()),
+		})
+	}
+	return res, nil
 }
 
 func cmdPs(args []string) error { return cmdPsTo(args, os.Stdout, os.Stderr) }
@@ -132,7 +195,16 @@ func cmdPsTo(args []string, stdout, stderr io.Writer) error {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n", e.Address, e.Harness, e.Vendor, e.Mode,
 			e.Status, e.State, e.WrapperPID, e.VendorPID, e.StartedAt.Local().Format(time.DateTime), e.Cwd)
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	for _, s := range res.Sessions {
+		for _, q := range s.OpenQuestions {
+			_, _ = fmt.Fprintf(stdout, "%s: %s asks (waiting %s): %s\n", s.Address, q.Delegate,
+				(time.Duration(q.WaitingSeconds) * time.Second).String(), q.Question)
+		}
+	}
+	return nil
 }
 
 // liveSessionsOf lists the live sessions recorded for a harness's run name, in
