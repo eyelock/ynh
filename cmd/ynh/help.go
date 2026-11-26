@@ -101,6 +101,11 @@ Install a harness from a Git URL, a registry id, or a local path.
 Flags:
   --path <subdir>    Install from a subdirectory of the repository
   --ref <ref>        Pin to a tag, branch or commit
+  --trust            Accept what the harness executes as part of the install; only
+                     at a full 40-character commit SHA, with every remote include
+                     that brings commands pinned to one too. Recorded as
+                     'install --trust'. Without it, the harness runs only after
+                     'ynh trust accept'
   --allow-shadow     Install even when the harness's name matches a command on PATH
                      (its launcher would replace that command; refused by default)
 
@@ -124,9 +129,14 @@ Examples:
   ynh uninstall local/david
   ynh uninstall local/david github.com/org/repo/planner`,
 
-	"update": `ynh update <name>
+	"update": `ynh update <name> [--trust]
 
-Refresh the cached Git repositories a harness resolves from.`,
+Refresh the cached Git repositories a harness resolves from.
+
+An update can move what the harness executes, which leaves an accepted harness
+refused until it is accepted again. --trust accepts it again in one step, only
+when the harness and every include that brings commands are pinned to a full
+commit SHA, and records the acceptance as 'update --trust'.`,
 
 	"run": `ynh run [<harness-id|path>] [flags] [prompt]
 
@@ -152,6 +162,10 @@ Flags:
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
+  --trust                  For a run from a folder only: accept the commands its
+                           remote includes bring, if each is pinned to a full
+                           commit SHA. An installed harness refuses it (accept
+                           it with 'ynh trust accept' or 'ynh install --trust')
   --session-name <name>    Claude: bind --resume to this name's session (a fresh
                            launch starts a new one). Other vendors: a label
   --resume                 Continue the previous session in this directory
@@ -373,6 +387,10 @@ Manage a harness's Git includes.
   ynh include remove <harness> <url>   Remove an include
   ynh include update <harness> <url>   Change an include's path, picks or ref
 
+add and update take --trust, which accepts the harness again after the change in
+one step, only when everything that runs is pinned to a full commit SHA, and
+records it as 'include --trust'.
+
 Run 'ynh include <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"focus": `ynh focus <ls|add|remove|update> [args]
@@ -565,6 +583,10 @@ Flags:
   --sandbox none|srt          Wrap the worker in srt with ynh's network and
                               write allowlist (claude, codex, cursor; opencode
                               on Linux only, refused on macOS); none by default
+  --trust                     For a run from a folder only (--harness <path>):
+                              accept the commands its remote includes bring, if
+                              each is pinned to a full commit SHA. Refused for
+                              an installed harness
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor, opencode). Only for runs inside

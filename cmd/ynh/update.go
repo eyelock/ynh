@@ -16,6 +16,40 @@ import (
 )
 
 func cmdUpdate(args []string) error {
+	args, trustFlag := takeTrustFlag(args)
+	if len(args) < 1 {
+		return fmt.Errorf("usage: ynh update <harness-name> [--trust]")
+	}
+	if trustFlag {
+		// --trust accepts the harness as it is after the update, so it refuses,
+		// before anything is fetched, one that is not pinned to full SHAs.
+		if gateRef(args[0]) == "" {
+			return fmt.Errorf("--trust is for an installed harness id, not a path")
+		}
+		p, err := harness.LoadQualified(args[0])
+		if err != nil {
+			return err
+		}
+		bad, err := pinProblems(p)
+		if err != nil {
+			return err
+		}
+		if len(bad) > 0 {
+			return refuseUnpinned(args[0], "--trust", bad)
+		}
+	}
+	if err := updateHarness(args, trustFlag); err != nil {
+		return err
+	}
+	if trustFlag {
+		return acceptAfterChange(args[0], viaUpdateTrust, os.Stdout)
+	}
+	return nil
+}
+
+// updateHarness refreshes the harness; quiet leaves out the "no longer
+// trusted" note, for --trust, which accepts it again straight after.
+func updateHarness(args []string, quiet bool) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: ynh update <harness-name>")
 	}
@@ -26,6 +60,9 @@ func cmdUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
+	// An update can move what the harness executes; if it was accepted and now
+	// differs, it is refused until accepted again, and the update says so.
+	before := trustStateOf(name)
 
 	if p.InstalledFrom != nil && p.InstalledFrom.ForkedFrom != nil {
 		return fmt.Errorf("harness %q is a fork — ynh update cannot pull upstream changes for a fork\n"+
@@ -204,5 +241,8 @@ func cmdUpdate(args []string) error {
 	}
 
 	fmt.Printf("Checked %d source(s) for harness %q, %d updated.\n", checked, name, updated)
+	if !quiet {
+		noteUntrustedAfterChange(name, before, os.Stdout)
+	}
 	return nil
 }

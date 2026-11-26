@@ -259,6 +259,7 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 			Digest:     executablesDigest(r.Set),
 			Commands:   r.Set.count(),
 			Scheme:     trustScheme,
+			Via:        viaAccept,
 			AcceptedAt: now,
 		}
 		keys = append(keys, r.Key)
