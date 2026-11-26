@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -32,6 +33,11 @@ func imageTrustRecord(id string, p *harness.Harness) (*trustRecord, error) {
 		return nil, untrustedf("refusing to build an image of %s: the trust record could not be read: %v", id, err)
 	}
 	if err := installedGate(id, p, store); err != nil {
+		// The gate's words, about a build: its text is "refusing to run <id>".
+		msg := strings.Replace(err.Error(), "refusing to run "+id, "refusing to build an image of "+id, 1)
+		if isUntrusted(err) {
+			return nil, &untrustedError{msg: msg}
+		}
 		return nil, err
 	}
 	st := trustStatusFor(id, p, store, nil)
