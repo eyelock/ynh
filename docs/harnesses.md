@@ -578,7 +578,7 @@ After a harness is installed, use `ynh include` to add, remove, or update its Gi
 ### Add an include
 
 ```bash
-ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace]
+ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace] [--trust]
 ```
 
 The source is a Git URL, or a path to a directory on disk: absolute, starting `./`, `../` or `~/`, or an existing directory. A path is recorded as a `local` include, so `--as`, `--pick` and the rest apply to it and nothing is cloned. A path inside the harness is stored relative to it; one outside is stored absolute, and the source allow-list governs it. `--ref` is Git-only. `--git` keeps a path a Git source (a repository on disk, such as `.` for the harness's own repo). `remove` and `update` find a local include by the path as typed.
@@ -593,6 +593,8 @@ When targeting an installed harness by name, the new include is pre-fetched imme
 
 `--replace` overwrites an existing URL+path combination instead of erroring.
 
+`--trust` accepts the installed harness again in the same step, when the change moved what it executes. It works only at full 40-character commit SHAs (the harness's own ref and every remote include that brings commands) and is recorded as `include --trust`. Without it, the command says the harness is no longer trusted and `ynh run` refuses it until `ynh trust accept`. `--trust` needs an installed harness id, not a path.
+
 ### Remove an include
 
 ```bash
@@ -604,10 +606,10 @@ If the same URL appears at multiple paths (monorepo), `--path` selects which ent
 ### Update an include
 
 ```bash
-ynh include update <harness> <url> [--from-path <subdir>] [--path <newpath>] [--pick <items>] [--ref <ref>]
+ynh include update <harness> <url> [--from-path <subdir>] [--path <newpath>] [--pick <items>] [--ref <ref>] [--trust]
 ```
 
-Only the flags you supply are changed; others are left unchanged. `--from-path` disambiguates which entry to target when the URL matches multiple includes. `--path` sets a new path value on the selected entry.
+Only the flags you supply are changed; others are left unchanged. `--from-path` disambiguates which entry to target when the URL matches multiple includes. `--path` sets a new path value on the selected entry. `--trust` works as it does for `include add`.
 
 ### Pick validation
 

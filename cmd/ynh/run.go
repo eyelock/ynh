@@ -125,6 +125,16 @@ func cmdRun(args []string) (runErr error) {
 	// The trust gate: an installed harness whose commands are not accepted is
 	// refused before anything launches, and a folder run says it is not
 	// checked (ynh #950).
+	// --trust first accepts a folder run's remote includes, if every one is
+	// pinned to a full SHA; an installed harness never takes it (ynh #951).
+	if ra.Trust {
+		if harnessID != "" {
+			return fmt.Errorf("--trust is for a run from a folder; an installed harness is accepted with 'ynh trust accept %s', or at install with 'ynh install --trust'", harnessID)
+		}
+		if err := acceptFolderRunOf(loaded, os.Stderr); err != nil {
+			return err
+		}
+	}
 	if err := trustGate(harnessID, loaded, os.Stderr); err != nil {
 		return err
 	}
@@ -248,6 +258,16 @@ func cmdRun(args []string) (runErr error) {
 		// A focus of an included harness: its prompt is the run's prompt, and
 		// its profile has been applied to that harness during resolution.
 		prompt = nsFocus.Prompt
+	}
+
+	// Pre-approval follows trust (ynh #952): MCP tools, and Copilot's
+	// one-shot approval of every tool, are given only to a harness the gate
+	// vouched for. Copilot's one-shot has no narrower grant, so an untrusted
+	// harness is refused before anything launches.
+	trusted := gateTrusted(harnessID, loaded)
+	oneShot := prompt != "" && !ra.Interactive
+	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
+		return copilotOneShotRefusal(harnessID, loaded)
 	}
 
 	// Print per-source status
@@ -672,9 +692,18 @@ func cmdRun(args []string) (runErr error) {
 
 		// One-shot runs have no one to approve an MCP tool call: approve the
 		// tools of the harness's own servers on the vendors that refuse them,
-		// unless the harness opts out (mcp_manual_approval).
-		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
-			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		// unless the harness opts out (mcp_manual_approval). Only for a
+		// trusted harness: a folder run, or one not accepted, gets none and
+		// the vendor asks as it always did.
+		if a, ok := adapter.(vendor.MCPToolApprover); ok && oneShot && !p.MCPManualApproval {
+			if !trusted {
+				// Say so only when there is something to approve.
+				if len(vendor.CodexMCP(runDir).Servers) > 0 {
+					fmt.Fprintf(os.Stderr, "ynh: MCP tools are not pre-approved for %s: a harness is pre-approved only when installed and accepted (ynh trust accept)\n", p.Name)
+				}
+			} else {
+				vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+			}
 		}
 
 		// Claude Code ignores a project allow rule while the workspace is
@@ -1215,6 +1244,7 @@ type runArgs struct {
 	OnLive       string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
+	Trust        bool     // --trust: accept the folder run's full-SHA-pinned remote includes; not forwarded
 	Relay        bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
 }
 
@@ -1307,6 +1337,8 @@ func parseRunArgs(args []string) runArgs {
 			ra.NoWorkspace = true
 		case flagArgs[i] == "--telemetry-relay":
 			ra.Relay = true
+		case flagArgs[i] == "--trust":
+			ra.Trust = true
 		case flagArgs[i] == "--label" && i+1 < len(flagArgs):
 			ra.Labels = append(ra.Labels, flagArgs[i+1])
 			i++

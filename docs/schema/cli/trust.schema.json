@@ -241,6 +241,10 @@
         "type": "string",
         "description": "RFC3339 timestamp of acceptance."
       },
+      "accepted_via": {
+        "type": "string",
+        "description": "How the acceptance was recorded: accept (ynh trust accept), install --trust, run --trust, update --trust, include --trust or image. Open set: tolerate unknown members. Absent when no record exists or the record predates the field."
+      },
       "undeclared_env": {
         "type": "array",
         "items": {

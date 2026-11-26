@@ -562,3 +562,26 @@ func TestTrustGate_LocalIncludeCommandsAreNotTheRemoteIncludesRecord(t *testing.
 		t.Fatalf("a remote include with no commands, and a local hook: %v", gerr)
 	}
 }
+
+// A harness that only requests workspace folders is refused until accepted,
+// and the refusal lists the folders (ynh #978).
+func TestTrustGate_WorkspaceOnlyRefusalListsFolders(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	id := installListTestHarness(t, home, "folders", `{"name":"folders","version":"0.1.0","default_vendor":"claude",`+
+		`"workspace":["../sibling","~/notes"]}`)
+
+	err := trustGate(id, loadInstalled(t, id), io.Discard)
+	if !isUntrusted(err) {
+		t.Fatalf("err = %v, want an untrusted refusal", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"what it asks for", "It requests workspace folders:", "../sibling", "~/notes", "ynh trust accept " + id} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal lacks %q:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "what it executes") || strings.Contains(msg, "It executes:") {
+		t.Errorf("refusal claims it executes something:\n%s", msg)
+	}
+}

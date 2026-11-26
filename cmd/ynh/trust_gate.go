@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/workspace"
 )
 
 // errCodeUntrusted is the structured error code of a trust-gate refusal
@@ -72,6 +74,35 @@ func trustGate(id string, p *harness.Harness, stderr io.Writer) error {
 	return folderGate(p, store, stderr)
 }
 
+// gateTrusted reports whether the harness passed the gate as trusted: an
+// installed harness whose current commands match an accepted record (or that
+// has none). A folder run is never trusted, since the gate does not check its
+// own commands (design decisions 5, 5a, 5c, ynh #952). Every pre-approval
+// (MCP tools, Copilot's --allow-all-tools, --auto-approve) asks this, so none
+// can be given to a harness the gate did not vouch for.
+func gateTrusted(id string, p *harness.Harness) bool {
+	if id == "" || p == nil {
+		return false
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return false
+	}
+	return installedGate(id, p, store) == nil
+}
+
+// copilotOneShotRefusal refuses a one-shot Copilot run of a harness that
+// is not trusted: Copilot's one-shot mode approves every tool, so there is no
+// narrower grant to give (decision 5b).
+func copilotOneShotRefusal(id string, p *harness.Harness) error {
+	if id == "" {
+		return untrustedf("refusing to run %s one-shot on copilot: a run from a folder is not trust-checked, and copilot's one-shot mode approves every tool.\n"+
+			"Install it and accept what it executes (ynh install <folder>, then ynh trust accept local/%s), run it interactively, or use another vendor.", p.Name, p.Name)
+	}
+	return untrustedf("refusing to run %s one-shot on copilot: copilot's one-shot mode approves every tool, and you have not accepted what %s executes.\n"+
+		"Accept it: ynh trust accept %s", id, id, id)
+}
+
 func gateName(id string, p *harness.Harness) string {
 	if id != "" {
 		return id
@@ -100,10 +131,15 @@ func installedGate(id string, p *harness.Harness, store trustStore) error {
 		if st.LegacyDigest {
 			b.WriteString(legacyNote(st.acceptedScheme) + "\n")
 		}
+	} else if len(st.Executables)+len(st.Hooks)+len(st.MCPServers) == 0 && len(p.Workspace) > 0 {
+		// Only workspace folders: nothing executes, but granting folders is
+		// a permission the operator has not given (ynh #978).
+		fmt.Fprintf(&b, "refusing to run %s: you have not accepted what it asks for.\n", id)
 	} else {
 		fmt.Fprintf(&b, "refusing to run %s: you have not accepted what it executes.\n", id)
 	}
 	b.WriteString(listExecutables(st.Executables, st.Hooks, st.MCPServers))
+	b.WriteString(listWorkspace(p))
 	fmt.Fprintf(&b, "Review them: ynh trust show %s\nThen accept:  ynh trust accept %s", id, id)
 	return &untrustedError{msg: b.String()}
 }
@@ -133,6 +169,27 @@ func listExecutables(sensors []executable, hooks []hookExec, servers []mcpExec) 
 		lines = append(lines[:maxListed], fmt.Sprintf("  ... and %d more", more))
 	}
 	return "It executes:\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// listWorkspace names the workspace folders p requests, as written and as
+// they resolve, for a refusal to show beside what the harness executes. They
+// are covered by the digest, so accepting grants them.
+func listWorkspace(p *harness.Harness) string {
+	if len(p.Workspace) == 0 {
+		return ""
+	}
+	home, _ := os.UserHomeDir()
+	var b strings.Builder
+	b.WriteString("It requests workspace folders:\n")
+	for _, e := range p.Workspace {
+		resolved := workspace.Resolve(e, p.Dir, home)
+		if resolved == e {
+			fmt.Fprintf(&b, "  %s\n", e)
+		} else {
+			fmt.Fprintf(&b, "  %s (resolves to %s)\n", e, resolved)
+		}
+	}
+	return b.String()
 }
 
 // folderGate says a folder run is not trust-checked, then refuses it when a
@@ -259,6 +316,7 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 			Digest:     executablesDigest(r.Set),
 			Commands:   r.Set.count(),
 			Scheme:     trustScheme,
+			Via:        viaAccept,
 			AcceptedAt: now,
 		}
 		keys = append(keys, r.Key)

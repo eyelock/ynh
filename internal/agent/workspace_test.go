@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -170,6 +172,89 @@ func TestRunLoop_HookTrustReachesWorker(t *testing.T) {
 		}
 		if len(mb.startOpts) != 1 || mb.startOpts[0].TrustedHooks {
 			t.Fatalf("no hook trusted hooks: %+v", mb.startOpts)
+		}
+	})
+}
+
+// Pre-approval follows trust (ynh #952): the worker is told the harness is
+// trusted only when the Trusted hook says so, and --auto-approve is refused
+// for a harness that is not.
+func TestRunLoop_PreApprovalFollowsTrust(t *testing.T) {
+	setup := func(t *testing.T) (string, string) {
+		t.Setenv("YNH_HOME", t.TempDir())
+		dir := filepath.Join(t.TempDir(), "seat")
+		writePathHarness(t, dir)
+		recordCheck(t, gate.StatusPass)
+		return dir, t.TempDir()
+	}
+	gated := func(opts *RunOptions, trusted bool) {
+		opts.TrustGate = func(*harness.Harness, string) error { return nil }
+		opts.Trusted = func(*harness.Harness, string) bool { return trusted }
+	}
+
+	for _, trusted := range []bool{true, false} {
+		t.Run(fmt.Sprintf("worker sees trusted=%v", trusted), func(t *testing.T) {
+			dir, session := setup(t)
+			mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+			opts := resumeOpts(mb, session)
+			opts.HarnessName = dir
+			gated(&opts, trusted)
+			if _, err := RunLoop(opts); err != nil {
+				t.Fatal(err)
+			}
+			if len(mb.startOpts) != 1 || mb.startOpts[0].TrustedHarness != trusted {
+				t.Fatalf("worker start options: %+v, want TrustedHarness %v", mb.startOpts, trusted)
+			}
+		})
+	}
+
+	t.Run("no Trusted hook trusts nothing", func(t *testing.T) {
+		dir, session := setup(t)
+		mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+		opts := resumeOpts(mb, session)
+		opts.HarnessName = dir
+		opts.TrustGate = func(*harness.Harness, string) error { return nil }
+		if _, err := RunLoop(opts); err != nil {
+			t.Fatal(err)
+		}
+		if mb.startOpts[0].TrustedHarness {
+			t.Fatal("a run with no Trusted hook was trusted")
+		}
+	})
+
+	for _, level := range []string{AutoApproveEdits, AutoApproveAll} {
+		t.Run("auto-approve "+level+" refused for an untrusted harness", func(t *testing.T) {
+			dir, session := setup(t)
+			mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+			opts := resumeOpts(mb, session)
+			opts.Backend = "claude"
+			opts.HarnessName = dir
+			opts.AutoApprove = level
+			gated(&opts, false)
+			_, err := RunLoop(opts)
+			var ee *ExitError
+			if !errors.As(err, &ee) || ee.Code != ExitRefused || ee.ErrorCode != untrustedCode {
+				t.Fatalf("err = %v, want an untrusted refusal", err)
+			}
+			if len(mb.startOpts) != 0 {
+				t.Error("a worker started")
+			}
+		})
+	}
+
+	t.Run("auto-approve accepted for a trusted harness", func(t *testing.T) {
+		dir, session := setup(t)
+		mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+		opts := resumeOpts(mb, session)
+		opts.Backend = "claude"
+		opts.HarnessName = dir
+		opts.AutoApprove = AutoApproveEdits
+		gated(&opts, true)
+		if _, err := RunLoop(opts); err != nil {
+			t.Fatal(err)
+		}
+		if len(mb.startOpts) != 1 || mb.startOpts[0].AutoApprove != AutoApproveEdits {
+			t.Fatalf("worker start options: %+v", mb.startOpts)
 		}
 	})
 }

@@ -1028,13 +1028,14 @@ EOF
 
 ### L1: Copilot, session layout, untrusted folder
 
-In a scratch git repository that is not in Copilot's `trustedFolders`, launch with a prompt that makes the agent run `ls`, then read the log. `--allow-tool 'shell(ls)'` lets the one-shot session run that command and nothing else:
+In a scratch git repository that is not in Copilot's `trustedFolders`, install and accept the probe harness, then launch it with a prompt that makes the agent run `ls`, and read the log. Copilot's one-shot mode approves every tool, so ynh refuses a one-shot run of a harness that is not installed and accepted (`ynh run /tmp/ynh-live/probe-harness -v copilot -- "..."` exits 1 as untrusted); accepting it first keeps this step testing what it is for, the hooks in an untrusted Copilot folder. `--allow-tool 'shell(ls)'` lets the one-shot session run that command and nothing else:
 
 *Your output will differ: it shows what the model did.*
 
 ```bash
 cd /tmp/ynh-live/project && git init -q
-ynh run /tmp/ynh-live/probe-harness -v copilot --allow-tool 'shell(ls)' -- "Run the shell command: ls . Then reply with the single word done."
+ynh install /tmp/ynh-live/probe-harness && ynh trust accept local/probe
+ynh run local/probe -v copilot --allow-tool 'shell(ls)' -- "Run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 
@@ -1042,7 +1043,7 @@ Confirm a line for each of the six events, the `pwd` being the project root (ynh
 
 ### L2: Copilot, matcher and timeout
 
-Change the matchers to `Edit` and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured).
+Change the matchers to `Edit`, reinstall (`ynh install /tmp/ynh-live/probe-harness`), accept again (`ynh trust accept local/probe`) and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured). This second change alters the hook commands too, so reinstall and accept again (`ynh install /tmp/ynh-live/probe-harness`, `ynh trust accept local/probe`) before the rerun; otherwise ynh refuses it as changed since accepted.
 
 ### L3: Copilot, export layouts
 
@@ -1070,14 +1071,15 @@ Confirm `SessionEnd` fires after `Stop`. `ynh run` sets `CLAUDE_CODE_SESSIONEND_
 
 ### L5: Cursor, print mode
 
-Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. `--trust` trusts this workspace for the one run:
+Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. Cursor's own workspace trust has to be granted, and `ynh run --trust` is not it: that flag is ynh's, and accepts a folder run's remote includes. Cursor's `--trust` is passed only for an installed harness that passed the gate, so install and accept the probe harness first (`ynh install /tmp/ynh-live/probe-harness --trust`, then run it by id):
 
 *Your output will differ: it shows what the model did.*
 
 ```bash
 cd /tmp/ynh-live/project
 mkdir -p .cursor && echo '{"permissions":{"allow":["Shell(ls)"],"deny":[]}}' > .cursor/cli.json
-ynh run /tmp/ynh-live/probe-harness -v cursor --trust -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
+ynh install /tmp/ynh-live/probe-harness --trust
+ynh run local/probe -v cursor -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 

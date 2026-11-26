@@ -65,6 +65,10 @@ type trustRecord struct {
 	// the original scheme, which covered sensor commands only; a record in it
 	// is reported as changed with an explanation, never silently accepted.
 	Scheme int `json:"scheme,omitempty"`
+	// Via is how the acceptance was recorded: "accept", "install --trust",
+	// "run --trust", "update --trust", "include --trust" or "image". Absent on a record written before it existed.
+	// It does not change the digest.
+	Via string `json:"via,omitempty"`
 	// Source, Ref and SHA are copied from provenance at acceptance time.
 	// Copied rather than referenced: the point is what the operator was
 	// looking at when they accepted, which an update would otherwise rewrite.
@@ -913,6 +917,9 @@ type trustStatus struct {
 	// state is "unavailable" and Digest is empty: a digest of a partial set
 	// would read as the whole.
 	Problems []string `json:"problems,omitempty"`
+	// AcceptedVia is how the acceptance was recorded. Present only when a
+	// record exists and says.
+	AcceptedVia string `json:"accepted_via,omitempty"`
 	// LegacyDigest is true when the accepted digest predates hooks and MCP
 	// servers being covered, which is why the state is "changed".
 	LegacyDigest bool `json:"legacy_digest,omitempty"`
@@ -975,7 +982,7 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 		return st
 	}
 	if rec, ok := store.Harnesses[id]; ok {
-		st.AcceptedDigest, st.AcceptedAt = rec.Digest, rec.AcceptedAt
+		st.AcceptedDigest, st.AcceptedAt, st.AcceptedVia = rec.Digest, rec.AcceptedAt, rec.Via
 		st.LegacyDigest = rec.Scheme < trustScheme
 		st.acceptedScheme = rec.Scheme
 		if rec.Digest == st.Digest {
@@ -1146,6 +1153,7 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		Digest:     executablesDigest(set),
 		Commands:   set.count(),
 		Scheme:     trustScheme,
+		Via:        viaAccept,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if pr := p.InstalledFrom; pr != nil {
@@ -1173,7 +1181,7 @@ func printTrustList(w io.Writer, statuses []trustStatus) error {
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "HARNESS\tSTATE\tCOMMANDS\tSOURCE"); err != nil {
+	if _, err := fmt.Fprintln(tw, "HARNESS\tSTATE\tVIA\tCOMMANDS\tSOURCE"); err != nil {
 		return err
 	}
 	changed, unreviewed := 0, 0
@@ -1188,7 +1196,11 @@ func printTrustList(w io.Writer, statuses []trustStatus) error {
 		if src == "" {
 			src = "(local)"
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", s.Harness, s.State, len(s.Executables)+len(s.Hooks)+len(s.MCPServers), src); err != nil {
+		via := s.AcceptedVia
+		if via == "" {
+			via = "-"
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n", s.Harness, s.State, via, len(s.Executables)+len(s.Hooks)+len(s.MCPServers), src); err != nil {
 			return err
 		}
 	}
@@ -1224,6 +1236,9 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	_, _ = fmt.Fprintf(w, "  digest:   %s\n", s.Digest)
 	if s.State == trustChanged {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
+	}
+	if s.AcceptedVia != "" {
+		_, _ = fmt.Fprintf(w, "  via:      %s\n", s.AcceptedVia)
 	}
 
 	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {

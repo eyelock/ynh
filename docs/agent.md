@@ -165,6 +165,9 @@ leaves alone a server whose `default_tools_approval_mode` your `config.toml`
 already sets, and `mcp_manual_approval` in the manifest (or a profile) turns it
 off, after which an MCP call is refused with `MCP tool call requires approval,
 but approval policy is never` unless you pass your own approval to Codex.
+It does so only for a harness that passed the trust gate as trusted: an
+installed harness whose commands you accepted (`ynh trust accept`). A harness
+run from a folder, or one you have not accepted, gets no approval.
 
 ### Delegates
 
@@ -338,6 +341,12 @@ writes.
 |---|---|---|---|---|---|
 | `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error | error |
 | `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` | `--auto` |
+
+`--auto-approve` is refused, exit 1 with error code `untrusted`, for a harness
+that did not pass the trust gate as trusted: a harness run from a folder, or an
+installed one you have not accepted. Install it and run `ynh trust accept <id>`
+first. A run with no `--harness` runs no harness commands, so there is nothing
+to vouch for and `--auto-approve` is the caller's own grant for it.
 
 It exists for runs inside containment you own: a container, an egress policy,
 a diff gate, human review of what lands. Outside that, it hands an unattended
