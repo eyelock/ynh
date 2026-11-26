@@ -58,6 +58,10 @@ type ResolveResult struct {
 	// with "hooks": true (see includeResolver.hooksConsent). Without it the
 	// hooks are declared but not carried.
 	HooksActive bool
+	// HooksDeclined is whether the root's own side said "hooks": false, on
+	// this include or on one it was reached through: the hooks are off by
+	// choice. It is false when they are off only because nothing consented.
+	HooksDeclined bool
 	// Notes are remarks about the include graph that concern this include:
 	// an include cycle its harness closes (see includeResolver.resolve). A
 	// cycle is not an error; ynh info and ynd preview show the note.
@@ -237,7 +241,7 @@ type sourceVersion struct {
 // include consents to its hooks.
 type hookLink struct {
 	parent string
-	hooks  bool
+	hooks  *bool
 }
 
 // seenHarness is one harness met under a namespace.
@@ -514,13 +518,34 @@ func (r *includeResolver) hooksConsent(id string, memo map[string]bool) bool {
 	}
 	consent := len(links) > 0
 	for _, l := range links {
-		if !l.hooks || !r.hooksConsent(l.parent, memo) {
+		if l.hooks == nil || !*l.hooks || !r.hooksConsent(l.parent, memo) {
 			consent = false
 			break
 		}
 	}
 	memo[id] = consent
 	return consent
+}
+
+// hooksDeclined reports whether the routes that decide the hooks of the
+// harness with identity id (the same ones hooksConsent weighs) include an
+// explicit "hooks": false, at the include itself or at a link above it.
+func (r *includeResolver) hooksDeclined(id string, seen map[string]bool) bool {
+	if id == r.rootID || seen[id] {
+		return false
+	}
+	seen[id] = true
+	links := r.hookLinks[id]
+	direct := slices.DeleteFunc(slices.Clone(links), func(l hookLink) bool { return l.parent != r.rootID })
+	if len(direct) > 0 {
+		links = direct
+	}
+	for _, l := range links {
+		if l.hooks != nil && !*l.hooks || r.hooksDeclined(l.parent, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyHooksConsent sets HooksActive on each included harness (see
@@ -530,6 +555,7 @@ func (r *includeResolver) applyHooksConsent(results []ResolveResult) {
 	for i := range results {
 		if results[i].id != "" {
 			results[i].HooksActive = r.hooksConsent(results[i].id, memo)
+			results[i].HooksDeclined = !results[i].HooksActive && r.hooksDeclined(results[i].id, map[string]bool{})
 		}
 	}
 }

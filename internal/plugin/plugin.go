@@ -794,8 +794,10 @@ type ProvenanceMeta struct {
 // `ref` is Git-only. `as` names the namespace an included harness's focuses
 // and profiles are selected under ("alias:name"); it defaults to the included
 // harness's own name. `hooks` consents to the included harness's hooks
-// running in the session; it is false unless set, because a hook is command
-// execution the root author has not written.
+// running in the session. It is tri-state: absent, true or false. Hooks run
+// only when it is true, because a hook is command execution the root author
+// has not written; an explicit false is the author's choice to keep them off
+// and silences the inactive-hooks warning, which fires only when it is absent.
 type IncludeMeta struct {
 	Git   string   `json:"git,omitempty"`
 	Local string   `json:"local,omitempty"`
@@ -806,7 +808,7 @@ type IncludeMeta struct {
 	// means true: sensors travel with the include.
 	Sensors *bool  `json:"sensors,omitempty"`
 	As      string `json:"as,omitempty"`
-	Hooks   bool   `json:"hooks,omitempty"`
+	Hooks   *bool  `json:"hooks,omitempty"`
 	// Instructions, when false, leaves out the include's instructions file
 	// (instructions.md / AGENTS.md) when instructions are composed. Absent
 	// means true: the include contributes a section.

@@ -247,7 +247,7 @@ func TestTrustGate_LocalIncludeIsNotRemote(t *testing.T) {
 	root := t.TempDir()
 	writeIncludedHarness(t, root, "up", hookFields("./hooks/up.sh"))
 	writeScript(t, filepath.Join(root, "up"), "hooks/up.sh", "#!/bin/sh\nexit 0\n")
-	p := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: true}}}
+	p := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: hooksOn(true)}}}
 	if err := trustGate("", p, io.Discard); err != nil {
 		t.Fatalf("a local include is the folder's own: %v", err)
 	}

@@ -263,7 +263,7 @@ Expected output:
 
 ```
 warning: included harness github-lite declares hooks (on_session_start) that are not active
-  Fix: add "hooks": true to its include to run them
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Error: MCP servers of included harness github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
 ```
 
@@ -278,7 +278,7 @@ Expected output:
 
 ```
 warning: included harness github-lite declares hooks (on_session_start) that are not active
-  Fix: add "hooks": true to its include to run them
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Preview written to out/claude
 
 MCP servers from included harnesses:
@@ -450,7 +450,7 @@ Expected output:
 
 ```
 warning: included harness github-lite declares hooks (on_session_start) that are not active
-  Fix: add "hooks": true to its include to run them
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Error: MCP server "tracker" is defined differently by github-lite and other; declare it in the root harness to choose one
 ```
 
@@ -497,7 +497,7 @@ Expected output:
 
 ```
 warning: included harness github-lite declares hooks (on_session_start) that are not active
-  Fix: add "hooks": true to its include to run them
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Preview written to out/cycle
 
 MCP servers from included harnesses:
