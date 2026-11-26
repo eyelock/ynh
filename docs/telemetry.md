@@ -512,9 +512,9 @@ reaches the spool ([ynr #86](https://github.com/eyelock/ynr/pull/86)). It drops
 `process.executable.path`, and any attribute whose value is the user's home
 folder or a path under it, on every signal and from every vendor. Paths and host
 names are dropped rather than hashed
-([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs a `ynr` newer than v0.3.2, the
-latest release when this was written; an older relay writes those attributes
-as Codex sends them. The relay scrubs attributes only, not log bodies or span
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs ynr v0.6.0 or later, the release
+ynh pins (the `YNR_VERSION` line of the Dockerfile); an older relay writes those
+attributes as Codex sends them. The relay scrubs attributes only, not log bodies or span
 names; Codex's log bodies are off anyway, and its span names carry no paths.
 
 **What Codex passes on.** The commands Codex runs inherit `TRACEPARENT` and
@@ -578,10 +578,10 @@ on a harness in `testdata/conformance/`. The four scenarios end converged, at th
 turn cap, at the token budget, and refused before any worker starts. Each plants
 a prompt and a credential, and the check fails if either reaches a record.
 
-CI's Conformance job downloads a pinned ynr release, with the SHA-256 of its
-`ynr` and `ynr-stub-vendor` archives pinned beside the version. The release's
-`checksums.txt` must list the same digests, and the downloads must match them,
-before anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
+CI's Conformance job downloads the ynr release the Dockerfile pins (`ARG
+YNR_VERSION`, the one place ynh pins ynr). The downloaded `ynr` and
+`ynr-stub-vendor` archives must match the release's `checksums.txt` before
+anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
 on your `PATH`:
 
 ```bash
