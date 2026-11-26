@@ -65,6 +65,10 @@ type trustRecord struct {
 	// the original scheme, which covered sensor commands only; a record in it
 	// is reported as changed with an explanation, never silently accepted.
 	Scheme int `json:"scheme,omitempty"`
+	// Via is how the acceptance was recorded: "accept", "install --trust",
+	// "run --trust", "update --trust", "include --trust" or "image". Absent on a record written before it existed.
+	// It does not change the digest.
+	Via string `json:"via,omitempty"`
 	// Source, Ref and SHA are copied from provenance at acceptance time.
 	// Copied rather than referenced: the point is what the operator was
 	// looking at when they accepted, which an update would otherwise rewrite.

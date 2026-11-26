@@ -32,6 +32,10 @@ type imageTemplateData struct {
 	// orchestrator reads both with `docker inspect`, without running anything.
 	HarnessVersion string
 	HarnessSHA     string
+	// TrustDigest is the trust digest the image carries (also in its
+	// trust.json), "" when the image bakes no trust record. An orchestrator
+	// reads it with `docker inspect`, as it does the SHA.
+	TrustDigest string
 	// Entrypoint is "run" (interactive vendor session) or "agent" (the
 	// autonomous loop). A factory image that can only start an interactive
 	// session cannot do batch work.
@@ -62,8 +66,9 @@ COPY --chown=ynh:ynh vendors/opencode/ /home/ynh/.ynh/run/local--{{.Name}}/openc
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
 
-# Schema version of the layout above, so ynh does not try to migrate it, and
-# the include cache (cache/), so included sensors are read from the build
+# Schema version of the layout above, so ynh does not try to migrate it, the
+# include cache (cache/), so included sensors are read from the build, and the
+# accepted trust record (trust.json), which the run's trust gate checks
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
@@ -80,6 +85,9 @@ LABEL dev.ynh.harness="{{.Name}}" \
       dev.ynh.harness.default-vendor="{{.DefaultVendor}}" \
       dev.ynh.harness.version="{{.HarnessVersion}}" \
       dev.ynh.harness.sha="{{.HarnessSHA}}" \
+{{- if .TrustDigest}}
+      dev.ynh.harness.trust-digest="{{.TrustDigest}}" \
+{{- end}}
       dev.ynh.entrypoint="{{.Entrypoint}}" \
       dev.ynh.assembled-by="{{.YnhVersion}}"
 `))
@@ -348,6 +356,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	var p *harness.Harness
 	var harnessSrcDir string
 
+	var trustID string // install id of an installed harness, "" for --from
 	if ia.from != "" {
 		// Build from source (Git or local)
 		resolved, err := resolveInstallSource(ia.from, ia.path, cfg)
@@ -403,6 +412,18 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		harnessSrcDir = p.Dir
+		trustID = ia.name
+	}
+
+	// An installed harness must be one the operator accepted, as at run time
+	// (design decision 9). The check comes before anything is copied or built.
+	var bakedTrust *trustRecord
+	if trustID != "" {
+		rec, err := imageTrustRecord(trustID, p)
+		if err != nil {
+			return err
+		}
+		bakedTrust = rec
 	}
 
 	// Create temp build context
@@ -483,6 +504,16 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// Bake the accepted trust record, so the gate the image's entrypoint goes
+	// through finds what the operator accepted at build time.
+	trustDigest := ""
+	if bakedTrust != nil {
+		if err := writeImageTrust(homeDir, p.Name, *bakedTrust); err != nil {
+			return err
+		}
+		trustDigest = bakedTrust.Digest
+	}
+
 	// Determine default vendor
 	defaultVendor := p.DefaultVendor
 	if defaultVendor == "" {
@@ -498,6 +529,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		HarnessVersion: p.Version,
 		HarnessSHA:     harnessSHA(p, ia),
 		Entrypoint:     ia.entrypoint,
+		TrustDigest:    trustDigest,
 	}
 
 	dockerfile, err := generateDockerfile(data)
