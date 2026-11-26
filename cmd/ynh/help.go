@@ -612,7 +612,16 @@ Flags:
 
 	"image": `ynh image <name> [flags]
 
-Build a Docker image with a harness baked in.`,
+Build a Docker image with a harness baked in.
+
+Flags:
+  --from <source>   Build from a Git URL or local path instead of an installed harness
+  --ref <ref>       The commit, tag or branch of a remote --from source
+  --trust           With --from, accept what the harness executes and bake the
+                    acceptance (via: image). Needs --ref at a full 40-character
+                    commit SHA for a remote source and its remote includes.
+                    Without it, a --from harness with hooks, MCP servers or
+                    sensors is refused at build time.`,
 
 	"prune": `ynh prune
 
