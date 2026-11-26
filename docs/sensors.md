@@ -391,23 +391,10 @@ value is printed as `(literal, not shown)`, because a literal may be a
 credential. Read the manifest in the harness directory to see one.
 
 **Scripts.** From digest scheme 3 the digest also covers the script a hook, MCP server or sensor command
-runs, so changing it alone makes the harness read `changed`. The script is the command's first word after
-any leading `env` and `NAME=value` words, or, when that is an interpreter (`sh`, `bash`, `zsh`, `python`,
-`python3`, `node`, with or without a path such as `/bin/bash`), the first word after its options
-(`bash -e ./x`). An option that takes a value consumes it (`bash -o pipefail ./x`, `python3 -W ignore ./x`,
-`env -u HOME ./x`, `env -i ./x`), and `-c`, `-m`, `-e` and `env -S` name code, not a file. It is covered when it is `./x` or
-`$YNH_HARNESS_DIR/x` (an MCP server also takes `${PLUGIN_ROOT}/x`) and the file is in the harness or
-include that declares the command. A sensor reads `$YNH_HARNESS_DIR/x` only: its `./x` runs in the
-measured tree. What is covered is the script's whole folder, every file in it and its subfolders, so code
-the script builds or reads beside itself (a sensor's `test-trust/` checker, say) is in the digest; a
-`.git` folder is left out. Only regular files inside the harness are read: a link to a file inside the
-harness is read through, and a link that leaves the harness, loops, dangles or points at a device is
-never opened; a script folder that is a link to a folder inside the harness is read as that folder. `ynh trust show` lists each as `skipped`, and a script that is itself refused is reported as
-not covered. A link to a folder is not followed. A path into the project (`bash scripts/wake.sh`) is
-project code, like `make check`: `trust show` says it is not covered and the digest leaves it out, and so
-is whatever a covered script reaches outside its own folder. `trust show` prints a `script:` line under
-each command. A harness accepted under scheme 2 shows `changed` once, with a note saying why, until you
-review and accept it again.
+runs, and every file in that script's folder, so changing a script's body alone makes the harness read
+`changed`. A path into the project (`bash scripts/wake.sh`) is project code and is not covered. How a
+script is found, what is and is not covered, how links are treated and what `trust show` prints are in
+[Trust](trust.md#what-the-digest-covers).
 
 **Upgrading.** Until hooks and MCP servers were covered (#577), the digest covered sensor commands only. A harness
 you accepted then shows `changed` once, even if nothing in it has, and says so.
