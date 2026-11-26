@@ -237,6 +237,57 @@ func TestSetup_OTLPExports(t *testing.T) {
 	}
 }
 
+// With http/protobuf, ynh sends protobuf bodies to the operator's endpoint
+// (ynw-th8o, ynh #816): no warning, nothing in the spool.
+func TestSetup_OTLPProtobufExports(t *testing.T) {
+	clearTelemetryEnv(t)
+	type hit struct {
+		path, ctype string
+		body        []byte
+	}
+	var mu sync.Mutex
+	var hits []hit
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		hits = append(hits, hit{r.URL.Path, r.Header.Get("Content-Type"), body})
+		mu.Unlock()
+	}))
+	defer srv.Close()
+	spoolDir := t.TempDir()
+	t.Setenv("YNR_SPOOL", spoolDir)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	var stderr bytes.Buffer
+	tel := Setup("1.0.0", Options{}, &stderr)
+	tel.StartRun().Finish("converged", true)
+	tel.Shutdown()
+	if !tel.Active() || tel.Destination() != DestinationOTLP {
+		t.Errorf("active=%v destination=%q, want active otlp", tel.Active(), tel.Destination())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	seen := map[string]bool{}
+	for _, h := range hits {
+		seen[h.path] = true
+		if !strings.HasPrefix(h.ctype, "application/x-protobuf") {
+			t.Errorf("%s: Content-Type=%q, want application/x-protobuf", h.path, h.ctype)
+		}
+		if !bytes.Contains(h.body, []byte("ynh")) || bytes.HasPrefix(bytes.TrimSpace(h.body), []byte("{")) {
+			t.Errorf("%s: body is not a protobuf carrying the ynh resource", h.path)
+		}
+	}
+	if !seen["/v1/traces"] || !seen["/v1/logs"] {
+		t.Errorf("posted to %v, want /v1/traces and /v1/logs", seen)
+	}
+	if recs := readSpool(t, spoolDir); len(recs) != 0 {
+		t.Errorf("wrote %d records to the spool", len(recs))
+	}
+}
+
 // A setting the exporter cannot honour (other than the protocol, below) is the
 // operator's choice too: one note naming it, never a header value, and nothing
 // written anywhere.
@@ -273,14 +324,13 @@ func TestSetup_OTLPUnsupported(t *testing.T) {
 	}
 }
 
-// A protocol the exporter cannot speak (http/protobuf, grpc), general or
+// A protocol the exporter cannot speak (grpc), general or
 // per-signal, is warned about once and the run goes to the spool, not nowhere
 // (ynw-46x9, ynh #784). The warning never prints a header value.
 func TestSetup_OTLPProtocolFallsBackToTheSpool(t *testing.T) {
 	for _, env := range []map[string]string{
-		{"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"},
 		{"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"},
-		{"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "http/protobuf"},
+		{"OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "grpc"},
 	} {
 		clearTelemetryEnv(t)
 		spoolDir := t.TempDir()
@@ -317,7 +367,7 @@ func TestSetup_OTLPProtocolWithNoSpoolRecordsNothing(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
 	var stderr bytes.Buffer
 	tel := Setup("1.0.0", Options{}, &stderr)
 	tel.StartRun().Finish("converged", true)

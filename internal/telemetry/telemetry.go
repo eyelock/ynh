@@ -44,9 +44,10 @@ const (
 	// DestinationSpool writes OTLP JSON lines into a spool folder.
 	DestinationSpool Destination = "spool"
 	// DestinationOTLP is an operator's OTEL_EXPORTER_OTLP_* endpoint, sent to
-	// over OTLP/HTTP with JSON bodies. A setting that exporter cannot honour
+	// over OTLP/HTTP with JSON or protobuf bodies, as OTEL_EXPORTER_OTLP_PROTOCOL
+	// asks (http/json or http/protobuf). A setting that exporter cannot honour
 	// (custom certificates, compression) writes nothing and says so; a protocol it
-	// cannot speak (http/protobuf, grpc) goes to the spool instead.
+	// cannot speak (grpc) goes to the spool instead.
 	DestinationOTLP Destination = "otlp"
 )
 
@@ -88,11 +89,11 @@ func spoolFolder() string {
 }
 
 // protocolUnsupported reports whether the operator's OTLP protocol (general or
-// per-signal) is one the JSON exporter cannot speak, http/protobuf or grpc, and
-// names the first such variable.
+// per-signal) is one the exporter cannot speak (anything but http/json and
+// http/protobuf, in practice grpc), and names the first such variable.
 func protocolUnsupported(getenv func(string) string) (string, bool) {
 	for _, name := range []string{"OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"} {
-		if v := strings.TrimSpace(getenv(name)); v != "" && !strings.EqualFold(v, "http/json") {
+		if v := strings.TrimSpace(getenv(name)); v != "" && !strings.EqualFold(v, "http/json") && !strings.EqualFold(v, "http/protobuf") {
 			return name, true
 		}
 	}
@@ -194,19 +195,19 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 		// The operator chose; ynh does not look for a spool behind them.
 		opts, _, unsupported := spool.HTTPOptionsFromEnv(os.Getenv)
 		if unsupported != "" {
-			// A protocol the exporter cannot speak (http/protobuf is what
-			// Claude Code's setup and ynh's own relay export) is not a reason
+			// A protocol the exporter cannot speak (grpc, say; http/json and
+			// http/protobuf are both spoken) is not a reason
 			// to lose the run: it goes to the spool, as it would had the
 			// operator set nothing. The other unsupported settings
 			// (certificates, compression) still write nothing.
 			if name, ok := protocolUnsupported(os.Getenv); ok {
 				if dir := spoolFolder(); dir != "" {
-					_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json, and ynh sends only OTLP/HTTP with JSON bodies; writing this run to the spool instead\n", name)
+					_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json or http/protobuf, and ynh sends only OTLP/HTTP; writing this run to the spool instead\n", name)
 					t.dest = DestinationSpool
 					t.activate(dir, nil)
 					break
 				}
-				_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json, and ynh sends only OTLP/HTTP with JSON bodies; there is no spool (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local), so nothing was recorded for this run\n", name)
+				_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json or http/protobuf, and ynh sends only OTLP/HTTP; there is no spool (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local), so nothing was recorded for this run\n", name)
 				break
 			}
 			_, _ = fmt.Fprintf(stderr, "ynh: %s; no telemetry is written for this run\n", unsupported)

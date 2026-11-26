@@ -26,7 +26,8 @@ ynh chooses when the run starts, in this order:
 1. **`OTEL_EXPORTER_OTLP_*`.** An OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`
    or a per-signal one), or a setting ynh cannot honour (below), means the
    operator chose, and that choice wins. ynh posts its spans and logs to the
-   endpoint over OTLP/HTTP with JSON bodies, in the same batches, with the same
+   endpoint over OTLP/HTTP, with JSON or protobuf bodies as
+   `OTEL_EXPORTER_OTLP_PROTOCOL` asks, in the same batches, with the same
    resource and the same 2-second bound on every flush as the spool, and writes
    nothing to the spool. Settings that name no endpoint, such as a lone
    `OTEL_EXPORTER_OTLP_TIMEOUT`, ask for nothing, and the order goes on.
@@ -48,9 +49,10 @@ operator's `OTEL_EXPORTER_OTLP_*` stops the search, since that choice is theirs.
 
 ### Exporting to an OTLP endpoint
 
-ynh uses a small OTLP/HTTP exporter with JSON bodies from ynr's
-`spoolexporter`, not the standard OpenTelemetry exporters, which would bring in
-gRPC and protobuf and about sixty-five more modules. It reads these variables:
+ynh uses a small OTLP/HTTP exporter from ynr's `spoolexporter`, with JSON or
+protobuf bodies as `OTEL_EXPORTER_OTLP_PROTOCOL` asks, not the standard
+OpenTelemetry exporters, which would bring in gRPC and about sixty-five more
+modules. The protobuf bodies come from a small encoder inside `spoolexporter`. It reads these variables:
 
 | Variable | Used |
 |---|---|
@@ -58,16 +60,18 @@ gRPC and protobuf and about sixty-five more modules. It reads these variables:
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | each signal's full URL, as given |
 | `OTEL_EXPORTER_OTLP_HEADERS` and the per-signal `_HEADERS` | sent with each request; the per-signal list wins by name |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` and the per-signal `_TIMEOUT` | milliseconds, but each export is bounded by at least 2 seconds regardless |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | only `http/json` (or unset); another protocol sends the run to the spool, see below |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` (or unset) or `http/protobuf`; another protocol (`grpc`) sends the run to the spool, see below |
 
-`OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) other than `http/json`, including
-`http/protobuf` and `grpc`, is not spoken. The ynr how-to for Claude Code exports `http/protobuf`,
-and ynh's own relay sets it in the environment of the worker it starts, so this is a common
-setting. ynh does not drop the run for it: it prints one note on stderr naming the setting
-(never a header value) and writes the run to the spool, `YNR_SPOOL` or the standing spool, as if
-the endpoint had not been set. With no spool, the note says so, `nothing was recorded for this run`,
-and nothing is written. Nothing is sent to the endpoint either way. To export to the endpoint, set
-the protocol to `http/json`.
+`OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) set to `http/protobuf` sends protobuf
+bodies (`application/x-protobuf`) that a standard OTLP/HTTP receiver accepts; `http/json`
+or unset sends JSON. The ynr how-to for Claude Code exports `http/protobuf`, and ynh's own
+relay sets it in the environment of the worker it starts, so this is a common setting.
+
+`grpc`, or any other value, is not spoken. ynh does not drop the run for it: it prints one note
+on stderr naming the setting (never a header value) and writes the run to the spool, `YNR_SPOOL`
+or the standing spool, as if the endpoint had not been set. With no spool, the note says so,
+`nothing was recorded for this run`, and nothing is written. Nothing is sent to the endpoint
+either way. To export to the endpoint, set the protocol to `http/json` or `http/protobuf`.
 
 These other settings are not supported. When one is set, ynh prints one note on stderr naming
 the setting, never a header value, and writes nothing for the run: not to the endpoint, and not
@@ -408,8 +412,9 @@ before the worker starts:
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write. This holds whatever protocol
-  the operator names: with `http/protobuf` or `grpc`, ynh's own record of the
-  run still goes to the spool (see above), but the relay does not start, under
+  the operator names: with `grpc`, ynh's own record of the run still goes to
+  the spool (see above), and with `http/protobuf` it goes to their endpoint,
+  but the relay does not start, under
   `ynh run` and `ynh agent run` alike
 - `ynr` is on `PATH`
 - the run is not under `--sandbox srt`. srt's settings can allow the relay's

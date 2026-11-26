@@ -184,8 +184,8 @@ type relayDestination interface {
 	Destination() telemetry.Destination
 	SpoolDir() string
 	// OperatorOTLP is true when the operator set OTEL_EXPORTER_OTLP_*, even
-	// when ynh's own record goes to the spool (an http/protobuf or grpc
-	// protocol its exporter cannot speak).
+	// when ynh's own record goes to the spool (grpc, or another protocol its
+	// exporter cannot speak).
 	OperatorOTLP() bool
 }
 
@@ -250,8 +250,8 @@ func (r *runRelay) start(backend string) {
 	}
 	// Only into the spool. An operator's OTEL_EXPORTER_OTLP_* is their
 	// choice, and the vendor reads it for itself (contract rule 1), whatever
-	// protocol it names: ynh's own record may go to the spool for http/protobuf
-	// or grpc, but the vendor's telemetry stays the operator's.
+	// protocol it names: ynh's own record may go to the spool for grpc (or
+	// another protocol it cannot speak), but the vendor's telemetry stays the operator's.
 	if r.tel.OperatorOTLP() {
 		skip("OTEL_EXPORTER_OTLP_* is set, so the vendor's telemetry is left to it")
 		return
