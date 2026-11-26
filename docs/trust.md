@@ -74,8 +74,8 @@ Under each hook, MCP server or sensor command that names a script, `ynh trust sh
 ```
 script:  ./tools/lint.sh (covered with its folder tools: 3 file(s), sha256:f49d58b15cc65fee)
 script:  scripts/wake.sh (not covered: project code, outside what this digest reads)
-script:  ./hooks/z.sh (NOT covered: refused)
-           skipped z.sh: a link that leads outside the harness, not read
+script:  ./hooks/z.sh (NOT covered: refused; this blocks a run)
+           skipped z.sh: a link that leads outside the harness, not read (this blocks a run)
 ```
 
 The JSON has the same facts in a `script` object on each executable, hook and MCP server: `path`, `covered`, `folder`, `files`, `skipped` and `digest`.
@@ -91,15 +91,17 @@ A record carries the digest scheme it was made under. A harness accepted under a
 A refusal exits 1 and prints, on stderr:
 
 ```
-refusing to run acme: you have not accepted what it executes.
+Error: refusing to run local/acme: you have not accepted what it executes.
 It executes:
   hook PreToolUse: ./hooks/guard.sh
   sensor lint (command): gofmt -l .
-Review them: ynh trust show acme
-Then accept:  ynh trust accept acme
+Review them: ynh trust show local/acme
+Then accept:  ynh trust accept local/acme
 ```
 
-For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` writes the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness that executes nothing needs no acceptance. A harness whose workspace folders are not allow-listed has them granted by accepting it.
+For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` writes the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
+
+What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance.
 
 Three refusals are not "you have not accepted this":
 
@@ -115,9 +117,11 @@ What the gate does not do: it does not sandbox. It decides whether a run starts,
 
 ## Folder runs
 
-A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`, `ynh run --harness-file <file>`, a manifest in the current folder, and `ynh agent run --harness <path>`. A folder has no record: it is yours, and you are looking at it.
+A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`, `ynh check ./dir`, `ynh run --harness-file <file>`, a manifest in the current folder, and `ynh agent run --harness <path>`. A folder has no record: it is yours, and you are looking at it.
 
-- The folder's **own commands run unchecked**, and ynh says so once on stderr: `<name> runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.`
+"Folder" is not the same as "installed from a folder". `ynh install ./dir` copies the harness into `$YNH_HOME` as `local/<name>`, and from then on it is an installed harness like any other: the gate refuses it until you accept it, by its id, whether or not the folder is a Git checkout. Only a run by path is a folder run.
+
+- The folder's **own commands run unchecked**, and ynh says so once on stderr: `ynh: <name> runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.`
 - The commands a **remote include** brings are refused unless accepted. A remote include is a Git include of another repository, at any depth; a local include and an include of the harness's own repository are the folder's own files. Each remote include that brings commands needs a record of its own, keyed by repository, subpath and ref, over that include's own commands, so the record means the same to every folder that includes it and accepting one folder never changes another's. An include whose commands cannot be read is refused, naming `ynh update`.
 - **Accept them with `ynh trust accept <dir>`**, which records each remote include and prints how many commands. With none to accept it says so. Whether a run's MCP tools are pre-approved is a separate part of the design ([ynh #952](https://github.com/eyelock/ynh/issues/952)); it is not built yet, and a folder run is not meant to get it.
 - A script the digest could not read in full blocks a remote include's run exactly as it blocks an installed harness.
@@ -126,13 +130,14 @@ A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`,
 
 > **Landing with part C** ([ynh #951](https://github.com/eyelock/ynh/pull/973)). Written to the decisions made for that part; check `ynh <command> --help` on a build that has it.
 
-Accepting by hand needs a review. `--trust` accepts in the same step as the action, so it asks for something in return: **everything that runs must be pinned to a commit that cannot move.**
+Accepting by hand needs a review, and no pin: `ynh trust accept` takes a harness at whatever ref it has, and a harness installed from a folder needs no Git checkout. With `--trust`, only its remote includes that bring commands must be at full SHAs. `--trust` accepts in the same step as the action, so it asks for something in return: **everything that runs must be pinned to a commit that cannot move.**
 
-A **full SHA** is a 40-character commit hash. A tag, a branch, a short SHA or no ref at all is not one: each can name another commit tomorrow, so an acceptance of it would cover code you never saw. `--trust` is refused, with the reason named, unless the harness's own ref (for a Git or registry install) and the ref of every remote include that brings commands is a full SHA. A local folder is your own files and needs no pin for them, but its remote includes still do. The refusal ends with how out: pin it, or review it and accept it by hand with `ynh trust accept`.
+A **full SHA** is a 40-character commit hash. A tag, a branch, a short SHA or no ref at all is not one: each can name another commit tomorrow, so an acceptance of it would cover code you never saw. `--trust` is refused, with the reason named, unless the harness's own ref (for a Git or registry install) and the ref of every remote include that brings commands is a full SHA. A local folder is your own files and needs no pin for them, but its remote includes still do. The refusal ends with the way out: pin it, or review it and accept it by hand with `ynh trust accept`.
 
 | Route | What it accepts | When the pin is checked |
 |---|---|---|
-| `ynh install <source> --ref <sha> --trust` | the harness just installed | before anything is written |
+| `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | before anything is written |
+| `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
 | `ynh include add <harness> <url> --trust` (with `--replace` too) and `ynh include update <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then |

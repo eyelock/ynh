@@ -407,15 +407,15 @@ acceptance does not cover them. Review them with `ynh trust show`, then
 | `unreviewed` | Never accepted. Also every install predating this command. |
 | `accepted` | The commands match what you accepted. |
 | `changed` | The commands differ from what you accepted. |
-| `no-commands` | The harness executes nothing. Most harnesses. |
+| `no-commands` | Nothing to review: no commands, workspace folders or focuses of delegates. Most harnesses. |
 | `unavailable` | What the harness executes could not be read in full, because an include is not in the cache. Nothing can be accepted; run `ynh update`. |
 
 **It blocks.** `ynh run`, `ynh agent run` (and `--resume`) and `ynh check`
 refuse an installed harness that is `unreviewed`, `changed` or `unavailable`,
 before any vendor starts: exit 1, with the error code `untrusted` under
 `--format json`. The refusal lists what the harness executes and names
-`ynh trust show` and `ynh trust accept`. A harness that executes nothing
-(`no-commands`) needs no acceptance. A script the digest cannot read in full (a
+`ynh trust show` and `ynh trust accept`. A harness that only requests
+workspace folders is refused too, until you accept it. A script the digest cannot read in full (a
 link out of the harness, to a device, dangling or looping, a link to a folder, or
 a missing script or script folder) blocks the run too, accepted or not, because
 accepting cannot make it reviewable; `ynh trust show` marks each such entry

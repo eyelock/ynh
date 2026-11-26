@@ -30,8 +30,12 @@ The fastest way to see what ynh does is to install the ynh harness itself:
 
 ```bash
 ynh install github.com/eyelock/ynh
+ynh trust show github.com/eyelock/ynh/ynh-guide    # review what it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide  # record that you did; no pin needed
 ynh-guide
 ```
+
+The ynh harness declares sensors, so ynh refuses to launch it until you have accepted what it executes (exit 1, with the exact commands to run). Review it with `ynh trust show`, then `ynh trust accept`. See [Trust](trust.md).
 
 This gives you an AI session with skills that teach you ynh — including `/ynh-create-harness` to build your own harness interactively.
 
@@ -66,6 +70,8 @@ ynh install ./david
 david                              # interactive session
 david "explain what this function does"   # one-shot
 ```
+
+A harness that declares commands (sensors, hooks or MCP servers) or requests workspace folders is refused until you accept it: run `ynh trust show local/david` to read what it executes, then `ynh trust accept local/david`, or install it with `ynh install ./david --trust` to do both in one step. A harness with nothing to review runs at once. See [Trust](trust.md).
 
 ## Switch Vendors
 
@@ -237,7 +243,7 @@ By default, harnesses can pull skills and agents from any Git repo via `includes
 | Empty array `[]` | All remote sources blocked |
 | Patterns present | Only matching sources allowed |
 
-The harness you install from a local directory (e.g. `ynh install ./david`) is trusted and bypasses this check. Its includes and delegates do not.
+The harness you install from a local directory (e.g. `ynh install ./david`) is not checked against this list (the list is separate from [`ynh trust`](trust.md)). Its includes and delegates are.
 
 **Pattern syntax:**
 
