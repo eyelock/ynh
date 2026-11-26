@@ -96,9 +96,9 @@ func scriptToken(fields []string) (tok string, fromInterp bool) {
 				return unquoteToken(rest[i+1]), true
 			}
 			return "", true
-		case interpCodeFlags[base][f]:
+		case interpCodeFlags[base][f] || clusterIsCode(base, f):
 			return "", true
-		case interpValueFlags[base][f]:
+		case interpValueFlags[base][f] || clusterTakesValue(base, f):
 			i++
 		case strings.HasPrefix(f, "-") || strings.HasPrefix(f, "+"):
 		default:
@@ -112,7 +112,7 @@ func scriptToken(fields []string) (tok string, fromInterp bool) {
 // as their value, and interpCodeFlags those that take code or a module to run
 // instead of a file. Keyed by the interpreter's own name.
 var (
-	shValueFlags     = map[string]bool{"-o": true, "+o": true, "-O": true, "+O": true}
+	shValueFlags     = map[string]bool{"-o": true, "+o": true, "-O": true, "+O": true, "--rcfile": true, "--init-file": true}
 	pyValueFlags     = map[string]bool{"-W": true, "-X": true}
 	nodeValueFlags   = map[string]bool{"-r": true, "--require": true, "--import": true, "--loader": true, "--experimental-loader": true}
 	interpValueFlags = map[string]map[string]bool{
@@ -127,6 +127,32 @@ var (
 		"python": pyCodeFlags, "python3": pyCodeFlags, "node": nodeCodeFlags,
 	}
 )
+
+// shCluster reports whether f is a cluster of single-letter options of a shell
+// (-eu, -euo, +eo), and its letters.
+func shCluster(base, f string) (string, bool) {
+	if base != "sh" && base != "bash" && base != "zsh" {
+		return "", false
+	}
+	if len(f) < 3 || (f[0] != '-' && f[0] != '+') || f[1] == '-' {
+		return "", false
+	}
+	return f[1:], true
+}
+
+// clusterTakesValue reports whether a cluster of shell options ends in o or O,
+// which then takes the next word as its value (bash -euo pipefail ./x).
+func clusterTakesValue(base, f string) bool {
+	letters, ok := shCluster(base, f)
+	return ok && !strings.Contains(letters, "c") && (strings.HasSuffix(letters, "o") || strings.HasSuffix(letters, "O"))
+}
+
+// clusterIsCode reports whether a cluster of shell options carries -c (sh -ec
+// "code"), which names code and not a file.
+func clusterIsCode(base, f string) bool {
+	letters, ok := shCluster(base, f)
+	return ok && strings.Contains(letters, "c")
+}
 
 // skipEnvOptions drops env's own options (-i, -0, -v, -u NAME, -C DIR and
 // their long forms), leaving the NAME=value words and the command. ok is
@@ -148,9 +174,9 @@ func skipEnvOptions(fields []string) ([]string, bool) {
 		case strings.HasPrefix(f, "-"):
 			fields = fields[1:]
 		case isEnvWord(f):
-			// A NAME=value word may come between options; skipEnvWords
-			// handles it, but a following option must still be seen.
-			fields = fields[1:]
+			// A NAME=value word may come between options, quoted value and
+			// all, and a following option must still be seen.
+			fields = skipOneEnvWord(fields)
 		default:
 			return fields, true
 		}
@@ -178,19 +204,25 @@ func isEnvWord(w string) bool {
 // word is the one that runs.
 func skipEnvWords(fields []string) []string {
 	for len(fields) > 0 && isEnvWord(fields[0]) {
-		_, v, _ := strings.Cut(fields[0], "=")
-		i := 1
-		if v != "" && (v[0] == '"' || v[0] == '\'') && (len(v) == 1 || v[len(v)-1] != v[0]) {
-			for i < len(fields) && !strings.HasSuffix(fields[i-1], string(v[0])) {
-				i++
-			}
-		}
-		if i > len(fields) {
-			i = len(fields)
-		}
-		fields = fields[i:]
+		fields = skipOneEnvWord(fields)
 	}
 	return fields
+}
+
+// skipOneEnvWord drops the NAME=value word at the front of fields, with the
+// rest of a quoted value that holds spaces (FOO="a b").
+func skipOneEnvWord(fields []string) []string {
+	_, v, _ := strings.Cut(fields[0], "=")
+	i := 1
+	if v != "" && (v[0] == '"' || v[0] == '\'') && (len(v) == 1 || v[len(v)-1] != v[0]) {
+		for i < len(fields) && !strings.HasSuffix(fields[i-1], string(v[0])) {
+			i++
+		}
+	}
+	if i > len(fields) {
+		i = len(fields)
+	}
+	return fields[i:]
 }
 
 // pluginRootVars are the spellings of the MCP placeholder for the declaring

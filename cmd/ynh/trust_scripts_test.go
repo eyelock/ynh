@@ -475,7 +475,7 @@ func TestOptionValuesAreNotTheScript(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	for _, cmd := range []string{`bash -o pipefail ./tools/x.sh`, `python3 -W ignore ./tools/x.sh`, `env -i ./tools/x.sh`, `env -u HOME ./tools/x.sh`} {
+	for _, cmd := range []string{`bash -euo pipefail ./tools/x.sh`, `bash -eo pipefail ./tools/x.sh`, `env FOO="a b" ./tools/x.sh`, `bash --rcfile rc ./tools/x.sh`, `bash --init-file rc ./tools/x.sh`, `bash -o pipefail ./tools/x.sh`, `python3 -W ignore ./tools/x.sh`, `env -i ./tools/x.sh`, `env -u HOME ./tools/x.sh`} {
 		writeScript(t, root, "tools/x.sh", "#!/bin/sh\n")
 		h := &harness.Harness{Name: "h", Dir: root, Hooks: map[string][]plugin.HookEntry{"on_stop": {{Command: cmd}}}}
 		st := statusOf(t, h)
