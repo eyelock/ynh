@@ -346,3 +346,141 @@ func TestTrustGate_AgentRunAcceptedInstallPassesTheGate(t *testing.T) {
 		t.Fatalf("an accepted harness was refused: %+v", r)
 	}
 }
+
+// ---- scripts the digest could not read ----
+
+// A script the digest skips or refuses blocks the run, accepted or not
+// (the human's decision on ynw-pz9kv): a link to a device, out of the harness,
+// dangling or looping, a link to a folder beside the script, a link out in
+// the script's folder, and a script that is missing. The refusal names each
+// with its reason and a Fix, and carries the gate's code.
+func TestTrustGate_SkippedScriptBlocksTheRun(t *testing.T) {
+	outside := t.TempDir()
+	writeScript(t, outside, "evil.sh", "#!/bin/sh\n")
+
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, dir string)
+		cmd   string
+		want  []string
+	}{
+		{"a link to a device", func(t *testing.T, dir string) { mustSymlink(t, "/dev/zero", dir, "hooks/g.sh") },
+			"./hooks/g.sh", []string{"g.sh", "leads outside the harness"}},
+		{"a link out of the harness", func(t *testing.T, dir string) { mustSymlink(t, filepath.Join(outside, "evil.sh"), dir, "hooks/g.sh") },
+			"./hooks/g.sh", []string{"g.sh", "leads outside the harness"}},
+		{"a dangling link", func(t *testing.T, dir string) { mustSymlink(t, filepath.Join(dir, "nowhere"), dir, "hooks/g.sh") },
+			"./hooks/g.sh", []string{"g.sh", "does not resolve"}},
+		{"a looping link", func(t *testing.T, dir string) {
+			mustSymlink(t, filepath.Join(dir, "hooks", "b.sh"), dir, "hooks/g.sh")
+			mustSymlink(t, filepath.Join(dir, "hooks", "g.sh"), dir, "hooks/b.sh")
+		}, "./hooks/g.sh", []string{"g.sh", "does not resolve"}},
+		{"a link out in the script's folder", func(t *testing.T, dir string) {
+			writeScript(t, dir, "hooks/g.sh", "#!/bin/sh\n")
+			mustSymlink(t, filepath.Join(outside, "evil.sh"), dir, "hooks/helper.sh")
+		}, "./hooks/g.sh", []string{"helper.sh", "leads outside the harness"}},
+		{"a link to a folder in the script's folder", func(t *testing.T, dir string) {
+			writeScript(t, dir, "hooks/g.sh", "#!/bin/sh\n")
+			if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			mustSymlink(t, filepath.Join(dir, "lib"), dir, "hooks/lib")
+		}, "./hooks/g.sh", []string{"lib", "a link to a folder"}},
+		{"a missing script", func(t *testing.T, dir string) {}, "./hooks/g.sh", []string{"g.sh", "missing"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			manifest := `{"name":"scr","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"` + tc.cmd + `"}]}}`
+			id := installTrustedTestHarness(t, home, "scr", manifest)
+			tc.setup(t, harness.InstalledDirByID(id))
+			// Accepted again with the script as it now is: accepting changes nothing.
+			if err := cmdTrustTo([]string{"accept", id}, io.Discard, io.Discard); err != nil {
+				t.Fatal(err)
+			}
+
+			err := trustGate(id, loadInstalled(t, id), io.Discard)
+			if !isUntrusted(err) {
+				t.Fatalf("err = %v, want an untrusted refusal", err)
+			}
+			for _, want := range append(tc.want, "hook on_stop", "Fix:") {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("refusal lacks %q:\n%s", want, err)
+				}
+			}
+		})
+	}
+}
+
+// Project code is not reviewable and never was, so it does not block; a
+// regular covered script does not either.
+func TestTrustGate_ProjectAndRegularScriptsDoNotBlock(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	manifest := `{"name":"ok","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"./hooks/g.sh"},{"command":"bash scripts/wake.sh"}]}}`
+	id := installListTestHarness(t, home, "ok", manifest)
+	writeScript(t, harness.InstalledDirByID(id), "hooks/g.sh", "#!/bin/sh\n")
+	if err := cmdTrustTo([]string{"accept", id}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := trustGate(id, loadInstalled(t, id), io.Discard); err != nil {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// A folder run's remote include is refused for a script it cannot read.
+func TestTrustGate_FolderRunRefusesAnUnreadableScriptOfARemoteInclude(t *testing.T) {
+	folder, src := remoteIncludeFolder(t)
+	hooky := `{"name":"inc","version":"1.0.0","hooks":{"on_stop":[{"command":"./hooks/x.sh"}]}}`
+	if err := writePluginJSONFile(src, []byte(hooky)); err != nil {
+		t.Fatal(err)
+	}
+	mustSymlink(t, "/dev/zero", src, "hooks/x.sh")
+	runGitInDir(t, src, "add", "-A")
+	runGitInDir(t, src, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "hook")
+	if _, err := resolver.EnsureRepo("file://"+src, ""); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"folderh","version":"0.1.0","includes":[{"git":"file://` + src + `","hooks":true}]}`
+	if err := writePluginJSONFile(folder, []byte(manifest)); err != nil {
+		t.Fatal(err)
+	}
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gerr := trustGate("", p, io.Discard)
+	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "x.sh") || !strings.Contains(gerr.Error(), "Fix:") {
+		t.Fatalf("err = %v", gerr)
+	}
+}
+
+// trust show says a skipped script blocks a run.
+func TestTrustShowSaysASkippedScriptBlocksARun(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	id := installListTestHarness(t, home, "scr", `{"name":"scr","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"./hooks/g.sh"}]}}`)
+	writeScript(t, harness.InstalledDirByID(id), "hooks/g.sh", "#!/bin/sh\n")
+	mustSymlink(t, "/dev/zero", harness.InstalledDirByID(id), "hooks/z.sh")
+	st := trustStatusFor(id, loadInstalled(t, id), trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if out := showText(t, st); !strings.Contains(out, "skipped z.sh") || !strings.Contains(out, "this blocks a run") {
+		t.Errorf("show:\n%s", out)
+	}
+
+	missing := installListTestHarness(t, home, "gone", `{"name":"gone","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"./hooks/g.sh"}]}}`)
+	st = trustStatusFor(missing, loadInstalled(t, missing), trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if out := showText(t, st); !strings.Contains(out, "is missing; this blocks a run") {
+		t.Errorf("show of a missing script:\n%s", out)
+	}
+}
+
+func mustSymlink(t *testing.T, target, dir, rel string) {
+	t.Helper()
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+}

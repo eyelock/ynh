@@ -83,11 +83,16 @@ func gateName(id string, p *harness.Harness) string {
 // not match an accepted record.
 func installedGate(id string, p *harness.Harness, store trustStore) error {
 	st := trustStatusFor(id, p, store, nil)
-	switch st.State {
-	case trustAccepted, trustNoCommands:
-		return nil
-	case trustUnavailable:
+	if st.State == trustUnavailable {
 		return untrustedf("refusing to run %s: %s", id, unavailableMessage(id, st.Problems))
+	}
+	// A script the digest could not fully read blocks the run, accepted or
+	// not: accepting cannot make it reviewable.
+	if blockers := scriptBlockers(st.Executables, st.Hooks, st.MCPServers); len(blockers) > 0 {
+		return unreadableScriptsError(id, blockers)
+	}
+	if st.State == trustAccepted || st.State == trustNoCommands {
+		return nil
 	}
 	var b strings.Builder
 	if st.State == trustChanged {
@@ -144,6 +149,9 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	}
 	if brought.count() == 0 || len(remote) == 0 {
 		return nil
+	}
+	if blockers := scriptBlockers(brought.Sensors, brought.Hooks, brought.MCPServers); len(blockers) > 0 {
+		return unreadableScriptsError(p.Name, blockers)
 	}
 	digest := executablesDigest(brought)
 	var unaccepted []string
@@ -261,4 +269,49 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	}
 	_, err = fmt.Fprintf(stdout, "Recorded %d remote include(s) of %s: %d command(s), %s\n", len(remote), p.Dir, rec.Commands, rec.Digest)
 	return err
+}
+
+// scriptBlockers lists, one line each, what the digest could not fully read of
+// the scripts the commands run: a file it skipped or refused (a link out of
+// the harness, a device, a dangling or looping link, a link to a folder), and
+// a covered script whose folder is missing or unreadable. Such a command
+// cannot be reviewed whole, so it blocks a run (human's decision on
+// ynw-pz9kv, 2026-11-26). A script outside what the digest covers (project
+// code) is not listed: it was never reviewable.
+func scriptBlockers(sensors []executable, hooks []hookExec, servers []mcpExec) []string {
+	var out []string
+	add := func(what string, s *scriptRef) {
+		if s == nil {
+			return
+		}
+		for _, k := range s.Skipped {
+			out = append(out, fmt.Sprintf("%s: script %s: %s", what, s.Path, k))
+		}
+		if s.Covered && (s.Digest == "missing" || s.Digest == "unreadable") {
+			out = append(out, fmt.Sprintf("%s: script %s: its folder %s is %s", what, s.Path, s.Folder, s.Digest))
+		}
+	}
+	for _, h := range hooks {
+		add("hook "+h.Event, h.Script)
+	}
+	for _, m := range servers {
+		add("MCP server "+m.Name, m.Script)
+	}
+	for _, e := range sensors {
+		add(fmt.Sprintf("sensor %s (%s)", e.Sensor, e.Field), e.Script)
+	}
+	return out
+}
+
+// unreadableScriptsError is the refusal for a harness with such scripts. It
+// has the gate's exit 1 and error code untrusted: the design names no other.
+func unreadableScriptsError(name string, blockers []string) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "refusing to run %s: a script its commands run cannot be read in full, so what runs cannot be reviewed:\n", name)
+	for _, l := range blockers {
+		fmt.Fprintf(&b, "  %s\n", l)
+	}
+	b.WriteString("Fix: make each listed file a regular file inside the harness (no link out of it, to a device, or in a loop), " +
+		"or add the missing script, then run 'ynh trust show' to see it covered.")
+	return &untrustedError{msg: b.String()}
 }
