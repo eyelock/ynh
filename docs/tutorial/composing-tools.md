@@ -262,7 +262,8 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Error: MCP servers of included harness github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
 ```
 
@@ -276,7 +277,8 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Preview written to out/claude
 
 MCP servers from included harnesses:
@@ -447,7 +449,8 @@ ynd preview my-team -v claude -o out/conflict 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Error: MCP server "tracker" is defined differently by github-lite and other; declare it in the root harness to choose one
 ```
 
@@ -493,7 +496,8 @@ ynd preview my-team -v claude -o out/cycle 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them
 Preview written to out/cycle
 
 MCP servers from included harnesses:
@@ -998,7 +1002,7 @@ ynd preview my-team -v cursor -o out/delegate-cursor 2>&1 >/dev/null
 Expected output:
 
 ```
-  warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
+warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
 ```
 
 Now launch it. Claude Code ignores `mcpServers` in a plugin's agents, so `ynh run` hands the delegate to Claude with `--agents`. A command line is visible to every process on the machine, and Claude does not expand `${VAR}` inside `--agents`, so the token cannot go there. The server is wrapped in `ynh mcp-exec`, which reads the variables from a file in the run directory and starts the real server. The `...` below stands for text that varies between runs or is too long to show:

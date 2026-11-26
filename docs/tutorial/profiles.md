@@ -209,7 +209,8 @@ ynd diff /tmp/ynh-tutorial/profile-harness claude cursor --profile ci
 Expected output starts with a warning on stderr, because the `ci` profile's `Bash` matcher is written to Cursor as-is and Cursor matches its own tool types instead (see [Hooks: Matchers](../hooks.md#matchers)), then the comparison:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 === claude vs cursor ===
 Only in claude:
   .claude/.mcp.json
