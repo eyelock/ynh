@@ -1,9 +1,12 @@
 # syntax=docker/dockerfile:1
 
 # The one place the ynr version is pinned. .github/workflows/ci.yml reads it
-# from this line for the relay test. Move it when ynh's relay contract with
-# ynr changes. Stages that use it redeclare `ARG YNR_VERSION` to inherit it.
-ARG YNR_VERSION=0.2.0
+# from this line for the relay test and the conformance job, and a CI step
+# checks go.mod's spoolexporter is no newer. Move it when ynh's relay contract
+# with ynr changes. 0.6.0 is the first release whose relay scrubs tool_input
+# and hashes account ids (ynr #136, #137), as well as cwd, host.name and
+# user.email. Stages that use it redeclare `ARG YNR_VERSION` to inherit it.
+ARG YNR_VERSION=0.6.0
 
 # Stage 1: Build ynh and ynd
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
