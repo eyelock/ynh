@@ -138,6 +138,10 @@ func (t uninstallTarget) remove() error {
 		}
 	}
 
+	// The trust record is keyed by id alone, so it must not outlive the
+	// install it was accepted for (ynh #1001). Both id forms, as with run dirs.
+	forgetTrust(t.ref, t.ptr != nil, t.bareName)
+
 	// Run dirs are keyed by canonical id ("local--foo"), so the removed
 	// install's run dirs are exclusively its own, so remove them outright.
 	// Both id forms in uninstalledIDs may have dirs; removing a missing one
@@ -218,4 +222,32 @@ func (t uninstallTarget) remove() error {
 func sourceTreeExists(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.IsDir()
+}
+
+// forgetTrust drops the trust record of an uninstalled harness. A failure is a
+// warning, not an error: the harness is already gone, and the source and commit
+// check in trustStatusFor keeps a stale record from counting for another install.
+func forgetTrust(ref string, pointer bool, bareName string) {
+	store, err := loadTrustStore()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not read the trust record to clear %s: %v\n", ref, err)
+		return
+	}
+	ids := []string{ref}
+	if pointer {
+		ids = append(ids, "local/"+bareName)
+	}
+	changed := false
+	for _, id := range ids {
+		if _, ok := store.Harnesses[id]; ok {
+			delete(store.Harnesses, id)
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	if err := saveTrustStore(store); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not clear the trust record of %s: %v\n", ref, err)
+	}
 }

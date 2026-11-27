@@ -307,3 +307,34 @@ func mkdirAll(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 }
+
+// A trust record is keyed by id alone, so uninstall drops it: a harness
+// installed later under the same id starts unreviewed, not accepted (ynh #1001).
+func TestCmdUninstall_ClearsTrustRecord(t *testing.T) {
+	t.Setenv("YNH_HOME", filepath.Join(t.TempDir(), ".ynh"))
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	installTestHarness(t, "a")
+	installTestHarness(t, "b")
+	store := trustStore{Harnesses: map[string]trustRecord{
+		"local/a": {Digest: "d", Source: "github.com/someone/a"},
+		"local/b": {Digest: "d"},
+	}}
+	if err := saveTrustStore(store); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdUninstall([]string{"local/a"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadTrustStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got.Harnesses["local/a"]; ok {
+		t.Error("the uninstalled harness's trust record is still there")
+	}
+	if _, ok := got.Harnesses["local/b"]; !ok {
+		t.Error("another harness's trust record was removed")
+	}
+}

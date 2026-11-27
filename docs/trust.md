@@ -84,6 +84,12 @@ The JSON has the same facts in a `script` object on each executable, hook and MC
 
 A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. A harness accepted under scheme 2 (command text only) sees the note about scripts; one accepted under the first scheme (sensors only) sees the note about hooks and MCP servers. Old records are never accepted on your behalf: review, then `ynh trust accept` again.
 
+## What a record is keyed by
+
+A record is keyed by the harness's installed id, and it carries the `source` and, for a remote harness, the commit (`sha`) it was accepted from. It counts only while all of these hold: the digest matches, the harness is installed from the same source, and it is at the same commit. A harness that matches the digest but was installed from another source, or is at another commit, reads `changed` with a `moved` reason: `ynh trust show` prints it as a `moved:` line and `--format json` carries it as `moved`, and the [gate](#the-gate) names it in its refusal. Review it and `ynh trust accept` again.
+
+`ynh uninstall` removes the harness's record, so a harness installed later under the same id starts `unreviewed`. The source and commit check is what keeps a record safe if one is left behind (for instance, by editing `trust.json` or a failed removal, which `ynh uninstall` reports as a warning).
+
 ## The gate
 
 `ynh run`, `ynh agent run` (and its `--resume`) and `ynh check` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).

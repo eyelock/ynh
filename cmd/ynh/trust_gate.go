@@ -126,7 +126,9 @@ func installedGate(id string, p *harness.Harness, store trustStore) error {
 		return nil
 	}
 	var b strings.Builder
-	if st.State == trustChanged {
+	if st.State == trustChanged && st.Moved != "" {
+		fmt.Fprintf(&b, "refusing to run %s: your acceptance on %s does not cover it: %s.\n", id, st.AcceptedAt, st.Moved)
+	} else if st.State == trustChanged {
 		fmt.Fprintf(&b, "refusing to run %s: its commands differ from what you accepted on %s.\n", id, st.AcceptedAt)
 		if st.LegacyDigest {
 			b.WriteString(legacyNote(st.acceptedScheme) + "\n")
