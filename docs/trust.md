@@ -149,6 +149,7 @@ Pin it to a 40-character commit SHA, or review it and accept it by hand with 'yn
 |---|---|---|
 | `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | before anything is written |
 | `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
+| `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref and its remote includes' refs, after the includes are fetched |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
 | `ynh include add <harness> <url> --trust` (with `--replace` too) and `ynh include update <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then |
@@ -210,7 +211,19 @@ Review them: ynh trust show local/acme
 Then accept:  ynh trust accept local/acme
 ```
 
-An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one. `--from <source>`, which builds from a Git URL or a local path rather than an installed harness, is not checked and bakes no record and no label. On a base image whose ynh has the gate, such an image of a harness with hooks, MCP servers or sensors refuses at start, because it carries no record; a harness with nothing to accept runs. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
+An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one.
+
+### `ynh image --from`
+
+`ynh image <name> --from <source>` builds from a Git URL or a local path rather than an installed harness, so nothing has accepted it yet. A harness with hooks, MCP servers, sensors or workspace folders is refused at build time, with exit 1, the `untrusted` error code and a `Fix:` line naming `--trust`; a harness with nothing to accept builds, with no record and no label.
+
+`--trust` accepts what the source executes and bakes the record, with `via` set to `image`, as above, so the image's start passes its gate. It follows the full-SHA rule of `ynh install --trust`: a remote source must be pinned with `--ref` at a 40-character commit SHA, and so must every remote include that brings commands, or the build is refused, naming what floats (a tag, a branch, a short SHA or no ref). A local folder is your own files and needs no pin; its remote includes still do.
+
+```bash
+ynh image acme --from github.com/org/acme --ref 0123456789abcdef0123456789abcdef01234567 --trust
+```
+
+`--trust` is only valid with `--from`; an installed harness is accepted with `ynh trust accept`. `--ref` is likewise `--from` only, and not valid for a local folder. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
 
 ## Related
 

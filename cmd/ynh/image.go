@@ -253,7 +253,11 @@ type imageArgs struct {
 	dryRun     bool
 	from       string
 	path       string
+	ref        string // --ref: the commit, tag or branch of a remote --from source
 	entrypoint string
+	// trust is --trust: with --from, accept what the source executes and bake
+	// the acceptance (via: image), refusing a source that is not pinned.
+	trust bool
 	// sha is the commit resolved from --from, filled in during the build
 	// rather than parsed from a flag.
 	sha string
@@ -293,6 +297,8 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			}
 		case "--dry-run":
 			ia.dryRun = true
+		case "--trust":
+			ia.trust = true
 		case "--from":
 			if i+1 >= len(args) {
 				return ia, fmt.Errorf("--from requires a value")
@@ -305,15 +311,28 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			}
 			i++
 			ia.path = args[i]
+		case "--ref":
+			if i+1 >= len(args) {
+				return ia, fmt.Errorf("--ref requires a value")
+			}
+			i++
+			ia.ref = args[i]
 		default:
 			remaining = append(remaining, args[i])
 		}
 	}
 
 	if len(remaining) < 1 {
-		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--entrypoint run|agent] [--dry-run]")
+		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--ref <commit|tag|branch>] [--entrypoint run|agent] [--trust] [--dry-run]")
 	}
 	ia.name = remaining[0]
+
+	if ia.ref != "" && ia.from == "" {
+		return ia, fmt.Errorf("--ref is for an image built with --from")
+	}
+	if ia.trust && ia.from == "" {
+		return ia, fmt.Errorf("--trust is for an image built with --from; an installed harness is accepted with 'ynh trust accept %s' before it is built", ia.name)
+	}
 
 	if ia.tag == "" {
 		ia.tag = "ynh-" + ia.name + ":latest"
@@ -358,11 +377,22 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	var harnessSrcDir string
 
 	var trustID string // install id of an installed harness, "" for --from
+	var fromRef string // the ref --from resolved to, "" for a local source
+	fromLocal := false
 	if ia.from != "" {
 		// Build from source (Git or local)
 		resolved, err := resolveInstallSource(ia.from, ia.path, cfg)
 		if err != nil {
 			return fmt.Errorf("resolving source: %w", err)
+		}
+
+		// --ref overrides any registry-resolved ref, as `ynh install --ref` does.
+		if ia.ref != "" {
+			if isLocalPath(ia.from) {
+				return fmt.Errorf("--ref is not valid for a local --from source")
+			}
+			resolved.ref = ia.ref
+			resolved.sha = ""
 		}
 
 		source := ia.from
@@ -380,7 +410,15 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 				return err
 			}
 			harnessSrcDir = absPath
+			fromLocal = true
 		} else {
+			fromRef = resolved.ref
+			// --trust refuses a floating source before anything is fetched.
+			if ia.trust {
+				if why := notPinned(resolved.ref); why != "" {
+					return refuseUnpinned("this image", "--trust", []string{"the source's own ref: " + why})
+				}
+			}
 			if err := cfg.CheckSource(source, ""); err != nil {
 				return err
 			}
@@ -392,6 +430,9 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 				return err
 			}
 			ia.sha = resolved.sha
+			if ia.sha == "" && isFullSHA(resolved.ref) {
+				ia.sha = resolved.ref
+			}
 			harnessSrcDir = result.Path
 		}
 
@@ -421,6 +462,12 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	var bakedTrust *trustRecord
 	if trustID != "" {
 		rec, err := imageTrustRecord(trustID, p)
+		if err != nil {
+			return err
+		}
+		bakedTrust = rec
+	} else {
+		rec, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
 		if err != nil {
 			return err
 		}
