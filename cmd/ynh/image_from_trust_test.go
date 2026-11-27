@@ -3,8 +3,13 @@ package main
 import (
 	"bytes"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // ynh image --from <source> --trust (ynh #986): the build bakes a record with
@@ -20,6 +25,23 @@ func TestImageFromTrust_RemoteFullSHA(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "trust-digest") || !strings.Contains(out.String(), `dev.ynh.harness.sha="`+sha+`"`) {
 		t.Errorf("Dockerfile lacks the digest label or the pinned sha:\n%s", out.String())
+	}
+}
+
+// Accepting through the image route prints the same verb as every other route,
+// on stderr so a --dry-run Dockerfile on stdout stays clean.
+func TestImageFromTrust_PrintsAccepted(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	var out, errb bytes.Buffer
+	if err := cmdImageTo([]string{"hh", "--from", "file://" + src, "--ref", sha, "--trust", "--dry-run"}, &out, &errb); err != nil {
+		t.Fatalf("image --from --trust: %v", err)
+	}
+	if !strings.HasPrefix(errb.String(), "Accepted local/hh (image): ") || !strings.Contains(errb.String(), "command(s), sha256:") {
+		t.Errorf("stderr lacks the Accepted line:\n%s", errb.String())
+	}
+	if strings.Contains(out.String(), "Accepted ") {
+		t.Errorf("stdout (the Dockerfile) carries the Accepted line:\n%s", out.String())
 	}
 }
 
@@ -193,5 +215,51 @@ func TestImageFromTrust_WarnsOnPreGateBase(t *testing.T) {
 		if !strings.Contains(out.String(), "trust-digest") {
 			t.Errorf("%s: the build did not go ahead:\n%s", tt.labels, out.String())
 		}
+	}
+}
+
+// The record an `image --from <git> --trust` build bakes must read accepted
+// inside the image. The image's harness/ folder is a clone with no
+// installed.json, so the record carries no source or commit to compare
+// against it (ynw-8py06).
+func TestImageFromTrust_BakedRecordReadsAcceptedInTheImage(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	p, err := harness.LoadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ia := imageArgs{name: "hh", from: "file://" + src, ref: sha, trust: true, sha: sha}
+	rec, err := imageFromTrustRecord(p, cfg, ia, false, sha)
+	if err != nil || rec == nil {
+		t.Fatalf("rec = %v, err = %v", rec, err)
+	}
+
+	// The image's home: the baked record, and the clone with no installed.json.
+	image := t.TempDir()
+	if err := writeImageTrust(image, "hh", *rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := assembler.CopyTree(src, filepath.Join(image, "harnesses", "local--hh")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YNH_HOME", image)
+	inImage := loadInstalled(t, "local/hh")
+	if inImage.InstalledFrom != nil {
+		t.Fatalf("the image's clone has provenance %+v; the test assumes none", inImage.InstalledFrom)
+	}
+	if err := trustGate("local/hh", inImage, io.Discard); err != nil {
+		t.Fatalf("the gate refused the image's own harness: %v", err)
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := trustStatusFor("local/hh", inImage, store, nil); st.State != trustAccepted || st.Moved != "" {
+		t.Errorf("state = %q, moved = %q, want accepted", st.State, st.Moved)
 	}
 }
