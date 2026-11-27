@@ -108,6 +108,21 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		// only an unreviewed harness is the operator's to accept.
 		if st.State != trustUnreviewed || len(scriptBlockers(st.Executables, st.Hooks, st.MCPServers)) > 0 {
 			msg := strings.Replace(err.Error(), "refusing to run "+id, "refusing to build an image of "+id, 1)
+			if st.State == trustUnavailable && !ia.trust {
+				// The gate's own hint, 'ynh update local/<name>', names an id
+				// that is not installed: no route exists for a --from source
+				// except --trust, which fetches the includes itself.
+				msg = strings.Replace(msg, "Run 'ynh update "+id+"' to fetch its includes, then review it again.",
+					fromUnavailableFix(ia, isLocal), 1)
+				// The resolver's own 'run `ynh update`' line is no route either.
+				var kept []string
+				for _, l := range strings.Split(msg, "\n") {
+					if !strings.Contains(l, "run `ynh update`") {
+						kept = append(kept, l)
+					}
+				}
+				msg = strings.Join(kept, "\n")
+			}
 			if isUntrusted(err) {
 				return nil, &untrustedError{msg: msg}
 			}
@@ -163,4 +178,14 @@ func fetchIncludesForTrust(p *harness.Harness, cfg *config.Config) error {
 		}
 	}
 	return nil
+}
+
+// fromUnavailableFix is the Fix line for a --from build whose includes are not
+// in the cache: nothing is installed to update, so it names --trust, which
+// fetches them, at a full SHA for a remote source.
+func fromUnavailableFix(ia imageArgs, isLocal bool) string {
+	if isLocal {
+		return fmt.Sprintf("Fix: review it, then build with 'ynh image %s --from %s --trust', which fetches its includes (each remote include must be pinned to a 40-character commit SHA).", ia.name, ia.from)
+	}
+	return fmt.Sprintf("Fix: review it, then build with 'ynh image %s --from %s --ref <40-character commit SHA> --trust', which fetches its includes (each remote include must be pinned to a 40-character commit SHA).", ia.name, ia.from)
 }

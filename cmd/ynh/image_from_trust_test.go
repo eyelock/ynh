@@ -114,6 +114,21 @@ func TestImageFromTrust_ColdIncludeCache(t *testing.T) {
 	}
 }
 
+// Without --trust an uncached include cannot be read, and the refusal must not
+// point at 'ynh update local/<name>' (not installed): its Fix names --trust.
+func TestImageFromTrust_ColdIncludeWithoutTrustNamesTrust(t *testing.T) {
+	fakeHome(t)
+	cold := coldFolder(t, "sha")
+	err := cmdImageTo([]string{"fld", "--from", cold, "--dry-run"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("want a refusal")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "ynh update") || !strings.Contains(msg, "Fix:") || !strings.Contains(msg, "--trust") || !strings.Contains(msg, "40-character") {
+		t.Errorf("refusal lacks a --from Fix line naming --trust at a full SHA:\n%s", msg)
+	}
+}
+
 // A harness with nothing to accept builds as before, with or without --trust.
 func TestImageFromTrust_CommandlessBuildsAsBefore(t *testing.T) {
 	fakeHome(t)
