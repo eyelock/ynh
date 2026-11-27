@@ -1098,6 +1098,8 @@ Print the fully-resolved sensor block as JSON. Inline focuses are kept inline; s
 
 Mechanically execute a sensor and emit a JSON result. There is no `passed` boolean — ynh returns raw exit codes, output, and file contents. Pass/fail thresholds are loop-driver policy.
 
+An installed harness must be accepted first. `ynh sensors run` refuses an unaccepted or changed installed harness before it looks up the sensor or starts anything, exits 1, and writes the error envelope with code `untrusted` (the command only emits JSON). See [Trust](trust.md#the-gate) for how to accept it.
+
 For a `command` sensor:
 
 ```json
@@ -1120,6 +1122,7 @@ For a `files` sensor, the result includes file contents (or just metadata with `
 Flags:
 - `--cwd <dir>` — working directory for `command` sensors and base for relative `files` globs. Defaults to current directory.
 - `--no-content` — omit file contents for `files` sensors. Use when only metadata (path, size) is needed.
+- `--sensor-overlay-json <json>` — overlay sensors for this run; it comes from your own command line, so it is not checked by the gate.
 
 ## Relationship to hooks
 
