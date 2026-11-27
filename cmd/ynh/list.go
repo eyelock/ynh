@@ -386,7 +386,7 @@ func printListJSON(w io.Writer, checkUpdates bool, filter listFilter) error {
 		if !filter.matches(p) {
 			continue
 		}
-		entries = append(entries, buildListEntry(p))
+		entries = append(entries, withInstalledID(buildListEntry(p), canonicalIDForEntry(e)))
 	}
 
 	if checkUpdates {
@@ -477,6 +477,27 @@ func canonicalIDForEntry(e harness.ListEntry) string {
 		return "local/" + e.Name
 	}
 	return e.Namespace + "/" + e.Name
+}
+
+// withInstalledID gives entry the id the harness is installed under, and the
+// namespace of that id. buildListEntry derives both from the recorded source,
+// which is the id a harness installed from that source has; inside an image the
+// same harness sits at local/<name> whatever it was built from (ynh #1040), and
+// an id a consumer cannot hand back to info, trust show or run is no id.
+func withInstalledID(entry listEntry, id string) listEntry {
+	// Only a local/<name> install is renamed. Any other id is what the
+	// source gives, and a legacy host-stripped layout is not this function's
+	// to reshape.
+	if !strings.HasPrefix(id, "local/") {
+		return entry
+	}
+	entry.ID = id
+	ns, _ := namespace.SplitID(id)
+	if ns == "local" {
+		ns = ""
+	}
+	entry.Namespace = ns
+	return entry
 }
 
 // buildListEntry assembles the structured-output entry for a loaded harness.

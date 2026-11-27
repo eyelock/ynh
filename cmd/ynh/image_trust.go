@@ -155,11 +155,11 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		Via:        viaImage,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	// The image's harness/ folder is a clone with no installed.json, so inside
-	// the image the harness has no recorded source or commit. The record is
-	// keyed by what the image will see, so it carries none either: a record
-	// with a source would read "moved" against that clone and the gate would
-	// refuse the image's own harness. The pin was enforced above, at build.
+	// Source, ref and commit are filled in by the caller for a remote source
+	// (bakeFromProvenance), which also bakes the installed.json they match: a
+	// record naming a source the image's harness does not carry would read
+	// "moved" and the gate would refuse the image's own harness. The pin was
+	// enforced above, at build.
 	return &rec, nil
 }
 
