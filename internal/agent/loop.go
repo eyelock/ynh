@@ -191,6 +191,9 @@ type RunOptions struct {
 	// testSensorNames overrides sensor collection from the harness.
 	// Set by tests that need sensor-loop behaviour without a real installed harness.
 	testSensorNames []string
+
+	// testNow replaces the wall clock the budget reads. Tests only.
+	testNow func() time.Time
 	// testPreRun runs once the harness is loaded and assembled, before the
 	// worker starts, so a test can interrupt the pre-run phase.
 	testPreRun func(ctx context.Context)
@@ -601,6 +604,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		MaxTurns:  opts.MaxTurns,
 		MaxTokens: opts.MaxTokens,
 		MaxWall:   opts.MaxWall,
+		now:       opts.testNow,
 	}
 	result.budget = budget
 	result.Budgets = BudgetLimits{

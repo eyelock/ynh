@@ -63,7 +63,27 @@ func start(t *testing.T, folder, task string) (*Record, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The supervisor is a process of its own and keeps writing the record
+	// directory (the final status, the log) after the run is stopped. The
+	// directory is a t.TempDir, so wait for the supervisor to be gone before
+	// the test ends, or the removal races its last write ("directory not empty").
+	pid, pidStart := rec.Pid, rec.PidStart
+	t.Cleanup(func() { settle(path, pid, pidStart) })
 	return rec, path
+}
+
+// settle stops whatever run the record at path still has and waits, bounded,
+// for the supervisor process Start launched (pid, whatever the test has since
+// written into the record) to exit.
+func settle(path string, pid int, pidStart string) {
+	_, _ = Cancel(path)
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if st := procState(pid, pidStart); st == procGone || st == procOther {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitFor(t *testing.T, path string, ok func(*Record) bool) *Record {

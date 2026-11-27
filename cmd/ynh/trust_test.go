@@ -985,3 +985,43 @@ func TestDelegateTransportMovesTheDigest(t *testing.T) {
 }
 
 func hooksOn(v bool) *bool { return &v }
+
+// A record is keyed by id alone, so a different harness installed under the
+// same id must not inherit it, even when its digest matches (ynh #1001).
+func TestTrustRecordDoesNotCoverAnotherSourceOrCommit(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	const id = "github.com/someone/harness"
+	sensors := map[string]plugin.Sensor{"lint": cmdSensor("golangci-lint run", "")}
+	from := func(source, sha string) *harness.Harness {
+		p := harnessWithSensors(t, sensors)
+		p.InstalledFrom = &harness.Provenance{Source: source, SHA: sha}
+		return p
+	}
+	accepted := from("github.com/someone/harness", "aaaa")
+	store := trustStore{Harnesses: map[string]trustRecord{id: {
+		Digest: executablesDigest(harnessExecutables(accepted)),
+		Source: "github.com/someone/harness", SHA: "aaaa",
+	}}}
+
+	if got := trustStatusFor(id, accepted, store, nil); got.State != trustAccepted || got.Moved != "" {
+		t.Fatalf("same source and commit: state %q moved %q, want accepted", got.State, got.Moved)
+	}
+	for name, p := range map[string]*harness.Harness{
+		"another source": from("github.com/evil/harness", "aaaa"),
+		"another commit": from("github.com/someone/harness", "bbbb"),
+		"no provenance":  harnessWithSensors(t, sensors),
+	} {
+		got := trustStatusFor(id, p, store, nil)
+		if got.State != trustChanged || got.Moved == "" {
+			t.Errorf("%s: state %q moved %q, want changed with a reason", name, got.State, got.Moved)
+		}
+		err := installedGate(id, p, store)
+		if err == nil || !strings.Contains(err.Error(), got.Moved) {
+			t.Errorf("%s: the gate's refusal %v does not carry the reason %q", name, err, got.Moved)
+		}
+		var buf bytes.Buffer
+		if err := printTrustDetail(&buf, got); err != nil || !strings.Contains(buf.String(), got.Moved) {
+			t.Errorf("%s: trust show omits the reason %q:\n%s", name, got.Moved, buf.String())
+		}
+	}
+}

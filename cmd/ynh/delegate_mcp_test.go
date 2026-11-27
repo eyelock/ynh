@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -136,6 +137,42 @@ func TestDelegateMCPEntry_ResolvedBySession(t *testing.T) {
 		e, err := delegateMCPEntry(o.eps, "local/parent", "/work", delegateQuestionsFor("", oneShot))
 		if err != nil || !strings.HasSuffix(strings.Join(e.Args, " "), want) {
 			t.Errorf("oneShot=%v: args = %v, err %v, want ...%s", oneShot, e, err, want)
+		}
+	}
+}
+
+// The wait setting is the user's, set before `ynh run`; the run's scrub of an
+// enclosing session's endpoints must not clear it before the entry reads it.
+func TestDelegateMaxWaitSurvivesTheRunScrub(t *testing.T) {
+	parent, store := endpointSetup(t, "a2a")
+	t.Setenv("YNH_DELEGATE_STALE_CARD", "http://stale") // from an enclosing session
+	t.Setenv(delegateMaxWaitEnv, "90")
+	o, err := openEndpointsWith(parent, "local/parent", t.TempDir(), &store, &bytes.Buffer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.close()
+	if _, ok := os.LookupEnv("YNH_DELEGATE_STALE_CARD"); ok {
+		t.Error("the scrub left an enclosing session's endpoint variable")
+	}
+	e, err := delegateMCPEntry(o.eps, "local/parent", "/work", "")
+	if err != nil || e.Args[len(e.Args)-2] != "--max-wait" || e.Args[len(e.Args)-1] != "90" {
+		t.Errorf("with %s=90 set before the run: %v %v", delegateMaxWaitEnv, e, err)
+	}
+}
+
+func TestBadDelegateMaxWaitRefusesTheRunPath(t *testing.T) {
+	for _, bad := range []string{"0", "abc", "-5", "1.5"} {
+		parent, store := endpointSetup(t, "a2a")
+		t.Setenv(delegateMaxWaitEnv, bad)
+		o, err := openEndpointsWith(parent, "local/parent", t.TempDir(), &store, &bytes.Buffer{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = delegateMCPEntry(o.eps, "local/parent", "/work", "")
+		o.close()
+		if err == nil || !strings.Contains(err.Error(), "want a whole number of seconds above 0") {
+			t.Errorf("%s=%q: err = %v", delegateMaxWaitEnv, bad, err)
 		}
 	}
 }
