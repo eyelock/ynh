@@ -7,7 +7,7 @@
   "$defs": {
     "ScriptRef": {
       "type": "object",
-      "description": "The script this command runs, when it names one: its first word, or its first argument when that is bash, sh, python3 or node. covered is true for a file of the declaring harness named by ./x, $YNH_HARNESS_DIR/x (or ${PLUGIN_ROOT}/x for an MCP server), after any leading env and NAME=value words and any interpreter (bash, sh, zsh, python, python3, node, with or without a path) and its flags; the whole folder of that script, subfolders included, is part of digest (scheme 3); anything else (bash scripts/wake.sh) is project code, reported with covered false and left out of the digest. Only regular files inside the harness are read.",
+      "description": "The script this command runs, when it names one: its first word, or its first argument when that is bash, sh, python3 or node. covered is true for a file of the declaring harness named by ./x, $YNH_HARNESS_DIR/x (or ${PLUGIN_ROOT}/x for an MCP server), after any leading env and NAME=value words and any interpreter (bash, sh, zsh, python, python3, node, with or without a path) and its flags; the whole folder of that script, subfolders included, is part of digest (scheme 3); anything else is reported with covered false and left out of the digest: a path in the project (bash scripts/wake.sh) is project code, and a script at an absolute path or named from the home directory (/usr/local/bin/check.sh, ~/bin/check.sh, $HOME/bin/check.sh) is a file on this host, labelled apart by ynh trust show. Only regular files inside the harness are read.",
       "properties": {
         "path": { "type": "string", "description": "The script as the command names it." },
         "covered": { "type": "boolean" },

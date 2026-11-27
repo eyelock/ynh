@@ -124,6 +124,21 @@ func TestHostScriptIsLabelledApart(t *testing.T) {
 	}
 }
 
+// A script named from the home directory is a file on the host too.
+func TestHomeScriptIsLabelledAsHostFile(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	for _, cmd := range []string{"bash ~/bin/check.sh", "$HOME/bin/check.sh", "sh ${HOME}/bin/check.sh"} {
+		h := &harness.Harness{Name: "h", Dir: t.TempDir(), Hooks: map[string][]plugin.HookEntry{
+			"on_start": {{Command: cmd}},
+		}}
+		st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+		out := showText(t, st)
+		if !strings.Contains(out, "not covered: a file on this host, outside the harness") || strings.Contains(out, "project code") {
+			t.Errorf("%q: show does not label it a host file:\n%s", cmd, out)
+		}
+	}
+}
+
 // A script in the project is project code, like make check: not covered,
 // whatever its body, and trust show says so.
 func TestProjectScriptIsNotCovered(t *testing.T) {

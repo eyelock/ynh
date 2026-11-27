@@ -61,7 +61,7 @@ Only regular files inside the harness are read:
 ### What the digest leaves out
 
 - **Project code.** A script in the project (`bash scripts/wake.sh`, a sensor's `./lint.sh`) is the project's, like `make check`. `ynh trust show` says it is not covered.
-- **A file on this host.** A script at an absolute path outside the harness (`/usr/local/bin/format-check.sh`) is whatever is installed on the machine, not part of the project. `ynh trust show` says it is not covered, and labels it differently from project code.
+- **A file on this host.** A script at an absolute path outside the harness (`/usr/local/bin/format-check.sh`), or one named from the home directory (`~/bin/check.sh`, `$HOME/bin/check.sh` or `${HOME}/bin/check.sh`), is whatever is installed on the machine, not part of the project. `ynh trust show` says it is not covered, and labels it differently from project code.
 - **Anything a covered script reaches outside its own folder.** A script that sources `../lib/common.sh`, or runs another script elsewhere, is covered for its own folder only.
 - **Tools found on `PATH`.** A command such as `gofmt`, `golangci-lint` or `go` has its command string covered, not the binary.
 - **What a skipped link points at**, as above. A skipped script is not silently accepted: it blocks the run (see [Links and other files](#links-and-other-files)).
