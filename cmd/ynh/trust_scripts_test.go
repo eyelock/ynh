@@ -104,6 +104,26 @@ func TestSensorScriptBodyMovesTheDigest(t *testing.T) {
 	changedByScriptBody(t, h2, filepath.Join(h2.Dir, "vendored", "up"), "lint.sh")
 }
 
+// A script at an absolute path is a file on the host, not project code: trust
+// show labels it apart, and it stays out of the digest.
+func TestHostScriptIsLabelledApart(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h := &harness.Harness{Name: "h", Dir: t.TempDir(), Hooks: map[string][]plugin.HookEntry{
+		"on_start": {{Command: "/usr/local/bin/format-check.sh"}},
+	}}
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if len(st.Hooks) != 1 || st.Hooks[0].Script == nil || st.Hooks[0].Script.Covered {
+		t.Fatalf("host script reported as covered: %+v", st.Hooks)
+	}
+	out := showText(t, st)
+	if !strings.Contains(out, "/usr/local/bin/format-check.sh (not covered: a file on this host, outside the harness)") {
+		t.Errorf("show does not label the host script:\n%s", out)
+	}
+	if strings.Contains(out, "project code") {
+		t.Errorf("show calls a host script project code:\n%s", out)
+	}
+}
+
 // A script in the project is project code, like make check: not covered,
 // whatever its body, and trust show says so.
 func TestProjectScriptIsNotCovered(t *testing.T) {
