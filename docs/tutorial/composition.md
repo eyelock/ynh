@@ -89,9 +89,15 @@ ls ~/.ynh/run/local--my-dev/.claude/skills/
 
 ## Own repo — local checkout (no clone)
 
-If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
+If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development.
 
-*Replace `/tmp/ynh-tutorial/assistants` with the path of your checkout (here: `/tmp/ynh-tutorial/assistants`).*
+For this tutorial, put a checkout at `/tmp/ynh-tutorial/assistants`:
+
+```bash
+git clone https://github.com/eyelock/assistants /tmp/ynh-tutorial/assistants
+```
+
+If you already have a checkout of your own, skip the clone and put its full path in `"git"` below instead.
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-dev/.agents/harness
@@ -110,6 +116,19 @@ cat > /tmp/ynh-tutorial/my-dev/.agents/harness/plugin.json << 'EOF'
   ]
 }
 EOF
+
+ynh install /tmp/ynh-tutorial/my-dev
+```
+
+Run it once, then check that only the two skills picked from the checkout are there:
+
+```bash
+my-dev "list your skills"
+```
+
+```bash
+ls ~/.ynh/run/local--my-dev/.claude/skills/
+# Expected: dev-project/ dev-quality/
 ```
 
 Local paths start with `/` or `.` — ynh uses them directly without cloning.

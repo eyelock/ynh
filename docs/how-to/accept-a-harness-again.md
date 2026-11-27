@@ -12,9 +12,29 @@ Review them: ynh trust show <harness>
 Then accept:  ynh trust accept <harness>
 ```
 
-These steps get it running again. They are the same whatever changed it; the sections after them say
-what to expect after an update, an include change, an edit to a folder you installed, and an upgrade of
-ynh.
+## When ynh asks again
+
+A harness reads `changed` when:
+
+- you edit a hook, script, sensor or MCP server in a folder you installed
+- `ynh update` brings in new commands, or moves a Git harness to a new commit
+- you add, change or remove an include and that moves what the harness runs
+- you upgrade ynh and it now covers more of what the harness runs
+
+> After an upgrade, nothing in the harness need have moved: the refusal says your acceptance predates
+> the newer check, for example:
+>
+> ```
+> Your acceptance predates the digest covering the contents of the scripts that
+> hooks and sensors run (it covered only the command text), so this
+> harness reads as changed even if nothing in it has. Review the scripts above,
+> then accept again.
+> ```
+>
+> Review, then accept again. `ynh trust` lists every harness; each one to do reads `changed`.
+
+The steps below get it running again, whatever changed it; the sections after them say what to expect
+after an update, an include change and an edit to a folder you installed.
 
 ## Steps
 
@@ -101,22 +121,6 @@ It executes:
 `ynh install ./<folder>` does not copy the folder: the installed harness `local/<name>` *is* that folder.
 Editing a hook, a script, a sensor or an MCP server in it makes `local/<name>` read `changed` at once.
 Follow the steps above after each edit you want to run.
-
-## After upgrading ynh from v0.17
-
-ynh v0.18.0 fingerprints the scripts that hooks, MCP servers and sensors run, as well as their command
-text. A harness you accepted with an earlier ynh therefore reads `changed` once, even if nothing in it
-moved, and the refusal says why:
-
-```
-Error: refusing to run local/greeter: its commands differ from what you accepted on 2026-11-27T16:55:06Z.
-Your acceptance predates the digest covering the contents of the scripts that
-hooks and sensors run (it covered only the command text), so this
-harness reads as changed even if nothing in it has. Review the scripts above,
-then accept again.
-```
-
-Follow the steps above for each harness. `ynh trust` lists them all; each one to do reads `changed`.
 
 ## When the refusal is not "changed"
 
