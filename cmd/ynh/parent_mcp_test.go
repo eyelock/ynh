@@ -71,13 +71,20 @@ func TestParentMCPRefusesBadArguments(t *testing.T) {
 }
 
 func TestClaudeOwnMCPAllowRule(t *testing.T) {
-	if got := claudeOwnMCPAllowRule("h", nil); got != "" {
+	if got := claudeOwnMCPAllowRule("h", nil, false); got != "" {
 		t.Errorf("no servers: got %q, want none", got)
 	}
-	got := claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"})
+	got := claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"}, false)
 	want := "--allowedTools=mcp__plugin_my_h_probe,mcp__plugin_my_h_b_c"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+	// Under mcp_isolation the servers load as <server>, not through the plugin
+	// (ynw-bogq7).
+	got = claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"}, true)
+	want = "--allowedTools=mcp__probe,mcp__b_c"
+	if got != want {
+		t.Errorf("isolated: got %q, want %q", got, want)
 	}
 }
 

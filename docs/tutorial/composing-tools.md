@@ -528,6 +528,16 @@ mv notes-plugin.json.bak notes/.agents/harness/plugin.json
 
 By default a harness's servers load alongside everything you have already configured: your user MCP servers and, on Claude Code, your claude.ai connectors. `--isolated-mcp` runs with only the servers the harness composes: its own and those of the harnesses it includes, here `notes`, `team` and `tracker`. The harness can also ask for it with `"mcp_isolation": true`.
 
+We run `my-team` by its folder, not as an installed harness, so ynh does not ask you to accept it first:
+a folder you run by its path is yours, and you are looking at it. Each run says so once on stderr:
+
+```
+ynh: my-team runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
+```
+
+Installed with `ynh install`, the same harness would need accepting before its first run, as in
+[Your First Trusted Harness](first-trusted-harness.md).
+
 Without the flag, this is what ynh hands Claude Code:
 
 *This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers`

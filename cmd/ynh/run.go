@@ -18,6 +18,7 @@ import (
 	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/inboxmcp"
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
@@ -344,6 +345,11 @@ func cmdRun(args []string) (runErr error) {
 	wsDecided := false
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
 	var endpoints *openedEndpoints
+	// This run's session id, the key of its presence record. inboxWired is set
+	// when an interactive session is given the ynh-inbox server and can take a
+	// task delegated to its harness (docs/delegate-sessions.md).
+	sessionID, _ := sessions.NewID()
+	inboxWired := false
 	decideWorkspace := func() error {
 		if wsDecided {
 			return nil
@@ -488,6 +494,25 @@ func cmdRun(args []string) (runErr error) {
 				servers[parentmcp.ServerName] = *pentry
 			}
 		}
+		// An interactive session of an installed harness gets ynh's inbox
+		// server, so a task another session delegates to this harness can be
+		// taken here, on the vendors the spike showed honour its launch-time
+		// allow rule. A folder or inline run has no installed id to address, so
+		// it takes no tasks and records accepts_tasks: false.
+		if action == "" && inboxSession(adapter.Name(), !oneShot && !delegationNamesHarness(runDirName), harnessID != "", p.MCPManualApproval) {
+			ientry, iErr := inboxMCPEntry(runDirName)
+			if iErr != nil {
+				return iErr
+			}
+			if _, taken := servers[inboxmcp.ServerName]; taken {
+				return fmt.Errorf("the harness declares an MCP server named %q, which ynh uses to take a delegated task in an interactive session\n  Fix: rename the server", inboxmcp.ServerName)
+			}
+			if servers == nil {
+				servers = map[string]plugin.MCPServer{}
+			}
+			servers[inboxmcp.ServerName] = *ientry
+			inboxWired = true
+		}
 		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
 				return fmt.Errorf("creating plugin data dir: %w", err)
@@ -501,7 +526,7 @@ func cmdRun(args []string) (runErr error) {
 				return fmt.Errorf("writing MCP config: %w", err)
 			}
 			if adapter.Name() == "codex" {
-				if err := vendor.WriteCodexEnvPassthrough(runDir, harness.ComposedEnvPassthrough(p, resolver.IncludedHarnesses(resolved))); err != nil {
+				if err := vendor.WriteCodexEnvPassthrough(runDir, append(harness.ComposedEnvPassthrough(p, resolver.IncludedHarnesses(resolved)), inboxEnvNames(inboxWired)...)); err != nil {
 					return fmt.Errorf("writing env_passthrough names: %w", err)
 				}
 			}
@@ -724,7 +749,7 @@ func cmdRun(args []string) (runErr error) {
 			declaredMCP = mcpServerNames(runDir)
 		}
 		if adapter.Name() == "claude" && grant.MCPApprove {
-			if rule := claudeOwnMCPAllowRule(p.Name, declaredMCP); rule != "" {
+			if rule := claudeOwnMCPAllowRule(p.Name, declaredMCP, p.MCPIsolation || ra.IsolatedMCP); rule != "" {
 				vendorArgs = append([]string{rule}, vendorArgs...)
 			}
 		}
@@ -736,6 +761,13 @@ func cmdRun(args []string) (runErr error) {
 		// needs an allow rule for the server.
 		if adapter.Name() == "claude" && isDelegateSession && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
 			vendorArgs = append([]string{parentAllowRule(p.Name)}, vendorArgs...)
+		}
+
+		// The launch-time allow rule for the ynh-inbox tools, so the session
+		// takes a delegated task with no prompt.
+		if inboxWired {
+			vendorArgs = append(inboxAllowArgs(adapter.Name(), p.Name), vendorArgs...)
+			_ = os.Setenv(inboxSessionEnv, sessionID)
 		}
 
 		// Workspace folders the harness requested and the operator granted,
@@ -797,7 +829,7 @@ func cmdRun(args []string) (runErr error) {
 			launchRec.markStarted()
 		})
 		defer removeHook()
-		endPresence := startPresence(adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession)
+		endPresence := startPresence(sessionID, adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession, inboxWired)
 		defer endPresence()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}

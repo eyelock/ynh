@@ -13,6 +13,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // resumeOpts builds RunOptions wired to a real session directory so the
@@ -455,5 +456,35 @@ func TestRunLoop_AdmitSeesResolvedBackend(t *testing.T) {
 	}
 	if len(seen) != 2 || seen[0] != "codex" || seen[1] != "codex" {
 		t.Errorf("Admit saw backends %v, want [codex codex]: a resume with no --backend takes the checkpoint's", seen)
+	}
+}
+
+// ynw-zpkaj: Admit runs before RunLoop resolves the profile, so the MCP grant
+// it hands back must not already carry mcp_manual_approval; the worker is
+// started with the setting of the profile that ran.
+func TestRunLoop_WorkerReadsTheProfilesMCPManualApproval(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	hdir := filepath.Join(t.TempDir(), "seat")
+	writePathHarness(t, hdir)
+	recordCheck(t, gate.StatusPass)
+	pj := filepath.Join(hdir, plugin.PluginDir, plugin.PluginFile)
+	if err := os.WriteFile(pj, []byte(`{"name":"authoring","version":"0.2.0","default_vendor":"claude","mcp_manual_approval":true,"profiles":{"open":{"mcp_manual_approval":false}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		profile string
+		want    bool
+	}{{"", true}, {"open", false}} {
+		mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+		opts := resumeOpts(mb, t.TempDir())
+		opts.HarnessName = hdir
+		opts.Profile = tc.profile
+		opts.Admit = func(*harness.Harness, string, string) Admission { return Admission{MCPApprove: true} }
+		if _, err := RunLoop(opts); err != nil {
+			t.Fatalf("profile %q: %v", tc.profile, err)
+		}
+		if len(mb.startOpts) != 1 || !mb.startOpts[0].TrustedHarness || mb.startOpts[0].MCPManualApproval != tc.want {
+			t.Errorf("profile %q: worker started with %+v, want TrustedHarness and MCPManualApproval %v", tc.profile, mb.startOpts, tc.want)
+		}
 	}
 }

@@ -173,11 +173,14 @@ var grantRows = []struct {
 }
 
 // agentAdmission is what `ynh agent run` hands the loop: the refusal, or the
-// grants of a one-shot run on the backend the loop resolved.
-func agentAdmission(adm Admission, backend string, manualApproval bool) agent.Admission {
+// grants of a one-shot run on the backend the loop resolved. It does not read
+// mcp_manual_approval: the loop calls it before it resolves --profile and the
+// focus's profile, and a profile can turn the setting on or off, so the loop
+// reads the resolved setting and the worker withholds the MCP grant itself.
+func agentAdmission(adm Admission, backend string) agent.Admission {
 	if err := adm.err(); err != nil {
 		return agent.Admission{Refusal: err}
 	}
-	g := grantsFor(adm, backend, true, manualApproval)
+	g := grantsFor(adm, backend, true, false)
 	return agent.Admission{MCPApprove: g.MCPApprove, AutoApprove: g.AutoApprove}
 }

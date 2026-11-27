@@ -140,6 +140,18 @@ Install the harness first:
 ynh install /tmp/ynh-tutorial/profile-harness
 ```
 
+`profile-demo` runs hooks and MCP servers, in its base and in its profiles, so ynh refuses to start it
+until you have reviewed and accepted what it runs, as in
+[Your First Trusted Harness](first-trusted-harness.md). The review covers every profile at once, so one
+acceptance is enough for `--profile ci` and `--profile local`:
+
+```bash
+ynh trust show local/profile-demo
+ynh trust accept local/profile-demo
+```
+
+Expected output of the accept: `Accepted local/profile-demo (accept): 4 command(s), sha256:...`.
+
 Launch interactively with the `ci` profile:
 
 *This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--profile-demo/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--profile-demo/.../**) --append-system-prompt You are a deployment assistant. ... procedures for all environments.`

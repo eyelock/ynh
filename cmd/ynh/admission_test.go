@@ -200,6 +200,21 @@ func TestRunOneShotClaudeOwnMCPRuleFollowsGrants(t *testing.T) {
 	if args := run(t, mcpClaudeManualHarness, "--", "hi"); has(args) {
 		t.Errorf("mcp_manual_approval still got the rule: %q", args)
 	}
+	// Under isolation the servers load as <server>, so the rule names them so
+	// (ynw-bogq7).
+	iso := run(t, mcpClaudeHarness, "--isolated-mcp", "--", "hi")
+	if has(iso) {
+		t.Errorf("an isolated run got the plugin-named rule: %q", iso)
+	}
+	foundIso := false
+	for _, a := range iso {
+		if strings.HasPrefix(a, "--allowedTools=mcp__") && !strings.Contains(a, "mcp__plugin_") {
+			foundIso = true
+		}
+	}
+	if !foundIso {
+		t.Errorf("an isolated trusted run got no mcp__<server> rule: %q", iso)
+	}
 	if args := run(t, mcpClaudeHarness, "--interactive", "--", "hi"); has(args) {
 		t.Errorf("an interactive run got the rule: %q", args)
 	}
@@ -249,13 +264,12 @@ func TestAgentAdmissionFollowsResolvedBackend(t *testing.T) {
 	for _, v := range grantVendors {
 		t.Run(v.name, func(t *testing.T) {
 			want := v.name == "claude" || v.name == "codex" || v.name == "copilot"
-			if a := agentAdmission(trusted, v.name, false); a.Refusal != nil || a.MCPApprove != want || !a.AutoApprove {
+			// mcp_manual_approval is not read here: a profile can turn it off,
+			// and the loop reads the resolved setting (ynw-zpkaj).
+			if a := agentAdmission(trusted, v.name); a.Refusal != nil || a.MCPApprove != want || !a.AutoApprove {
 				t.Errorf("trusted: %+v, want MCPApprove %v", a, want)
 			}
-			if a := agentAdmission(trusted, v.name, true); a.MCPApprove {
-				t.Errorf("mcp_manual_approval: MCP approved: %+v", a)
-			}
-			if a := agentAdmission(Admission{}, v.name, false); a.Refusal == nil || a.MCPApprove {
+			if a := agentAdmission(Admission{}, v.name); a.Refusal == nil || a.MCPApprove {
 				t.Errorf("zero Admission: %+v, want a refusal", a)
 			}
 		})

@@ -156,6 +156,14 @@ func TestBuildClaudeStreamArgs_OwnMCPAllowRule(t *testing.T) {
 	if has(buildClaudeStreamArgs(base), rule) {
 		t.Error("an untrusted harness had its MCP tools allowed")
 	}
+	// Under isolation the servers load as <server> (--strict-mcp-config), so
+	// the rule names mcp__<server>, not the plugin form (ynw-bogq7).
+	isolated := trusted
+	isolated.IsolatedMCP = true
+	iargs := buildClaudeStreamArgs(isolated)
+	if !has(iargs, "--allowedTools=mcp__probe") || has(iargs, rule) {
+		t.Errorf("isolated harness: want --allowedTools=mcp__probe and not %s in %v", rule, iargs)
+	}
 	manual := trusted
 	manual.MCPManualApproval = true
 	if has(buildClaudeStreamArgs(manual), rule) {

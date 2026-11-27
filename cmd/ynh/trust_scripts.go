@@ -23,9 +23,12 @@ import (
 // are then part of the digest, and so is every file in its folder, subfolders
 // included (a script that builds or reads code beside it is only as reviewed as
 // that code), so changing any of them alone changes the digest. A script
-// anywhere else (`bash scripts/wake.sh`, an absolute path) is project code, as
-// `make check` is: it is reported as not covered and the digest leaves it
-// out. What a covered script reaches outside its own folder is not covered.
+// anywhere else is reported as not covered and the digest leaves it out, with
+// one of two labels in `trust show`: a path in the project (`bash
+// scripts/wake.sh`) is "project code", as `make check` is; a script at an
+// absolute path (`/usr/local/bin/format-check.sh`) or from the home directory
+// (`~/bin/check.sh`, `$HOME/bin/check.sh`) is "a file on this host,
+// outside the harness". What a covered script reaches outside its own folder is not covered.
 type scriptRef struct {
 	// Path is the script as the command names it.
 	Path    string `json:"path"`
@@ -478,6 +481,10 @@ func writeScriptLine(w io.Writer, s *scriptRef) {
 			writeSkipped(w, s)
 			return
 		}
+		if isHostScriptPath(s.Path) {
+			_, _ = fmt.Fprintf(w, "    script:  %s (not covered: a file on this host, outside the harness)\n", s.Path)
+			return
+		}
 		_, _ = fmt.Fprintf(w, "    script:  %s (not covered: project code, outside what this digest reads)\n", s.Path)
 		return
 	}
@@ -487,6 +494,21 @@ func writeScriptLine(w io.Writer, s *scriptRef) {
 	}
 	_, _ = fmt.Fprintf(w, "    script:  %s (covered with its folder %s: %d file(s), %s)\n", s.Path, s.Folder, s.Files, shortDigest(s.Digest))
 	writeSkipped(w, s)
+}
+
+// isHostScriptPath reports whether a script path names a file on this host
+// rather than in the project: an absolute path, or one spelled from the home
+// directory (~/x, $HOME/x or ${HOME}/x), which the shell expands to one.
+func isHostScriptPath(path string) bool {
+	if filepath.IsAbs(path) {
+		return true
+	}
+	for _, p := range []string{"~/", "$HOME/", "${HOME}/"} {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // writeSkipped says what the folder walk did not read.

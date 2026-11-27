@@ -185,7 +185,7 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 	// every vendor, ynh #1006): only for a harness the trust gate vouched
 	// for, and not when it sets mcp_manual_approval.
 	if opts.TrustedHarness && !opts.MCPManualApproval && opts.ConfigPath != "" {
-		if rule := vendor.ClaudeOwnMCPAllowRule(opts.HarnessName, vendor.ClaudeOwnMCPServers(opts.ConfigPath)); rule != "" {
+		if rule := vendor.ClaudeOwnMCPAllowRule(opts.HarnessName, vendor.ClaudeOwnMCPServers(opts.ConfigPath), opts.IsolatedMCP); rule != "" {
 			args = append(args, rule)
 		}
 	}

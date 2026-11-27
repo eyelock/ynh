@@ -14,11 +14,18 @@ import (
 // not the user's servers, not ynh-delegates. It is "" when there are none.
 // Claude Code names the tools mcp__plugin_<harness>_<server>__<tool>, with
 // any character of a name outside letters, digits, _ and - written as _; a rule
-// naming the server allows all of its tools.
-func ClaudeOwnMCPAllowRule(name string, servers []string) string {
+// naming the server allows all of its tools. Under MCP isolation
+// (--strict-mcp-config with --mcp-config, see IsolateMCP) the servers do not
+// load through the plugin, so Claude Code names their tools
+// mcp__<server>__<tool> and the rule names mcp__<server>.
+func ClaudeOwnMCPAllowRule(name string, servers []string, isolated bool) string {
 	var rules []string
 	for _, s := range servers {
-		rules = append(rules, "mcp__plugin_"+claudeMCPName(name)+"_"+claudeMCPName(s))
+		if isolated {
+			rules = append(rules, "mcp__"+ClaudeMCPName(s))
+			continue
+		}
+		rules = append(rules, "mcp__plugin_"+ClaudeMCPName(name)+"_"+ClaudeMCPName(s))
 	}
 	if len(rules) == 0 {
 		return ""
@@ -26,7 +33,9 @@ func ClaudeOwnMCPAllowRule(name string, servers []string) string {
 	return "--allowedTools=" + strings.Join(rules, ",")
 }
 
-func claudeMCPName(s string) string {
+// ClaudeMCPName is a server or harness name as Claude Code writes it in a
+// tool name.
+func ClaudeMCPName(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
 			return r

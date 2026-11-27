@@ -99,9 +99,12 @@ func parentAllowRule(name string) string {
 
 // claudeOwnMCPAllowRule is vendor.ClaudeOwnMCPAllowRule, the one rule a
 // one-shot `ynh run` and an `ynh agent run` worker share.
-func claudeOwnMCPAllowRule(name string, servers []string) string {
-	return vendor.ClaudeOwnMCPAllowRule(name, servers)
+func claudeOwnMCPAllowRule(name string, servers []string, isolated bool) string {
+	return vendor.ClaudeOwnMCPAllowRule(name, servers, isolated)
 }
+
+// claudeMCPName is how Claude Code writes a server or harness name in a tool name.
+func claudeMCPName(s string) string { return vendor.ClaudeMCPName(s) }
 
 // mcpServerNames lists, sorted, the servers in runDir's .mcp.json: for a baked
 // image, the servers its harness declared when it was built.

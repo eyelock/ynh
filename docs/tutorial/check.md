@@ -56,7 +56,7 @@ ynh trust show local/gate-demo
 ynh trust accept local/gate-demo
 ```
 
-Expected output of the accept: `Recorded local/gate-demo: 3 command(s), sha256:...`
+Expected output of the accept: `Accepted local/gate-demo (accept): 3 command(s), sha256:...`. It is the same review and acceptance you did in [Your First Trusted Harness](first-trusted-harness.md).
 
 ## A clean run
 

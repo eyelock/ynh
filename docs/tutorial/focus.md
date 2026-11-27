@@ -252,7 +252,7 @@ ynh trust show local/wake-demo
 ynh trust accept local/wake-demo
 ```
 
-Expected output of the accept: `Recorded local/wake-demo: 1 command(s), sha256:...`
+Expected output of the accept: `Accepted local/wake-demo (accept): 1 command(s), sha256:...`. It is the same review and acceptance you did in [Your First Trusted Harness](first-trusted-harness.md).
 
 A bare launch, with no `--focus` and no prompt, runs `--focus wake --interactive`: the session stays open, the focus prompt is its first message, and the focus's profile is applied. ynh says so on stderr.
 
