@@ -85,7 +85,7 @@ func TestTrustGate_ChangedHarnessIsRefused(t *testing.T) {
 		t.Fatal(serr)
 	}
 	err = trustGate(id, loadInstalled(t, id), io.Discard)
-	if !isUntrusted(err) || !strings.Contains(err.Error(), scriptDigestNote) {
+	if !isUntrusted(err) || !strings.Contains(err.Error(), scriptDigestNote("hooks")) {
 		t.Fatalf("err = %v, want scheme 3's note", err)
 	}
 }
@@ -219,7 +219,7 @@ func TestTrustGate_FolderRunRefusesAnUnacceptedRemoteInclude(t *testing.T) {
 	if aerr := cmdTrustTo([]string{"accept", folder}, &out, io.Discard); aerr != nil {
 		t.Fatalf("accept: %v", aerr)
 	}
-	if !strings.Contains(out.String(), "Recorded 1 remote include") {
+	if !strings.Contains(out.String(), "Accepted 1 remote include") {
 		t.Errorf("accept output: %q", out.String())
 	}
 	if gerr = trustGate("", p, io.Discard); gerr != nil {

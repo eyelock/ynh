@@ -65,10 +65,12 @@ func TestRunLoop_NeverSendsATurnBeyondTheCap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			redSensors(t)
-			mb := &mockBackend{name: "mock", turns: tt.turns, delays: tt.delays}
+			clk := newFakeClock()
+			mb := &mockBackend{name: "mock", turns: tt.turns, delays: tt.delays, sleep: clk.Advance}
 			var traj bytes.Buffer
 			opts := baseOpts(mb, &traj, &bytes.Buffer{}, strings.NewReader(""))
 			opts.EmitJSONL = "-"
+			opts.testNow = clk.Now
 			opts.testSensorNames = []string{"build"}
 			tt.configure(&opts)
 

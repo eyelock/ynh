@@ -143,7 +143,9 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 // from an enclosing session, so a run never offers its vendor another
 // session's delegates, or lets the a2a CLI pick one of them by default. It
 // clears only what a run itself sets: YNH_DELEGATES, YNH_DELEGATE_* and the two
-// a2a CLI variables that pick an agent. It leaves every other A2ACLI_* alone, since
+// a2a CLI variables that pick an agent. YNH_DELEGATE_MAX_WAIT is the one
+// YNH_DELEGATE_* name a run does not set: it is the user's own setting, read
+// later by delegateMCPEntry, so it stays. It leaves every other A2ACLI_* alone, since
 // those are the user's own settings for the CLI (a timeout, say) and the
 // parent should keep them; a delegate session, by contrast, drops all of
 // A2ACLI_* (delegation.ParentOnlyEnv), because it is a separate agent that must
@@ -152,6 +154,9 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 func scrubParentEndpoints() {
 	for _, kv := range os.Environ() {
 		k, _, _ := strings.Cut(kv, "=")
+		if k == delegateMaxWaitEnv {
+			continue
+		}
 		if k == "YNH_DELEGATES" || strings.HasPrefix(k, "YNH_DELEGATE_") || k == "A2ACLI_AGENT_CARD" || k == "A2ACLI_AUTH" ||
 			(k == a2acli.CredentialHelperEnv && strings.Contains(kv, a2acli.HelperMarker)) {
 			_ = os.Unsetenv(k)
