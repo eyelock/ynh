@@ -73,6 +73,7 @@ pulled is not checked, so the check never pulls or runs anything.
 A base whose ynh is older than 0.18.0 predates the [trust gate](trust.md#ynh-image):
 it runs the baked harness with no trust check. A build that bakes an acceptance
 record warns about that too, with the same `--base` fix.
+
 ### What goes into the image
 
 The harness source is copied into the build context the way git sees it: tracked
