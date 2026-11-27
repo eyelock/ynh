@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/gate"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // resumeOpts builds RunOptions wired to a real session directory so the
@@ -416,5 +417,43 @@ func TestSessions_ResumeTokenAccessors(t *testing.T) {
 	}
 	if got := (&codexSession{threadID: "sid"}).ResumeToken(); got != "sid" {
 		t.Errorf("codex ResumeToken = %q, want sid", got)
+	}
+}
+
+// ynw-3fsvf: Admit is handed the backend RunLoop resolved, so the grants are
+// decided for the vendor that runs: the checkpoint's on --resume with no
+// --backend, claude on a fresh run with none.
+func TestRunLoop_AdmitSeesResolvedBackend(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	hdir := filepath.Join(t.TempDir(), "seat")
+	writePathHarness(t, hdir)
+	recordCheck(t, gate.StatusPass)
+
+	var seen []string
+	admit := func(_ *harness.Harness, _, backend string) Admission {
+		seen = append(seen, backend)
+		return Admission{}
+	}
+
+	dir := t.TempDir()
+	failSensor(t)
+	opts1 := resumeOpts(&mockBackend{name: "mock", turns: []Turn{{Content: "r1"}}, resumeToken: "tok"}, dir)
+	opts1.HarnessName = hdir
+	opts1.Backend = "codex"
+	opts1.MaxTurns = 1
+	opts1.Admit = admit
+	_, _ = RunLoop(opts1)
+
+	passSensor(t)
+	opts2 := resumeOpts(&mockBackend{name: "mock", turns: []Turn{{Content: "done"}}, resumeToken: "tok"}, dir)
+	opts2.HarnessName = hdir
+	opts2.Resume = dir
+	opts2.MaxTurns = 5
+	opts2.Admit = admit
+	if _, err := RunLoop(opts2); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 || seen[0] != "codex" || seen[1] != "codex" {
+		t.Errorf("Admit saw backends %v, want [codex codex]: a resume with no --backend takes the checkpoint's", seen)
 	}
 }

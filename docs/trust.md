@@ -210,7 +210,7 @@ A trust record carries `via`: `accept` (`ynh trust accept`), `install --trust`, 
 
 Some approvals let a run act without asking you. ynh gives them only to a harness that passed the gate as **trusted**: installed, and accepted or with nothing to accept. A harness run from a folder is never trusted, because the gate does not check its own commands. Every approval below is read from one table in the code (`grantsFor`), which takes the decision of the gate and the vendor the run starts, so no approval is decided anywhere else; a test holds this table to it.
 
-For a trusted harness, on a one-shot run (an interactive run approves nothing in advance) that does not set `mcp_manual_approval`:
+For a trusted harness, on a one-shot run (an interactive run approves nothing in advance). The table is for a harness that does not set `mcp_manual_approval`; the paragraph below says what setting it changes:
 
 | Grant | Claude Code | Codex | Copilot | Cursor | OpenCode |
 |---|---|---|---|---|---|
@@ -221,7 +221,7 @@ For a trusted harness, on a one-shot run (an interactive run approves nothing in
 | Codex hooks and project trust | - | granted | - | - | - |
 | Cursor `--trust` | - | - | - | granted | - |
 
-`granted` is given to a trusted harness; `asks` means the vendor has no way for ynh to approve in advance, so it asks as it always did; `-` means the grant is not one that vendor has. Claude Code's grant is `--allowedTools=mcp__plugin_<harness>_<server>` for each server the harness declares, on a run you start directly as well as on a delegate's. Copilot's one-shot mode approves every tool, so its own MCP tools are covered by that grant, and a Copilot one-shot run of a harness that is not trusted is refused before launch (exit 1). A harness that sets `mcp_manual_approval`, at the top level or in the profile that runs, gets no MCP approval on any vendor. A run from a folder, or an installed harness you have not accepted, gets none of this: the vendor asks, `--auto-approve` is refused (exit 1, error code `untrusted`), and when there are MCP servers to approve ynh says so once on stderr.
+`granted` is given to a trusted harness; `asks` means the vendor has no way for ynh to approve in advance, so it asks as it always did; `-` means the grant is not one that vendor has. Claude Code's grant is `--allowedTools=mcp__plugin_<harness>_<server>` for each server the harness declares, on a run you start directly as well as on a delegate's. Copilot's one-shot mode approves every tool, so its own MCP tools are covered by that grant, and a Copilot one-shot run of a harness that is not trusted is refused before launch (exit 1). A harness that sets `mcp_manual_approval`, at the top level or in the profile that runs, gets no MCP approval from ynh on Claude Code or Codex, the two vendors where ynh approves a harness's own MCP tools by name: the vendor asks. It withholds nothing on Copilot: a trusted harness's one-shot run still passes `--allow-all-tools`, which covers its own MCP tools whether or not the setting is on, so on Copilot only a harness that is not trusted is stopped. Cursor and OpenCode ask either way. A run from a folder, or an installed harness you have not accepted, gets none of this: the vendor asks, `--auto-approve` is refused (exit 1, error code `untrusted`), and when there are MCP servers to approve ynh says so once on stderr.
 
 An installed harness you have not accepted is refused by the gate before any of this is reached, so in practice the case that gets none is the folder run. A run with no `--harness` runs no harness commands, so `--auto-approve` there is your own grant. See [MCP Servers](mcp.md), [Agent Loop](agent.md) and [Vendors](vendors.md).
 
@@ -245,8 +245,6 @@ Install it and accept what it executes (ynh install <folder>, ynh trust accept l
 |---|---|---|---|---|
 | A launching command (`ynh run`, `ynh agent run`, `ynh check`, `ynh image`, a delegate) is used on a harness you have not accepted | yes: the same refusal from each, exit 1 for `run`, `check`, `agent run` and `image` | `ynh trust show <id>`, then `ynh trust accept <id>` | `ynh install <url> --ref <sha> --trust` | `ynh image <id>` after accepting, or `ynh image --from <source> --ref <sha> --trust` |
 | A remote include of a folder changes | the folder run, until its include is accepted | `ynh trust accept <dir>` | `ynh run <dir> --trust` or `ynh agent run --harness <dir> --trust`, with the includes at full SHAs | the include's records are baked with the harness |
-| A trusted harness runs one-shot | no: its own MCP tools are pre-approved on every vendor that can, Claude Code included | n/a | n/a | the baked record makes it trusted inside the image |
-| `mcp_manual_approval` is set | no: nothing is pre-approved, the vendor asks | n/a | n/a | n/a |
 
 ## `ynh image`
 

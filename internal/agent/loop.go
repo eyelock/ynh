@@ -141,14 +141,16 @@ type RunOptions struct {
 	HookTrust func(h *harness.Harness, id, backend, configDir string) bool
 	// Admit is the one trust decision for the harness (ynh #950, #952, #1006).
 	// It is handed the harness as loaded and the installed id ("" for a
-	// harness given by path) before anything is assembled or started. A
+	// harness given by path) and the backend the run resolved (the
+	// checkpoint's on --resume, claude when none is named), before anything
+	// is assembled or started. A
 	// non-nil Refusal refuses the run with exit 1 and error_code "untrusted".
 	// On --resume it is handed the harness the checkpoint names, and a
 	// checkpoint that names none is refused. --auto-approve is accepted, and
 	// the MCP tools of the harness's servers are approved, only as the
 	// returned Admission grants them. Nil runs ungated and trusts nothing, which only
 	// tests do: the CLI always sets it.
-	Admit func(h *harness.Harness, id string) Admission
+	Admit func(h *harness.Harness, id, backend string) Admission
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -424,7 +426,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			loadedID = opts.HarnessName
 		}
 		if opts.Admit != nil {
-			adm := opts.Admit(harnessObj, loadedID)
+			adm := opts.Admit(harnessObj, loadedID, opts.Backend)
 			if adm.Refusal != nil {
 				return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: adm.Refusal.Error()}
 			}

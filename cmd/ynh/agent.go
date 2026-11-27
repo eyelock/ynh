@@ -325,13 +325,12 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	if opts.Resume != "" {
 		purpose = purposeResume
 	}
-	opts.Admit = func(h *harness.Harness, id string) agent.Admission {
+	// The grants are decided for the backend RunLoop resolved, which it hands
+	// to Admit: opts.Backend here is the raw flag, empty without --backend and
+	// not the checkpoint's on --resume.
+	opts.Admit = func(h *harness.Harness, id, backend string) agent.Admission {
 		adm = decideTrust(id, h, purpose, stderr)
-		if err := adm.err(); err != nil {
-			return agent.Admission{Refusal: err}
-		}
-		g := grantsFor(adm, opts.Backend, true, false)
-		return agent.Admission{MCPApprove: g.MCPApprove, AutoApprove: g.AutoApprove}
+		return agentAdmission(adm, backend)
 	}
 
 	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {

@@ -239,3 +239,19 @@ func TestDecideTrustPurposeChangesOnlyTheWords(t *testing.T) {
 		t.Errorf("the purposes differ by more than the words:\n%q\n%q", run.err(), image.err())
 	}
 }
+
+// ynw-3fsvf: the grants follow the backend the loop resolved, so a resumed
+// Codex worker of a trusted harness keeps its MCP approval even though the
+// CLI was given no --backend.
+func TestAgentAdmissionFollowsResolvedBackend(t *testing.T) {
+	trusted := Admission{minted: true, Trusted: true}
+	if a := agentAdmission(trusted, "codex"); a.Refusal != nil || !a.MCPApprove || !a.AutoApprove {
+		t.Errorf("codex: %+v, want MCP and auto-approve granted", a)
+	}
+	if a := agentAdmission(trusted, "cursor"); a.MCPApprove {
+		t.Errorf("cursor: MCP approved: %+v", a)
+	}
+	if a := agentAdmission(Admission{}, "codex"); a.Refusal == nil || a.MCPApprove {
+		t.Errorf("zero Admission: %+v, want a refusal", a)
+	}
+}

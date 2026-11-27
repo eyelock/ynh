@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agent"
 	"github.com/eyelock/ynh/internal/harness"
 )
 
@@ -169,4 +170,14 @@ var grantRows = []struct {
 	{"Workspace folders", func(g grants) bool { return g.Workspace }},
 	{"Codex hooks and project trust", func(g grants) bool { return g.CodexHooks }},
 	{"Cursor `--trust`", func(g grants) bool { return g.CursorTrust }},
+}
+
+// agentAdmission is what `ynh agent run` hands the loop: the refusal, or the
+// grants of a one-shot run on the backend the loop resolved.
+func agentAdmission(adm Admission, backend string) agent.Admission {
+	if err := adm.err(); err != nil {
+		return agent.Admission{Refusal: err}
+	}
+	g := grantsFor(adm, backend, true, false)
+	return agent.Admission{MCPApprove: g.MCPApprove, AutoApprove: g.AutoApprove}
 }
