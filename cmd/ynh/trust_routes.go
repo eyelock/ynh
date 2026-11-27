@@ -102,6 +102,9 @@ func refuseUnpinnedWith(what, flag string, reasons []string, closing string) err
 const (
 	imageSourceUnpinnedClosing  = "Fix: build again with --ref <40-character commit SHA>"
 	imageIncludeUnpinnedClosing = "Fix: pin each of these to a 40-character commit SHA in the harness's manifest, then build again"
+	// A Git source is built at its --ref commit, so building again with the
+	// same --ref reads the same floating includes: the pins need a new commit.
+	imageIncludeUnpinnedGitClosing = "Fix: pin each of these to a 40-character commit SHA in the harness's manifest, commit that, then build again with --ref <the new commit's 40-character SHA>"
 )
 
 // uncachedUnpinnedClosing ends the refusal of an uncached include that is not

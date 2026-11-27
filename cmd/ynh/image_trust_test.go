@@ -93,6 +93,36 @@ func TestCmdImage_AcceptedHarnessLabelsTheDigest(t *testing.T) {
 	}
 }
 
+// A base image whose ynh predates the trust gate warns for an installed,
+// accepted harness too, not only for --from; a harness with nothing to accept
+// bakes no record and so does not warn.
+func TestCmdImage_WarnsOnPreGateBaseForInstalledHarness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	id, _ := installHookedWithScript(t, home)
+	if err := cmdTrustTo([]string{"accept", id}, io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	plain := installListTestHarness(t, home, "plain", plainHarness)
+	for _, tt := range []struct {
+		name, labels, id string
+		warns            bool
+	}{
+		{"accepted, old base", `{"dev.ynh.version":"0.17.1"}`, id, true},
+		{"accepted, new base", `{"dev.ynh.version":"0.18.0"}`, id, false},
+		{"nothing to accept, old base", `{"dev.ynh.version":"0.17.1"}`, plain, false},
+	} {
+		stubBaseLabels(t, tt.labels)
+		var out, errOut bytes.Buffer
+		if err := cmdImageTo([]string{tt.id, "--dry-run"}, &out, &errOut); err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if got := strings.Contains(errOut.String(), "predates the trust gate"); got != tt.warns {
+			t.Errorf("%s: warned = %v, want %v:\n%s", tt.name, got, tt.warns, errOut.String())
+		}
+	}
+}
+
 // A harness that executes nothing needs no record: the image's gate lets it
 // through, and no digest label claims an acceptance.
 func TestCmdImage_CommandlessHarnessBakesNoRecord(t *testing.T) {

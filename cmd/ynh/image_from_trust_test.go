@@ -125,6 +125,23 @@ func TestImageFromTrust_RefusesFloatingInclude(t *testing.T) {
 	}
 }
 
+// For a Git source the manifest is the one at the --ref commit, so building
+// again with the same --ref reads the same floating includes: the Fix line
+// names the new commit and --ref at it.
+func TestImageFromTrust_RefusesFloatingIncludeInGitSource(t *testing.T) {
+	fakeHome(t)
+	remote := filepath.Join(t.TempDir(), "remote")
+	gitRepo(t, remote, "remote-sensor")
+	src, sha := remoteSource(t, `,"includes":[{"git":"file://`+remote+`","ref":"main"}]`)
+	err := cmdImageTo([]string{"hh", "--from", "file://" + src, "--ref", sha, "--trust", "--dry-run"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "--trust refuses") || !strings.Contains(err.Error(), "floats") && !strings.Contains(err.Error(), "tag or branch") {
+		t.Fatalf("err = %v, want a refusal naming the floating include", err)
+	}
+	if !strings.Contains(err.Error(), "commit that, then build again with --ref <the new commit's 40-character SHA>") || strings.Contains(err.Error(), "trust accept") {
+		t.Errorf("Git-source Fix line should name the new commit and --ref:\n%s", err)
+	}
+}
+
 // A cold include cache must not stop --trust: the includes are fetched before
 // the gate reads them (ynw-twt3a). A floating include is judged once fetched.
 func TestImageFromTrust_ColdIncludeCache(t *testing.T) {

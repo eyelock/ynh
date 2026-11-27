@@ -146,7 +146,11 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		return nil, err
 	}
 	if bad := unpinnedIncludes(remote); len(bad) > 0 {
-		return nil, refuseUnpinnedWith("this image", "--trust", bad, imageIncludeUnpinnedClosing)
+		closing := imageIncludeUnpinnedClosing
+		if !isLocal {
+			closing = imageIncludeUnpinnedGitClosing
+		}
+		return nil, refuseUnpinnedWith("this image", "--trust", bad, closing)
 	}
 	rec := trustRecord{
 		Digest:     st.Digest,
