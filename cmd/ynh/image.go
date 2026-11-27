@@ -11,11 +11,13 @@ import (
 	"sort"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 	"github.com/eyelock/ynh/internal/warn"
@@ -356,6 +358,11 @@ func generateDockerfile(data imageTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+// imageContextHook, when set, is given the build context just before a dry run
+// prints its Dockerfile or a real build writes it, while the context still
+// exists. Tests read what cmdImageTo baked into it; nothing else sets it.
+var imageContextHook func(dir string)
+
 // cmdImage builds a Docker image with a harness baked in.
 func cmdImage(args []string) error {
 	return cmdImageTo(args, os.Stdout, os.Stderr)
@@ -384,6 +391,9 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 
 	var trustID string // install id of an installed harness, "" for --from
 	var fromRef string // the ref --from resolved to, "" for a local source
+	// fromProv is where a remote --from harness came from, baked into the
+	// image as installed.json so the image's ynh reports it (ynh #1040).
+	var fromProv *plugin.InstalledJSON
 	fromLocal := false
 	if ia.from != "" {
 		// Build from source (Git or local)
@@ -438,6 +448,16 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			ia.sha = resolved.sha
 			if ia.sha == "" && isFullSHA(resolved.ref) {
 				ia.sha = resolved.ref
+			}
+			fromProv = &plugin.InstalledJSON{
+				SourceType:   resolved.sourceType,
+				Source:       source,
+				Ref:          resolved.ref,
+				SHA:          result.SHA,
+				Path:         pathFlag,
+				Namespace:    resolved.namespace,
+				RegistryName: resolved.registryName,
+				InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 			}
 			harnessSrcDir = result.Path
 		}
@@ -496,6 +516,10 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	harnessDst := filepath.Join(tmpDir, "harness")
 	if err := assembler.CopyTree(harnessSrcDir, harnessDst); err != nil {
 		return fmt.Errorf("copying harness source: %w", err)
+	}
+
+	if err := bakeFromProvenance(harnessDst, fromProv, bakedTrust); err != nil {
+		return err
 	}
 
 	// Resolve includes (with remote source allow-list check)
@@ -609,6 +633,10 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 
+	if imageContextHook != nil {
+		imageContextHook(tmpDir)
+	}
+
 	if ia.dryRun {
 		_, _ = fmt.Fprint(stdout, dockerfile)
 		return nil
@@ -655,4 +683,24 @@ func harnessSHA(p *harness.Harness, ia imageArgs) string {
 		return p.InstalledFrom.SHA
 	}
 	return ""
+}
+
+// bakeFromProvenance keeps a remote --from source inside the image (ynh
+// #1040). The image's harness/ folder is a clone with no installed.json of its
+// own, so without this the image's ynh reports the harness as (local) and its
+// baked trust record has no source or commit to name. prov is nil for a local
+// folder, which has no source worth keeping: its path means nothing inside an
+// image. The record is given the same source, ref and commit, which is what
+// the image's gate compares it against, so it still reads accepted.
+func bakeFromProvenance(harnessDst string, prov *plugin.InstalledJSON, rec *trustRecord) error {
+	if prov == nil {
+		return nil
+	}
+	if err := plugin.SaveInstalledJSON(harnessDst, prov); err != nil {
+		return fmt.Errorf("recording the harness's source in the image: %w", err)
+	}
+	if rec != nil {
+		rec.Source, rec.Ref, rec.SHA = prov.Source, prov.Ref, prov.SHA
+	}
+	return nil
 }

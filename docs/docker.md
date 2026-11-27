@@ -68,10 +68,11 @@ newer than every release. The warning never stops the build or changes the
 Dockerfile; pass `--base <image>` to build on a newer ynh image. A base that is not
 pulled is not checked, so the check never pulls or runs anything.
 
+**Trust.** `ynh image` refuses a harness you have not accepted, and an accepted harness's image carries its trust record, so its run passes the gate inside the image. The machine that runs the image is never asked. See [Build an image that passes the trust gate](how-to/build-an-image-that-passes-the-trust-gate.md).
+
 A base whose ynh is older than 0.18.0 predates the [trust gate](trust.md#ynh-image):
 it runs the baked harness with no trust check. A build that bakes an acceptance
 record warns about that too, with the same `--base` fix.
-
 ### What goes into the image
 
 The harness source is copied into the build context the way git sees it: tracked
@@ -387,6 +388,6 @@ docker run -e YNH_IMAGE_DIGEST="$(docker inspect --format '{{index .RepoDigests 
 | Claude Code (`claude`) | `npm install -g @anthropic-ai/claude-code` (pinned) |
 | Codex (`codex`) | `npm install -g @openai/codex` (pinned) |
 | Cursor (`agent`) | `curl https://cursor.com/install` (latest) |
-| ynr (`ynr`) | The pinned release binary from `eyelock/ynr`, checked against the release's `checksums.txt`; only the binary is copied in. Its version is the `dev.ynh.ynr.version` label. Having it starts nothing: the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) runs only when asked |
+| ynr (`ynr`) | The pinned release binary from `eyelock/ynr`, its `checksums.txt` verified against ynr's sigstore bundle (`cosign verify-blob`, identity pinned to ynr's release workflow at the tag) and the binary checked against that file; only the binary is copied in. Its version is the `dev.ynh.ynr.version` label. Having it starts nothing: the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) runs only when asked |
 | Git, SSH, bash | Alpine packages |
 | tini | PID 1 signal handler |

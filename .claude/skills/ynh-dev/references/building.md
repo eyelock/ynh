@@ -19,7 +19,7 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 
 | Command | What it does |
 |---------|-------------|
-| `make check` | Every CI check needing no Docker or network: deps, format, lint, **check-tidy**, test, build, **check-artifacts**, **check-vendor-parity**, **check-marketplace** |
+| `make check` | Every CI check needing no Docker or network: deps, format, lint, **check-tidy**, **check-go-pin**, **check-spoolexporter-pin**, test, build, **check-artifacts**, **check-vendor-parity**, **check-marketplace** |
 | `make deps` | Install prerequisites (Go, golangci-lint, goimports, jq); fails if python3 is missing, which it does not install |
 | `make build` | Build **both** binaries to `bin/ynh` and `bin/ynd` |
 | `make install` | Build and copy both binaries to `~/.ynh/bin` |
@@ -29,6 +29,8 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 | `make format` | Run goimports + gofmt |
 | `make lint` | Run golangci-lint |
 | `make check-tidy` | Fail if `go.mod`/`go.sum` are not tidy (`go mod tidy -diff`, writes nothing) |
+| `make check-go-pin` | Fail if the Dockerfile's Go version differs from `go.mod`'s toolchain line |
+| `make check-spoolexporter-pin` | Run the cases of the spoolexporter-versus-ynr-pin comparison (major, then minor; `scripts/spoolexporter-pin.sh --self-test`) |
 | `make check-artifacts` | `ynd validate` + `ynd lint` over `skills/ agents/ rules/ .claude/` |
 | `make check-vendor-parity` | Every vendor documented, assembling the same artifacts, and its CLI stubbed in `.claude/agents/evals.md` (needs jq) |
 | `make check-marketplace` | The committed marketplace indexes agree with the plugin manifests (needs python3) |

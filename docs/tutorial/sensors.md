@@ -180,6 +180,11 @@ ynh info local/sensor-demo | grep -A 3 'Focus:'
 
 You should see only `audit-vulns` listed under Focus — `coverage-judge` is a sensor, and its inline focus is hidden inside the sensor declaration.
 
+The `build` sensor runs a command, so `ynh check` and `ynh sensors run` refuse this harness until you have
+accepted it, as in [Your First Trusted Harness](first-trusted-harness.md). This tutorial only reads what is
+declared, with `ynh info`, `ynh sensors ls` and `ynh sensors show`, which run nothing, so there is nothing
+to accept yet.
+
 ## Discovery — `ynh sensors ls/show`
 
 Loop drivers discover what's declared via the CLI:

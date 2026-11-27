@@ -732,9 +732,15 @@ turn cap, at the token budget, and refused before any worker starts. Each plants
 a prompt and a credential, and the check fails if either reaches a record.
 
 CI's Conformance job downloads the ynr release the Dockerfile pins (`ARG
-YNR_VERSION`, the one place ynh pins ynr). The downloaded `ynr` and
-`ynr-stub-vendor` archives must match the release's `checksums.txt` before
-anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
+YNR_VERSION`, the one place ynh pins ynr). Before anything else, `checksums.txt`
+is verified with `cosign verify-blob` against the release's
+`checksums.txt.sigstore.json`, with the signer pinned to ynr's release workflow
+at that version's tag (`eyelock/ynr`, `.github/workflows/release.yml`,
+`refs/tags/v<version>`, issued by GitHub Actions); a replaced `checksums.txt`
+fails there. Then the downloaded `ynr` and `ynr-stub-vendor` archives must match
+it before anything is extracted or run. The Test job's relay-test install and
+the Dockerfile's ynr stage make the same signature check before they trust
+`checksums.txt`. Locally, with `ynr` and `ynr-stub-vendor`
 on your `PATH`:
 
 ```bash

@@ -281,7 +281,8 @@ Error: delegate /private/tmp/ynh-tutorial/reviewer of team-lead is installed as 
   Review with 'ynh trust show local/reviewer', then run: ynh trust accept local/reviewer
 ```
 
-Trust is ynh's record that you have read what a harness will run, before ynh runs it. We do that next.
+Trust is ynh's record that you have read what a harness will run, before ynh runs it. We do that next,
+as in [Your First Trusted Harness](first-trusted-harness.md).
 
 ## Trust the reviewer
 
@@ -325,7 +326,7 @@ ynh trust accept local/reviewer
 ```
 
 ```
-Recorded local/reviewer: 1 command(s), sha256:...
+Accepted local/reviewer (accept): 1 command(s), sha256:...
 ```
 
 The `sha256:` value is the one `ynh trust show` printed as `digest:`. It depends on your ynh's digest scheme as well as on the reviewer, so it is not shown here: a build of `develop` from 2026-11-26 prints `sha256:abab6f64cd7a3573`. This trust is recorded in `/tmp/ynh-tutorial/home`, not in your usual ynh home.
@@ -469,7 +470,7 @@ ynh trust accept github.com/eyelock/ynh/librarian
 ```
 
 ```
-Recorded github.com/eyelock/ynh/librarian: 1 command(s), sha256:...
+Accepted github.com/eyelock/ynh/librarian (accept): 1 command(s), sha256:...
 ```
 
 Now name it in the team lead, writing the whole manifest again:

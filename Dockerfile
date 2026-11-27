@@ -89,12 +89,15 @@ RUN set -eu; \
 
 # Stage 2d: ynr (parallel), only the slim binary
 FROM alpine:3.24.4@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS ynr-cli
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl cosign
 
 ARG YNR_VERSION
 ARG TARGETARCH
-# The tarball is checked against the release's checksums.txt, strictly: the
-# build fails if the line for this asset is missing, or does not match.
+# checksums.txt is first verified against its sigstore bundle, signed keylessly
+# by ynr's release workflow at this release's tag (the identity is pinned to
+# that workflow and tag); only then is the tarball checked against it,
+# strictly: the build fails if the signature is bad, if the line for this asset
+# is missing, or if it does not match.
 RUN set -eu; \
     case "${TARGETARCH:-$(uname -m)}" in \
       amd64|x86_64)  YNR_ARCH=amd64 ;; \
@@ -105,7 +108,12 @@ RUN set -eu; \
     base="https://github.com/eyelock/ynr/releases/download/v${YNR_VERSION}"; \
     mkdir -p /tmp/ynr /out; \
     cd /tmp/ynr; \
-    curl -fsSL -O "${base}/${asset}" -O "${base}/checksums.txt"; \
+    curl -fsSL -O "${base}/${asset}" -O "${base}/checksums.txt" -O "${base}/checksums.txt.sigstore.json"; \
+    cosign verify-blob \
+      --bundle checksums.txt.sigstore.json \
+      --certificate-identity "https://github.com/eyelock/ynr/.github/workflows/release.yml@refs/tags/v${YNR_VERSION}" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt; \
     grep " ${asset}\$" checksums.txt > wanted.txt; \
     [ "$(wc -l < wanted.txt)" -eq 1 ]; \
     sha256sum -c -s wanted.txt; \
