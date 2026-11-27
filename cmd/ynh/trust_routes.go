@@ -344,6 +344,29 @@ func pinProblems(p *harness.Harness) ([]string, error) {
 	return append(bad, unpinnedIncludes(remote)...), nil
 }
 
+// acceptIncludeChange is the --trust of ynh include add, update and remove: it
+// judges the harness as the change left it and, when something that runs is
+// not pinned to a full SHA, puts the manifest back with restore, so a refused
+// call leaves the harness and its trust record as they were (ynh #1041).
+func acceptIncludeChange(id string, restore func() error, stdout io.Writer) error {
+	p, err := harness.LoadByID(id)
+	if err != nil {
+		return err
+	}
+	bad, err := pinProblems(p)
+	if err != nil {
+		return err
+	}
+	if len(bad) > 0 {
+		if rerr := restore(); rerr != nil {
+			return fmt.Errorf("%s was not accepted and the change could not be undone: %w", id, rerr)
+		}
+		return refuseUnpinnedWith(id+" after this change", "--trust", bad,
+			"The include change was not made. Pin it to a 40-character commit SHA, or make the change without --trust and accept it by hand with 'ynh trust accept'")
+	}
+	return recordAcceptance(id, p, viaIncludeTrus, stdout)
+}
+
 // acceptAfterChange is the --trust of `ynh update` and `ynh include`
 // (decision 14): once the change is made it records the acceptance of the
 // installed harness id in one step, with via, and only when everything that

@@ -35,9 +35,6 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 		return fmt.Errorf("unknown include subcommand: %s\nUsage: ynh include <add|remove|update>", args[0])
 	}
 	rest, trustFlag := takeTrustFlag(args[1:])
-	if trustFlag && args[0] == "remove" {
-		return fmt.Errorf("--trust goes with ynh include add or update: removing an include needs no acceptance")
-	}
 	args = append([]string{args[0]}, rest...)
 	id, before := "", ""
 	// The harness is the first positional, wherever the flags sit.
@@ -49,11 +46,24 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 		id = ref
 		before = trustStateOf(id)
 	}
+	// --trust accepts the harness as it is after the change, which is only
+	// known once the change is made. The manifest is kept so that a refusal
+	// puts it back: a refused call changes nothing (ynh #1041).
+	var restore func() error
+	if trustFlag {
+		dir, _, err := harness.ResolveEditTarget(id)
+		if err != nil {
+			return err
+		}
+		if restore, err = harness.SnapshotManifest(dir); err != nil {
+			return err
+		}
+	}
 	if err := run(args[1:], stdout); err != nil {
 		return err
 	}
 	if trustFlag {
-		return acceptAfterChange(id, viaIncludeTrus, stdout)
+		return acceptIncludeChange(id, restore, stdout)
 	}
 	if id != "" && !trustFlag {
 		noteUntrustedAfterChange(id, before, stdout)

@@ -187,13 +187,14 @@ Pin it to a 40-character commit SHA, or review it and accept it by hand with 'yn
 | `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref and its remote includes' refs, after the includes are fetched |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
-| `ynh include add <harness> <url> --trust` (with `--replace` too) and `ynh include update <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then |
+| `ynh include add <harness> <url> --trust` (with `--replace` too), `ynh include update <harness> <url> --trust` and `ynh include remove <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then; a refusal puts the manifest back, so nothing is changed |
 
 Notes on the routes:
 
 - `ynh run --trust` is ynh's own flag. It is not passed on to Cursor.
 - An **installed harness never takes `--trust` at run time**: it is refused, with the commands that do accept it (`ynh trust accept <harness>`, or `ynh install --trust`). A run-time `--trust` that you type from habit would otherwise accept whatever the harness had become.
-- `include add --trust` and `include update --trust` make the change first. If something is then unpinned, the change stays, the acceptance is refused with the reason, and the harness is as untrusted as it would have been without the flag. `--trust` on `include remove` is refused: removing an include needs no acceptance.
+- `include add --trust`, `include update --trust` and `include remove --trust` make the change, then judge the harness as it now is, because what the includes bring is only known then. If something is unpinned, the acceptance is refused with the reason and the change is undone: the harness's manifest and its trust record are exactly as they were, and the refusal says the change was not made.
+- `include remove` changes what the harness executes, so an accepted harness reads `changed` afterwards. Without `--trust` it says so ("no longer trusted") and names `ynh trust show` and `ynh trust accept`. With `--trust` it records the new digest as accepted, under the same full-SHA rule as the other routes: what stays in the harness must be pinned.
 - `--trust` is for an installed id on `update` and `include`, not a path.
 
 ### Without `--trust`

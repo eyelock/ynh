@@ -3,6 +3,7 @@ package harness
 import (
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -26,6 +27,23 @@ func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 		return nil, fmt.Errorf("%s is an Agent Plugins package: ynh derives its harness at load time and does not write into it; edit its plugin.json and mcp.json directly", dir)
 	}
 	return plugin.LoadPluginJSON(dir)
+}
+
+// SnapshotManifest records the manifest of the harness at dir, as `ynh include`
+// edits it, and returns a function that puts it back exactly as it was. It
+// lets a caller that finds, after a change, that the change must be refused
+// leave the harness untouched (ynh #1041). It is taken after the manifest is
+// loaded, so any format migration has already run and the path is final.
+func SnapshotManifest(dir string) (restore func() error, err error) {
+	if _, err := loadManifest(dir); err != nil {
+		return nil, err
+	}
+	path := plugin.PluginPath(dir)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	return func() error { return os.WriteFile(path, data, 0o644) }, nil
 }
 
 // ResolveEditTarget resolves a harness reference to the directory where
