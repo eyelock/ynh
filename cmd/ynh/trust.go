@@ -1203,10 +1203,11 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		// the operator was never shown.
 		return cliError(stderr, structured, errCodeConfigError, unavailableMessage(name, set.Problems))
 	}
-	// An installed remote harness is accepted only at a full SHA of its own
-	// ref, as --trust requires: a branch or tag can move under the record
-	// (ynh #1023).
-	if bad := unpinnedOwnRef(p); len(bad) > 0 {
+	// An installed remote harness is accepted at the exact commit that was
+	// installed (installed.json's sha), recorded below, even when its ref
+	// floats: a branch or tag that later moves reads as changed (ynh #1023).
+	// An install that recorded no full commit cannot be pinned this way.
+	if bad := unrecordedCommit(p); len(bad) > 0 {
 		return cliError(stderr, structured, errCodeConfigError, refuseUnpinnedWith(name, "ynh trust accept", bad, ownRefClosing(p)).Error())
 	}
 	rec := trustRecord{
@@ -1232,6 +1233,10 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		workspaceNote = fmt.Sprintf(", %d workspace folder(s)", n)
 	}
 	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest)
+	if err == nil && rec.SHA != "" && notPinned(rec.Ref) != "" {
+		// The ref floats, so say which commit the acceptance is of.
+		_, err = fmt.Fprintf(stdout, "It is accepted at commit %s, the one installed; if %q moves, the harness reads as changed.\n", rec.SHA, rec.Ref)
+	}
 	return err
 }
 

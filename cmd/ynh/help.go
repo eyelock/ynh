@@ -564,8 +564,11 @@ accept'. A script the digest cannot read in full blocks the run even once
 accepted. A run from a folder ('ynh run ./dir', 'ynh check ./dir') does not
 check the folder's own commands, but refuses the commands its remote includes
 bring until you run 'ynh trust accept <dir>'. A harness with nothing to review
-(no-commands) needs no acceptance. 'ynh install --trust' accepts in the same step,
-at full commit SHAs. See docs/trust.md.
+(no-commands) needs no acceptance. 'ynh trust accept' of an installed harness
+whose ref floats (a branch or tag) records the exact commit that was installed,
+and the harness reads as changed if it later moves. 'ynh install --trust'
+accepts in the same step, at full commit SHAs (the harness's own ref and its
+remote includes'). See docs/trust.md.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising

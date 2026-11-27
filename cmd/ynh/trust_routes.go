@@ -96,10 +96,10 @@ func refuseUnpinnedWith(what, flag string, reasons []string, closing string) err
 		flag, what, strings.Join(reasons, "\n  "), closing)
 }
 
-// ownRefClosing ends the refusal of `ynh trust accept` for a harness whose own
-// ref is not a full SHA. The shared line sends the operator back to 'ynh trust
-// accept', which is the command that just refused; accepting needs the install
-// itself to be at a full SHA, so the way out is to reinstall there.
+// ownRefClosing ends the refusal of `ynh trust accept` for a harness whose
+// install recorded no full commit SHA. The shared line sends the operator back
+// to 'ynh trust accept', which is the command that just refused; it needs a
+// commit to record, so the way out is to reinstall at one.
 func ownRefClosing(p *harness.Harness) string {
 	src := "<source>"
 	if p.InstalledFrom != nil && p.InstalledFrom.Source != "" {
@@ -350,6 +350,16 @@ func unpinnedOwnRef(p *harness.Harness) []string {
 		return []string{"the harness's own ref: " + why}
 	}
 	return nil
+}
+
+// unrecordedCommit says why trust accept cannot record the installed commit of
+// p: it is a git or registry install and installed.json holds no full SHA. Nil
+// when the commit is there, or p is a local folder install.
+func unrecordedCommit(p *harness.Harness) []string {
+	if !harnessHasRemoteSource(p) || isFullSHA(p.InstalledFrom.SHA) {
+		return nil
+	}
+	return []string{"the commit installed: its install record holds no full commit SHA"}
 }
 
 // pinProblems lists what keeps the installed harness p from being accepted at
