@@ -85,10 +85,22 @@ func unpinnedIncludes(remote []remoteInclude) []string {
 // refuseUnpinned is the refusal of --trust when something that runs is not
 // pinned: it names each and the way out.
 func refuseUnpinned(what, flag string, reasons []string) error {
-	return fmt.Errorf("%s refuses to accept %s: it is not pinned to a full commit SHA, so what runs could change under the acceptance:\n  %s\n"+
-		"Pin it to a 40-character commit SHA, or review it and accept it by hand with 'ynh trust accept'",
-		flag, what, strings.Join(reasons, "\n  "))
+	return refuseUnpinnedWith(what, flag, reasons,
+		"Pin it to a 40-character commit SHA, or review it and accept it by hand with 'ynh trust accept'")
 }
+
+// refuseUnpinnedWith is refuseUnpinned with the closing line named by the
+// caller.
+func refuseUnpinnedWith(what, flag string, reasons []string, closing string) error {
+	return fmt.Errorf("%s refuses to accept %s: it is not pinned to a full commit SHA, so what runs could change under the acceptance:\n  %s\n%s",
+		flag, what, strings.Join(reasons, "\n  "), closing)
+}
+
+// uncachedUnpinnedClosing ends the refusal of an uncached include that is not
+// pinned. `ynh trust accept <folder>` reads includes from the cache and this
+// one is not in it, so it would only point back at --trust (ynh #993).
+const uncachedUnpinnedClosing = "Pin it to a 40-character commit SHA and run it again with --trust. " +
+	"'ynh trust accept' cannot help: it reads an include from the cache, and this one is not in it"
 
 // checkInstallTrust refuses `ynh install --trust` before anything is written
 // when the install is not pinned: a git or registry install needs --ref at a
@@ -223,12 +235,12 @@ func warmFolderIncludes(p *harness.Harness) error {
 		}
 	}
 	if len(bad) > 0 {
-		return refuseUnpinned(p.Name, "--trust", bad)
+		return refuseUnpinnedWith(p.Name, "--trust", bad, uncachedUnpinnedClosing)
 	}
 	err := resolver.WarmPinnedIncludes(p)
 	var unpinned *resolver.UnpinnedUncachedError
 	if errors.As(err, &unpinned) {
-		return refuseUnpinned(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))})
+		return refuseUnpinnedWith(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))}, uncachedUnpinnedClosing)
 	}
 	if err != nil {
 		return fmt.Errorf("--trust could not fetch the includes of %s: %w", p.Name, err)

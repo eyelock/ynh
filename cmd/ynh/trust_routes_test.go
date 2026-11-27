@@ -529,6 +529,11 @@ func TestRunTrust_RefusesUncachedUnpinnedIncludeWithoutFetching(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "full commit SHA") {
 				t.Fatalf("err = %v, want the unpinned refusal", err)
 			}
+			// ynh trust accept reads from the cache, so it cannot help here and
+			// the closing line must not offer it as a way out (ynw-jsjts).
+			if strings.Contains(err.Error(), "accept it by hand") || !strings.Contains(err.Error(), "run it again with --trust") {
+				t.Errorf("closing line offers a route that loops:\n%v", err)
+			}
 			if _, ok := resolver.LookupCache(url, ref); ok {
 				t.Error("an unpinned include was fetched")
 			}
@@ -589,4 +594,23 @@ func TestRunTrust_BothRoutesFetchAnUncachedInclude(t *testing.T) {
 			t.Fatal("ynh agent run --trust did not fetch the include")
 		}
 	})
+}
+
+// ynh check <folder> with an uncached include fails before the gate. Its hint
+// must not name ynh update, which takes installed ids only (ynw-lx3cs).
+func TestCheckFolder_UncachedIncludeDoesNotNameUpdate(t *testing.T) {
+	fakeHome(t)
+	folder, _, _ := uncachedFolder(t, "sha")
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{folder, "--cwd", t.TempDir()}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("check of an uncached include must fail")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "run `ynh update`") {
+		t.Errorf("a folder check is pointed at ynh update:\n%v", msg)
+	}
+	if !strings.Contains(msg, "ynh run <folder> --trust") {
+		t.Errorf("no route named:\n%v", msg)
+	}
 }
