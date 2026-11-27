@@ -195,10 +195,15 @@ Flags:
                            Merged over config.json, the harness manifest and
                            YNH_LABELS; see docs/telemetry.md
   --telemetry-relay        Start ynr relay for the session and send the vendor's
-                           own telemetry to the spool (copilot,
+                           own telemetry to the spool (claude, copilot,
                            codex). Also
                            YNH_TELEMETRY_RELAY, or "telemetry_relay": true in
                            config.json
+  --telemetry-relay-endpoint <url>
+                           Send the vendor's own telemetry to a standing relay
+                           at this loopback http endpoint and start none. Also
+                           YNH_TELEMETRY_RELAY_ENDPOINT, or
+                           "telemetry_relay_endpoint" in config.json
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
@@ -343,6 +348,25 @@ Flags:
   --all                Include ended and dead sessions (history)
   --format text|json   Output format (default text)
   --json               Same as --format json`,
+
+	"stop": `ynh stop <session> | ynh stop --owner <session>
+
+Stop a live session: ask its vendor process to terminate, and kill it if it
+has not gone within a few seconds. A session is named by its id or its address
+(ynh:<id>), as ynh ps shows it. --owner stops every live session that session
+started (its delegates).
+
+Flags:
+  --owner <session>    Stop every live session owned by that session`,
+
+	"reap": `ynh reap [flags]
+
+Stop the orphaned sessions: delegates whose owner session is gone, which ynh ps
+lists as orphaned.
+
+Flags:
+  --history   Also delete the records of ended and dead sessions
+  --dry-run   Say what would be done and do nothing`,
 
 	"search": `ynh search <term> [flags]
 
@@ -545,12 +569,16 @@ States:
   accepted     The commands match what you accepted.
   changed      The commands differ from what you accepted.
 
-This reports; it does not block. Nothing refuses to run because a harness is
-unreviewed or changed. The record earns its place by pinning the exact command
-set you read, so that "changed" can be reported when an update alters it:
-'ynh check' reports it, and 'ynh run' warns on stderr before launch, naming the
-kinds of command the harness declares (not which one moved) and any workspace
-folders left ungranted.
+This blocks. 'ynh run', 'ynh agent run' (and --resume) and 'ynh check' refuse an
+installed harness that is unreviewed, changed or unavailable, before any vendor
+starts: exit 1, with the error code untrusted under --format json. The refusal
+lists what the harness executes and names 'ynh trust show' and 'ynh trust
+accept'. A script the digest cannot read in full blocks the run even once
+accepted. A run from a folder ('ynh run ./dir', 'ynh check ./dir') does not
+check the folder's own commands, but refuses the commands its remote includes
+bring until you run 'ynh trust accept <dir>'. A harness with nothing to review
+(no-commands) needs no acceptance. 'ynh install --trust' accepts in the same step,
+at full commit SHAs. See docs/trust.md.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising
@@ -621,7 +649,16 @@ Flags:
 
 	"image": `ynh image <name> [flags]
 
-Build a Docker image with a harness baked in.`,
+Build a Docker image with a harness baked in.
+
+Flags:
+  --from <source>   Build from a Git URL or local path instead of an installed harness
+  --ref <ref>       The commit, tag or branch of a remote --from source
+  --trust           With --from, accept what the harness executes and bake the
+                    acceptance (via: image). Needs --ref at a full 40-character
+                    commit SHA for a remote source and its remote includes.
+                    Without it, a --from harness with hooks, MCP servers,
+                    sensors or workspace folders is refused at build time.`,
 
 	"prune": `ynh prune
 

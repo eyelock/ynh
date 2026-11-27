@@ -51,9 +51,9 @@ type QueueOptions struct {
 	TakeBy           time.Duration
 }
 
-// LiveSessions lists the live interactive sessions of the installed harness id
+// LiveSessionsOf lists the live interactive sessions of the installed harness id
 // that accept tasks, oldest first.
-func LiveSessions(delegate string) []presence.Entry {
+func LiveSessionsOf(delegate string) []presence.Entry {
 	live, err := presence.List(false)
 	if err != nil {
 		return nil
@@ -225,7 +225,7 @@ func settleLive(path string, rec *Record) (*Record, error) {
 	}
 	switch rec.Status {
 	case StatusQueued:
-		if len(LiveSessions(rec.Delegate)) > 0 {
+		if len(LiveSessionsOf(rec.Delegate)) > 0 {
 			return rec, nil
 		}
 		var started bool
@@ -249,7 +249,7 @@ func settleLive(path string, rec *Record) (*Record, error) {
 		}
 		return Load(path)
 	case StatusRunning:
-		for _, e := range LiveSessions(rec.Delegate) {
+		for _, e := range LiveSessionsOf(rec.Delegate) {
 			if e.SessionID == rec.Session {
 				return rec, nil
 			}

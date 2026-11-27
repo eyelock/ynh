@@ -131,7 +131,7 @@ the two must be set.
 | `pick` | no | Specific artifact paths to include, in `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`), or a top-level skill folder by its name alone (see [Skills at the top level of a repository](#skills-at-the-top-level-of-a-repository)). If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
 | `sensors` | no | Boolean, default `true`. `false` drops the sensors the include declares; its skills, agents, rules and commands still come through. See [sensors](sensors.md#taking-an-include-without-its-sensors). |
-| `hooks` | no | `true` to let the included harness's hooks run in the session. Default `false`; a harness reached through another needs it at every link, on every route (see [When routes disagree](#when-routes-disagree)). See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
+| `hooks` | no | `true` to let the included harness's hooks run in the session. Absent or `false` keeps them off, and only absent warns (`false` is your choice); a harness reached through another needs it at every link, on every route (see [When routes disagree](#when-routes-disagree)). See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
 | `as` | no | Namespace for the included harness's focuses and profiles, in place of its own name. A harness name: letters, digits, `.`, `_`, `-`, and no `:`. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses). |
 
 If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its sensors come with it too unless the include says `"sensors": false` (see [Sensors from an include](sensors.md#sensors-from-an-include)), and its hooks only when the include says `"hooks": true` (see [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses)). Its focuses and profiles are not applied unless you select them by namespace (`--profile github:ci`, `--focus github:triage`). See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses) and [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
@@ -426,6 +426,10 @@ Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or 
 
 `"refuse"` or `"allow"`; absent by default. What `ynh run` does when a session of this harness is already live (see [`ynh ps`](presence.md)): `refuse` stops the second run, naming the live session and giving a Fix line; `allow` starts it with no warning; absent warns, naming the live session, and starts it. `ynh run --on-live=refuse|allow` overrides it for one run. See [When a session of the harness is already live](presence.md#when-a-session-of-the-harness-is-already-live).
 
+### delegate_questions (optional)
+
+`"model"` or `"client"`; auto by session when absent. Where a question from one of this harness's delegates goes. Absent, an interactive parent gets `client` and a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) gets `model`. `model` returns it in the delegate tool's result (state `input-required`, the delegate's name, how long it has waited), and the harness's model puts it to the person in the parent's chat and answers with `delegate_reply`. `client` first puts it to the client's own question prompts (elicitation, and Claude Code's Tasks), for a client that has them; a client with none, or one that declines, falls back to the result. Set `model` or `client` to force one whatever the session. See [Questions from a delegate](delegate-sessions.md#questions-from-a-delegate).
+
 ### workspace (optional)
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
@@ -585,7 +589,7 @@ The source is a Git URL, or a path to a directory on disk: absolute, starting `.
 
 `--as <alias>` sets the include's `as`: the namespace its focuses and profiles are selected under. The alias must be a valid harness name and may not contain `:`.
 
-`--hooks` sets `"hooks": true`: the included harness's hooks run in the session. Without it they are declared but not carried, and a warning names them. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
+`--hooks` sets `"hooks": true`: the included harness's hooks run in the session. Without it they are declared but not carried, and a warning names them unless the include says `"hooks": false`. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
 
 `<harness>` is the installed harness name **or** a filesystem path to a harness directory. Names resolve to `~/.ynh/harnesses/<name>`; a leading `/` or `.` forces path semantics.
 

@@ -82,3 +82,40 @@ func TestTheNoteDoesNotSayAnOutstandingElicitationWasNotAnswered(t *testing.T) {
 		t.Errorf("a settled, unanswered elicitation noted as %q", got)
 	}
 }
+
+func TestAQuestionGoesToTheClientOnlyWhenTheHarnessAsks(t *testing.T) {
+	caps := map[string]any{"elicitation": map[string]any{}}
+	for _, c := range []struct {
+		questions string
+		caps      map[string]any
+		want      bool
+	}{
+		{"", caps, false},
+		{QuestionsModel, caps, false},
+		{QuestionsClient, caps, true},
+		{QuestionsClient, map[string]any{}, false},
+	} {
+		if got := New(Config{Questions: c.questions}).elicits(c.caps); got != c.want {
+			t.Errorf("questions %q, caps %v: elicits = %v, want %v", c.questions, c.caps, got, c.want)
+		}
+	}
+}
+
+func TestAnOpenQuestionNamesTheAskerAndHowLongItHasWaited(t *testing.T) {
+	s, handle, path := askedTwice(t)
+	rec, err := delegation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.Questions[1].AskedAt = time.Now().UTC().Add(-90 * time.Second)
+	r := s.resultOf(rec)
+	if r.State != "input-required" || r.TaskID != handle {
+		t.Fatalf("result = %+v", r)
+	}
+	if r.Message != "reviewer asks: second?" {
+		t.Errorf("message = %q", r.Message)
+	}
+	if r.AskedAt == "" || r.WaitingSeconds < 89 {
+		t.Errorf("asked_at %q, waiting %d", r.AskedAt, r.WaitingSeconds)
+	}
+}

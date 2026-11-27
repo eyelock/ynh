@@ -163,9 +163,14 @@ The mailbox is a delegation record in state `queued` (A2A `submitted`) under `$Y
 ## Questions from a delegate
 
 A delegate session gets one extra tool, `ask_parent`, from an MCP server named `ynh-parent`. A question
-travels as an A2A task in state `input-required`, and the parent sees it by whichever route its client
-offers: as an elicitation or a task where the client takes one, otherwise in the tool result, where the
-parent's model answers it with a reply on the same task.
+travels as an A2A task in state `input-required`. Where it goes depends on the session, by default. An
+interactive parent gets the client's own question prompts (elicitation, and Claude Code's Tasks); a client
+that has none, or declines, falls back to the result. A headless parent gets it in its tool result: the
+delegate's tool result says which delegate asked, what, and how long the question has waited, and the
+parent's model answers with a reply on the same task. A harness sets
+[`delegate_questions`](harnesses.md#delegate-questions-optional) to `model` or `client` to force one
+whatever the session. While a question is open, `ynh ps` lists it under the session it
+belongs to, with its age, and `delegate_list` shows `asked_at` and `waiting_seconds` on the delegation.
 
 > **Known issue.** In a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) the
 > model answers a delegate's question, not a person
@@ -194,10 +199,13 @@ rule holds whichever vendor the parent runs on.
 - **Depth.** A delegation is refused when it would put the delegate more than 4 levels below the
   harness that was run (the root's own delegate is level 1). Set `YNH_DELEGATION_MAX_DEPTH` to a
   whole number above 0 to change it.
-- **Live sessions.** A delegation is refused while 16 delegate sessions are live (started, running
-  or waiting on a question) under the same `YNH_HOME`, which bounds a chain that is wide rather than
-  deep. Set `YNH_DELEGATION_MAX_LIVE` to a whole number above 0 to change it. A session whose
-  process is gone is settled first and does not count.
+- **Live sessions.** A delegation is refused while 16 sessions are live under the same `YNH_HOME`,
+  which bounds a chain that is wide rather than deep. The count is every live session `ynh ps` lists,
+  whatever its launch mode (an interactive or one-shot `ynh run` counts, not only delegates), or the
+  delegations started and not yet final when there are more of those. Set `YNH_DELEGATION_MAX_LIVE`
+  to a whole number above 0 to change it. A session whose process is gone is settled first and does
+  not count. The refusal's Fix line names `ynh ps`, `ynh stop` and `ynh reap`
+  ([Stopping sessions](presence.md#stopping-sessions)).
 
 A refusal is the delegate tool's result to the parent (the failed task over A2A, so the parent's
 model reads it and can change course), never a crash, and no session or record is started. It names

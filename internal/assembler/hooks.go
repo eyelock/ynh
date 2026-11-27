@@ -246,7 +246,8 @@ type HookSet struct {
 	// copied from. The root's scripts are not in it.
 	Scripts map[string]ScriptOrigin
 	// Inactive holds one warning per included harness that declares hooks
-	// without consent to run them.
+	// without consent to run them and without a "hooks": false that keeps
+	// them off on purpose. NotActive still lists the latter.
 	Inactive []warn.Warning
 	// Sources runs parallel to Hooks: for each event, the include chain that
 	// supplied each entry, "" for the root's own. Nil when no included harness
@@ -303,9 +304,12 @@ func ComposeHooks(root map[string][]plugin.HookEntry, resolved []resolver.Resolv
 		for _, event := range events {
 			hs.NotActive = append(hs.NotActive, HookOrigin{Event: event, Source: r.Chain})
 		}
+		if r.HooksDeclined {
+			continue // "hooks": false is a choice: listed as not active, no warning
+		}
 		hs.Inactive = append(hs.Inactive, warn.Warning{
 			Message: fmt.Sprintf("included harness %s declares hooks (%s) that are not active", r.Chain, strings.Join(events, ", ")),
-			Fix:     "add \"hooks\": true to its include to run them",
+			Fix:     "add \"hooks\": true to its include to run them, or \"hooks\": false to keep them off",
 		})
 	}
 	if len(active) == 0 {

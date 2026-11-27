@@ -12,6 +12,7 @@
         "harness": {"type": "string"},
         "vendor": {"type": "string"},
         "vendor_pid": {"type": "integer", "description": "Vendor process id once it has started; omitted until then."},
+        "vendor_start": {"type": "integer", "description": "Vendor process start, an opaque per-OS number; ynh stop signals the vendor only while the process at vendor_pid started then. Omitted until the vendor has started."},
         "wrapper_pid": {"type": "integer", "description": "The `ynh run` process."},
         "start_time": {"type": "integer", "description": "Wrapper process start, an opaque per-OS number used to tell a live wrapper from a reused pid."},
         "started_at": {"type": "string", "description": "ISO 8601 UTC wall-clock start, for people."},
@@ -23,7 +24,23 @@
         "state": {"type": "string", "description": "alive, busy, idle or unknown."},
         "last_beat": {"type": "string", "description": "ISO 8601 UTC time of the last heartbeat."},
         "ended": {"type": "boolean", "description": "True after a clean exit."},
-        "status": {"type": "string", "description": "Derived: live, orphaned, dead or ended."}
+        "status": {"type": "string", "description": "Derived: live, orphaned, dead or ended."},
+        "open_questions": {
+          "type": "array",
+          "description": "Questions this session's delegates have asked it that nobody has answered yet, oldest delegation first; omitted when there are none. A delegate's question belongs to the newest live, non-delegate session of the parent harness in the folder the delegation ran in.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "delegate": {"type": "string", "description": "The delegate that asked."},
+              "handle": {"type": "string", "description": "The delegation's handle, for delegate_reply."},
+              "question": {"type": "string"},
+              "asked_at": {"type": "string", "description": "ISO 8601 UTC time the question was asked."},
+              "waiting_seconds": {"type": "integer", "description": "How long it has waited, when the listing was made."}
+            },
+            "required": ["delegate", "handle", "question", "asked_at", "waiting_seconds"],
+            "additionalProperties": false
+          }
+        }
       },
       "required": ["session_id", "harness", "vendor", "wrapper_pid", "start_time", "started_at", "cwd", "mode", "address", "state", "last_beat", "ended", "status"],
       "additionalProperties": false

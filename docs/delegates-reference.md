@@ -124,18 +124,44 @@ there is the handle, not the A2A task id the CLI used. A task started with the C
 
 ### Tools
 
-Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. Fields:
-`task_id`, `context_id`, `state` (`working`, `input-required`, `completed`, `failed` or `canceled`),
-`message`, and `result` once completed or `log_tail` once failed.
+Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. A
+delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`working`, `input-required`, `completed`,
+`failed` or `canceled`), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
+`waiting_seconds` while `input-required`. `delegate_list` returns them as a list under `delegations`, and
+`ynh_ps` returns `sessions`.
 
 | Tool | Does |
 |---|---|
 | `delegate_to_<name>` (`task`, optional `wait`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle with state `working`: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
+| `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is the delegate's question. |
 | `delegate_result` (`task_id`, optional `wait`) | The result once completed; the state for one still going. |
 | `delegate_cancel` (`task_id`) | Cancels and stops the run's process group. |
 | `delegate_reply` (`task_id`, `message`, optional `wait`) | A message on the same task: the answer to a question. |
+
+**A refused delegation.** When the delegate's session is refused before it starts (a loop, the depth limit,
+a bad `YNH_DELEGATION_MAX_DEPTH`), `delegate_to_<name>` is not a tool error. It returns state `failed`, the
+reason and its fix in `message`, and no `log_tail`. Its `task_id` is the A2A task id the endpoint made (a
+UUID such as `01a21da2-ff4a-7309-b2fb-9c806391c1f0`), not a `dlg-` handle, because no delegation was
+recorded: `delegate_list` does not show it, and `delegate_status`, `delegate_result`, `delegate_cancel`
+and `delegate_reply` given it are tool errors (`"<task_id>" is not a delegation handle`). A `task_id`
+that does not start with `dlg-` is therefore always a refusal. For a loop:
+
+```json
+{
+ "task_id": "01a21da2-ff4a-7309-b2fb-9c806391c1f0",
+ "context_id": "01a21da2-ff4a-73a5-9b0f-aaab1b59adf1",
+ "delegate": "reviewer",
+ "state": "failed",
+ "message": "delegation refused: this is a loop. local/reviewer -> local/reviewer returns to local/reviewer, which is already in the chain.\n  Fix: remove the delegates_to entry that closes the loop, or do this work in local/reviewer itself instead of delegating it back"
+}
+```
+
+Shown live, 2026-11-27, on a build of `develop` at
+[cbe06cbc](https://github.com/eyelock/ynh/commit/cbe06cbc): `ynh run` of a parent whose vendor was a stand-in
+that called the `ynh-delegates` server ynh configured, with no model, for a self-loop and for
+`YNH_DELEGATION_MAX_DEPTH=0`.
 
 `<name>` is the delegate's harness name, lower-cased, each character outside a-z and 0-9 turned into `_`.
 The server has no tool that takes a harness name or a path: a handle is checked against `dlg-` and 16 hex
@@ -232,13 +258,18 @@ that name is refused at run.
 
 `ask_parent` (`question`, optional `wait`) writes the question to the delegation record and waits, at most 45
 seconds (`YNH_PARENT_ASK_MAX_WAIT`, in seconds). The record puts the delegate's A2A task into
-`input-required`, with the question as its message. The parent sees it by its route:
+`input-required`, with the question as its message. The parent sees it by its route. By default
+the route follows the session ([`delegate_questions`](harnesses.md#delegate-questions-optional) absent): an
+interactive parent gets the two client routes below, where its client offers them, and a headless parent
+gets the result route. A harness that sets `delegate_questions` to `model` gets the result route whatever
+its client offers, and one that sets `client` gets the client routes in a headless parent too, where the
+client answers them:
 
 | Route | What the parent sees | How it answers |
 |---|---|---|
 | MCP, with Tasks (Claude Code interactive) | the task moves to `input_required` with an `elicitation/create` in `inputRequests` | `tasks/update`; a declined elicitation is recorded as `(the parent declined to answer)` and the delegate's tool says `declined` |
 | MCP, elicitation but no Tasks (interactive Codex, Copilot CLI, OpenCode) | during a call that waits, a server-initiated `elicitation/create`, once per question | the elicitation, or `delegate_reply` (then the elicitation's answer is dropped). A client that refuses, declines or cancels has not answered: Cursor's CLI refuses without asking, Copilot CLI's `-p` declines at once |
-| MCP, headless (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) | state `input-required`, the question as `message` | `delegate_reply` on the same task: the model answers, not a person ([a headless parent's model answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)) |
+| MCP, `delegate_questions` `model`, a headless parent by default (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) | state `input-required`, `message` is `<delegate> asks: <question>`, with `asked_at` and `waiting_seconds` | `delegate_reply` on the same task: the model answers, not a person ([a headless parent's model answers a delegate's question](vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)) |
 | `a2a` CLI | `a2a task get` shows `input-required` with the question as the status message | `a2a send --task-id <id> "<answer>"` |
 
 `ask_parent` returns `answered`, `declined`, `unanswered`, `withdrawn` or `ended` (the delegation was

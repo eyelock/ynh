@@ -24,7 +24,7 @@ func liveSession(t *testing.T, id, name string) (func(), presence.Entry) {
 	var once sync.Once
 	end := func() { once.Do(s.End) }
 	t.Cleanup(end)
-	live := delegation.LiveSessions("local/" + name)
+	live := delegation.LiveSessionsOf("local/" + name)
 	for _, e := range live {
 		if e.SessionID == id {
 			return end, e

@@ -161,3 +161,39 @@ func TestRunLoop_RelayConfiguresClaudeAndCodex(t *testing.T) {
 		})
 	}
 }
+
+func TestRunRelayClaude(t *testing.T) {
+	if !SupportsRunRelay("claude") {
+		t.Fatal("claude is not supported under ynh run")
+	}
+	for _, v := range []string{"cursor", "opencode"} {
+		if SupportsRunRelay(v) {
+			t.Errorf("%s must not be supported under ynh run", v)
+		}
+	}
+	const ep = "http://127.0.0.1:4318"
+	args := RunRelayArgs("claude", ep)
+	if len(args) != 2 || args[0] != "--settings" || args[1] != claudeSettingsArg(ep) {
+		t.Errorf("args = %q", args)
+	}
+	env := map[string]string{}
+	for _, kv := range RunRelayEnv("claude", ep) {
+		env[kv[0]] = kv[1]
+	}
+	for k, v := range map[string]string{
+		"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+		"OTEL_EXPORTER_OTLP_ENDPOINT":  ep,
+		"OTEL_LOG_USER_PROMPTS":        "0",
+		"OTEL_LOG_TOOL_DETAILS":        "0",
+	} {
+		if env[k] != v {
+			t.Errorf("%s = %q, want %q", k, env[k], v)
+		}
+	}
+	t.Setenv("OTEL_LOG_USER_PROMPTS", "1")
+	t.Setenv("PATH_UNRELATED", "x")
+	unset := strings.Join(RunRelayUnset("claude"), " ")
+	if !strings.Contains(unset, "OTEL_LOG_USER_PROMPTS") || strings.Contains(unset, "PATH_UNRELATED") {
+		t.Errorf("unset = %q", unset)
+	}
+}

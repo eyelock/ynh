@@ -9,7 +9,7 @@ vendor CLI and the sensors.
 a `ynh.session` span with a started and a finished event ([What a launch
 emits](#what-a-launch-emits)). It carries no tokens, cost, paths or content;
 a vendor's own telemetry is a separate matter ([Vendor telemetry through the
-relay](#vendor-telemetry-through-the-relay), `ynh agent run`, and `ynh run` for Codex and Copilot CLI).
+relay](#vendor-telemetry-through-the-relay), `ynh agent run`, and `ynh run` for Claude Code, Codex and Copilot CLI).
 The other commands that launch a vendor CLI emit nothing.
 
 ynh stays the parent process while the vendor CLI runs as its child, on every
@@ -383,14 +383,16 @@ may still change, and when one does, the registry says so.
 ## Vendor telemetry through the relay
 
 Claude Code, Codex and Copilot CLI can report their own spans, metrics and events, but only
-over the network. Claude Code and Codex are collected under `ynh agent run`, Copilot CLI and Codex under
-`ynh run`. The telemetry relay setting lets a run collect them into its spool
+over the network. Claude Code and Codex are collected under `ynh agent run`, and Claude Code, Copilot CLI
+and Codex under `ynh run`. The telemetry relay setting lets a run collect them into its spool
 too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
 folder. Under `ynh agent run` that is beside ynh's own records and in the same
 trace; under `ynh run` ynh's own record is the `ynh.session` span, and whether
-Copilot CLI's spans join its trace has not been checked (see below).
+Copilot CLI's spans join its trace has not been checked (see below). Claude Code under
+`ynh run` is sent `TRACEPARENT` naming the `ynh.session` span, so its spans can join that
+trace; this has not been checked against a live Claude Code.
 
 ### Turning it on
 
@@ -407,7 +409,7 @@ The setting is off by default. The first of these that says anything decides:
 With the setting on, ynh starts the relay only when all of these hold, just
 before the worker starts:
 
-- the backend is `claude` or `codex` under `ynh agent run`, or `copilot` or `codex` under
+- the backend is `claude` or `codex` under `ynh agent run`, or `claude`, `copilot` or `codex` under
   `ynh run` (see [Other vendors](#other-vendors))
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
@@ -460,6 +462,8 @@ the run only the vendor's telemetry, with one note on stderr. The run's
 result, output and exit code are the same as without the relay.
 
 ### What Claude Code receives
+
+The same settings reach Claude Code under `ynh agent run` and under `ynh run`; the difference is how. Under `ynh agent run` ynh builds the worker's environment. Under `ynh run` ynh adds them to its own environment, which Claude Code inherits, after removing any variable the settings own that was already there (an inherited `OTEL_LOG_USER_PROMPTS=1`, say), and passes the same settings as `--settings` JSON, so a user's `~/.claude/settings.json` cannot undo them. A `--settings` the operator passes to Claude Code through ynh comes after ynh's.
 
 With a relay running, the worker's environment carries the settings recorded
 in ynr ADR-004 as verified with Claude Code 2.1.289, plus the per-signal
@@ -596,9 +600,9 @@ reaches the spool ([ynr #86](https://github.com/eyelock/ynr/pull/86)). It drops
 `process.executable.path`, and any attribute whose value is the user's home
 folder or a path under it, on every signal and from every vendor. Paths and host
 names are dropped rather than hashed
-([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs a `ynr` newer than v0.3.2, the
-latest release when this was written; an older relay writes those attributes
-as Codex sends them. The relay scrubs attributes only, not log bodies or span
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs ynr v0.6.0 or later, the release
+ynh pins (the `YNR_VERSION` line of the Dockerfile); an older relay writes those
+attributes as Codex sends them. The relay scrubs attributes only, not log bodies or span
 names; Codex's log bodies are off anyway, and its span names carry no paths.
 
 **What Codex passes on.** The commands Codex runs inherit `TRACEPARENT` and
@@ -653,8 +657,7 @@ started their own trace; whether Copilot now joins the `ynh.session` trace has n
 Verified on 2026-11-07 with Copilot CLI 1.0.106 against a real `ynr relay`: `ynh run
 --telemetry-relay -v copilot` with a one-shot prompt wrote `invoke_agent` and `chat` spans and
 the `gen_ai.*` metrics into the spool (model, token counts, cost), with no prompt text and no
-path, and no relay was left running. The relay is not yet started for Claude Code under
-`ynh run` ([vendor parity, L13](vendor-parity.md#l13-ynh-run-does-not-wire-every-vendor-s-own-telemetry)).
+path, and no relay was left running.
 
 Codex under `ynh run` is given the same `-c` overrides as under `ynh agent run` ([What Codex
 receives](#what-codex-receives)), added to its command line, since Codex reads nothing from
@@ -669,13 +672,35 @@ relay`: `ynh run local/<harness> --telemetry-relay -v codex` with a one-shot pro
 address, and no relay was left running. The spool held one source path, the build-time path of
 Codex's own MCP library.
 
+### A standing relay
+
+A Wheelhouse that runs one `ynr relay` for every launch, rather than one per launch, can
+tell `ynh run` where it is. The standing endpoint setting is off by default. The first of
+these that says anything decides:
+
+1. `--telemetry-relay-endpoint <url>` on `ynh run`.
+2. `YNH_TELEMETRY_RELAY_ENDPOINT`.
+3. `"telemetry_relay_endpoint"` in `~/.ynh/config.json` (`$YNH_HOME/config.json`).
+
+The value must be plain `http` on a loopback address with a port, such as
+`http://127.0.0.1:4318`; anything else is a note on stderr, and the setting stays off, so
+this setting never sends a vendor's telemetry off the host. With it set, `ynh run` points
+Claude Code, Codex or Copilot CLI at that endpoint exactly as it would at its own relay
+([What Claude Code receives](#what-claude-code-receives)), and starts no relay. The relay
+switch is not needed, and the standing endpoint wins over it. The same conditions apply:
+an operator's `OTEL_EXPORTER_OTLP_*` wins and leaves the vendor alone, and Cursor and
+OpenCode get one note. The standing relay writes to its own spool, so `ynh run` needs no
+spool folder of its own for it, and `ynr` need not be on `PATH`. Nothing starts because `ynr`
+exists: with neither the switch nor the endpoint, the environment is unchanged.
+
+Under `ynh run` there is no `--sandbox` flag, so the srt condition above is an `ynh agent run` matter only.
+
 ### Other vendors
 
 OpenCode and Cursor cannot send their telemetry to the run's relay
 ([vendor parity, L19](vendor-parity.md#l19-vendor-telemetry-through-the-relay)). With the
-setting on, their runs start no relay and print one note. Under `ynh run`, Claude Code
-does the same, with the note "ynh does not configure claude's telemetry yet"
-(or the vendor's name).
+setting on, their runs start no relay and print one note, "ynh does not configure
+<vendor>'s telemetry yet".
 
 ## No content
 
@@ -706,10 +731,10 @@ on a harness in `testdata/conformance/`. The four scenarios end converged, at th
 turn cap, at the token budget, and refused before any worker starts. Each plants
 a prompt and a credential, and the check fails if either reaches a record.
 
-CI's Conformance job downloads a pinned ynr release, with the SHA-256 of its
-`ynr` and `ynr-stub-vendor` archives pinned beside the version. The release's
-`checksums.txt` must list the same digests, and the downloads must match them,
-before anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
+CI's Conformance job downloads the ynr release the Dockerfile pins (`ARG
+YNR_VERSION`, the one place ynh pins ynr). The downloaded `ynr` and
+`ynr-stub-vendor` archives must match the release's `checksums.txt` before
+anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
 on your `PATH`:
 
 ```bash

@@ -333,7 +333,7 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 		return nil, "", fmt.Errorf("on_live takes queue or headless, not %q", onLive)
 	}
 	if onLive != "headless" {
-		if live := delegation.LiveSessions(x.o.Delegate); len(live) > 0 {
+		if live := delegation.LiveSessionsOf(x.o.Delegate); len(live) > 0 {
 			return delegation.Queue(delegation.QueueOptions{
 				Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
 				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,

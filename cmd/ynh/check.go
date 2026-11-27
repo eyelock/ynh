@@ -122,17 +122,19 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	// only way to check a harness was to install it first. That is a real
 	// barrier while you are still authoring one, which is exactly when you most
 	// want to run the gate.
-	p, err := loadHarnessRefProfile(harnessName, profileName)
-	if err != nil {
-		return checkExecErr(cliError(stderr, structured, errCodeNotFound, err.Error()))
-	}
-	// The trust gate, on the harness as loaded (a profile reshapes p, and the
-	// trust record covers the harness before it).
+	// The trust gate comes first, on the harness as loaded (a profile reshapes
+	// p, and the trust record covers the harness before it), so a harness the
+	// gate refuses is refused the same way here as by `ynh run`: a folder whose
+	// remote include cannot be read is untrusted (exit 1), not not_found.
 	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
 		if gerr := checkTrustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
 			// Exit 1, a refusal, not 2: the check was not unable to run, it was not allowed to.
 			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
 		}
+	}
+	p, err := loadHarnessRefProfile(harnessName, profileName)
+	if err != nil {
+		return checkExecErr(cliError(stderr, structured, errCodeNotFound, folderCheckHint(harnessName, err.Error())))
 	}
 	if cwd == "" {
 		cwd, _ = os.Getwd()
@@ -797,4 +799,17 @@ func loadHarnessRefProfile(ref, profile string) (*harness.Harness, error) {
 		return nil, err
 	}
 	return resolver.WithIncludedSensors(h)
+}
+
+// folderCheckHint rewrites the resolver's `ynh update` hint for a check of a
+// folder. `ynh update` takes installed ids only, so for a folder it cannot
+// help; the include is fetched by a run with --trust, which check has not
+// (ynh #993). An installed id keeps the resolver's hint.
+func folderCheckHint(ref, msg string) string {
+	if gateRef(ref) != "" {
+		return msg
+	}
+	const hint = "\nrun `ynh update` (checking a gate must not reach the network)"
+	return strings.ReplaceAll(msg, hint, "\nynh check reads the cache only and has no --trust. Fetch each remote include by running "+
+		"'ynh run <folder> --trust' once it is pinned to a full 40-character commit SHA, then check again. 'ynh update' takes installed harnesses only.")
 }

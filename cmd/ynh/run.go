@@ -227,7 +227,10 @@ func cmdRun(args []string) (runErr error) {
 
 	// A vendor that cannot take a first message starts bare, and says so.
 	if launch.Bare && !launchFocusPromptSupported(adapter) {
-		fmt.Fprintf(os.Stderr, "warning: launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only\n", launch.Name, adapter.Name())
+		warn.Print(os.Stderr, warn.Warning{
+			Message: fmt.Sprintf("launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only", launch.Name, adapter.Name()),
+			Fix:     "run with a vendor that takes a first message, or remove launch_focus from the harness",
+		})
 		ra.Prompt = ""
 	}
 
@@ -459,7 +462,7 @@ func cmdRun(args []string) (runErr error) {
 			if err := writeLiveA2ACLICompanion(adapter, runDir, opened.eps); err != nil {
 				return fmt.Errorf("assembling delegates: %w", err)
 			}
-			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder)
+			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder, delegateQuestionsFor(p.DelegateQuestions, oneShot))
 			if eErr != nil {
 				return eErr
 			}
@@ -570,7 +573,10 @@ func cmdRun(args []string) (runErr error) {
 					return err
 				}
 				if pi.Size > vendor.CodexProjectDocMaxBytes {
-					fmt.Fprintf(os.Stderr, "warning: the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off\n", pi.Size, vendor.CodexProjectDocMaxBytes)
+					warn.Print(os.Stderr, warn.Warning{
+						Message: fmt.Sprintf("the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off", pi.Size, vendor.CodexProjectDocMaxBytes),
+						Fix:     "shorten the project's AGENTS.md, or raise project_doc_max_bytes in Codex's config.toml",
+					})
 				}
 			}
 		}
@@ -798,7 +804,7 @@ func cmdRun(args []string) (runErr error) {
 		}
 		// The vendor's own telemetry, through a relay that lives as long as
 		// the session (the child ynh supervises).
-		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, os.Stderr)
+		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, ra.RelayEndpoint, os.Stderr)
 		defer stopRelay()
 		vendorArgs = append(relayArgs, vendorArgs...)
 		vendorArgs = append(delegateQuietArgs(adapter.Name(), vendorArgs, os.Getenv(delegationHandleEnv)), vendorArgs...)
@@ -1180,11 +1186,12 @@ func updateLegacyRunAlias(bareName, runDirName string) {
 	// pre-re-key assembly — the old flow clobbered it via AssembleTo on
 	// every run anyway, so replacing it with the alias loses nothing.
 	if err := os.RemoveAll(alias); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not refresh legacy run alias %s: %v\n", alias, err)
+		// No Fix: the alias is a legacy convenience, and the filesystem error is the cause.
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not refresh legacy run alias %s: %v", alias, err)})
 		return
 	}
 	if err := os.Symlink(runDirName, alias); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not create legacy run alias %s: %v\n", alias, err)
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not create legacy run alias %s: %v", alias, err)})
 	}
 }
 
@@ -1257,25 +1264,26 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 // forwarded too: "first -- second" prompts "second" and forwards "first".
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
-	HarnessName  string   // positional name, if given
-	HarnessFile  string   // --harness-file or YNH_HARNESS_FILE
-	VendorFlag   string   // -v or YNH_VENDOR
-	ProfileFlags []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
-	FocusFlag    string   // --focus or YNH_FOCUS
-	SessionName  string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
-	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
-	Prompt       string   // trailing prompt after --
-	VendorArgs   []string // passthrough args for vendor CLI
-	Action       string   // "install", "clean", or ""
-	Interactive  bool     // --interactive: stay in session after initial prompt
-	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
-	Resume       bool     // --resume: continue a previous session
-	ResumeID     string   // --resume=<id>: continue one specific session
-	OnLive       string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
-	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
-	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
-	Trust        bool     // --trust: accept the folder run's full-SHA-pinned remote includes; not forwarded
-	Relay        bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
+	HarnessName   string   // positional name, if given
+	HarnessFile   string   // --harness-file or YNH_HARNESS_FILE
+	VendorFlag    string   // -v or YNH_VENDOR
+	ProfileFlags  []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
+	FocusFlag     string   // --focus or YNH_FOCUS
+	SessionName   string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
+	Instructions  string   // --instructions: per-invocation context injected into vendor pipeline
+	Prompt        string   // trailing prompt after --
+	VendorArgs    []string // passthrough args for vendor CLI
+	Action        string   // "install", "clean", or ""
+	Interactive   bool     // --interactive: stay in session after initial prompt
+	IsolatedMCP   bool     // --isolated-mcp: run with only the harness's MCP servers
+	Resume        bool     // --resume: continue a previous session
+	ResumeID      string   // --resume=<id>: continue one specific session
+	OnLive        string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
+	NoWorkspace   bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
+	Labels        []string // --label key:value, repeatable; key: removes a label; not forwarded
+	Trust         bool     // --trust: accept the folder run's full-SHA-pinned remote includes; not forwarded
+	Relay         bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
+	RelayEndpoint string   // --telemetry-relay-endpoint: a standing relay's loopback endpoint; not forwarded
 }
 
 // ynhValueFlags are ynh's own run flags that take the next argument as their
@@ -1283,7 +1291,7 @@ type runArgs struct {
 var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
-	"--label": true, "--on-live": true,
+	"--label": true, "--on-live": true, "--telemetry-relay-endpoint": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1369,6 +1377,11 @@ func parseRunArgs(args []string) runArgs {
 			ra.Relay = true
 		case flagArgs[i] == "--trust":
 			ra.Trust = true
+		case flagArgs[i] == "--telemetry-relay-endpoint" && i+1 < len(flagArgs):
+			ra.RelayEndpoint = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--telemetry-relay-endpoint="):
+			ra.RelayEndpoint = strings.TrimPrefix(flagArgs[i], "--telemetry-relay-endpoint=")
 		case flagArgs[i] == "--label" && i+1 < len(flagArgs):
 			ra.Labels = append(ra.Labels, flagArgs[i+1])
 			i++

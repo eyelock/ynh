@@ -70,7 +70,7 @@ func setup(t *testing.T) (presence.Entry, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.End)
-	live := delegation.LiveSessions("local/eno")
+	live := delegation.LiveSessionsOf("local/eno")
 	if len(live) != 1 {
 		t.Fatalf("live = %v", live)
 	}

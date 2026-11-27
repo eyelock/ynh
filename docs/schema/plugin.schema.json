@@ -139,6 +139,10 @@
       "description": "What `ynh run` does when a session of this harness is already live (see `ynh ps`). `refuse` stops the second run, naming the live session's address, with a Fix line. `allow` starts it with no warning. Absent: warn, naming the address, and start it, as parallel sessions are normal for most harnesses. A Wheelhouse sets `refuse` on every seat. `ynh run --on-live=refuse|allow` overrides it for one run. A launch-time setting; it does not change an export.",
       "enum": ["refuse", "allow"]
     },
+    "delegate_questions": {
+      "description": "Where a question from one of this harness's delegates goes. Absent, it is auto by session: an interactive parent gets `client` and a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) gets `model`. `model`: the question comes back in the delegate tool's result, naming the delegate that asked, and the harness's model puts it to the person in the parent's chat. `client`: ynh first puts it to the client's own question prompts, for a client that has them (Claude Code's Tasks, and elicitation in the interactive UIs of Codex, Copilot CLI and OpenCode); a client with none, or one that declines, falls back to the result. Set either to force it whatever the session. A launch-time setting; it does not change an export.",
+      "enum": ["model", "client"]
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",
@@ -740,7 +744,7 @@
           },
           "hooks": {
             "type": "boolean",
-            "description": "Consent to the hooks of the harness this include resolves to. When true they run in the session, ahead of the root's own hooks for each event. Default false: the hooks are not active and a warning names them. A hook is command execution, so the root author opts in per include, and for a harness reached through another, at every link, on every route; a direct include by the root decides alone.",
+            "description": "Consent to the hooks of the harness this include resolves to. When true they run in the session, ahead of the root's own hooks for each event. Absent, false and anything but true all leave the hooks not active; only absent also prints a warning naming them (its Fix offers \"hooks\": true to run them or \"hooks\": false to keep them off), because false is the author's choice. A hook is command execution, so the root author opts in per include, and for a harness reached through another, at every link, on every route; a direct include by the root decides alone.",
             "default": false
           },
           "instructions": {

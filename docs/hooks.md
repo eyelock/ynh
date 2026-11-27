@@ -67,7 +67,7 @@ Codex runs a hook only when it trusts both the project layer holding it and the 
 | Installed, `changed` since you accepted it | Not trusted; Codex skips them |
 | Run from a path (`ynh run ./dir`), which has no trust record | Not trusted; Codex skips them |
 
-When the grant is withheld, ynh prints one line on stderr saying Codex will skip the hooks, and what to run: `ynh trust accept local/<name>` (for a path run, install the harness first). A harness with no hooks needs no grant and prints nothing. An installed harness that is `unreviewed` or `changed` is refused outright by `ynh run`, before the grant is considered (see [the trust gate](sensors.md)); only a folder run still launches, with the hooks withheld.
+When the grant is withheld, ynh prints one line on stderr saying Codex will skip the hooks, and what to run: `ynh trust accept local/<name>` (for a path run, install the harness first). A harness with no hooks needs no grant and prints nothing. An installed harness that is `unreviewed` or `changed` is refused outright by `ynh run`, before the grant is considered (see [the trust gate](trust.md#the-gate)); only a folder run still launches, with the hooks withheld.
 
 Nothing is written to your `~/.codex/config.toml`. The overrides are table-form, and they merge with the entries you persisted there rather than replacing them: your own Codex hooks stay trusted and other trusted projects still load during an `ynh run`. This was checked on codex-cli 0.166.0 with a separate Codex home (`hooks/list` through `codex app-server`), and `config.toml` was byte-identical afterwards. It has not been re-checked on other Codex versions. Trusting the run directory as a project also lets Codex load the rest of what ynh wrote under its `.codex/` (for example the agent files), and ynh is the only writer there. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
 
@@ -559,7 +559,7 @@ ynh include add <harness> <url> --hooks     # sets "hooks": true
 ynh profile include add <harness> <profile> <url> --hooks
 ```
 
-`hooks` defaults to false. `ynh include add --replace --hooks` changes an existing include.
+`hooks` is tri-state. Absent and `false` both keep the included harness's hooks off; `true` runs them. They differ in one way: an include that says nothing gets a [warning](#warning-when-an-include-says-nothing), and `"hooks": false` is the author's choice and gets none. `ynh include add --replace --hooks` changes an existing include; write `"hooks": false` into the manifest by hand.
 
 ### What is carried
 
@@ -570,14 +570,16 @@ ynh profile include add <harness> <profile> <url> --hooks
 - **Merge order.** Per event, entries are appended: included harnesses first, in content order (dependencies before the harness that includes them), the root's own entries last. Nothing is de-duplicated: an identical entry from two sources runs twice.
 - **Delegates are not carried, and sensors are not governed by this flag.** An included harness's sensors travel unless its include says `"sensors": false`; see [sensors](sensors.md#sensors-from-an-include).
 
-### Warning without consent
+### Warning when an include says nothing
 
-When an included harness declares hooks and its include does not consent, ynh does not fail. It prints one warning per such harness on stderr, every time the harness is assembled (`ynh run`, `ynh agent run`, `ynd preview`, `ynd export`):
+When an included harness declares hooks and its include has no `hooks` key, ynh does not fail. It prints one warning per such harness on stderr, every time the harness is assembled (`ynh run`, `ynh agent run`, `ynd preview`, `ynd export`):
 
 ```
 warning: included harness guard declares hooks (before_tool, on_stop) that are not active
-  Fix: add "hooks": true to its include to run them
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 ```
+
+An explicit `"hooks": false` prints no warning. Where routes disagree, a `"hooks": false` on the link that decides (the root's direct include, or a link above the harness) silences it. The hooks are still listed as not active by `ynd preview`, `ynd compose` and `ynh info`.
 
 The events are listed sorted. The source is the include's name as shown elsewhere, with the chain (`eyelock/a > eyelock/b`) for a harness reached through another. `ynd preview` also lists them after the assembled tree, under "Hooks from included harnesses:" (active) and "Hooks from included harnesses, not active" (declined), each with the event and its source. `ynd compose` shows the same: its hooks are those a run carries, an included one marked with its source (`source` in JSON, `(from ...)` in text), and the declined ones are in `hooks_not_active`. `ynh info` lists them the same way, for a run with no profile or, with `--profile` or `--focus`, for a run with that selection.
 
@@ -596,7 +598,7 @@ A `./` command from an included harness names a script inside **that harness's**
 
 ### `ynh hook export`
 
-`ynh hook export` writes the project's own `.claude/settings.json`, where a `./` command is anchored to `$CLAUDE_PROJECT_DIR`, the project. An included harness's script is not in the project and a settings file cannot reach into the include's directory, so the export includes consented include hooks that are plain commands (absolute, `$CLAUDE_PROJECT_DIR`-anchored or PATH-style) and refuses, naming the include and the script, when one runs a `./` script. Either anchor the command in the included harness, or run the harness with `ynh run`, which does carry the script. Includes are resolved only when one of them says `"hooks": true`, so exporting a harness's own hooks still needs no network. An include without consent is warned about, as above.
+`ynh hook export` writes the project's own `.claude/settings.json`, where a `./` command is anchored to `$CLAUDE_PROJECT_DIR`, the project. An included harness's script is not in the project and a settings file cannot reach into the include's directory, so the export includes consented include hooks that are plain commands (absolute, `$CLAUDE_PROJECT_DIR`-anchored or PATH-style) and refuses, naming the include and the script, when one runs a `./` script. Either anchor the command in the included harness, or run the harness with `ynh run`, which does carry the script. Includes are resolved only when one of them says `"hooks": true`, so exporting a harness's own hooks still needs no network. An include that says nothing is warned about, as above.
 
 ## Portable Hook Script Advice
 

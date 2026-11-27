@@ -16,6 +16,7 @@
   * [Profiles](/profiles.md)
   * [Focus](/focus.md)
   * [Sensors](/sensors.md)
+  * [Trust](/trust.md)
   * [Session Presence](/presence.md)
   * [Agent Loop](/agent.md)
   * [Telemetry](/telemetry.md)
@@ -66,13 +67,16 @@
   * [17. The Agent Loop](/tutorial/agent-loop.md)
   * [18. Shadow Mode](/tutorial/shadow-mode.md)
 
+* **Tutorials: Delegates**
+  * [19. A First Delegate Session](/tutorial/first-delegate-session.md)
+  * [20. Native Delegation](/tutorial/delegation.md)
+
 * **Tutorials: Share & Scale**
-  * [19. Delegation](/tutorial/delegation.md)
-  * [20. Export](/tutorial/export.md)
-  * [21. Marketplace](/tutorial/marketplace.md)
-  * [22. Registry & Discovery](/tutorial/registry-and-discovery.md)
-  * [23. Docker Images](/tutorial/docker-image.md)
-  * [24. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
+  * [21. Export](/tutorial/export.md)
+  * [22. Marketplace](/tutorial/marketplace.md)
+  * [23. Registry & Discovery](/tutorial/registry-and-discovery.md)
+  * [24. Docker Images](/tutorial/docker-image.md)
+  * [25. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
 
 * **Project**
   * [Migrating to 0.2](/migration.md)

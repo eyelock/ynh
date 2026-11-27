@@ -80,6 +80,10 @@ func main() {
 		err = cmdStatus(os.Args[2:])
 	case "ps":
 		err = cmdPs(os.Args[2:])
+	case "stop":
+		err = cmdStop(os.Args[2:])
+	case "reap":
+		err = cmdReap(os.Args[2:])
 	case "search":
 		err = cmdSearch(os.Args[2:])
 	case "registry":

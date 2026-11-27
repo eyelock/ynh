@@ -46,6 +46,10 @@ ynh image david --tag ghcr.io/org/harness-david:latest
 # Build from a Git source
 ynh image david --from github.com/org/harnesses --tag harness-david:latest
 
+# Build from a Git source whose harness has hooks, MCP servers or sensors:
+# --trust accepts them and bakes the record, and the source must be pinned
+ynh image david --from github.com/org/harnesses --ref <40-character-sha> --trust
+
 # Build from a monorepo subdirectory
 ynh image david --from github.com/org/monorepo --path harnesses/david
 

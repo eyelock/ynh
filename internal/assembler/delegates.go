@@ -29,8 +29,10 @@ import (
 // Claude Code ignores that field for a plugin's subagents, though, and a run
 // loads the assembled directory as a plugin. So a run hands the subagents
 // that declare servers to the CLI directly (DelegateLaunchFile), where the
-// field is honoured. The agent file keeps the field too: it is what an
-// exported agent carries, and what works once copied into .claude/agents/.
+// field is honoured. A run writes no agent file for such a subagent, so the
+// model is offered it once. An export (Launch off) keeps the agent file and the
+// field: it is what an exported agent carries, and what works once copied into
+// .claude/agents/.
 type DelegateMCPCarrier interface {
 	// DelegateMCPFrontmatter returns the frontmatter line (without a
 	// trailing newline) that gives a subagent the servers.
@@ -308,6 +310,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		servers := composed.Servers
 
 		mcpLine := ""
+		offeredByLaunch := false
 		if len(servers) > 0 {
 			names := slices.Sorted(maps.Keys(servers))
 			for _, s := range composed.Sources {
@@ -331,10 +334,19 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 						}
 					}
 					launch = append(launch, agent)
+					offeredByLaunch = true
 				}
 			} else {
 				warn.Print(warnW, DelegateMCPWarning(delHarness.Name, names, vendorName))
 			}
+		}
+
+		// A delegate handed to the CLI directly is offered once, by that
+		// launch entry. A copy in the run directory would load as a plugin
+		// agent (<plugin>:<name>) as well, without the MCP servers, which
+		// Claude Code ignores there (ynh #1022).
+		if offeredByLaunch {
+			continue
 		}
 
 		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, focus, fd.Declared, mcpLine))

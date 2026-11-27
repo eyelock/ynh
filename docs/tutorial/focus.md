@@ -245,6 +245,15 @@ Expected first line:
 /tmp/ynh-tutorial/wake-harness: valid
 ```
 
+The `live` profile carries a hook, so `ynh run` refuses this harness until you accept it: the [trust gate](../trust.md#the-gate) refuses an installed harness that runs commands you have not reviewed. Review it, then accept it:
+
+```bash
+ynh trust show local/wake-demo
+ynh trust accept local/wake-demo
+```
+
+Expected output of the accept: `Recorded local/wake-demo: 1 command(s), sha256:...`
+
 A bare launch, with no `--focus` and no prompt, runs `--focus wake --interactive`: the session stays open, the focus prompt is its first message, and the focus's profile is applied. ynh says so on stderr.
 
 *This launches:* `claude Begin: act on your wake block --plugin-dir ~/.ynh/run/.snapshots/local--wake-demo/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--wake-demo/.../**)`

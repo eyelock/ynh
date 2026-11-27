@@ -477,7 +477,7 @@ func TestCmdProfileIncludeLocalPathWithHooks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if incs := got.Profiles["ci"].Includes; len(incs) != 1 || incs[0].Local != "up" || !incs[0].Hooks {
+	if incs := got.Profiles["ci"].Includes; len(incs) != 1 || incs[0].Local != "up" || incs[0].Hooks == nil || !*incs[0].Hooks {
 		t.Errorf("includes = %+v, want local up with hooks", incs)
 	}
 }
