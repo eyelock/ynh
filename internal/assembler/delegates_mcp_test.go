@@ -56,11 +56,50 @@ func assembleFor(t *testing.T, vendorName, repo string, lookup func(string) (str
 		return
 	}
 	dir := adapter.ArtifactDirs()["agents"]
-	data, rerr := os.ReadFile(filepath.Join(workDir, adapter.ConfigDir(), dir, "probe.md"))
+	// A run hands Claude Code the delegate through the launch file and
+	// writes no agent file, so the model is offered it once (ynh #1022).
+	// The agent file is what an export carries: assemble it without Launch.
+	if _, serr := os.Stat(filepath.Join(workDir, adapter.ConfigDir(), dir, "probe.md")); serr == nil {
+		if _, lerr := os.Stat(filepath.Join(workDir, vendor.ClaudeDelegateAgentsFile)); lerr == nil {
+			t.Errorf("a delegate in the launch file must not also be a plugin agent: %s", filepath.Join(workDir, adapter.ConfigDir(), dir, "probe.md"))
+		}
+	}
+	exportDir := t.TempDir()
+	if _, eerr := AssembleDelegates(exportDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Lookup: lookup, Warn: &strings.Builder{}}); eerr != nil {
+		t.Fatal(eerr)
+	}
+	data, rerr := os.ReadFile(filepath.Join(exportDir, adapter.ConfigDir(), dir, "probe.md"))
 	if rerr != nil {
 		t.Fatalf("agent file: %v", rerr)
 	}
 	return workDir, string(data), declared, warnings, nil
+}
+
+// On Claude Code a native delegate with MCP servers is offered once: in the
+// launch file (--agents, which honours its servers), and not as a plugin agent
+// of the run directory (<plugin>:<name>, which ignores them). ynh #1022.
+func TestAssembleDelegates_ClaudeOffersServerDelegateOnce(t *testing.T) {
+	repo := delegateRepo(t, t.TempDir(), map[string]any{
+		"name": "probe", "version": "0.1.0", "description": "Probe agent",
+		"mcp_servers": map[string]any{"s": map[string]any{"command": "srv"}},
+	})
+	t.Setenv("YNH_HOME", t.TempDir())
+	adapter, _ := vendor.Get("claude")
+	workDir := t.TempDir()
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}}}, "", DelegateOptions{Warn: &strings.Builder{}, Launch: true}); err != nil {
+		t.Fatal(err)
+	}
+	if files := agentFilesOf(t, workDir, adapter); len(files) != 0 {
+		t.Errorf("no plugin agent copy wanted, got %v", files)
+	}
+	launch, err := os.ReadFile(filepath.Join(workDir, vendor.ClaudeDelegateAgentsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var defs map[string]json.RawMessage
+	if err := json.Unmarshal(launch, &defs); err != nil || len(defs) != 1 || defs["probe"] == nil {
+		t.Errorf("want exactly the one launch entry probe, got %s (%v)", launch, err)
+	}
 }
 
 func frontmatterMCP(t *testing.T, agent string) []map[string]map[string]any {
