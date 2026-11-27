@@ -29,13 +29,13 @@ const delegateMaxWaitEnv = "YNH_DELEGATE_MAX_WAIT"
 // cmdDelegateMCP is `ynh delegate-mcp`, the MCP server a vendor starts over
 // stdio for a parent with A2A delegates. It is not for people to run:
 //
-//	ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>]
+//	ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>] [--questions model|client]
 //
 // It reaches each delegate through the endpoint its environment names
 // (YNH_DELEGATES, YNH_DELEGATE_<NAME>_CARD and _AUTH, which `ynh run` writes
 // into the server's entry in the MCP config).
 func cmdDelegateMCP(args []string) error {
-	var parent, folder string
+	var parent, folder, questions string
 	maxWait := time.Duration(0)
 	for i := 0; i < len(args); i++ {
 		next := func() (string, error) {
@@ -52,6 +52,11 @@ func cmdDelegateMCP(args []string) error {
 			parent, err = next()
 		case "--folder":
 			folder, err = next()
+		case "--questions":
+			if v, err = next(); err == nil && !delegatemcp.ValidQuestions(v) {
+				err = fmt.Errorf("--questions takes model or client, not %q", v)
+			}
+			questions = v
 		case "--max-wait":
 			if v, err = next(); err == nil {
 				var n int
@@ -60,14 +65,14 @@ func cmdDelegateMCP(args []string) error {
 				}
 			}
 		default:
-			err = fmt.Errorf("unknown flag %s\nusage: ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>]", args[i])
+			err = fmt.Errorf("unknown flag %s\nusage: ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>] [--questions model|client]", args[i])
 		}
 		if err != nil {
 			return err
 		}
 	}
 	if parent == "" || folder == "" {
-		return fmt.Errorf("usage: ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>]")
+		return fmt.Errorf("usage: ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>] [--questions model|client]")
 	}
 	ds, err := delegatesFromEnv(os.Getenv)
 	if err != nil {
@@ -76,7 +81,7 @@ func cmdDelegateMCP(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return delegatemcp.New(delegatemcp.Config{
-		Parent: parent, Folder: folder, Delegates: ds, MaxWait: maxWait, Version: config.Version,
+		Parent: parent, Folder: folder, Delegates: ds, MaxWait: maxWait, Version: config.Version, Questions: questions,
 	}).Serve(ctx, os.Stdin, os.Stdout)
 }
 
@@ -101,10 +106,28 @@ func delegatesFromEnv(get func(string) string) ([]delegatemcp.Delegate, error) {
 	return out, nil
 }
 
+// delegateQuestionsFor resolves delegate_questions for a session. Unset, it
+// is auto by session: an interactive parent has a person at its client, so
+// the question goes to the client's own prompts (elicitation, Claude Code
+// Tasks) where the client has them; a headless parent (oneShot: a prompt and
+// no --interactive, `claude -p` and the like) has no one to ask, so the
+// question comes back in the tool result for its model. A harness that sets
+// model or client keeps its choice.
+func delegateQuestionsFor(declared string, oneShot bool) string {
+	switch {
+	case declared != "":
+		return declared
+	case oneShot:
+		return delegatemcp.QuestionsModel
+	default:
+		return delegatemcp.QuestionsClient
+	}
+}
+
 // delegateMCPEntry is the server `ynh run` adds to the parent's MCP config
 // for its open endpoints: ynh itself, with the endpoints in its environment.
 // It is nil when there are none. maxWait comes from YNH_DELEGATE_MAX_WAIT.
-func delegateMCPEntry(eps []*a2aserve.Endpoint, parentID, folder string) (*plugin.MCPServer, error) {
+func delegateMCPEntry(eps []*a2aserve.Endpoint, parentID, folder, questions string) (*plugin.MCPServer, error) {
 	if len(eps) == 0 {
 		return nil, nil
 	}
@@ -126,7 +149,13 @@ func delegateMCPEntry(eps []*a2aserve.Endpoint, parentID, folder string) (*plugi
 			env[k] = v
 		}
 	}
+	if !delegatemcp.ValidQuestions(questions) {
+		return nil, fmt.Errorf("delegate_questions takes model or client, not %q", questions)
+	}
 	args := []string{"delegate-mcp", "--parent", parentID, "--folder", folder}
+	if questions != "" {
+		args = append(args, "--questions", questions)
+	}
 	if v := os.Getenv(delegateMaxWaitEnv); v != "" {
 		if n, err := strconv.Atoi(v); err != nil || n <= 0 {
 			return nil, fmt.Errorf("%s=%q: want a whole number of seconds above 0", delegateMaxWaitEnv, v)

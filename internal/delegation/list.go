@@ -32,3 +32,45 @@ func List(parent, folder string) ([]*Record, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	return out, nil
 }
+
+// ListAll returns the records of every parent's delegations in every folder,
+// oldest first, under the same rules as List.
+func ListAll() ([]*Record, error) {
+	parents, err := os.ReadDir(Dir())
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []*Record
+	for _, p := range parents {
+		if !p.IsDir() {
+			continue
+		}
+		folders, err := os.ReadDir(filepath.Join(Dir(), p.Name()))
+		if err != nil {
+			continue
+		}
+		for _, f := range folders {
+			if !f.IsDir() {
+				continue
+			}
+			dir := filepath.Join(Dir(), p.Name(), f.Name())
+			files, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, e := range files {
+				if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+					continue
+				}
+				if r, err := Load(filepath.Join(dir, e.Name())); err == nil {
+					out = append(out, r)
+				}
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}

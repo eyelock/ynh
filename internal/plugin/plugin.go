@@ -49,6 +49,14 @@ type HarnessJSON struct {
 	// empty (the default) warns and starts it. `ynh run --on-live` overrides
 	// it for one run. A launch concern, like MCPManualApproval.
 	OnLive string `json:"on_live,omitempty"`
+	// DelegateQuestions says where a delegate's question to this harness
+	// goes: "model" returns it in the tool result for the harness's
+	// model to put to the person, naming the asker; "client" puts it to the
+	// client's own prompts first (elicitation, Claude Code Tasks), where the
+	// client has them. Absent, it is auto by session: client for an
+	// interactive parent, model for a headless one. A launch concern, like
+	// OnLive.
+	DelegateQuestions string `json:"delegate_questions,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`

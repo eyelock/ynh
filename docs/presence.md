@@ -20,6 +20,8 @@ ynh ps [--all] [--format text|json | --json]
 
 JSON output is `{"sessions": [...]}`, oldest first; an empty listing is `{"sessions": []}`. Each session has the fields of the record below plus `status`.
 
+A session whose delegates have asked it a question nobody has answered also has `open_questions` in JSON (the delegate, its handle, the question, `asked_at` and `waiting_seconds`), and the text listing prints one line under the table for each: `ynh:<id>: reviewer asks (waiting 3m0s): which branch?`. The question belongs to the newest live, non-delegate session of the parent harness in the folder the delegation ran in. See [Questions from a delegate](delegate-sessions.md#questions-from-a-delegate).
+
 ### Status
 
 | `status` | Meaning |

@@ -426,6 +426,10 @@ Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`, or 
 
 `"refuse"` or `"allow"`; absent by default. What `ynh run` does when a session of this harness is already live (see [`ynh ps`](presence.md)): `refuse` stops the second run, naming the live session and giving a Fix line; `allow` starts it with no warning; absent warns, naming the live session, and starts it. `ynh run --on-live=refuse|allow` overrides it for one run. See [When a session of the harness is already live](presence.md#when-a-session-of-the-harness-is-already-live).
 
+### delegate_questions (optional)
+
+`"model"` or `"client"`; auto by session when absent. Where a question from one of this harness's delegates goes. Absent, an interactive parent gets `client` and a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) gets `model`. `model` returns it in the delegate tool's result (state `input-required`, the delegate's name, how long it has waited), and the harness's model puts it to the person in the parent's chat and answers with `delegate_reply`. `client` first puts it to the client's own question prompts (elicitation, and Claude Code's Tasks), for a client that has them; a client with none, or one that declines, falls back to the result. Set `model` or `client` to force one whatever the session. See [Questions from a delegate](delegate-sessions.md#questions-from-a-delegate).
+
 ### workspace (optional)
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).

@@ -6,7 +6,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/presence"
 )
 
@@ -53,5 +56,68 @@ func TestPsTextAndBadFlag(t *testing.T) {
 	}
 	if err := cmdPsTo([]string{"--bogus"}, &out, &errb); err == nil {
 		t.Error("unknown flag should fail")
+	}
+}
+
+func TestPsListsOpenQuestionsWithAgeAgainstTheOwningSession(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_TEST_SUPERVISE", "1")
+	cwd, _ := os.Getwd()
+	s, err := presence.Start(presence.Record{SessionID: "seat1", Harness: "seat", Vendor: "claude", Mode: presence.ModeInteractive, Cwd: cwd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.End()
+	rec, _, err := delegation.Start(delegation.StartOptions{Parent: "local/seat", Delegate: "local/reviewer", Task: "sleep 30", Folder: cwd, Supervisor: []string{os.Args[0]}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { delegationtest.StopAll(t) })
+	path := delegation.RecordPath("local/seat", cwd, rec.Handle)
+	asked := time.Now().UTC().Add(-3 * time.Minute)
+	if _, err := delegation.Update(path, func(r *delegation.Record) {
+		r.Questions = []delegation.Question{{ID: "q1", Text: "which branch?", AskedAt: asked}}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if err := cmdPsTo([]string{"--json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	var res psResult
+	if err := json.Unmarshal(out.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	var seat *psSession
+	for i := range res.Sessions {
+		if res.Sessions[i].SessionID == "seat1" {
+			seat = &res.Sessions[i]
+		}
+	}
+	if seat == nil || len(seat.OpenQuestions) != 1 {
+		t.Fatalf("sessions = %+v", res.Sessions)
+	}
+	q := seat.OpenQuestions[0]
+	if q.Delegate != "reviewer" || q.Handle != rec.Handle || q.Question != "which branch?" || q.WaitingSeconds < 179 {
+		t.Errorf("question = %+v", q)
+	}
+	out.Reset()
+	if err := cmdPsTo(nil, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "reviewer asks (waiting 3m") || !strings.Contains(out.String(), "which branch?") {
+		t.Errorf("text output lacks the question:\n%s", out.String())
+	}
+	// A question answered is no longer listed.
+	if _, err := delegation.Update(path, func(r *delegation.Record) {
+		a := "main"
+		r.Questions[0].Answer = &a
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	_ = cmdPsTo([]string{"--json"}, &out, &errb)
+	if strings.Contains(out.String(), "open_questions") {
+		t.Errorf("an answered question is still listed: %s", out.String())
 	}
 }
