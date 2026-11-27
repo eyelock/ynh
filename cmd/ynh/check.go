@@ -134,7 +134,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	}
 	p, err := loadHarnessRefProfile(harnessName, profileName)
 	if err != nil {
-		return checkExecErr(cliError(stderr, structured, errCodeNotFound, err.Error()))
+		return checkExecErr(cliError(stderr, structured, errCodeNotFound, folderCheckHint(harnessName, err.Error())))
 	}
 	if cwd == "" {
 		cwd, _ = os.Getwd()
@@ -799,4 +799,17 @@ func loadHarnessRefProfile(ref, profile string) (*harness.Harness, error) {
 		return nil, err
 	}
 	return resolver.WithIncludedSensors(h)
+}
+
+// folderCheckHint rewrites the resolver's `ynh update` hint for a check of a
+// folder. `ynh update` takes installed ids only, so for a folder it cannot
+// help; the include is fetched by a run with --trust, which check has not
+// (ynh #993). An installed id keeps the resolver's hint.
+func folderCheckHint(ref, msg string) string {
+	if gateRef(ref) != "" {
+		return msg
+	}
+	const hint = "\nrun `ynh update` (checking a gate must not reach the network)"
+	return strings.ReplaceAll(msg, hint, "\nynh check reads the cache only and has no --trust. Fetch each remote include by running "+
+		"'ynh run <folder> --trust' once it is pinned to a full 40-character commit SHA, then check again. 'ynh update' takes installed harnesses only.")
 }

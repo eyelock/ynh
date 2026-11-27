@@ -39,6 +39,7 @@ A session whose delegates have asked it a question nobody has answered also has 
 | `harness` | The harness's run name. |
 | `vendor` | `claude`, `codex`, `copilot`, `cursor` or `opencode`. |
 | `vendor_pid` | The vendor CLI's process id; absent until it has started. |
+| `vendor_start` | The vendor's start as the OS reports it, like `start_time`; `ynh stop` signals the vendor only while the process at `vendor_pid` started then, and otherwise stops the session through its wrapper. |
 | `wrapper_pid` | The `ynh run` process id. ynh stays the vendor's parent for the whole session. |
 | `start_time` | The wrapper's start as the OS reports it (see below). Opaque: compare, do not interpret. |
 | `started_at` | Wall-clock start, for people. |
@@ -82,6 +83,20 @@ Records live in `$YNH_HOME/presence/<session_id>.json`. Ended and dead records s
 
 `ynh run --on-live=refuse|allow` (or `--on-live refuse`) wins over the harness's `on_live`: `--on-live=allow` starts a run that the harness would refuse. A harness that is only dead (a crashed wrapper) or ended is not live, so it never blocks a new run. A Wheelhouse sets `on_live: "refuse"` on every seat without ynh knowing what a seat is. The check is skipped for the run of a delegate (a parent started it for this harness on purpose) and for `--install` and `--clean`. See [`on_live`](harnesses.md#on-live-optional).
 
+## Stopping sessions
+
+```
+ynh stop <session>
+ynh stop --owner <session>
+ynh reap [--history] [--dry-run]
+```
+
+A session is named by its `session_id` or its `address` (`ynh:<id>`), as `ynh ps` shows them. [ynh #895](https://github.com/eyelock/ynh/issues/895).
+
+- `ynh stop <session>` stops one live session. The record is checked against the process table first, so a pid that now belongs to another process is never signalled. ynh asks the vendor process to terminate (the wrapper, its parent, then ends the record cleanly), but only while the process at the recorded pid still started when the record says; otherwise it signals the wrapper, whose identity was just checked, and kills it if it has not gone within five seconds. A session that is not live is refused, with a Fix line.
+- `ynh stop --owner <session>` stops every live session that session started: its delegates (a record's `owner_session`).
+- `ynh reap` stops every `orphaned` session: a delegate keeps running when its owner exits, `ynh ps` lists it as orphaned, and reap clears it. `--history` also deletes the records of ended and dead sessions, which `ynh ps --all` otherwise keeps; `--dry-run` says what would be done and does nothing. A live session is never removed.
+
 ## Not covered
 
-Delegates' A2A endpoints are not yet queried as a second source, and there is no `ynh stop`, reap or live-session cap; those are [ynh #895](https://github.com/eyelock/ynh/issues/895). Presence is per machine and per `YNH_HOME`.
+Delegates' A2A endpoints are not yet queried as a second source, and reuse of a live delegate by name is not built ([ynh #895](https://github.com/eyelock/ynh/issues/895)). Presence is per machine and per `YNH_HOME`.

@@ -154,8 +154,10 @@ A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`,
 "Folder" is not the same as "installed from a folder". `ynh install ./dir` copies nothing: it records a pointer to the folder under `$YNH_HOME` as `local/<name>`, and from then on it is an installed harness like any other: the gate refuses it until you accept it, by its id, whether or not the folder is a Git checkout. Because the installed harness is the folder itself, editing the folder changes the installed harness: it reads `changed` and is refused until you accept it again. Only a run by path is a folder run.
 
 - The folder's **own commands run unchecked**, and ynh says so once on stderr: `ynh: <name> runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.`
-- The commands a **remote include** brings are refused unless accepted. A remote include is a Git include of another repository, at any depth; a local include and an include of the harness's own repository are the folder's own files. Each remote include that brings commands needs a record of its own, keyed by repository, subpath and ref, over that include's own commands, so the record means the same to every folder that includes it and accepting one folder never changes another's. An include whose commands cannot be read is refused, naming `ynh update`.
-- **Accept them with `ynh trust accept <dir>`**, which records each remote include and prints how many commands: `Accepted 1 remote include(s) of /home/you/folder: 2 command(s)`. With none to accept it says so. A folder run gets none of the [pre-approvals that follow trust](#what-follows-trust): its MCP tools are not pre-approved, a one-shot Copilot run is refused and `--auto-approve` is refused.
+- The commands a **remote include** brings are refused unless accepted. A remote include is a Git include of another repository, at any depth; a local include and an include of the harness's own repository are the folder's own files. Each remote include that brings commands needs a record of its own, keyed by repository, subpath and ref, over that include's own commands, so the record means the same to every folder that includes it and accepting one folder never changes another's. An include whose commands cannot be read is refused. For an installed harness the Fix line names `ynh update`; for a folder run it names `--trust`, because `ynh update` takes installed ids only.
+- **A run checks the gate offline.** Without `--trust` it never reaches the network: a remote include that is not in the cache is refused, and the Fix line says to run it again with `--trust`, once the include is pinned to a full SHA.
+- **Fetch and accept them in one step with `--trust`**: `ynh run <dir> --trust` and `ynh agent run --harness <dir> --trust` fetch each remote include that is missing from the cache, once, then record it as in [the full-SHA rule](#the-full-sha-rule-and-trust-flags). Only an include pinned to a full 40-character SHA is fetched; an uncached include at a tag, a branch, a short SHA or no ref is refused and nothing is fetched. The refusal says to pin it and run again with `--trust`; it does not offer `ynh trust accept`, which reads an include from the cache and so cannot help. An include already in the cache is not fetched again. `ynh update <dir>` is not a route: it takes installed ids only. `ynh check <dir>` has no `--trust` and never reaches the network: with an uncached remote include it fails before the gate (exit 2) and says to fetch the include with `ynh run <dir> --trust`, then check again.
+- **Or accept them by hand with `ynh trust accept <dir>`**, once they are in the cache, which records each remote include and prints how many commands. With none to accept it says so. A folder run gets none of the [pre-approvals that follow trust](#what-follows-trust): its MCP tools are not pre-approved, a one-shot Copilot run is refused and `--auto-approve` is refused.
 - A script the digest could not read in full blocks a remote include's run exactly as it blocks an installed harness.
 
 ## The full-SHA rule and trust flags
@@ -174,6 +176,7 @@ Pin it to a 40-character commit SHA, or review it and accept it by hand with 'yn
 |---|---|---|
 | `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | before anything is written |
 | `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
+| `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref and its remote includes' refs, after the includes are fetched |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
 | `ynh include add <harness> <url> --trust` (with `--replace` too) and `ynh include update <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then |
@@ -235,7 +238,19 @@ Review them: ynh trust show local/acme
 Then accept:  ynh trust accept local/acme
 ```
 
-An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one. `--from <source>`, which builds from a Git URL or a local path rather than an installed harness, is not checked and bakes no record and no label. On a base image whose ynh has the gate, such an image of a harness with hooks, MCP servers or sensors refuses at start, because it carries no record; a harness with nothing to accept runs. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
+An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one.
+
+### `ynh image --from`
+
+`ynh image <name> --from <source>` builds from a Git URL or a local path rather than an installed harness, so nothing has accepted it yet. A harness with hooks, MCP servers, sensors or workspace folders is refused at build time, with exit 1, the `untrusted` error code and a `Fix:` line naming `--trust`; a harness with nothing to accept builds, with no record and no label.
+
+`--trust` accepts what the source executes and bakes the record, with `via` set to `image`, as above, so the image's start passes its gate. It follows the full-SHA rule of `ynh install --trust`: a remote source must be pinned with `--ref` at a 40-character commit SHA, and so must every remote include that brings commands, or the build is refused, naming what floats (a tag, a branch, a short SHA or no ref). A local folder is your own files and needs no pin; its remote includes still do.
+
+```bash
+ynh image acme --from github.com/org/acme --ref 0123456789abcdef0123456789abcdef01234567 --trust
+```
+
+`--trust` is only valid with `--from`; an installed harness is accepted with `ynh trust accept`. `--ref` is likewise `--from` only, and not valid for a local folder. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
 
 ## Related
 

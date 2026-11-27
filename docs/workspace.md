@@ -61,7 +61,7 @@ Every launch prints one line per folder on stderr, in the style of the hook warn
 
 ```
   workspace: granted /work/repos/ynh (inside the YNH_WORKSPACE_ROOTS allow-list)
-  warning: workspace: "../../elsewhere" not granted: /elsewhere is outside the YNH_WORKSPACE_ROOTS allow-list (/work/repos)
+warning: workspace: "../../elsewhere" not granted: /elsewhere is outside the YNH_WORKSPACE_ROOTS allow-list (/work/repos)
 ```
 
 `ynh trust show <harness>` lists the requested folders in their own section, with the strings as written and where they resolve to, and says whether the allow-list covers each one. It lists them even when the allow-list would grant them without trust. `--format json` carries the same in an optional `workspace` field.

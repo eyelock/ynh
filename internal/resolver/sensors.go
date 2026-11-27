@@ -283,6 +283,53 @@ func ResolveSelectedLocal(p *harness.Harness, sel harness.Selection) ([]ResolveR
 	}, sel)
 }
 
+// UnpinnedUncachedError is what WarmPinnedIncludes reports for a git include
+// that is not in the cache and is not pinned to a full commit SHA: it fetches
+// nothing for it, because only a full SHA makes the fetch deterministic.
+type UnpinnedUncachedError struct{ Git, Ref string }
+
+func (e *UnpinnedUncachedError) Error() string {
+	return fmt.Sprintf("include %s (ref %q) is not in the cache and is not pinned to a full commit SHA, so it is not fetched", e.Git, e.Ref)
+}
+
+// IsFullSHA reports whether ref is a full commit SHA: 40 hexadecimal digits.
+func IsFullSHA(ref string) bool {
+	if len(ref) != 40 {
+		return false
+	}
+	for _, c := range ref {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// WarmPinnedIncludes walks the includes of p, and of every harness they
+// reach, fetching each git include that is missing from the cache and is
+// pinned to a full commit SHA (ynh #993). A cached include is never refetched.
+// An uncached include that is not full-SHA pinned is not fetched and ends the
+// walk with an *UnpinnedUncachedError. It is the operator's explicit act
+// (`--trust` on a folder run); a check of the gate never calls it.
+func WarmPinnedIncludes(p *harness.Harness) error {
+	_, _, err := resolveSelected(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+		fetch := repoFunc(func(gitURL, ref string) (RepoResult, error) {
+			if res, ok := LookupCache(gitURL, ref); ok {
+				return res, nil
+			}
+			if !IsFullSHA(ref) {
+				return RepoResult{}, &UnpinnedUncachedError{Git: gitURL, Ref: ref}
+			}
+			return EnsureRepo(gitURL, ref)
+		})
+		if IsOwnRepoSource(gs, dir) {
+			fetch = EnsureRepo
+		}
+		return resolveGitSourceWith(gs, dir, fetch)
+	}, harness.Selection{})
+	return err
+}
+
 // ResolveDelegateLocal resolves a delegate's source to its directory without
 // touching the network, as ResolveIncludesLocal does for includes: a delegate
 // that is not cached is an error, and the harness's own repo is refreshed.

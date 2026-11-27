@@ -13,6 +13,7 @@ import (
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdUpdate(args []string) error {
@@ -236,7 +237,8 @@ func updateHarness(args []string, quiet bool) error {
 			}
 		}
 		if err := harness.SaveInstalledRecord(name, p, ins); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not update install record: %v\n", err)
+			// No Fix: the cause is the filesystem error writing the record.
+			warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not update install record: %v", err)})
 		}
 	}
 
