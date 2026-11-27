@@ -97,7 +97,10 @@ ynh trust show <parent>
 ynh trust accept <parent>
 ```
 
-A native delegate needs no install and no record of its own.
+A native delegate needs no install and no record of its own. Its entry in the parent's manifest must
+be pinned to a full 40-character commit SHA, or `ynh trust accept <parent>` refuses it (`native delegate
+...: no ref, so it floats with the default branch`); see
+[Make a delegate native instead](make-a-delegate-native.md).
 
 Every refusal a delegate can cause is in
 [Delegates reference: refusals](../delegates-reference.md#refusals-when-a-delegate-cannot-be-matched).
