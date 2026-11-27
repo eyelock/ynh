@@ -173,14 +173,7 @@ jobs:
         run: |
           pin="$(sed -n 's/^ARG YNR_VERSION=//p' Dockerfile)"
           lib="$(go list -m -f '{{.Version}}' github.com/eyelock/ynr/spoolexporter)"
-          [ -n "$pin" ] && [ -n "$lib" ]
-          pin_minor="$(echo "$pin" | cut -d. -f2)"
-          lib_minor="$(echo "${lib#v}" | cut -d. -f2)"
-          echo "ynr pin $pin, spoolexporter $lib"
-          if [ "$lib_minor" -gt "$pin_minor" ]; then
-            echo "spoolexporter $lib is newer than the ynr pin $pin: move YNR_VERSION in the Dockerfile" >&2
-            exit 1
-          fi
+          bash scripts/spoolexporter-pin.sh "$pin" "$lib"
       # The Docker image builds with the Dockerfile's GO_VERSION, not go.mod's
       # toolchain (the golang images set GOTOOLCHAIN=local); this keeps the two
       # equal so govulncheck scans the Go the image ships.
