@@ -122,17 +122,19 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	// only way to check a harness was to install it first. That is a real
 	// barrier while you are still authoring one, which is exactly when you most
 	// want to run the gate.
-	p, err := loadHarnessRefProfile(harnessName, profileName)
-	if err != nil {
-		return checkExecErr(cliError(stderr, structured, errCodeNotFound, folderCheckHint(harnessName, err.Error())))
-	}
-	// The trust gate, on the harness as loaded (a profile reshapes p, and the
-	// trust record covers the harness before it).
+	// The trust gate comes first, on the harness as loaded (a profile reshapes
+	// p, and the trust record covers the harness before it), so a harness the
+	// gate refuses is refused the same way here as by `ynh run`: a folder whose
+	// remote include cannot be read is untrusted (exit 1), not not_found.
 	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
 		if gerr := checkTrustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
 			// Exit 1, a refusal, not 2: the check was not unable to run, it was not allowed to.
 			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
 		}
+	}
+	p, err := loadHarnessRefProfile(harnessName, profileName)
+	if err != nil {
+		return checkExecErr(cliError(stderr, structured, errCodeNotFound, folderCheckHint(harnessName, err.Error())))
 	}
 	if cwd == "" {
 		cwd, _ = os.Getwd()

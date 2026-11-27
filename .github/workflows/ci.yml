@@ -167,6 +167,20 @@ jobs:
       - name: go.mod is tidy
         run: go mod tidy -diff
 
+      # The spoolexporter library writes the spool the relay scrubs; one newer
+      # than the pinned ynr binary would write what that binary cannot read.
+      - name: spoolexporter is no newer than the ynr pin
+        run: |
+          pin="$(sed -n 's/^ARG YNR_VERSION=//p' Dockerfile)"
+          lib="$(go list -m -f '{{.Version}}' github.com/eyelock/ynr/spoolexporter)"
+          [ -n "$pin" ] && [ -n "$lib" ]
+          pin_minor="$(echo "$pin" | cut -d. -f2)"
+          lib_minor="$(echo "${lib#v}" | cut -d. -f2)"
+          echo "ynr pin $pin, spoolexporter $lib"
+          if [ "$lib_minor" -gt "$pin_minor" ]; then
+            echo "spoolexporter $lib is newer than the ynr pin $pin: move YNR_VERSION in the Dockerfile" >&2
+            exit 1
+          fi
       # The Docker image builds with the Dockerfile's GO_VERSION, not go.mod's
       # toolchain (the golang images set GOTOOLCHAIN=local); this keeps the two
       # equal so govulncheck scans the Go the image ships.
@@ -359,31 +373,26 @@ jobs:
   conformance:
     # ynr conformance (ynr ADR-008): ynh's own scenarios in .ynr/conformance.yaml
     # run `ynh agent run` against ynr's stub vendor, offline, with no model and
-    # no secret, against a pinned ynr release. Among All Clear's needs, so a red
+    # no secret, against the ynr release the Dockerfile pins. Among All Clear's needs, so a red
     # run turns All Clear red.
     name: Conformance
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    env:
-      # The ynr release, without the leading v, and the SHA-256 of the two
-      # archives the job runs, pinned beside it: the release's checksums.txt
-      # must list the same digests, and the downloads must match them, before
-      # anything is extracted or run. Move all three together.
-      YNR_VERSION: 0.5.1
-      YNR_SHA256: 615bffc870d12973ffacfe11da82f3c45c24c04352664d9faabcbeeb233bdc2e
-      YNR_STUB_SHA256: ed96fe26f9488cc0db8d2ec79f6d9a2a83c75cad61d50340a5805bda96a6a657
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532  # v4.1.3
-      - name: Install ynr and its stub vendor, checked against their pinned checksums
+      - name: Install ynr and its stub vendor, checked against the release checksums
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # The one pin: the Dockerfile's ARG, as the Test job reads it.
+          YNR_VERSION="$(sed -n 's/^ARG YNR_VERSION=//p' Dockerfile)"
+          [ -n "$YNR_VERSION" ]
           dl="$RUNNER_TEMP/ynr-download"
           bin="$RUNNER_TEMP/ynr-bin"
           mkdir -p "$dl" "$bin"
@@ -397,10 +406,9 @@ jobs:
             --certificate-identity "https://github.com/eyelock/ynr/.github/workflows/release.yml@refs/tags/v${YNR_VERSION}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             checksums.txt
-          # The release's published checksums name the same digests as the pins.
-          grep -qx "${YNR_SHA256}  ${ynr}" checksums.txt
-          grep -qx "${YNR_STUB_SHA256}  ${stub}" checksums.txt
-          printf '%s  %s\n%s  %s\n' "$YNR_SHA256" "$ynr" "$YNR_STUB_SHA256" "$stub" | sha256sum --check --strict -
+          grep -e " ${ynr}\$" -e " ${stub}\$" checksums.txt > wanted.txt
+          [ "$(wc -l < wanted.txt)" -eq 2 ]
+          sha256sum --check --strict wanted.txt
           tar -xzf "$ynr" -C "$bin" ynr
           tar -xzf "$stub" -C "$bin" ynr-stub-vendor
           "$bin/ynr" version

@@ -450,3 +450,27 @@ func TestParseImageArgs_Entrypoint(t *testing.T) {
 		t.Error("--entrypoint with no value must error")
 	}
 }
+
+func TestParseImageArgs_UnknownFlag(t *testing.T) {
+	for _, args := range [][]string{
+		{"--turst", "demo"},
+		{"demo", "--turst"},
+		{"demo", "--from", "./x", "--turst"},
+		{"demo", "-x"},
+	} {
+		_, err := parseImageArgs(args)
+		if err == nil {
+			t.Fatalf("%v: expected an unknown-flag error, got nil", args)
+		}
+		if !strings.Contains(err.Error(), "unknown flag") || !strings.Contains(err.Error(), "usage:") {
+			t.Errorf("%v: error = %q, want unknown flag and usage", args, err)
+		}
+	}
+}
+
+func TestCmdImage_UnknownFlag(t *testing.T) {
+	err := cmdImage([]string{"demo", "--turst"})
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --turst") {
+		t.Fatalf("want unknown flag refusal, got %v", err)
+	}
+}

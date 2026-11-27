@@ -230,7 +230,7 @@ func TestCmdInfo_RendersSensorsSection(t *testing.T) {
 func TestCmdSensors_Run_Command(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
-	installListTestHarness(t, home, "sh", `{
+	installTrustedTestHarness(t, home, "sh", `{
 		"name": "sh",
 		"version": "0.1.0",
 		"sensors": {
@@ -344,7 +344,7 @@ func TestCmdSensors_Run_Files(t *testing.T) {
 func TestCmdSensors_Run_FocusReturnsResolvedPayload(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
-	installListTestHarness(t, home, "sh", sensorHarnessJSON)
+	installTrustedTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
 	if err := cmdSensorsTo([]string{"run", "local/sh", "sec"}, &stdout, io.Discard); err != nil {
@@ -463,4 +463,81 @@ func TestMergeSensorOverlayKeepsTheOriginHarness(t *testing.T) {
 	if got.Tolerance != "advisory" || got.HarnessDir != "/somewhere/else" {
 		t.Errorf("got tolerance %q, HarnessDir %q", got.Tolerance, got.HarnessDir)
 	}
+}
+
+// `ynh sensors run` passes the gate `ynh run` does, before /bin/sh starts: a
+// never-accepted harness and a changed one are refused with the gate's message
+// and its Fix line, the structured code untrusted and no sensor output; an
+// accepted one still runs (ynh #1010).
+func TestCmdSensors_Run_TrustGate(t *testing.T) {
+	const marker = "sensor-ran"
+	sensorJSON := func(cmd string) string {
+		return `{"name":"gated","version":"0.1.0","sensors":{"build":{` +
+			`"source":{"command":"` + cmd + `"},"output":{"format":"text"}}}}`
+	}
+	run := func(t *testing.T) (string, string, error) {
+		t.Helper()
+		var stdout, stderr bytes.Buffer
+		err := cmdSensorsTo([]string{"run", "local/gated", "build"}, &stdout, &stderr)
+		return stdout.String(), stderr.String(), err
+	}
+	refused := func(t *testing.T, stderr string, err error, want ...string) {
+		t.Helper()
+		if err == nil {
+			t.Fatalf("sensors run succeeded, want a refusal")
+		}
+		var env struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if jerr := json.Unmarshal([]byte(stderr), &env); jerr != nil {
+			t.Fatalf("stderr is not the error envelope: %v\n%s", jerr, stderr)
+		}
+		if env.Error.Code != errCodeUntrusted {
+			t.Errorf("code = %q, want %q", env.Error.Code, errCodeUntrusted)
+		}
+		for _, w := range want {
+			if !strings.Contains(env.Error.Message, w) {
+				t.Errorf("refusal lacks %q:\n%s", w, env.Error.Message)
+			}
+		}
+	}
+
+	t.Run("unaccepted", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+		installListTestHarness(t, home, "gated", sensorJSON("echo "+marker))
+		stdout, stderr, err := run(t)
+		refused(t, stderr, err, "you have not accepted", "echo "+marker, "ynh trust accept local/gated")
+		if strings.Contains(stdout, marker) {
+			t.Errorf("the sensor ran: %s", stdout)
+		}
+	})
+
+	t.Run("changed since accepted", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+		installTrustedTestHarness(t, home, "gated", sensorJSON("echo accepted"))
+		installListTestHarness(t, home, "gated", sensorJSON("echo "+marker))
+		stdout, stderr, err := run(t)
+		refused(t, stderr, err, "differ from what you accepted", "ynh trust accept local/gated")
+		if strings.Contains(stdout, marker) {
+			t.Errorf("the sensor ran: %s", stdout)
+		}
+	})
+
+	t.Run("accepted", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+		installTrustedTestHarness(t, home, "gated", sensorJSON("echo "+marker))
+		stdout, stderr, err := run(t)
+		if err != nil {
+			t.Fatalf("accepted harness refused: %v\n%s", err, stderr)
+		}
+		if !strings.Contains(stdout, marker) {
+			t.Errorf("sensor did not run: %s", stdout)
+		}
+	})
 }
