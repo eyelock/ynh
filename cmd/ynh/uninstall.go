@@ -232,7 +232,10 @@ func sourceTreeExists(path string) bool {
 func forgetTrust(ref string, pointer bool, bareName string) {
 	store, err := loadTrustStore()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not read the trust record to clear %s: %v\n", ref, err)
+		warn.Print(os.Stderr, warn.Warning{
+			Message: fmt.Sprintf("could not read the trust record to clear %s: %v", ref, err),
+			Fix:     "Run 'ynh trust ls' to see what it holds; a stale record cannot count for another install, which is checked by source and commit.",
+		})
 		return
 	}
 	ids := []string{ref}
@@ -250,6 +253,9 @@ func forgetTrust(ref string, pointer bool, bareName string) {
 		return
 	}
 	if err := saveTrustStore(store); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not clear the trust record of %s: %v\n", ref, err)
+		warn.Print(os.Stderr, warn.Warning{
+			Message: fmt.Sprintf("could not clear the trust record of %s: %v", ref, err),
+			Fix:     "Check that the trust file is writable; a stale record cannot count for another install, which is checked by source and commit.",
+		})
 	}
 }
