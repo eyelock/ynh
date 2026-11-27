@@ -883,7 +883,7 @@ func printSettingsSection(w io.Writer, settings []trustSetting, defaultVendor st
 	if list == "" {
 		return
 	}
-	_, _ = fmt.Fprintf(w, "\nSettings that widen what runs, or what runs without asking (an unset one is not listed):\n\n%s\n", list)
+	_, _ = fmt.Fprintf(w, "\nSettings that widen what runs, or what runs without asking (an unset env_passthrough shows (none), an unset mcp_manual_approval false; an unset default_vendor is not listed):\n\n%s\n", list)
 }
 
 // undeclaredEnvNames lists variables a sensor inherits that the harness never
