@@ -46,6 +46,17 @@ func TestIncludeAddTrust_RefusalChangesNothing(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "full commit SHA") || !strings.Contains(err.Error(), "was not made") {
 		t.Fatalf("err = %v", err)
 	}
+	// Both ways out work on a harness left unchanged: pin and run it again, or
+	// make the change without --trust. Accepting by hand is not offered, since
+	// ynh trust accept refuses an unpinned remote include too.
+	for _, want := range []string{"Pin each of them", "run it again with --trust", "make the change without --trust"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not say %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "accept it by hand") {
+		t.Errorf("the refusal still offers accepting by hand:\n%v", err)
+	}
 	if !bytes.Equal(manifestBytes(t, id), beforeManifest) {
 		t.Error("a refused include add --trust changed the manifest")
 	}
@@ -174,6 +185,16 @@ func TestIncludeAddTrust_NestedUncachedRefusesBeforeWriting(t *testing.T) {
 	err := cmdIncludeTo([]string{"add", id, "file://" + a, "--ref", sha, "--trust"}, &out)
 	if err == nil || !strings.Contains(err.Error(), "could not be read in full") {
 		t.Fatalf("err = %v", err)
+	}
+	// The harness was left unchanged, so 'ynh update' has nothing to fetch:
+	// the Fix line names the route that works (ynh #1041).
+	for _, want := range []string{"was not made", "Make the change without --trust", "ynh update " + id, "ynh trust accept " + id} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not say %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "Fetch them with 'ynh update', then run it again") {
+		t.Errorf("the refusal still sends an unchanged harness to ynh update first:\n%v", err)
 	}
 	if !bytes.Equal(manifestBytes(t, id), beforeManifest) {
 		t.Error("a refused include add --trust left the include written")

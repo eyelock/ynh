@@ -68,6 +68,8 @@ newer than every release. The warning never stops the build or changes the
 Dockerfile; pass `--base <image>` to build on a newer ynh image. A base that is not
 pulled is not checked, so the check never pulls or runs anything.
 
+**Trust.** `ynh image` refuses a harness you have not accepted, and an accepted harness's image carries its trust record, so its run passes the gate inside the image. The machine that runs the image is never asked. See [Build an image that passes the trust gate](how-to/build-an-image-that-passes-the-trust-gate.md).
+
 ### What goes into the image
 
 The harness source is copied into the build context the way git sees it: tracked

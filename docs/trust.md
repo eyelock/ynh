@@ -1,14 +1,23 @@
-# Trust
+<!-- Reference. Checked against a build of ynh v0.18.0 (develop), 2026-11-27. -->
 
-Why ynh asks you to review a harness before it runs, what the review covers, and what it leaves to you. This page explains; the commands are in the [CLI reference](reference.md) and the JSON in [`trust.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust.schema.json).
+# Trust Reference
 
-> **Status.** All of it is built: the digest (scheme 3, [ynh #949](https://github.com/eyelock/ynh/issues/949)), the gate ([ynh #950](https://github.com/eyelock/ynh/pull/970)), the acceptance routes and the full-SHA rule ([ynh #951](https://github.com/eyelock/ynh/pull/973)), pre-approval that follows trust ([ynh #952](https://github.com/eyelock/ynh/pull/974)) and `ynh image` ([ynh #953](https://github.com/eyelock/ynh/pull/976)).
+What the trust digest covers, how the gate decides, folder runs, the full-SHA rule and the trust
+record in an image. Why ynh asks for trust is in [Why ynh asks you to trust a harness](why-trust.md);
+the commands are in [ynh trust commands](trust-commands.md) and the JSON in
+[`trust.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust.schema.json).
 
-## What trust is for
+The trust pages, in reading order:
 
-A harness is a folder of instructions, and some of what it carries *executes*: hooks, MCP servers and sensor commands run on your machine, with your environment and your credentials. A harness installed from a Git URL lives in `~/.ynh/harnesses/` while its sensors run against a tree somewhere else, so an update can change what runs without changing anything in the directory you are looking at.
-
-`ynh trust` is the review step. `ynh trust show <harness>` lists everything the harness can get executed, `ynh trust accept <harness>` records a fingerprint of it (the **digest**) in `$YNH_HOME/trust.json`, and from then on ynh can tell a harness that is as you reviewed it from one that has changed. The [gate](#the-gate) acts on that: an installed harness that is not accepted does not run. The record lives outside the harness on purpose: a harness carrying its own record would authorise itself.
+1. Tutorial: [Your first trusted harness](tutorial/first-trusted-harness.md)
+2. Explanation: [Why ynh asks you to trust a harness](why-trust.md)
+3. How-to: [Accept a harness again after it changes](how-to/accept-a-harness-again.md),
+   [Run a harness on CI](how-to/run-a-harness-on-ci.md),
+   [Build an image that passes the trust gate](how-to/build-an-image-that-passes-the-trust-gate.md),
+   [Trust a delegate](how-to/trust-a-delegate.md)
+4. Reference: [What invalidates trust](what-invalidates-trust.md),
+   [ynh trust commands](trust-commands.md),
+   [What an accepted harness gets, by vendor](trust-by-vendor.md), and this page
 
 ## What the digest covers
 
@@ -19,7 +28,7 @@ The digest covers everything `ynh trust show` prints, as resolved for a run, for
 - MCP servers: command, arguments, URL, `cwd` and the values of `env` entries and headers (hashed, never printed), including those a native delegate carries on its own and those of every harness the includes reach;
 - the `workspace` folders, the `launch_focus` prompt, the `delegates_to` entries and the focus prompts they select.
 
-Since digest scheme 3 it also covers **the scripts those commands run**, so changing a script's body, with its command text untouched, is noticed.
+It also covers **the scripts those commands run**, so changing a script's body, with its command text untouched, is noticed.
 
 ### How a script is found
 
@@ -61,6 +70,7 @@ Only regular files inside the harness are read:
 ### What the digest leaves out
 
 - **Project code.** A script in the project (`bash scripts/wake.sh`, a sensor's `./lint.sh`) is the project's, like `make check`. `ynh trust show` says it is not covered.
+- **A file on this host.** A script at an absolute path outside the harness (`/usr/local/bin/format-check.sh`), or one named from the home directory (`~/bin/check.sh`, `$HOME/bin/check.sh` or `${HOME}/bin/check.sh`), is whatever is installed on the machine, not part of the project. `ynh trust show` says it is not covered, and labels it differently from project code.
 - **Anything a covered script reaches outside its own folder.** A script that sources `../lib/common.sh`, or runs another script elsewhere, is covered for its own folder only.
 - **Tools found on `PATH`.** A command such as `gofmt`, `golangci-lint` or `go` has its command string covered, not the binary.
 - **What a skipped link points at**, as above. A skipped script is not silently accepted: it blocks the run (see [Links and other files](#links-and-other-files)).
@@ -74,6 +84,7 @@ Under each hook, MCP server or sensor command that names a script, `ynh trust sh
 ```
 script:  ./tools/lint.sh (covered with its folder tools: 3 file(s), sha256:f49d58b15cc65fee)
 script:  scripts/wake.sh (not covered: project code, outside what this digest reads)
+script:  /usr/local/bin/format-check.sh (not covered: a file on this host, outside the harness)
 script:  ./hooks/z.sh (NOT covered: refused; this blocks a run)
            skipped z.sh: a link that leads outside the harness, not read (this blocks a run)
 ```
@@ -82,7 +93,7 @@ The JSON has the same facts in a `script` object on each executable, hook and MC
 
 ### When the scheme changes
 
-A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. A harness accepted under scheme 2 (command text only) sees the note about scripts; one accepted under the first scheme (sensors only) sees the note about hooks and MCP servers. Old records are never accepted on your behalf: review, then `ynh trust accept` again.
+A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. An acceptance that covered only command text (ynh v0.17 and earlier) sees the note about scripts; one that covered only sensors sees the note about hooks and MCP servers. Old records are never accepted on your behalf: review, then `ynh trust accept` again.
 
 ## What a record is keyed by
 
@@ -186,14 +197,15 @@ Pin it to a 40-character commit SHA, or review it and accept it by hand with 'yn
 | `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
 | `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref and its remote includes' refs, after the includes are fetched |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
-| `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
-| `ynh include add <harness> <url> --trust` (with `--replace` too), `ynh include update <harness> <url> --trust` and `ynh include remove <harness> <url> --trust` | the harness again, after the change | as the change would leave it, judged before the change is written (the include is fetched first, since what it brings is only known then); a refusal writes nothing, so nothing is changed |
+| `ynh update local/<name> --trust`, for a harness installed from a folder | the harness again, after the update | before anything is fetched |
+| `ynh include add local/<name> <url> --trust` (with `--replace` too), `ynh include update local/<name> <url> --trust` and `ynh include remove local/<name> <url> --trust`, for a harness installed from a folder | the harness again, after the change | as the change would leave it, judged before the change is written (the include is fetched first, since what it brings is only known then); a refusal writes nothing, so nothing is changed |
 
 Notes on the routes:
 
 - `ynh run --trust` is ynh's own flag. It is not passed on to Cursor.
 - An **installed harness never takes `--trust` at run time**: it is refused, with the commands that do accept it (`ynh trust accept <harness>`, or `ynh install --trust`). A run-time `--trust` that you type from habit would otherwise accept whatever the harness had become.
 - `include add --trust`, `include update --trust` and `include remove --trust` build the harness as it would be after the change, in memory, and judge that before writing anything. What an include brings is only known once it is fetched, so `include add` and `include update` fetch it first. If something is unpinned, or the includes cannot be read in full, the call is refused with the reason and nothing is written: the harness's manifest and its trust record are exactly as they were, and nothing is printed as done.
+  The refusal names a way out that works on a harness left unchanged: pin each remote include to a full SHA and run it again with `--trust`, or make the change without `--trust`. For an include that cannot be read in full it says to make the change without `--trust`, run `ynh update <harness>` to fetch the includes, and then `ynh trust accept <harness>` once each is pinned; `ynh update` has nothing to fetch before the change is made.
 - `include remove` changes what the harness executes, so an accepted harness reads `changed` afterwards. Without `--trust` it says so ("no longer trusted") and names `ynh trust show` and `ynh trust accept`. With `--trust` it records the new digest as accepted, under the same full-SHA rule as the other routes: what stays in the harness must be pinned.
 - `--trust` is for an installed id on `update` and `include`, not a path.
 
@@ -211,11 +223,11 @@ Some approvals let a run act without asking you. ynh gives them only to a harnes
 
 | What | A trusted harness | A folder run, or an installed harness you have not accepted |
 |---|---|---|
-| MCP tools of the harness's own servers on a one-shot run or an `ynh agent run` worker (Codex's `default_tools_approval_mode` for each server) | pre-approved | not pre-approved; the vendor asks as it always did. When there are servers to approve, ynh says so once on stderr |
+| On Codex, MCP tools of the harness's own servers on a one-shot run (`default_tools_approval_mode="approve"` for each server), unless the manifest sets `mcp_manual_approval` | pre-approved | not pre-approved; Codex asks as it always did, and ynh says so once on stderr |
 | A one-shot Copilot run, which approves every tool (`--allow-all-tools`) | runs | refused before launch, exit 1 |
 | `ynh agent run --auto-approve` with a `--harness` | runs | refused, exit 1, error code `untrusted` |
 
-An installed harness you have not accepted is refused by the gate before any of this is reached, so in practice the right-hand column is the folder run. Copilot has no narrower grant than "every tool", so ynh refuses the run rather than approve it. A run with no `--harness` runs no harness commands, so `--auto-approve` there is your own grant. See [MCP Servers](mcp.md), [Agent Loop](agent.md) and [Vendors](vendors.md).
+An installed harness you have not accepted is refused by the gate before any of this is reached, so in practice the right-hand column is the folder run. Copilot has no narrower grant than "every tool", so ynh refuses the run rather than approve it. A run with no `--harness` runs no harness commands, so `--auto-approve` there is your own grant. Every vendor's row is in [What an accepted harness gets, by vendor](trust-by-vendor.md). See also [MCP Servers](mcp.md), [Agent Loop](agent.md) and [Vendors](vendors.md).
 
 A one-shot Copilot run of a folder harness, and `--auto-approve` on one, as ynh prints them:
 
@@ -263,6 +275,6 @@ ynh image acme --from github.com/org/acme --ref 0123456789abcdef0123456789abcdef
 
 ## Related
 
-- [Sensors](sensors.md#what-a-command-sensor-can-reach): the `ynh trust` commands and the states.
-- [Hooks](hooks.md), [MCP Servers](mcp.md) and [Workspace Folders](workspace.md): what else follows the record.
+- [What invalidates trust](what-invalidates-trust.md): each event that makes ynh ask again, and what restores trust.
+- [Sensors](sensors.md#what-a-command-sensor-can-reach), [Hooks](hooks.md), [MCP Servers](mcp.md) and [Workspace Folders](workspace.md): what else follows the record.
 - [Delegate Sessions](delegate-sessions.md): the delegate gate.

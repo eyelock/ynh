@@ -924,7 +924,7 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			if err := cloneAtSHA(repoDir, fullURL, ref); err != nil {
 				return RepoResult{}, err
 			}
-			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
+			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: ref, Cloned: true, Changed: true}, nil
 		}
 		// Branch/tag: use clone --branch for the depth-1 shortcut.
 		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
