@@ -39,6 +39,7 @@ var features = []string{
 	"include-cycles-resolve",            // an include cycle resolves, noted in `ynh info` include_notes, and one source at two versions fails (#547)
 	"run-labels",                        // `ynh run` and `ynh agent run` take run labels: config.json, the manifest, YNH_LABELS, --label; `ynh ls --label` (ynw-17g.16)
 	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate) (#573, ynw-9cc.9)
+	"trust-gate",                        // `run`, `agent run`, `check` and `--resume` refuse an unaccepted harness; `install`, `run` and `agent run` take `--trust` (ynh #984)
 	"workspace-folders",                 // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
 
