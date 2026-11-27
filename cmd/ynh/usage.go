@@ -68,6 +68,8 @@ Commands:
     init                                   Show the ynh home path and setup instructions
     status                                 Show symlink installations across projects
     ps                                     List live sessions ynh has launched
+    stop <session> | --owner <session>     Stop a live session, or all an owner started
+    reap [--history] [--dry-run]           Stop orphaned sessions (delegates whose owner is gone)
     paths                                  Show resolved path roots
     doctor                                 Diagnose a broken setup: vendors, harnesses, symlinks, PATH
     prune                                  Clean orphaned symlinks and stale run dirs

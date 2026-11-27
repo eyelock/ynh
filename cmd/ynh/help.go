@@ -336,6 +336,25 @@ Flags:
   --format text|json   Output format (default text)
   --json               Same as --format json`,
 
+	"stop": `ynh stop <session> | ynh stop --owner <session>
+
+Stop a live session: ask its vendor process to terminate, and kill it if it
+has not gone within a few seconds. A session is named by its id or its address
+(ynh:<id>), as ynh ps shows it. --owner stops every live session that session
+started (its delegates).
+
+Flags:
+  --owner <session>    Stop every live session owned by that session`,
+
+	"reap": `ynh reap [flags]
+
+Stop the orphaned sessions: delegates whose owner session is gone, which ynh ps
+lists as orphaned.
+
+Flags:
+  --history   Also delete the records of ended and dead sessions
+  --dry-run   Say what would be done and do nothing`,
+
 	"search": `ynh search <term> [flags]
 
 Search configured registries and sources for a harness.
