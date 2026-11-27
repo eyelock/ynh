@@ -148,3 +148,35 @@ func TestCmdImage_BaseVersionWarning(t *testing.T) {
 		t.Error("the warning changed the generated Dockerfile")
 	}
 }
+
+func TestBaseTrustGateWarning(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels string
+		warn   bool
+	}{
+		{"older than the gate", `{"dev.ynh.version":"0.17.1"}`, true},
+		{"the gate's release", `{"dev.ynh.version":"0.18.0"}`, false},
+		{"a pre-release of the gate", `{"dev.ynh.version":"0.18.0-rc.1"}`, false},
+		{"newer", `{"dev.ynh.version":"0.19.2"}`, false},
+		{"a dev build is unknown", `{"dev.ynh.version":"dev"}`, false},
+		{"not a local image", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stubBaseLabels(t, tt.labels)
+			w, ok := baseTrustGateWarning("ghcr.io/eyelock/ynh:old")
+			if ok != tt.warn {
+				t.Fatalf("warning = %+v, want warn=%v", w, tt.warn)
+			}
+			if tt.warn {
+				got := w.Message + "\n" + w.Fix
+				for _, want := range []string{"ghcr.io/eyelock/ynh:old", "ynh 0.17.1", "no trust check", "--base <image>"} {
+					if !strings.Contains(got, want) {
+						t.Errorf("warning missing %q:\n%s", want, got)
+					}
+				}
+			}
+		})
+	}
+}

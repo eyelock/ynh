@@ -73,6 +73,31 @@ func baseVersionWarning(base, builder string) (warn.Warning, bool) {
 	}, true
 }
 
+// trustGateRelease is the first ynh release whose run gate checks a baked
+// trust record. A base image older than this starts a baked harness with no
+// check at all.
+var trustGateRelease = release{core: [3]int{0, 18, 0}}
+
+// baseTrustGateWarning explains that a base image's ynh predates the trust
+// gate, so it runs the harness baked into the image with no check and no
+// warning, or returns false when the base is new enough or its version cannot
+// be told (a base that is not a local image, or whose version is not a
+// release). It warns rather than refuses: the base is the builder's choice,
+// and what the image bakes is what the builder just accepted.
+func baseTrustGateWarning(base string) (warn.Warning, bool) {
+	baseVer := baseYnhVersion(base)
+	b, ok := parseRelease(baseVer)
+	// A pre-release of 0.18.0 counts as the gate's release: compare the core only.
+	if !ok || compareRelease(release{core: b.core}, trustGateRelease) >= 0 {
+		return warn.Warning{}, false
+	}
+	return warn.Warning{
+		Message: fmt.Sprintf("base image %s carries ynh %s, which predates the trust gate (ynh 0.18.0). "+
+			"The image will run the baked harness's hooks, MCP servers and sensors with no trust check and no warning.", base, baseVer),
+		Fix: "pass --base <image> to build on an image whose ynh is 0.18.0 or newer",
+	}, true
+}
+
 // release is a parsed semantic version.
 type release struct {
 	core [3]int

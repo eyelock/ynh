@@ -96,6 +96,14 @@ func refuseUnpinnedWith(what, flag string, reasons []string, closing string) err
 		flag, what, strings.Join(reasons, "\n  "), closing)
 }
 
+// imageSourceUnpinnedClosing and imageIncludeUnpinnedClosing end the refusal
+// of an image --from --trust build that floats. The build has nothing
+// installed, so 'ynh trust accept' is no way out: the fix is the pin itself.
+const (
+	imageSourceUnpinnedClosing  = "Fix: build again with --ref <40-character commit SHA>"
+	imageIncludeUnpinnedClosing = "Fix: pin each of these to a 40-character commit SHA in the harness's manifest, then build again"
+)
+
 // uncachedUnpinnedClosing ends the refusal of an uncached include that is not
 // pinned. `ynh trust accept <folder>` reads includes from the cache and this
 // one is not in it, so it would only point back at --trust (ynh #993).
