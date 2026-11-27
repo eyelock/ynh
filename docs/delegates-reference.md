@@ -38,6 +38,27 @@ Only Cursor declares none today (its subagents are unverified,
 [Cursor under `ynh run`, not shown live](vendor-parity.md#l35-cursor-under-ynh-run-not-shown-live)). Claude Code, Codex, Copilot CLI and
 OpenCode declare native subagents.
 
+### Allow rules for a native delegate's MCP servers
+
+A `native` delegate on Claude Code carries its MCP servers into the parent's session as the subagent's
+own servers. A headless (one-shot) Claude Code parent calls their tools only with an allow rule for each
+of them, named after the server as the delegate's manifest declares it: `mcp__<server>`. Without one the
+server starts and no tool is called. ynh adds no such rule.
+
+| Delegate's server | Allow rule |
+|---|---|
+| `probe` | `--allowedTools=mcp__probe`, or `mcp__probe` in `permissions.allow` |
+| `probe` and `tickets` | `--allowedTools=mcp__probe,mcp__tickets`, or both in `permissions.allow` |
+
+The rule is not the `mcp__plugin_<harness>_<server>` form of a harness's own servers, and not the
+`ynh-delegates` rule in [Allow rules for the tools](#allow-rules-for-the-tools). A `native` delegate on
+Codex, Copilot CLI or OpenCode carries no MCP servers, so there is no rule to add. `ynh doctor` does not
+check this rule.
+
+Shown live with `--allowedTools` on Claude Code, in the v0.18.0 acceptance, 2026-11-26
+([delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
+The `permissions.allow` form is Claude Code's own equivalent of the flag and was not run for this.
+
 ## Refusals when a delegate cannot be matched
 
 For an `a2a` entry, `ynh run` of the parent matches the entry to the installed harness whose source
@@ -161,7 +182,9 @@ so ynh writes this server's JSON-RPC itself.
 
 ### Allow rules for the tools
 
-A headless vendor denies MCP tools until they are allowed.
+A headless vendor denies MCP tools until they are allowed. These rules are for an `a2a` delegate's
+`ynh-delegates` server; a `native` delegate's own servers need the rules in
+[Allow rules for a native delegate's MCP servers](#allow-rules-for-a-native-delegate-s-mcp-servers).
 
 | Parent | Allow rule |
 |---|---|
