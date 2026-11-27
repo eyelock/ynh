@@ -124,18 +124,44 @@ there is the handle, not the A2A task id the CLI used. A task started with the C
 
 ### Tools
 
-Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. Fields:
-`task_id`, `context_id`, `state` (`working`, `input-required`, `completed`, `failed` or `canceled`),
-`message`, and `result` once completed or `log_tail` once failed.
+Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. A
+delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`working`, `input-required`, `completed`,
+`failed` or `canceled`), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
+`waiting_seconds` while `input-required`. `delegate_list` returns them as a list under `delegations`, and
+`ynh_ps` returns `sessions`.
 
 | Tool | Does |
 |---|---|
 | `delegate_to_<name>` (`task`, optional `wait`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle with state `working`: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
+| `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is the delegate's question. |
 | `delegate_result` (`task_id`, optional `wait`) | The result once completed; the state for one still going. |
 | `delegate_cancel` (`task_id`) | Cancels and stops the run's process group. |
 | `delegate_reply` (`task_id`, `message`, optional `wait`) | A message on the same task: the answer to a question. |
+
+**A refused delegation.** When the delegate's session is refused before it starts (a loop, the depth limit,
+a bad `YNH_DELEGATION_MAX_DEPTH`), `delegate_to_<name>` is not a tool error. It returns state `failed`, the
+reason and its fix in `message`, and no `log_tail`. Its `task_id` is the A2A task id the endpoint made (a
+UUID such as `01a21da2-ff4a-7309-b2fb-9c806391c1f0`), not a `dlg-` handle, because no delegation was
+recorded: `delegate_list` does not show it, and `delegate_status`, `delegate_result`, `delegate_cancel`
+and `delegate_reply` given it are tool errors (`"<task_id>" is not a delegation handle`). A `task_id`
+that does not start with `dlg-` is therefore always a refusal. For a loop:
+
+```json
+{
+ "task_id": "01a21da2-ff4a-7309-b2fb-9c806391c1f0",
+ "context_id": "01a21da2-ff4a-73a5-9b0f-aaab1b59adf1",
+ "delegate": "reviewer",
+ "state": "failed",
+ "message": "delegation refused: this is a loop. local/reviewer -> local/reviewer returns to local/reviewer, which is already in the chain.\n  Fix: remove the delegates_to entry that closes the loop, or do this work in local/reviewer itself instead of delegating it back"
+}
+```
+
+Shown live, 2026-11-27, on a build of `develop` at
+[cbe06cbc](https://github.com/eyelock/ynh/commit/cbe06cbc): `ynh run` of a parent whose vendor was a stand-in
+that called the `ynh-delegates` server ynh configured, with no model, for a self-loop and for
+`YNH_DELEGATION_MAX_DEPTH=0`.
 
 `<name>` is the delegate's harness name, lower-cased, each character outside a-z and 0-9 turned into `_`.
 The server has no tool that takes a harness name or a path: a handle is checked against `dlg-` and 16 hex
