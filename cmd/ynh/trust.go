@@ -1256,7 +1256,12 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	}
 	if name == "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh trust show <harness> [--format text|json]")
+			"usage: ynh trust show <harness|folder> [--format text|json]")
+	}
+	// A folder (./dir) has no install id and no record of its own: show the
+	// remote includes whose commands the gate checks, as accept would record.
+	if namespace.Classify(name) == namespace.RefPath {
+		return showFolderIncludes(name, format, structured, stdout, stderr)
 	}
 	p, err := harness.LoadQualified(name)
 	if err != nil {

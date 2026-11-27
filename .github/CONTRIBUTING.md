@@ -220,7 +220,7 @@ make format
 make lint
 
 # Every CI check needing no Docker or network (deps, format, lint, check-tidy,
-# test, build, check-artifacts, check-vendor-parity, check-marketplace)
+# check-go-pin, check-spoolexporter-pin, test, build, check-artifacts, check-vendor-parity, check-marketplace)
 make check
 
 # E2E suite (release gate; not part of `make check`)
@@ -671,12 +671,7 @@ The `<idfsname>` directory naming uses the canonical id with `/` → `--` (one-d
 
 ## Using ynh's Own Harness
 
-The ynh project ships its own harness (skills, agents, rules) for both contributors and new users:
-
-```bash
-ynh install github.com/eyelock/ynh
-ynh-guide
-```
+Contributors can work with ynh's own harness, using its `ynh-dev` profile through the `contribute` focus (`--focus contribute`). The steps to install and accept it are in [Getting started](../docs/getting-started.md).
 
 Inside the session, `/ynh-create-harness` walks you through creating your own harness. The development-focused skills (`ynh-dev`, `vendor-adapters`, etc.) live in `.claude/` and are loaded natively by Claude — they're not part of the installable harness.
 
@@ -691,7 +686,7 @@ are applied with Terraform. Change them there, in a pull request, not in the set
 1. Fork the repo
 2. Create a feature branch
 3. Make your changes
-4. Run `make check` (format, lint, test, build and the artifact checks)
+4. Run `make check` (format, lint, tidy, the Go and spoolexporter pins, test, build and the artifact checks)
 5. Submit a pull request
 
 All tests must pass. New features should include tests. Keep the code simple - this is a tool for developers, not a framework.
