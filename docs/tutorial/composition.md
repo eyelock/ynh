@@ -91,7 +91,7 @@ ls ~/.ynh/run/local--my-dev/.claude/skills/
 
 If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
 
-*Replace `/Users/david/Storage/Workspace/eyelock/assistants` with the path of your checkout (here: `/tmp/ynh-tutorial/assistants`).*
+*Replace `/tmp/ynh-tutorial/assistants` with the path of your checkout (here: `/tmp/ynh-tutorial/assistants`).*
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-dev/.agents/harness
@@ -103,7 +103,7 @@ cat > /tmp/ynh-tutorial/my-dev/.agents/harness/plugin.json << 'EOF'
   "default_vendor": "claude",
   "includes": [
     {
-      "git": "/Users/david/Storage/Workspace/eyelock/assistants",
+      "git": "/tmp/ynh-tutorial/assistants",
       "path": "skills/dev",
       "pick": ["skills/dev-project", "skills/dev-quality"]
     }

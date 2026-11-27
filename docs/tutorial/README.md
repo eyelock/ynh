@@ -12,6 +12,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Vendors & Symlinks](vendors-and-symlinks.md) | Switch between Claude/Codex/Cursor, manage symlinks |
 | [Composition](composition.md) | Pull skills from Git repos with pick, path, and ref |
 | [Include Editing](include-editing.md) | Add, remove, and update includes from the CLI — no manual JSON editing |
+| [Your First Trusted Harness](first-trusted-harness.md) | See ynh refuse a harness with a hook, review it, accept it, and see a changed script noticed |
 | [Hooks](hooks.md) | Declare vendor-agnostic lifecycle hooks, run work at session end, set per-hook timeouts |
 | [MCP Servers](mcp-servers.md) | Declare MCP server dependencies per harness |
 | [Profiles](profiles.md) | Environment-specific overrides with profiles |
@@ -19,7 +20,6 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Composing Tools](composing-tools.md) | Carry MCP servers, profiles, focuses and hooks across includes |
 | [Project-Local Config](project-local-config.md) | Zero-install `.agents/harness/plugin.json` in your project root |
 | [Workspace Folders](workspace.md) | Request sibling folders; grant them with an allow-list or trust; see what is never granted |
-| [Your First Trusted Harness](first-trusted-harness.md) | See ynh refuse a harness with a hook, review it, accept it, and see a changed script noticed |
 
 ### Refine
 

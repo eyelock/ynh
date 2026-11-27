@@ -28,7 +28,8 @@ export YNH_HOME=/tmp/ynh-trust/home
 ## Make a harness with a hook
 
 Our harness, `greeter`, has one hook, a script that runs before every shell command the assistant
-runs, and one sensor, a command `ynh check` runs:
+runs, and one sensor, a command `ynh check` runs. Hooks and sensors each have a tutorial of their own
+later; here all that matters is that both run commands on your machine:
 
 ```bash
 mkdir -p greeter/.agents/harness greeter/hooks
@@ -290,7 +291,10 @@ cd / && rm -rf /tmp/ynh-trust && unset YNH_HOME
 
 ## Next
 
-[Developer Tools](developer-tools.md): scaffold, lint, validate, format, compress, inspect with ynd.
+[Hooks](hooks.md): declare vendor-agnostic lifecycle hooks.
+
+From here on, whenever a tutorial installs a harness that runs commands, it has you review and accept it
+the way we did here, before the first run.
 
 More on trust:
 
