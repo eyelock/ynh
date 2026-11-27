@@ -46,15 +46,19 @@ func TestBaseVersionWarning(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stubBaseLabels(t, tt.labels)
-			got := baseVersionWarning("ghcr.io/eyelock/ynh:latest", tt.builder)
-			if (got != "") != tt.warn {
-				t.Fatalf("warning = %q, want warn=%v", got, tt.warn)
+			w, ok := baseVersionWarning("ghcr.io/eyelock/ynh:latest", tt.builder)
+			if ok != tt.warn {
+				t.Fatalf("warning = %+v, want warn=%v", w, tt.warn)
 			}
 			if tt.warn {
+				got := w.Message + "\n" + w.Fix
 				for _, want := range []string{"ghcr.io/eyelock/ynh:latest", "carries ynh 0.7.0", tt.builder, ".agents/harness/", "--base <image>"} {
 					if !strings.Contains(got, want) {
 						t.Errorf("warning missing %q:\n%s", want, got)
 					}
+				}
+				if w.Fix == "" {
+					t.Errorf("warning has no Fix")
 				}
 			}
 		})

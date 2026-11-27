@@ -18,6 +18,7 @@ import (
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // imageTemplateData holds the data passed to the harness Dockerfile template.
@@ -539,8 +540,8 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 
 	// The image runs the base's ynh, not this one. Read from a local image's
 	// labels only, so this neither pulls nor runs anything, in a dry run too.
-	if w := baseVersionWarning(ia.base, config.Version); w != "" {
-		_, _ = fmt.Fprint(stderr, w)
+	if w, ok := baseVersionWarning(ia.base, config.Version); ok {
+		warn.Print(stderr, w)
 	}
 
 	if ia.dryRun {
