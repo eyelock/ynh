@@ -107,6 +107,17 @@
       ],
       "additionalProperties": false
     },
+    "Setting": {
+      "type": "object",
+      "description": "A setting that widens what runs, or what runs without asking, as resolved for the harness or for one profile. For a harness with includes, env_passthrough is the names a run composes: the harness's own and every included harness's.",
+      "properties": {
+        "profile": { "type": "string", "description": "Present when the entry is for a profile that changes a setting. Absent for the harness itself." },
+        "env_passthrough": { "type": "array", "items": { "type": "string" }, "description": "Variable names, sorted. Names only, never values." },
+        "mcp_manual_approval": { "type": "boolean", "description": "Whether one-shot runs leave approval of the harness's MCP tools to the vendor." }
+      },
+      "required": ["env_passthrough", "mcp_manual_approval"],
+      "additionalProperties": false
+    },
     "MCPServer": {
       "type": "object",
       "properties": {
@@ -215,6 +226,15 @@
         "$ref": "#/$defs/MCPServer"
       },
       "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source. Native delegates (transport native, a subagent of the session) contribute the servers they carry, named in delegate; an a2a delegate is its own session under its own trust grant, so its servers are not listed here."
+    },
+    "settings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Setting" },
+      "description": "Settings that widen what runs, or what runs without asking: env_passthrough and mcp_manual_approval, for the harness (when set) and for each profile that changes them. Covered by digest since scheme 4. Omitted when there are none."
+    },
+    "default_vendor": {
+      "type": "string",
+      "description": "The harness's own default_vendor. Covered by digest since scheme 4. A vendor given to one run with -v or YNH_VENDOR is not. Omitted when unset."
     },
     "legacy_digest": {
       "type": "boolean",

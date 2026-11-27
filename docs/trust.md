@@ -12,13 +12,13 @@ A harness is a folder of instructions, and some of what it carries *executes*: h
 
 ## What the digest covers
 
-The digest covers everything `ynh trust show` prints, as resolved for a run, for the harness and each of its profiles:
+The digest covers everything `ynh trust show` prints (the settings and the default vendor included, in their own section), as resolved for a run, for the harness and each of its profiles:
 
 - sensor `command` and `version_command` strings, including sensors an include contributes;
 - hook commands with their event and matcher, including hooks of an included harness that consented with `"hooks": true`;
 - MCP servers: command, arguments, URL, `cwd` and the values of `env` entries and headers (hashed, never printed), including those a native delegate carries on its own and those of every harness the includes reach;
 - the `workspace` folders, the `launch_focus` prompt, the `delegates_to` entries and the focus prompts they select;
-- **the settings that widen what runs, or what runs without asking** (since scheme 4): `env_passthrough` (the names, sorted, so their order is not a change) and `mcp_manual_approval`, each at the top level and in every profile that changes it (a profile that turns `mcp_manual_approval` off under a harness that turns it on is a change), and the harness's own `default_vendor`.
+- **the settings that widen what runs, or what runs without asking** (since scheme 4): `env_passthrough` (the names, sorted, so their order is not a change, and for a harness with includes the names a run composes: its own and every included harness's) and `mcp_manual_approval`, each at the top level and in every profile that changes it (a profile that turns `mcp_manual_approval` off under a harness that turns it on is a change), and the harness's own `default_vendor`.
 
 The rule behind that last item is the rule for what belongs in the digest: every manifest field that widens what runs, or what runs without asking. A field the manifest gains later that meets the rule goes in with the next scheme.
 
@@ -148,10 +148,11 @@ If the trust record itself cannot be read, the run is refused too.
 Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`, `image`). `ynh image <name> --from <source> --trust` prints it on stderr, as `Accepted local/<name> (image): <n> command(s), <digest>`, so a `--dry-run` Dockerfile on stdout stays clean; a build that accepts nothing prints nothing:
 
 ```
+# the digests below are examples: yours is the full 64 hexadecimal characters of your harness
 $ ynh trust accept local/acme
-Accepted local/acme (accept): 2 command(s), sha256:95539ec8b7d7abe6
+Accepted local/acme (accept): 2 command(s), sha256:00e2a865a25c8e92bcf4c6bffe26da42544373138cf2f6dc8450a2c39675476f
 $ ynh install ./acme --trust
-Accepted local/acme (install --trust): 2 command(s), sha256:95539ec8b7d7abe6
+Accepted local/acme (install --trust): 2 command(s), sha256:00e2a865a25c8e92bcf4c6bffe26da42544373138cf2f6dc8450a2c39675476f
 It executes:
   hook before_tool: ./hooks/guard.sh
   sensor lint (command): gofmt -l .

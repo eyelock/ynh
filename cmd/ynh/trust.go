@@ -199,9 +199,13 @@ type mcpExec struct {
 // view is listed only when it differs from the harness's own, so an unchanged
 // profile adds nothing.
 type trustSetting struct {
-	Profile           string
-	EnvPassthrough    []string
-	MCPManualApproval bool
+	// Profile is empty for the harness's own settings.
+	Profile string `json:"profile,omitempty"`
+	// EnvPassthrough is the variable names, sorted. For a harness with
+	// includes it is the names a run composes: the harness's own and every
+	// included harness's (harness.ComposedEnvPassthrough).
+	EnvPassthrough    []string `json:"env_passthrough"`
+	MCPManualApproval bool     `json:"mcp_manual_approval"`
 }
 
 // trustSet is everything the operator is asked to review, grouped by kind.
@@ -405,6 +409,10 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 			return nil, src, nil, err
 		}
 		c := *h
+		// What a run composes, not the root's names alone: an included
+		// harness's env_passthrough widens a Codex run (and the MCP servers
+		// it composes) the same as the root's does, so the digest covers it.
+		c.EnvPassthrough = harness.ComposedEnvPassthrough(h, resolver.IncludedHarnesses(resolved))
 		c.MCPServers = servers
 		c.Hooks = hs.Hooks
 		src.hooks = hs.Sources
@@ -850,6 +858,34 @@ func executablesDigest(set trustSet) string {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
+// listSettings names the settings and the default vendor a refusal or `ynh
+// trust show` asks the operator to review, one line each, "" when there are
+// none.
+func listSettings(settings []trustSetting, defaultVendor string) string {
+	var lines []string
+	for _, st := range settings {
+		names := "(none)"
+		if len(st.EnvPassthrough) > 0 {
+			names = strings.Join(st.EnvPassthrough, ", ")
+		}
+		lines = append(lines, fmt.Sprintf("  env_passthrough: %s%s", names, scopeSuffix(st.Profile)))
+		lines = append(lines, fmt.Sprintf("  mcp_manual_approval: %t%s", st.MCPManualApproval, scopeSuffix(st.Profile)))
+	}
+	if defaultVendor != "" {
+		lines = append(lines, "  default_vendor: "+defaultVendor)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// printSettingsSection prints what listSettings names, under a heading.
+func printSettingsSection(w io.Writer, settings []trustSetting, defaultVendor string) {
+	list := listSettings(settings, defaultVendor)
+	if list == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nSettings that widen what runs, or what runs without asking (an unset one is not listed):\n\n%s\n", list)
+}
+
 // undeclaredEnvNames lists variables a sensor inherits that the harness never
 // declared, sorted. Names only, never values, matching the trajectory rule that
 // a record meant to prevent a leak must not become one.
@@ -993,6 +1029,12 @@ type trustStatus struct {
 	// as resolved for a run. They are covered by Digest like Executables.
 	Hooks      []hookExec `json:"hooks,omitempty"`
 	MCPServers []mcpExec  `json:"mcp_servers,omitempty"`
+	// Settings are the manifest settings that widen what runs, or what runs
+	// without asking, as resolved for the harness and for each profile that
+	// changes them. Covered by Digest like Executables.
+	Settings []trustSetting `json:"settings,omitempty"`
+	// DefaultVendor is the harness's own default_vendor. Covered by Digest.
+	DefaultVendor string `json:"default_vendor,omitempty"`
 	// State is "unreviewed", "accepted", or "changed".
 	State string `json:"state"`
 	// AcceptedDigest and AcceptedAt are populated when a record exists.
@@ -1058,6 +1100,8 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 		Executables:   set.Sensors,
 		Hooks:         set.Hooks,
 		MCPServers:    set.MCPServers,
+		Settings:      set.Settings,
+		DefaultVendor: set.DefaultVendor,
 		State:         trustUnreviewed,
 		UndeclaredEnv: undeclaredEnvNames(p, environ),
 
@@ -1357,7 +1401,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "  via:      %s\n", s.AcceptedVia)
 	}
 
-	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {
+	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 && len(s.Settings) == 0 && s.DefaultVendor == "" {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
 		return nil
 	}
@@ -1407,6 +1451,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	}
 
 	printWorkspaceSection(w, s.Workspace)
+	printSettingsSection(w, s.Settings, s.DefaultVendor)
 
 	if lf := s.LaunchFocus; lf != nil {
 		_, _ = fmt.Fprintf(w, "\nLaunch focus, the first message of every bare 'ynh run' (a prompt it is given replaces this one):\n\n  %s%s\n    %q\n", lf.Name, scopeSuffix(lf.Profile), lf.Prompt)
@@ -1436,8 +1481,12 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 				"'ynh trust accept %s' records what you review now.\n", s.Moved, s.Harness)
 			break
 		}
-		_, _ = fmt.Fprintf(w, "\nThese commands have changed since you accepted them.\n"+
-			"'ynh trust accept %s' records the new set.\n", s.Harness)
+		what := "These commands have changed since you accepted them."
+		if len(s.Settings) > 0 || s.DefaultVendor != "" {
+			what = "What it executes, or the settings above, have changed since you accepted it."
+		}
+		_, _ = fmt.Fprintf(w, "\n%s\n"+
+			"'ynh trust accept %s' records the new set.\n", what, s.Harness)
 	}
 	return nil
 }

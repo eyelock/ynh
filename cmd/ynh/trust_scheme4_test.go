@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -142,5 +144,85 @@ func TestTrustGate_Scheme3ImageRecordRefusesInside(t *testing.T) {
 	err = trustGate(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(err) || !strings.Contains(err.Error(), settingsDigestNote) {
 		t.Fatalf("err = %v, want a refusal with scheme 4's note", err)
+	}
+}
+
+// An included harness's env_passthrough widens a run as the root's does
+// (harness.ComposedEnvPassthrough is what a Codex run writes), so a change to
+// it alone makes the root read changed, and trust show lists the composed names.
+func TestIncludeEnvPassthroughMovesTheRootsDigest(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := t.TempDir()
+	writeIncludedHarness(t, root, "up", mcpFields("tool")+`,"env_passthrough":["GH_TOKEN"]`)
+	h := &harness.Harness{Name: "consumer", Dir: root, EnvPassthrough: []string{"HOME_TOKEN"},
+		Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}}}}
+
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if len(st.Settings) != 1 || !slices.Equal(st.Settings[0].EnvPassthrough, []string{"GH_TOKEN", "HOME_TOKEN"}) {
+		t.Fatalf("settings = %+v, want the root's and the include's names", st.Settings)
+	}
+	store := trustStore{Harnesses: map[string]trustRecord{"id": {Digest: st.Digest, Scheme: trustScheme}}}
+	if got := trustStatusFor("id", h, store, nil); got.State != trustAccepted {
+		t.Fatalf("unchanged include reads %q", got.State)
+	}
+	writeIncludedHarness(t, root, "up", mcpFields("tool")+`,"env_passthrough":["GH_TOKEN","AWS_SECRET_ACCESS_KEY"]`)
+	if got := trustStatusFor("id", h, store, nil); got.State != trustChanged {
+		t.Errorf("an include-only env_passthrough change reads %q, want changed", got.State)
+	}
+}
+
+// trust show prints the settings and default vendor the digest covers, and a
+// settings-only change says so instead of blaming the commands.
+func TestTrustShowListsSettingsAndDefaultVendor(t *testing.T) {
+	yes := true
+	h := scheme4Base()
+	h.DefaultVendor = "codex"
+	h.EnvPassthrough = []string{"GH_TOKEN"}
+	h.Profiles["ci"] = plugin.Profile{MCPManualApproval: &yes}
+	store := trustStore{Harnesses: map[string]trustRecord{"id": {Digest: "sha256:old", Scheme: trustScheme, AcceptedAt: "2026-11-01T00:00:00Z"}}}
+	st := trustStatusFor("id", h, store, nil)
+	out := showText(t, st)
+	for _, want := range []string{
+		"env_passthrough: GH_TOKEN\n",
+		"mcp_manual_approval: false\n",
+		"mcp_manual_approval: true (profile ci)",
+		"default_vendor: codex",
+		"or the settings above, have changed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("show is missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "These commands have changed") {
+		t.Errorf("a settings-bearing change still blames the commands:\n%s", out)
+	}
+
+	data, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"default_vendor":"codex"`, `"env_passthrough":["GH_TOKEN"]`, `"mcp_manual_approval":true`} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("JSON is missing %s: %s", want, data)
+		}
+	}
+}
+
+// The gate's refusal for a harness whose only change is a setting lists the
+// settings, so the operator is pointed at what moved.
+func TestTrustGateRefusalListsSettings(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	id := installTrustedTestHarness(t, home, "hooked", hookedHarness)
+	p := loadInstalled(t, id)
+	p.EnvPassthrough = []string{"AWS_SECRET_ACCESS_KEY"}
+	err := trustGate(id, p, io.Discard)
+	if !isUntrusted(err) {
+		t.Fatalf("err = %v, want a refusal", err)
+	}
+	for _, want := range []string{"env_passthrough: AWS_SECRET_ACCESS_KEY", "or its settings differ", "ynh trust show " + id} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal is missing %q:\n%v", want, err)
+		}
 	}
 }

@@ -129,7 +129,7 @@ func installedGate(id string, p *harness.Harness, store trustStore) error {
 	if st.State == trustChanged && st.Moved != "" {
 		fmt.Fprintf(&b, "refusing to run %s: your acceptance on %s does not cover it: %s.\n", id, st.AcceptedAt, st.Moved)
 	} else if st.State == trustChanged {
-		fmt.Fprintf(&b, "refusing to run %s: its commands differ from what you accepted on %s.\n", id, st.AcceptedAt)
+		fmt.Fprintf(&b, "refusing to run %s: what it executes or its settings differ from what you accepted on %s.\n", id, st.AcceptedAt)
 		if st.LegacyDigest {
 			b.WriteString(legacyNote(st.acceptedScheme, kindsOf(len(st.Executables), len(st.Hooks), len(st.MCPServers))) + "\n")
 		}
@@ -141,6 +141,9 @@ func installedGate(id string, p *harness.Harness, store trustStore) error {
 		fmt.Fprintf(&b, "refusing to run %s: you have not accepted what it executes.\n", id)
 	}
 	b.WriteString(listExecutables(st.Executables, st.Hooks, st.MCPServers))
+	if list := listSettings(st.Settings, st.DefaultVendor); list != "" {
+		b.WriteString("Its settings that widen what runs, or what runs without asking:\n" + list + "\n")
+	}
 	b.WriteString(listWorkspace(p))
 	fmt.Fprintf(&b, "Review them: ynh trust show %s\nThen accept:  ynh trust accept %s", id, id)
 	return &untrustedError{msg: b.String()}
@@ -223,6 +226,9 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	for _, r := range unaccepted {
 		fmt.Fprintf(&b, "  %s\n", r.Key)
 		b.WriteString(listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
+		if list := listSettings(r.Set.Settings, ""); list != "" {
+			b.WriteString("  Its settings:\n" + list + "\n")
+		}
 	}
 	fmt.Fprintf(&b, "Accept them for this folder: ynh trust accept %s", p.Dir)
 	return &untrustedError{msg: b.String()}
@@ -279,7 +285,7 @@ func remoteIncludesFor(p *harness.Harness, verb, fix string) ([]remoteInclude, e
 		if len(own.Problems) > 0 {
 			return nil, untrustedf("refusing to %s %s: %s", verb, p.Name, includesUnreadable(p, own.Problems, fix))
 		}
-		set := trustSet{Sensors: own.Sensors, Hooks: own.Hooks, MCPServers: own.MCPServers}
+		set := trustSet{Sensors: own.Sensors, Hooks: own.Hooks, MCPServers: own.MCPServers, Settings: own.Settings}
 		if set.count() == 0 {
 			continue
 		}
