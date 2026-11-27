@@ -297,9 +297,15 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
+	if err := refuseUnpinnedDelegates(p.Name, "ynh trust accept", p); err != nil {
+		return cliError(stderr, structured, errCodeConfigError, err.Error())
+	}
 	remote, err := remoteIncludes(p)
 	if err != nil {
 		return cliError(stderr, structured, errCodeConfigError, err.Error())
+	}
+	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
+		return cliError(stderr, structured, errCodeConfigError, refuseUnpinned(p.Name, "ynh trust accept", bad).Error())
 	}
 	if len(remote) == 0 {
 		if format == "json" {

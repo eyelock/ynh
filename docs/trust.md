@@ -133,19 +133,21 @@ A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`,
 
 ## The full-SHA rule and trust flags
 
-Accepting by hand needs a review, and no pin: `ynh trust accept` takes a harness at whatever ref it has, and a harness installed from a folder needs no Git checkout. With `--trust`, only its remote includes that bring commands must be at full SHAs. `--trust` accepts in the same step as the action, so it asks for something in return: **everything that runs must be pinned to a commit that cannot move.**
+One rule covers every way of accepting: `ynh trust accept`, `ynh install --trust`, `ynh run <dir> --trust`, and `--trust` on `ynh update` and `ynh include`. **Everything that runs must be pinned to a commit that cannot move.** Acceptance is a step for a person who has reviewed what runs, and an acceptance of a branch would cover code you never saw. `ynh trust accept` refuses a remote include that brings commands, and a native delegate entry from a remote source, that is not at a full SHA. `--trust` accepts in the same step as the action, so it asks the same and, for a Git or registry install, a full-SHA `--ref` as well.
 
-A **full SHA** is a 40-character commit hash. A tag, a branch, a short SHA or no ref at all is not one: each can name another commit tomorrow, so an acceptance of it would cover code you never saw. `--trust` is refused, with the reason named, unless the harness's own ref (for a Git or registry install) and the ref of every remote include that brings commands is a full SHA. A local folder is your own files and needs no pin for them, but its remote includes still do. The refusal ends with the way out: pin it, or review it and accept it by hand with `ynh trust accept`:
+**In CI**, do not call `ynh trust accept`: pin the refs, then install with `ynh install <source> --ref <40-character SHA> --trust`, or run a folder with `ynh run <dir> --trust`. Both refuse what floats and record how they were accepted.
+
+A **full SHA** is a 40-character commit hash. A tag, a branch, a short SHA or no ref at all is not one: each can name another commit tomorrow, so an acceptance of it would cover code you never saw. `--trust` is refused, with the reason named, unless the harness's own ref (for a Git or registry install) and the ref of every remote include that brings commands is a full SHA. A local folder is your own files and needs no pin for them, but its remote includes still do. A native delegate entry is judged like an include: its ref must be a full SHA. The refusal ends with the way out: pin it.
 
 ```
 Error: --trust refuses to accept this install: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
   /home/you/inc//@main: "main" is a tag or branch, which can move
-Pin it to a 40-character commit SHA, or review it and accept it by hand with 'ynh trust accept'
+Pin it to a 40-character commit SHA and try again. Acceptance is a step for a person who has reviewed what runs, and it covers only a commit that cannot move
 ```
 
 | Route | What it accepts | When the pin is checked |
 |---|---|---|
-| `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | before anything is written |
+| `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | the ref and any native delegate entry before anything is cloned; the includes once fetched, before anything is written |
 | `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |

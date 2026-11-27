@@ -1149,6 +1149,19 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		// the operator was never shown.
 		return cliError(stderr, structured, errCodeConfigError, unavailableMessage(name, set.Problems))
 	}
+	// The same pin rule as --trust: acceptance covers a commit that cannot
+	// move, so a remote include or native delegate entry on a branch, tag or
+	// no ref is refused, with nothing recorded (ynh #1002).
+	if err := refuseUnpinnedDelegates(name, "ynh trust accept", p); err != nil {
+		return cliError(stderr, structured, errCodeConfigError, err.Error())
+	}
+	remote, rerr := remoteIncludes(p)
+	if rerr != nil {
+		return cliError(stderr, structured, errCodeConfigError, rerr.Error())
+	}
+	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
+		return cliError(stderr, structured, errCodeConfigError, refuseUnpinned(name, "ynh trust accept", bad).Error())
+	}
 	rec := trustRecord{
 		Digest:     executablesDigest(set),
 		Commands:   set.count(),

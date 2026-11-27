@@ -124,6 +124,14 @@ func cmdInstall(args []string) error {
 			return err
 		}
 
+		// --trust needs a full-SHA ref, and that is known without fetching:
+		// refuse before the clone, so nothing is fetched or written (ynh #1002).
+		if trustFlag {
+			if err := checkInstallRefTrust(false, resolved.ref); err != nil {
+				return err
+			}
+		}
+
 		// Resolve from Git via cache. When the source came from a registry
 		// entry that pinned a ref, honor it so the on-disk checkout matches
 		// what the marketplace declared. If a sha is also declared, verify

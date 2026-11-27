@@ -525,7 +525,12 @@ are shown and covered by what you accept.
 
   ynh trust                      State of every installed harness
   ynh trust show <harness>       Every command it will run, with provenance
-  ynh trust accept <harness>     Record that you have read them
+  ynh trust accept <harness>     Record that you have read them. A step for a
+                                 person who has reviewed them: it refuses a
+                                 remote include or native delegate entry not
+                                 pinned to a full commit SHA. A CI script pins
+                                 first, or installs with 'ynh install --ref <sha>
+                                 --trust'
 
 Flags:
   --format text|json   Output format (default text)

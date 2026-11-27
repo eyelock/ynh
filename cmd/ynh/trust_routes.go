@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -81,11 +82,46 @@ func unpinnedIncludes(remote []remoteInclude) []string {
 	return out
 }
 
+// unpinnedNativeDelegates lists, one line each, the delegates_to entries of p
+// that run natively (inside the vendor's own subagents, their MCP servers part
+// of the digest) from a remote source not pinned to a full SHA. An entry that
+// names the parent's own repository ("."), a local folder, or an A2A delegate
+// is another harness with its own acceptance, so it is not judged here.
+func unpinnedNativeDelegates(p *harness.Harness) []string {
+	var out []string
+	for _, d := range p.DelegatesTo {
+		if p.TransportOf(d) != harness.TransportNative || d.Git == "" || strings.HasPrefix(d.Git, ".") || filepath.IsAbs(d.Git) {
+			continue
+		}
+		if why := notPinned(d.Ref); why != "" {
+			out = append(out, fmt.Sprintf("native delegate %s: %s", d.Git, why))
+		}
+	}
+	return out
+}
+
+// refuseUnpinnedDelegates is the delegate half of the pin rule, which reads
+// only the manifest and so runs first, before an include is fetched or read.
+func refuseUnpinnedDelegates(what, flag string, p *harness.Harness) error {
+	if bad := unpinnedNativeDelegates(p); len(bad) > 0 {
+		return refuseUnpinned(what, flag, bad)
+	}
+	return nil
+}
+
+// unpinnedForAcceptance is the one pin rule every acceptance route shares:
+// every remote include that brings commands, and every native delegate entry,
+// must be pinned to a full commit SHA (ynh #1002). Routes add their own ref
+// (a git or registry install's) on top.
+func unpinnedForAcceptance(p *harness.Harness, remote []remoteInclude) []string {
+	return append(unpinnedIncludes(remote), unpinnedNativeDelegates(p)...)
+}
+
 // refuseUnpinned is the refusal of --trust when something that runs is not
 // pinned: it names each and the way out.
 func refuseUnpinned(what, flag string, reasons []string) error {
 	return fmt.Errorf("%s refuses to accept %s: it is not pinned to a full commit SHA, so what runs could change under the acceptance:\n  %s\n"+
-		"Pin it to a 40-character commit SHA, or review it and accept it by hand with 'ynh trust accept'",
+		"Pin it to a 40-character commit SHA and try again. Acceptance is a step for a person who has reviewed what runs, and it covers only a commit that cannot move",
 		flag, what, strings.Join(reasons, "\n  "))
 }
 
@@ -95,10 +131,11 @@ func refuseUnpinned(what, flag string, reasons []string) error {
 // and every remote include that brings commands needs one too (decision 4b).
 // Includes are fetched first, as install does anyway, so they can be judged.
 func checkInstallTrust(p *harness.Harness, cfg *config.Config, isLocal bool, ref string) error {
-	if !isLocal {
-		if why := notPinned(ref); why != "" {
-			return refuseUnpinned("this install", "--trust", []string{"the harness's own ref: " + why})
-		}
+	if err := checkInstallRefTrust(isLocal, ref); err != nil {
+		return err
+	}
+	if err := refuseUnpinnedDelegates("this install", "--trust", p); err != nil {
+		return err
 	}
 	if _, err := resolver.Resolve(p, cfg); err != nil {
 		return fmt.Errorf("--trust could not read the includes of %s: %w", p.Name, err)
@@ -107,8 +144,21 @@ func checkInstallTrust(p *harness.Harness, cfg *config.Config, isLocal bool, ref
 	if err != nil {
 		return err
 	}
-	if bad := unpinnedIncludes(remote); len(bad) > 0 {
+	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
 		return refuseUnpinned("this install", "--trust", bad)
+	}
+	return nil
+}
+
+// checkInstallRefTrust is the part of the --trust pin rule that needs nothing
+// fetched: a git or registry install must name a full SHA. It runs before the
+// clone, so a refused install has fetched and written nothing (ynh #1002).
+func checkInstallRefTrust(isLocal bool, ref string) error {
+	if isLocal {
+		return nil
+	}
+	if why := notPinned(ref); why != "" {
+		return refuseUnpinned("this install", "--trust", []string{"the harness's own ref: " + why})
 	}
 	return nil
 }
@@ -169,11 +219,14 @@ func acceptFolderRun(ref string, p *harness.Harness, stdout io.Writer) error {
 // not always a path ref, "hs" for example) or by a manifest in the current
 // folder.
 func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
+	if err := refuseUnpinnedDelegates(p.Name, "--trust", p); err != nil {
+		return err
+	}
 	remote, err := remoteIncludes(p)
 	if err != nil {
 		return err
 	}
-	if bad := unpinnedIncludes(remote); len(bad) > 0 {
+	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
 		return refuseUnpinned(p.Name, "--trust", bad)
 	}
 	if len(remote) == 0 {
@@ -291,7 +344,7 @@ func pinProblems(p *harness.Harness) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(bad, unpinnedIncludes(remote)...), nil
+	return append(bad, unpinnedForAcceptance(p, remote)...), nil
 }
 
 // acceptAfterChange is the --trust of `ynh update` and `ynh include`
