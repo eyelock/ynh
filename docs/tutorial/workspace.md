@@ -84,7 +84,7 @@ Accept it. That lets the harness run and, with no allow-list set, grants the fol
 ynh trust accept local/seat
 ```
 
-Expected output: `Recorded local/seat: 0 command(s), 2 workspace folder(s), sha256:...`
+Expected output: `Accepted local/seat (accept): 0 command(s), 2 workspace folder(s), sha256:...`. It is the same review and acceptance you did in [Your First Trusted Harness](first-trusted-harness.md).
 
 *This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--seat/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--seat/.../**) -p hello --add-dir .../ynh-tutorial/ws/ynh --add-dir .../ynh-tutorial/elsewhere`
 
