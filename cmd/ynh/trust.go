@@ -1149,6 +1149,12 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		// the operator was never shown.
 		return cliError(stderr, structured, errCodeConfigError, unavailableMessage(name, set.Problems))
 	}
+	// An installed remote harness is accepted only at a full SHA of its own
+	// ref, as --trust requires: a branch or tag can move under the record
+	// (ynh #1023).
+	if bad := unpinnedOwnRef(p); len(bad) > 0 {
+		return cliError(stderr, structured, errCodeConfigError, refuseUnpinned(name, "ynh trust accept", bad).Error())
+	}
 	rec := trustRecord{
 		Digest:     executablesDigest(set),
 		Commands:   set.count(),

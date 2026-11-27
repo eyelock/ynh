@@ -327,16 +327,24 @@ func takeTrustFlag(args []string) ([]string, bool) {
 	return out, found
 }
 
+// unpinnedOwnRef says why the installed harness p's own ref is not a full-SHA
+// pin, one line, or nil when it is pinned or p is a local folder install
+// (the operator's own files, decision 4c).
+func unpinnedOwnRef(p *harness.Harness) []string {
+	if !harnessHasRemoteSource(p) {
+		return nil
+	}
+	if why := notPinned(p.InstalledFrom.Ref); why != "" {
+		return []string{"the harness's own ref: " + why}
+	}
+	return nil
+}
+
 // pinProblems lists what keeps the installed harness p from being accepted at
 // a full SHA: its own ref when it floats from a git or registry source, and
 // each remote include that brings commands (decisions 4b and 14).
 func pinProblems(p *harness.Harness) ([]string, error) {
-	var bad []string
-	if harnessHasRemoteSource(p) {
-		if why := notPinned(p.InstalledFrom.Ref); why != "" {
-			bad = append(bad, "the harness's own ref: "+why)
-		}
-	}
+	bad := unpinnedOwnRef(p)
 	remote, err := remoteIncludes(p)
 	if err != nil {
 		return nil, err
