@@ -121,6 +121,18 @@ func TestInstallTrust_RefusesWhatIsNotPinned(t *testing.T) {
 // installFolder makes a local folder harness with a remote include, at ref.
 func installFolder(t *testing.T, includeRef string) (folder string) {
 	t.Helper()
+	return makeFolder(t, includeRef, true)
+}
+
+// coldFolder is installFolder with the include cache left empty, as on a
+// machine that has never fetched the include (ynw-twt3a).
+func coldFolder(t *testing.T, includeRef string) (folder string) {
+	t.Helper()
+	return makeFolder(t, includeRef, false)
+}
+
+func makeFolder(t *testing.T, includeRef string, warm bool) (folder string) {
+	t.Helper()
 	root := t.TempDir()
 	remote := filepath.Join(root, "remote")
 	gitRepo(t, remote, "remote-sensor")
@@ -146,8 +158,10 @@ func installFolder(t *testing.T, includeRef string) (folder string) {
 	case "branch":
 		cacheRef = "main"
 	}
-	if _, err := resolver.EnsureRepo("file://"+remote, cacheRef); err != nil {
-		t.Fatal(err)
+	if warm {
+		if _, err := resolver.EnsureRepo("file://"+remote, cacheRef); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return folder
 }
@@ -437,5 +451,180 @@ func TestRunTrust_RelativeHarnessFileIsAFolderRun(t *testing.T) {
 	err := cmdRun([]string{"--harness-file", "hs/.agents/harness/plugin.json", "--trust", "-v", "cursor", "--install"})
 	if err != nil && strings.Contains(err.Error(), "--trust is for a run from a folder") {
 		t.Fatalf("a folder run was refused as an installed harness: %v", err)
+	}
+}
+
+// uncachedFolder is installFolder without warming the include cache: a folder
+// with a file:// git include at ref ("sha", "branch" or floating), the include
+// not yet fetched. It returns the folder and the include's source URL and ref.
+func uncachedFolder(t *testing.T, includeRef string) (folder, url, ref string) {
+	t.Helper()
+	root := t.TempDir()
+	remote := filepath.Join(root, "remote")
+	gitRepo(t, remote, "remote-sensor")
+	folder = filepath.Join(root, "folder")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	refJSON := ""
+	switch includeRef {
+	case "sha":
+		ref = gitRevParse(t, remote)
+		refJSON = `,"ref":"` + ref + `"`
+	case "branch":
+		ref = "main"
+		refJSON = `,"ref":"main"`
+	}
+	url = "file://" + remote
+	manifest := `{"name":"fld","version":"0.1.0","default_vendor":"claude","includes":[{"git":"` + url + `"` + refJSON + `}]}`
+	if err := writePluginJSONFile(folder, []byte(manifest)); err != nil {
+		t.Fatal(err)
+	}
+	return folder, url, ref
+}
+
+// ynh #993: --trust fetches a full-SHA include missing from the cache, once,
+// accepts it, and the gate then passes. Without --trust the gate stays
+// offline: it refuses, fetches nothing, and its Fix line names --trust.
+func TestRunTrust_FetchesUncachedFullSHAInclude(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "sha")
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gerr := trustGate("", p, io.Discard)
+	if !isUntrusted(gerr) {
+		t.Fatalf("an uncached include must refuse offline: %v", gerr)
+	}
+	if strings.Contains(gerr.Error(), "run `ynh update`") {
+		t.Errorf("a stray ynh update hint:\n%v", gerr)
+	}
+	for _, want := range []string{"--trust", "40-character"} {
+		if !strings.Contains(gerr.Error(), want) {
+			t.Errorf("Fix line lacks %q:\n%v", want, gerr)
+		}
+	}
+	if strings.Contains(gerr.Error(), "Fetch them with 'ynh update'") {
+		t.Errorf("a folder run is pointed at ynh update, which takes installed ids only:\n%v", gerr)
+	}
+	if _, ok := resolver.LookupCache(url, ref); ok {
+		t.Fatal("the gate fetched without --trust")
+	}
+
+	var out bytes.Buffer
+	if err := acceptFolderRun(folder, p, &out); err != nil {
+		t.Fatalf("run --trust: %v", err)
+	}
+	if _, ok := resolver.LookupCache(url, ref); !ok {
+		t.Fatal("--trust did not fetch the include")
+	}
+	if !strings.Contains(out.String(), "(run --trust)") {
+		t.Errorf("output: %s", out.String())
+	}
+	if gerr := trustGate("", p, io.Discard); gerr != nil {
+		t.Fatalf("gate after run --trust: %v", gerr)
+	}
+}
+
+// --trust with an uncached include that is not full-SHA pinned refuses and
+// fetches nothing, a branch and a floating include alike.
+func TestRunTrust_RefusesUncachedUnpinnedIncludeWithoutFetching(t *testing.T) {
+	for _, kind := range []string{"branch", "floating"} {
+		t.Run(kind, func(t *testing.T) {
+			fakeHome(t)
+			folder, url, ref := uncachedFolder(t, kind)
+			p, err := harness.LoadDir(folder)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = acceptFolderRun(folder, p, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), "full commit SHA") {
+				t.Fatalf("err = %v, want the unpinned refusal", err)
+			}
+			// ynh trust accept reads from the cache, so it cannot help here and
+			// the closing line must not offer it as a way out (ynw-jsjts).
+			if strings.Contains(err.Error(), "accept it by hand") || !strings.Contains(err.Error(), "run it again with --trust") {
+				t.Errorf("closing line offers a route that loops:\n%v", err)
+			}
+			if _, ok := resolver.LookupCache(url, ref); ok {
+				t.Error("an unpinned include was fetched")
+			}
+			if gerr := trustGate("", p, io.Discard); !isUntrusted(gerr) {
+				t.Errorf("a refused --trust must not accept: %v", gerr)
+			}
+		})
+	}
+}
+
+// A cached include is not fetched again: removing the source after the first
+// --trust leaves a second one working from the cache.
+func TestRunTrust_DoesNotRefetchACachedInclude(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "sha")
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := acceptFolderRun(folder, p, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(strings.TrimPrefix(url, "file://")); err != nil {
+		t.Fatal(err)
+	}
+	if err := acceptFolderRun(folder, p, io.Discard); err != nil {
+		t.Fatalf("a second --trust reached for the network: %v", err)
+	}
+	if _, ok := resolver.LookupCache(url, ref); !ok {
+		t.Error("cache entry lost")
+	}
+}
+
+// `ynh run <folder> --trust` and `ynh agent run --harness <folder> --trust`
+// both reach the fetch, and neither is refused as untrusted afterwards.
+func TestRunTrust_BothRoutesFetchAnUncachedInclude(t *testing.T) {
+	t.Run("run", func(t *testing.T) {
+		isolateRun(t)
+		folder, url, ref := uncachedFolder(t, "sha")
+		err := cmdRun([]string{folder, "--trust", "-v", "claude", "--install"})
+		if isUntrusted(err) {
+			t.Fatalf("run --trust was refused by the gate: %v", err)
+		}
+		if _, ok := resolver.LookupCache(url, ref); !ok {
+			t.Fatal("ynh run --trust did not fetch the include")
+		}
+	})
+	t.Run("agent run", func(t *testing.T) {
+		isolateRun(t)
+		t.Setenv("YNH_AGENT_SESSION", "")
+		vendorShims(t, "no worker is needed to reach the gate")
+		folder, url, ref := uncachedFolder(t, "sha")
+		r, _, _ := runAgentRefused(t, "--task", "t", "--no-plan", "--harness", folder, "--trust")
+		if r.ErrorCode == errCodeUntrusted {
+			t.Fatalf("agent run --trust was refused by the gate: %+v", r)
+		}
+		if _, ok := resolver.LookupCache(url, ref); !ok {
+			t.Fatal("ynh agent run --trust did not fetch the include")
+		}
+	})
+}
+
+// ynh check <folder> with an uncached include fails before the gate. Its hint
+// must not name ynh update, which takes installed ids only (ynw-lx3cs).
+func TestCheckFolder_UncachedIncludeDoesNotNameUpdate(t *testing.T) {
+	fakeHome(t)
+	folder, _, _ := uncachedFolder(t, "sha")
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{folder, "--cwd", t.TempDir()}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("check of an uncached include must fail")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "run `ynh update`") {
+		t.Errorf("a folder check is pointed at ynh update:\n%v", msg)
+	}
+	if !strings.Contains(msg, "ynh run <folder> --trust") {
+		t.Errorf("no route named:\n%v", msg)
 	}
 }

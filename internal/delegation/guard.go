@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/presence"
 )
 
 // The delegation guard (docs/delegate-sessions.md, "Limits on delegation").
@@ -23,15 +25,19 @@ const (
 	ChainEnv = "YNH_DELEGATION_CHAIN"
 	// MaxDepthEnv sets how many harnesses may sit above a delegate.
 	MaxDepthEnv = "YNH_DELEGATION_MAX_DEPTH"
-	// MaxLiveEnv sets how many delegate sessions may be live at once.
+	// MaxLiveEnv sets how many sessions may be live at once under one
+	// YNH_HOME: every session ynh run has launched (see ynh ps), delegates
+	// included.
 	MaxLiveEnv = "YNH_DELEGATION_MAX_LIVE"
 
 	// DefaultMaxDepth: a root harness's delegate is at depth 1, so a chain
 	// of root, then four delegates deep is the longest allowed.
 	DefaultMaxDepth = 4
-	// DefaultMaxLive is the most delegate sessions live (started, running or
-	// waiting on a question) under one YNH_HOME. A process tree per session
-	// makes this the bound on how wide a chain can fan out.
+	// DefaultMaxLive is the most sessions live under one YNH_HOME: the
+	// sessions ynh run records (ynh ps) and the delegations started or running
+	// (counted by whichever is larger, since a delegation has no presence record
+	// until its run begins). A process tree per session makes this the bound on
+	// how wide a chain can fan out.
 	DefaultMaxLive = 16
 )
 
@@ -85,11 +91,23 @@ func Guard(parent, delegate string, chain []string, get func(string) string) ([]
 		return nil, fmt.Errorf("delegation refused: the chain is too deep. %s puts %s %d levels down; the limit is %d.\n  Fix: flatten the chain so fewer harnesses delegate onward, or raise the limit with %s=<n>",
 			path, delegate, len(anc), maxDepth, MaxDepthEnv)
 	}
-	if live := Live(); live >= maxLive {
-		return nil, fmt.Errorf("delegation refused: %d delegate sessions are already live; the limit is %d.\n  Fix: wait for some to finish or cancel them (ynh delegate-run cancel --handle <handle>), or raise the limit with %s=<n>",
+	if live := LiveSessions(); live >= maxLive {
+		return nil, fmt.Errorf("delegation refused: %d sessions are already live under this YNH_HOME; the limit is %d.\n  Fix: see them with ynh ps, end some with ynh stop <session> or ynh reap, or raise the limit with %s=<n>",
 			live, maxLive, MaxLiveEnv)
 	}
 	return anc, nil
+}
+
+// LiveSessions counts every live session under this YNH_HOME: the live and
+// orphaned sessions ynh ps lists, or the delegations not yet final when there
+// are more of those (a delegation that has been started but whose run has not
+// begun has no presence record yet).
+func LiveSessions() int {
+	n := Live()
+	if es, err := presence.List(false); err == nil && len(es) > n {
+		n = len(es)
+	}
+	return n
 }
 
 // Live counts the delegate sessions that are not final under this YNH_HOME,
