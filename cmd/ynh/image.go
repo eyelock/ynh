@@ -258,6 +258,9 @@ type imageArgs struct {
 	sha string
 }
 
+// imageUsage is the usage line shown for a missing name or an unknown flag.
+const imageUsage = "usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--entrypoint run|agent] [--dry-run]"
+
 // parseImageArgs parses flags for the image command.
 func parseImageArgs(args []string) (imageArgs, error) {
 	var ia imageArgs
@@ -305,12 +308,15 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			i++
 			ia.path = args[i]
 		default:
+			if strings.HasPrefix(args[i], "-") {
+				return ia, fmt.Errorf("unknown flag: %s\n%s", args[i], imageUsage)
+			}
 			remaining = append(remaining, args[i])
 		}
 	}
 
 	if len(remaining) < 1 {
-		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--entrypoint run|agent] [--dry-run]")
+		return ia, fmt.Errorf("%s", imageUsage)
 	}
 	ia.name = remaining[0]
 
