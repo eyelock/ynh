@@ -320,3 +320,20 @@ func TestRelay_StopsWhenStdinCloses(t *testing.T) {
 		t.Errorf("relay log:\n%s", log)
 	}
 }
+
+func TestParseRelayEndpoint(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://127.0.0.1:4318":  "http://127.0.0.1:4318",
+		"http://127.0.0.1:4318/": "http://127.0.0.1:4318",
+		"http://[::1]:4318":      "http://[::1]:4318",
+	} {
+		if got, err := ParseRelayEndpoint(in); err != nil || got != want {
+			t.Errorf("%q: %q, %v", in, got, err)
+		}
+	}
+	for _, in := range []string{"https://127.0.0.1:4318", "http://127.0.0.1", "http://example.com:4318", "http://u@127.0.0.1:1", "http://127.0.0.1:1/x", "", "localhost:4318"} {
+		if got, err := ParseRelayEndpoint(in); err == nil {
+			t.Errorf("%q accepted as %q", in, got)
+		}
+	}
+}

@@ -745,7 +745,7 @@ func TestIncludedHooksAreCoveredOnlyWithConsent(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	root := t.TempDir()
 	writeIncludedHarness(t, root, "up", hookFields("up-hook-v1"))
-	consent := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: true}}}
+	consent := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: hooksOn(true)}}}
 	noConsent := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}}}}
 
 	if st := trustStatusFor("id", noConsent, trustStore{Harnesses: map[string]trustRecord{}}, nil); len(st.Hooks) != 0 || st.State != trustNoCommands {
@@ -778,7 +778,7 @@ func TestTransitiveIncludedHooksFollowConsent(t *testing.T) {
 	writeIncludedHarness(t, root, "mid", `,"includes":[{"local":"leaf","hooks":true}]`)
 	leafRoot := filepath.Join(root, "mid")
 	writeIncludedHarness(t, leafRoot, "leaf", hookFields("leaf-v1"))
-	consent := &harness.Harness{Name: "c", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "mid"}, Hooks: true}}}
+	consent := &harness.Harness{Name: "c", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "mid"}, Hooks: hooksOn(true)}}}
 	noConsent := &harness.Harness{Name: "c", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "mid"}}}}
 
 	st := trustStatusFor("id", consent, trustStore{Harnesses: map[string]trustRecord{}}, nil)
@@ -798,7 +798,7 @@ func TestTransitiveIncludedHooksFollowConsent(t *testing.T) {
 func TestUnreadableIncludeWithHooksFailsClosed(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	h := &harness.Harness{Name: "c", Dir: t.TempDir(), Includes: []harness.Include{
-		{GitSource: harness.GitSource{Git: "https://example.invalid/x.git"}, Hooks: true},
+		{GitSource: harness.GitSource{Git: "https://example.invalid/x.git"}, Hooks: hooksOn(true)},
 	}}
 	if st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil); st.State != trustUnavailable || st.Digest != "" {
 		t.Errorf("state %q digest %q", st.State, st.Digest)
@@ -983,3 +983,5 @@ func TestDelegateTransportMovesTheDigest(t *testing.T) {
 		t.Error("an entry with no transport anywhere is a2a")
 	}
 }
+
+func hooksOn(v bool) *bool { return &v }

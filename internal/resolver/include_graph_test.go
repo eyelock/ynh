@@ -42,7 +42,7 @@ func TestResolve_CycleDoesNotWithholdHooksConsent(t *testing.T) {
 	writeNS(t, a, inc{"name": "a", "includes": []inc{{"local": b, "hooks": true}}})
 	writeNS(t, b, inc{"name": "b", "includes": []inc{{"local": a}}}) // no "hooks"
 
-	p := &harness.Harness{Name: "root", Dir: t.TempDir(), Includes: []harness.Include{{GitSource: harness.GitSource{Local: a}, Hooks: true}}}
+	p := &harness.Harness{Name: "root", Dir: t.TempDir(), Includes: []harness.Include{{GitSource: harness.GitSource{Local: a}, Hooks: hooksFlag(true)}}}
 	results, err := Resolve(p, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -170,3 +170,5 @@ func TestResolve_DifferentRefsWithoutCommitsAreTwoVersions(t *testing.T) {
 		t.Errorf("error = %v, want one naming the default branch and v2", err)
 	}
 }
+
+func hooksFlag(v bool) *bool { return &v }

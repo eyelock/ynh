@@ -507,4 +507,4 @@ than as a project.
 
 ## Next
 
-[Delegation](delegation.md) — chain harnesses together as subagents.
+[A First Delegate Session](first-delegate-session.md) — have one harness hand work to another.
