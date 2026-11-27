@@ -50,7 +50,7 @@ The job then starts with no trust records, and accepts only what it pins itself.
      Location: <YNH_HOME>/harnesses/<id>
      Launcher: <YNH_HOME>/bin/reviewer
      Vendor:   claude
-   Accepted <id> (install --trust): 2 command(s), sha256:b6a68a3387879e68
+   Accepted <id> (install --trust): 2 command(s), sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104
    It executes:
      hook before_tool: ./hooks/guard.sh
      sensor lint (command): echo lint ok from include <include>
@@ -106,7 +106,7 @@ ynh check local/<name>
 ```
 
 ```
-Accepted local/reviewer (install --trust): 2 command(s), sha256:b6a68a3387879e68
+Accepted local/reviewer (install --trust): 2 command(s), sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104
 ...
   ✓  lint  pass  30ms
 

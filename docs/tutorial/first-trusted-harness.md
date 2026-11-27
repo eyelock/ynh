@@ -121,7 +121,7 @@ ynh trust show local/greeter
 local/greeter
   source:   /tmp/ynh-trust/greeter
   state:    unreviewed
-  digest:   sha256:aff830900fd54227
+  digest:   sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104
 
 Sensors, executed via /bin/sh -c in the tree being measured:
 
@@ -157,7 +157,7 @@ ynh trust accept local/greeter
 ```
 
 ```
-Accepted local/greeter (accept): 2 command(s), sha256:aff830900fd54227
+Accepted local/greeter (accept): 2 command(s), sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104
 ```
 
 The digest it accepted is the one `ynh trust show` printed. Check the state again:
@@ -242,8 +242,8 @@ The page now begins with the old and the new fingerprints:
 local/greeter
   source:   /tmp/ynh-trust/greeter
   state:    changed
-  digest:   sha256:296fb74a19b43412
-  accepted: sha256:aff830900fd54227 on 2026-11-27T16:48:25Z
+  digest:   sha256:c9fe74f1533895ac3ed82f87f824954fe0a1c21af67291c380ad626af0e20bf5
+  accepted: sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104 on 2026-11-27T16:48:25Z
   via:      accept
 ```
 
@@ -262,7 +262,7 @@ ynh trust accept local/greeter
 ```
 
 ```
-Accepted local/greeter (accept): 2 command(s), sha256:296fb74a19b43412
+Accepted local/greeter (accept): 2 command(s), sha256:c9fe74f1533895ac3ed82f87f824954fe0a1c21af67291c380ad626af0e20bf5
 ```
 
 ```bash

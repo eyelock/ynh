@@ -48,8 +48,8 @@ after an update, an include change and an edit to a folder you installed.
 
    ```
      state:    changed
-     digest:   sha256:8d9672703ea2376d
-     accepted: sha256:c96fc50490fa7639 on 2026-11-27T16:49:32Z
+     digest:   sha256:c9fe74f1533895ac3ed82f87f824954fe0a1c21af67291c380ad626af0e20bf5
+     accepted: sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104 on 2026-11-27T16:49:32Z
      via:      accept
    ...
    These commands have changed since you accepted them.
@@ -67,7 +67,7 @@ after an update, an include change and an edit to a folder you installed.
    ```
 
    ```
-   Accepted <harness> (accept): 2 command(s), sha256:8d9672703ea2376d
+   Accepted <harness> (accept): 2 command(s), sha256:c9fe74f1533895ac3ed82f87f824954fe0a1c21af67291c380ad626af0e20bf5
    ```
 
 4. Run it, or check it without starting a vendor if it has sensors:
@@ -111,7 +111,7 @@ ynh include add local/<name> https://github.com/<org>/<repo> --ref <40-character
 
 ```
 Added include "https://github.com/<org>/<repo>"
-Accepted local/<name> (include --trust): 3 command(s), sha256:d15c5ab982ac39ca
+Accepted local/<name> (include --trust): 3 command(s), sha256:43b4c4b79432c8467d7c8de210972adfcc475c66aaa13ef03edb7aa1b43fa5c1
 It executes:
   ...
 ```

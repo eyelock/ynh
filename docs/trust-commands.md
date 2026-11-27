@@ -30,10 +30,10 @@ ynh trust [ls|show|accept] [harness] [--format text|json]
 `ynh trust accept <id>`:
 
 ```
-Accepted local/greeter (accept): 2 command(s), sha256:aff830900fd54227
+Accepted local/greeter (accept): 2 command(s), sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104
 ```
 
-A harness that only asks for workspace folders: `Accepted local/ws (accept): 0 command(s), 1 workspace folder(s), sha256:fcec517cd7869c57`.
+A harness that only asks for workspace folders: `Accepted local/ws (accept): 0 command(s), 1 workspace folder(s), sha256:43b4c4b79432c8467d7c8de210972adfcc475c66aaa13ef03edb7aa1b43fa5c1`.
 
 `ynh trust accept <folder>`:
 

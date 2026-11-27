@@ -113,7 +113,7 @@ The image flags themselves are in [Docker: Harness Images](../docker.md#harness-
    ...
    LABEL dev.ynh.harness="reviewer" \
          ...
-         dev.ynh.harness.trust-digest="sha256:b6a68a3387879e68" \
+         dev.ynh.harness.trust-digest="sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104" \
    ```
 
 2. After the build, read the label and the record inside the image:
@@ -124,7 +124,7 @@ The image flags themselves are in [Docker: Harness Images](../docker.md#harness-
    ```
 
    ```
-   sha256:b6a68a3387879e68
+   sha256:a3403ee82e9f674b6ed5e445d4e6fd2f214b6b7c365f74c9d2c734e7a7ab5104
    HARNESS         STATE     VIA    COMMANDS  SOURCE
    local/reviewer  accepted  image  2         <source>
    ```
