@@ -24,9 +24,9 @@ After these steps `ynh run` assembles it into the parent's run dir.
 
    or `"transport": "native"` at the top level for the harness default.
 
-   Pin the entry's `ref` to a full 40-character commit SHA. `ynh trust accept` (step 3) and `--trust`
-   refuse a native delegate entry from another repository with no ref, a tag, a branch or a short SHA,
-   because it floats. An entry that names the parent's own repository (`.` or `./sub`) needs no pin.
+   Pin the entry's `ref` to a full 40-character commit SHA. `--trust` refuses a native delegate entry
+   from another repository with no ref, a tag, a branch or a short SHA, because it floats. `ynh trust
+   accept` (step 3) accepts it anyway, at the commit it is at now, and records that commit. An entry that names the parent's own repository (`.` or `./sub`) needs no pin.
 
 2. Check the manifest. `ynd validate` checks the harness in the current folder, or the one at `[path]`:
 

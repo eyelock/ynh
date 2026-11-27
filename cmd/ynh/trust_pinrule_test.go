@@ -18,30 +18,49 @@ import (
 // install --trust, run --trust and native delegate entries, checked before
 // cloning where it can be.
 
-// ynh trust accept <id> refuses a remote include that floats, recording
-// nothing, and accepts one pinned to a full SHA.
-func TestTrustAccept_RefusesFloatingInclude(t *testing.T) {
+// ynh trust accept <id> accepts a remote include that floats at the commit it
+// was read at and records that commit, with a line saying so; it no longer
+// refuses, so the way out that the run refusal and trust show name leads
+// somewhere (ynw-3qlzu). A full-SHA include records no floating entry.
+func TestTrustAccept_AcceptsFloatingIncludeAtItsCommit(t *testing.T) {
+	for _, tc := range []struct{ name, ref, why string }{
+		{"no ref", "", "floats"},
+		{"branch", "branch", "tag or branch"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeHome(t)
+			folder := installFolder(t, tc.ref)
+			if out, err := installOut(t, folder); err != nil {
+				t.Fatalf("plain install: %v\n%s", err, out)
+			}
+			p, err := harness.LoadQualified("local/fld")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st := trustStatusFor("local/fld", p, trustStore{Harnesses: map[string]trustRecord{}}, nil); st.State != trustUnreviewed {
+				t.Fatalf("before accept: state %q, want unreviewed", st.State)
+			}
+			var out bytes.Buffer
+			if err := cmdTrustTo([]string{"accept", "local/fld"}, &out, io.Discard); err != nil {
+				t.Fatalf("floating include: %v", err)
+			}
+			store, _ := loadTrustStore()
+			rec, ok := store.Harnesses["local/fld"]
+			if !ok || len(rec.Floating) != 1 || !isFullSHA(rec.Floating[0].Commit) || !strings.Contains(rec.Floating[0].Why, tc.why) {
+				t.Fatalf("record = %+v, want one floating include with a full commit", rec)
+			}
+			for _, want := range []string{"Floating, accepted at what is installed now", "accepted at commit " + rec.Floating[0].Commit} {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("output lacks %q:\n%s", want, out.String())
+				}
+			}
+			if st := trustStatusFor("local/fld", p, store, nil); st.State != trustAccepted {
+				t.Errorf("after accept: state %q, want accepted", st.State)
+			}
+		})
+	}
+
 	fakeHome(t)
-	floating := installFolder(t, "")
-	if out, err := installOut(t, floating); err != nil {
-		t.Fatalf("plain install: %v\n%s", err, out)
-	}
-	err := cmdTrustTo([]string{"accept", "local/fld"}, io.Discard, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "floats") || !strings.Contains(err.Error(), "40-character commit SHA") {
-		t.Fatalf("floating include: err = %v, want the pin refusal", err)
-	}
-	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
-		t.Errorf("a refused accept recorded %v", store.Harnesses)
-	}
-
-	branch := installFolder(t, "branch")
-	if out, err := installOut(t, branch); err != nil {
-		t.Fatalf("plain install: %v\n%s", err, out)
-	}
-	if err := cmdTrustTo([]string{"accept", "local/fld"}, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "tag or branch") {
-		t.Fatalf("branch include: err = %v, want the pin refusal", err)
-	}
-
 	pinned := installFolder(t, "sha")
 	if out, err := installOut(t, pinned); err != nil {
 		t.Fatalf("plain install: %v\n%s", err, out)
@@ -50,22 +69,31 @@ func TestTrustAccept_RefusesFloatingInclude(t *testing.T) {
 	if err := cmdTrustTo([]string{"accept", "local/fld"}, &out, io.Discard); err != nil {
 		t.Fatalf("pinned include: %v", err)
 	}
+	if store, _ := loadTrustStore(); len(store.Harnesses["local/fld"].Floating) != 0 || strings.Contains(out.String(), "Floating") {
+		t.Errorf("a pinned include was reported floating: %+v\n%s", store.Harnesses["local/fld"], out.String())
+	}
 }
 
-// ynh trust accept <dir> takes the same rule.
-func TestTrustAcceptFolder_RefusesFloatingInclude(t *testing.T) {
+// ynh trust accept <dir> takes the same rule: the include's record carries the
+// commit, and nothing is refused.
+func TestTrustAcceptFolder_AcceptsFloatingIncludeAtItsCommit(t *testing.T) {
 	fakeHome(t)
 	floating := installFolder(t, "")
-	err := cmdTrustTo([]string{"accept", floating}, io.Discard, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "floats") {
-		t.Fatalf("floating include: err = %v, want the pin refusal", err)
+	var out bytes.Buffer
+	if err := cmdTrustTo([]string{"accept", floating}, &out, io.Discard); err != nil {
+		t.Fatalf("floating include: %v", err)
 	}
-	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
-		t.Errorf("a refused accept recorded %v", store.Harnesses)
+	store, _ := loadTrustStore()
+	if len(store.Harnesses) != 1 {
+		t.Fatalf("records = %v, want one include record", store.Harnesses)
 	}
-	pinned := installFolder(t, "sha")
-	if err := cmdTrustTo([]string{"accept", pinned}, io.Discard, io.Discard); err != nil {
-		t.Fatalf("pinned include: %v", err)
+	for k, rec := range store.Harnesses {
+		if !strings.HasPrefix(k, includeRecordPrefix) || !isFullSHA(rec.SHA) || len(rec.Floating) != 1 {
+			t.Errorf("record %s = %+v, want the include's commit and floating entry", k, rec)
+		}
+	}
+	if !strings.Contains(out.String(), "accepted at commit") {
+		t.Errorf("output does not say which commit:\n%s", out.String())
 	}
 }
 
@@ -105,28 +133,45 @@ func TestUnpinnedNativeDelegates(t *testing.T) {
 	}
 }
 
-// Every route refuses a floating native delegate entry: trust accept of a
-// folder, and run --trust.
-func TestNativeDelegateEntry_RefusedOnEveryRoute(t *testing.T) {
+// A floating native delegate entry: trust accept of a folder accepts it and
+// says which commit (a local git folder's HEAD) or that none could be told,
+// while run --trust, which accepts unreviewed, still refuses it.
+func TestNativeDelegateEntry_AcceptedByTrustAcceptRefusedByRunTrust(t *testing.T) {
 	fakeHome(t)
-	dir := t.TempDir()
-	body := `{"name":"nd","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"echo own"}]},` +
-		`"delegates_to":[{"git":"github.com/example/reviewer","ref":"main","transport":"native"}]}`
-	if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+	deleg := t.TempDir()
+	gitRepo(t, deleg, "del-sensor")
+	// trust accept reads a delegate from the cache, as it reads an include.
+	if _, err := resolver.EnsureRepo(deleg, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdTrustTo([]string{"accept", dir}, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "native delegate github.com/example/reviewer") {
-		t.Fatalf("trust accept <dir>: err = %v, want the native delegate named", err)
-	}
-	p, err := harness.LoadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := acceptFolderRun(dir, p, io.Discard); err == nil || !strings.Contains(err.Error(), "native delegate github.com/example/reviewer") {
-		t.Fatalf("run --trust: err = %v, want the native delegate named", err)
-	}
-	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
-		t.Errorf("a refused route recorded %v", store.Harnesses)
+	for _, tc := range []struct {
+		name, git string
+		wantLine  string
+	}{
+		{"local git folder", deleg, "accepted at commit " + gitRevParse(t, deleg)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			body := `{"name":"nd","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"echo own"}]},` +
+				`"delegates_to":[{"git":"` + tc.git + `","transport":"native"}]}`
+			if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+				t.Fatal(err)
+			}
+			var out bytes.Buffer
+			if err := cmdTrustTo([]string{"accept", dir}, &out, io.Discard); err != nil {
+				t.Fatalf("trust accept <dir>: %v, want it accepted", err)
+			}
+			if !strings.Contains(out.String(), "native delegate "+tc.git) || !strings.Contains(out.String(), tc.wantLine) {
+				t.Errorf("output lacks the entry and %q:\n%s", tc.wantLine, out.String())
+			}
+			p, err := harness.LoadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := acceptFolderRun(dir, p, io.Discard); err == nil || !strings.Contains(err.Error(), "native delegate "+tc.git) {
+				t.Fatalf("run --trust: err = %v, want the native delegate named", err)
+			}
+		})
 	}
 }
 
@@ -218,5 +263,65 @@ func TestImageFromTrust_RefusesFloatingNativeDelegate(t *testing.T) {
 	}
 	if rec != nil {
 		t.Errorf("a refused build returned a record: %v", rec)
+	}
+}
+
+// The bead's scenario (ynw-3qlzu): a harness with a native delegate entry that
+// names another git repository by absolute path, no ref, whose harness ops
+// declares an MCP server. The gate refuses it, trust show says it is not yet
+// reviewed, and trust accept, which they both name, now accepts it and records
+// the delegate's commit, after which the gate passes.
+func TestFloatingNativeDelegate_RefusalShowAndAcceptAgree(t *testing.T) {
+	fakeHome(t)
+	root := t.TempDir()
+	deleg := filepath.Join(root, "ops")
+	if err := os.MkdirAll(deleg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(deleg, []byte(`{"name":"ops","version":"0.1.0","default_vendor":"claude","mcp_servers":{"db":{"command":"echo","args":["x"]}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ops"}} {
+		if out, err := exec.Command("git", append([]string{"-C", deleg}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	team := filepath.Join(root, "team")
+	if err := os.MkdirAll(team, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(team, []byte(`{"name":"team","version":"0.1.0","default_vendor":"claude","delegates_to":[{"git":"`+deleg+`","transport":"native"}]}`)); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := installOut(t, deleg); err != nil {
+		t.Fatalf("install delegate: %v\n%s", err, out)
+	}
+	if err := cmdTrustTo([]string{"accept", "local/ops"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("accept delegate: %v", err)
+	}
+	if out, err := installOut(t, team); err != nil {
+		t.Fatalf("install team: %v\n%s", err, out)
+	}
+	p, err := harness.LoadQualified("local/team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gerr := trustGate("local/team", p, io.Discard)
+	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "ynh trust accept local/team") {
+		t.Fatalf("gate: %v, want a refusal naming 'ynh trust accept local/team'", gerr)
+	}
+	var out bytes.Buffer
+	if err := cmdTrustTo([]string{"accept", "local/team"}, &out, io.Discard); err != nil {
+		t.Fatalf("the accept the refusal names refused: %v", err)
+	}
+	if !strings.Contains(out.String(), "native delegate "+deleg) || !strings.Contains(out.String(), "accepted at commit "+gitRevParse(t, deleg)) {
+		t.Errorf("accept does not say which commit:\n%s", out.String())
+	}
+	store, _ := loadTrustStore()
+	if rec := store.Harnesses["local/team"]; len(rec.Floating) != 1 || rec.Floating[0].Commit != gitRevParse(t, deleg) {
+		t.Errorf("record = %+v, want the delegate's commit", rec)
+	}
+	if gerr := trustGate("local/team", p, io.Discard); gerr != nil {
+		t.Errorf("after accept the gate still refuses: %v", gerr)
 	}
 }

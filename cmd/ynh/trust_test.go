@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -176,7 +177,7 @@ func TestTrustStoreRoundTripsAndLivesUnderYnhHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reloaded.Harnesses["x"] != want {
+	if !reflect.DeepEqual(reloaded.Harnesses["x"], want) {
 		t.Errorf("round trip lost data: %+v", reloaded.Harnesses["x"])
 	}
 }

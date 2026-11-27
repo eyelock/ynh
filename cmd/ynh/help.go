@@ -564,11 +564,11 @@ are shown and covered by what you accept.
                                  with each one's state, to review before
                                  'ynh trust accept <dir>'
   ynh trust accept <harness>     Record that you have read them. A step for a
-                                 person who has reviewed them: it refuses a
-                                 remote include or native delegate entry not
-                                 pinned to a full commit SHA. A CI script pins
-                                 first, or installs with 'ynh install --ref <sha>
-                                 --trust'
+                                 person who has reviewed them: a remote include
+                                 or native delegate entry with no full SHA ref
+                                 is accepted at the commit it is at now, and that
+                                 commit is recorded. A CI script installs with
+                                 'ynh install --ref <sha> --trust'
 
 Flags:
   --format text|json   Output format (default text)
