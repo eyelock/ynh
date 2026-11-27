@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -169,7 +170,10 @@ func acceptFolderRun(ref string, p *harness.Harness, stdout io.Writer) error {
 // not always a path ref, "hs" for example) or by a manifest in the current
 // folder.
 func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
-	remote, err := remoteIncludes(p)
+	if err := warmFolderIncludes(p); err != nil {
+		return err
+	}
+	remote, err := remoteIncludesFor(p, folderFetchFix)
 	if err != nil {
 		return err
 	}
@@ -196,6 +200,40 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 		_, _ = fmt.Fprint(stdout, listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
 	}
 	return saveTrustStore(store)
+}
+
+// warmFolderIncludes fetches the remote includes of a folder run that are
+// missing from the cache, so the gate can read what they execute (ynh #993).
+// Only an include pinned to a full 40-character SHA is fetched: that makes the
+// fetch deterministic, and --trust is the operator's explicit act. An uncached
+// include that is not pinned refuses the run, and the ones named by the folder
+// itself are judged before anything is fetched. A cached include is not
+// fetched again, so a second run reaches no network.
+func warmFolderIncludes(p *harness.Harness) error {
+	var bad []string
+	for _, inc := range p.Includes {
+		if inc.IsLocal() || inc.Git == "" || resolver.IsOwnRepoSource(inc.GitSource, p.Dir) {
+			continue
+		}
+		if _, ok := resolver.LookupCache(resolver.GitSourceURL(inc.Git, p.Dir), inc.Ref); ok {
+			continue
+		}
+		if why := notPinned(inc.Ref); why != "" {
+			bad = append(bad, fmt.Sprintf("%s: %s", inc.Git, why))
+		}
+	}
+	if len(bad) > 0 {
+		return refuseUnpinned(p.Name, "--trust", bad)
+	}
+	err := resolver.WarmPinnedIncludes(p)
+	var unpinned *resolver.UnpinnedUncachedError
+	if errors.As(err, &unpinned) {
+		return refuseUnpinned(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))})
+	}
+	if err != nil {
+		return fmt.Errorf("--trust could not fetch the includes of %s: %w", p.Name, err)
+	}
+	return nil
 }
 
 // acceptFolderRunFor loads the folder harness named by ref and accepts it, for
