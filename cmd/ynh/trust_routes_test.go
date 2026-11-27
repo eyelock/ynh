@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -85,6 +86,59 @@ func TestInstallTrust_AtAFullSHA(t *testing.T) {
 	store, _ := loadTrustStore()
 	if got := store.Harnesses["local/hh"].Via; got != viaInstallTrus {
 		t.Errorf("via = %q", got)
+	}
+}
+
+// install --ref <full-sha> records the ref (ynh #1038): the install record
+// holds the SHA as its ref, so update --trust and include add/update --trust
+// find it pinned, while an install at a branch is still refused by them.
+func TestInstallRef_RecordedSoTrustRoutesPassTheFullSHARule(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	if out, err := installOut(t, "file://"+src, "--ref", sha, "--trust"); err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	p, err := harness.LoadByID("local/hh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.InstalledFrom == nil || p.InstalledFrom.Ref != sha {
+		t.Fatalf("recorded ref = %+v, want %s", p.InstalledFrom, sha)
+	}
+	if bad, err := pinProblems(p); err != nil || len(bad) > 0 {
+		t.Fatalf("pinProblems = %v, %v", bad, err)
+	}
+	if err := cmdUpdate([]string{"local/hh", "--trust"}); err != nil {
+		t.Fatalf("update --trust: %v", err)
+	}
+	// An update at a SHA keeps the SHA: it must not slide onto the default branch.
+	p, _ = harness.LoadByID("local/hh")
+	if p.InstalledFrom.Ref != sha {
+		t.Errorf("ref after update = %q, want %s", p.InstalledFrom.Ref, sha)
+	}
+	dir := harness.InstalledDirByID("local/hh")
+	writeIncludedHarness(t, dir, "extra", hookFields("echo extra"))
+	var out bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", "local/hh", filepath.Join(dir, "extra"), "--hooks", "--trust"}, &out); err != nil {
+		t.Fatalf("include add --trust: %v\n%s", err, out.String())
+	}
+	if err := cmdIncludeTo([]string{"update", "local/hh", filepath.Join(dir, "extra"), "--ref", sha, "--trust"}, &out); err != nil {
+		t.Fatalf("include update --trust: %v\n%s", err, out.String())
+	}
+}
+
+// The same install at a branch is still refused by update --trust.
+func TestInstallRef_BranchStillRefusedByUpdateTrust(t *testing.T) {
+	fakeHome(t)
+	src, _ := remoteSource(t, "")
+	const branch = "trunk"
+	gitIn(t, src, "branch", "-M", branch)
+	if out, err := installOut(t, "file://"+src, "--ref", branch); err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	err := cmdUpdate([]string{"local/hh", "--trust"})
+	if err == nil || !strings.Contains(err.Error(), "tag or branch") {
+		t.Fatalf("update --trust at a branch: %v", err)
 	}
 }
 
@@ -626,5 +680,119 @@ func TestCheckFolder_UncachedIncludeDoesNotNameUpdate(t *testing.T) {
 	}
 	if !strings.Contains(msg, "ynh run <folder> --trust") {
 		t.Errorf("no route named:\n%v", msg)
+	}
+}
+
+// ynh #1039: ynh check <folder> --trust fetches and accepts a full-SHA include
+// the way run --trust does, so a CI job that only runs sensors can pass the gate.
+func TestCheckFolder_TrustFetchesAndAcceptsAFullSHAInclude(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "sha")
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{folder, "--trust", "--cwd", t.TempDir()}, &stdout, &stderr)
+	if isUntrusted(err) || (err != nil && strings.Contains(err.Error(), "refusing")) {
+		t.Fatalf("check --trust was refused: %v\n%s", err, stderr.String())
+	}
+	if _, ok := resolver.LookupCache(url, ref); !ok {
+		t.Fatal("ynh check --trust did not fetch the include")
+	}
+	store, serr := loadTrustStore()
+	if serr != nil {
+		t.Fatal(serr)
+	}
+	found := false
+	for k, rec := range store.Harnesses {
+		if strings.HasPrefix(k, includeRecordPrefix) && rec.Via == viaRunTrust {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no include record written: %+v", store.Harnesses)
+	}
+}
+
+// A floating include is refused by check --trust, as by run --trust, and
+// nothing is fetched.
+func TestCheckFolder_TrustRefusesAFloatingInclude(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "branch")
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{folder, "--trust", "--cwd", t.TempDir()}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "40-character commit SHA") {
+		t.Fatalf("a floating include must be refused with the pin message: %v", err)
+	}
+	if _, ok := resolver.LookupCache(url, ref); ok {
+		t.Error("a floating include was fetched")
+	}
+}
+
+// check --trust is for a folder: an installed id is pointed at trust accept.
+func TestCheckTrust_RefusesAnInstalledID(t *testing.T) {
+	fakeHome(t)
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{"local/demo", "--trust"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "ynh trust accept local/demo") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// ynh #1039: ynh trust show <folder> lists each remote include that brings
+// commands, with key, SHA and state, in text and JSON, and follows an accept.
+func TestTrustShowFolder_ListsIncludesAndTheirState(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "sha")
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := warmFolderIncludes(p); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb bytes.Buffer
+	if err := cmdTrustShow([]string{folder}, &out, &errb); err != nil {
+		t.Fatalf("show: %v\n%s", err, errb.String())
+	}
+	src := strings.TrimPrefix(url, "file://")
+	for _, want := range []string{src, "state:    unreviewed", "commit:   " + ref, "ynh trust accept"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("text lacks %q:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	if err := cmdTrustShow([]string{folder, "--format", "json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Includes []includeShow `json:"includes"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out.String())
+	}
+	var generic any
+	if err := json.Unmarshal(out.Bytes(), &generic); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("trust-show-folder")
+	if err != nil {
+		t.Fatalf("Get trust-show-folder schema: %v", err)
+	}
+	if err := schema.Validate(generic); err != nil {
+		t.Errorf("trust show <folder> JSON does not validate: %v\n%s", err, out.String())
+	}
+	if len(doc.Includes) != 1 || doc.Includes[0].State != trustUnreviewed || doc.Includes[0].SHA != ref || !strings.Contains(doc.Includes[0].Key, src) || doc.Includes[0].Commands == 0 {
+		t.Fatalf("includes = %+v", doc.Includes)
+	}
+
+	if err := cmdTrustAccept([]string{folder}, io.Discard, &errb); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTrustShow([]string{folder, "--format", "json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil || doc.Includes[0].State != trustAccepted {
+		t.Fatalf("after accept: %v %s", err, out.String())
 	}
 }

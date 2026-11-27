@@ -8,6 +8,7 @@
     "include-cycles-resolve",
     "run-labels",
     "trust-counts-composed-mcp-servers",
+    "trust-folder-includes",
     "workspace-folders"
   ]
 }

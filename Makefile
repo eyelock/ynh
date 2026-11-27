@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pin check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck evals
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-go-pin check-spoolexporter-pin check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck evals
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -80,6 +80,9 @@ format: ## Format code
 
 lint: ## Lint code
 	golangci-lint run ./...
+
+check-spoolexporter-pin: ## Run the cases of the spoolexporter-versus-ynr-pin comparison (major, then minor)
+	@bash scripts/spoolexporter-pin.sh --self-test
 
 check-go-pin: ## Fail if the Dockerfile's Go version differs from go.mod's toolchain line
 	@want=$$(awk '$$1=="toolchain"{sub(/^go/,"",$$2); print $$2}' go.mod); \
@@ -197,4 +200,4 @@ docker-push: ## Push base Docker image to GHCR
 #   e2e                             e2e.yml (release gate)
 # `format` rewrites files where CI's Format Check only reports them, so commit
 # what it changes.
-check: deps format lint check-tidy check-go-pin test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network
+check: deps format lint check-tidy check-go-pin check-spoolexporter-pin test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network
