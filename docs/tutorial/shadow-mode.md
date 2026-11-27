@@ -201,7 +201,7 @@ ynh trust show local/shadow-pin
 ynh trust accept local/shadow-pin
 ```
 
-Expected output of the accept: `Recorded local/shadow-pin: 1 command(s), sha256:...`
+Expected output of the accept: `Accepted local/shadow-pin (accept): 1 command(s), sha256:...`. It is the same review and acceptance you did in [Your First Trusted Harness](first-trusted-harness.md).
 
 *Replace `<pinned-harness>` with the harness you pin (here: `shadow-pin`).*
 

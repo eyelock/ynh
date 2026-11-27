@@ -489,4 +489,4 @@ rm -rf /tmp/ynh-tutorial-includes
 
 ## Next
 
-[Hooks](hooks.md) — declare vendor-agnostic lifecycle hooks.
+[Your First Trusted Harness](first-trusted-harness.md): see ynh refuse a harness until you review and accept what it runs.
