@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ type mockBackend struct {
 	name        string
 	turns       []Turn
 	delays      []time.Duration
+	sleep       func(time.Duration) // stands in for time.Sleep when set (a fake clock)
 	errs        []error
 	pos         int
 	sends       []string
@@ -97,7 +99,11 @@ func (s *mockSession) Next() (Turn, error) {
 	}
 
 	if pos < len(mb.delays) && mb.delays[pos] > 0 {
-		time.Sleep(mb.delays[pos])
+		if mb.sleep != nil {
+			mb.sleep(mb.delays[pos])
+		} else {
+			time.Sleep(mb.delays[pos])
+		}
 	}
 	if pos < len(mb.errs) && mb.errs[pos] != nil {
 		return Turn{}, mb.errs[pos]
@@ -371,4 +377,26 @@ func TestValidateBackend(t *testing.T) {
 			t.Error("expected error for unknown backend")
 		}
 	})
+}
+
+// fakeClock is a clock a test advances by hand. A mockBackend's delays advance
+// it instead of sleeping, so a wall-clock cap trips on exactly the turn the
+// test scripts, however loaded the machine is.
+type fakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func newFakeClock() *fakeClock { return &fakeClock{t: time.Unix(1_700_000_000, 0)} }
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
 }
