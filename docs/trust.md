@@ -64,6 +64,13 @@ Only regular files inside the harness are read:
 - **Anything a covered script reaches outside its own folder.** A script that sources `../lib/common.sh`, or runs another script elsewhere, is covered for its own folder only.
 - **Tools found on `PATH`.** A command such as `gofmt`, `golangci-lint` or `go` has its command string covered, not the binary.
 - **What a skipped link points at**, as above. A skipped script is not silently accepted: it blocks the run (see [Links and other files](#links-and-other-files)).
+- **Instructions, skills, agents, rules and commands.** A change to any of them, including one `ynh update` brings, leaves the digest as it was and asks nothing. Focus prompts are the exception: the `launch_focus` prompt and the focus prompts `delegates_to` entries select are covered, because a prompt a session starts with steers the model as a command does.
+- **`env_passthrough`.** Widening the list of your environment variables that a worker and MCP expansion receive does not change the digest. `ynm client install ynh` writes this list into a harness.
+- **The vendor.** `default_vendor` and `-v` are not in the digest, so one acceptance holds on every vendor, though what it unlocks differs by vendor ([What follows trust](#what-follows-trust)).
+
+The digest itself is SHA-256 cut to its first 64 bits, written as `sha256:` and 16 hex characters (`executablesDigest` in `cmd/ynh/trust.go`).
+
+These four are known gaps, not settled policy: which fields the digest should cover, and its length, are the design question of [ynh #1007](https://github.com/eyelock/ynh/issues/1007) (digest scheme 4). A new scheme would make every accepted harness need accepting again, as [When the scheme changes](#when-the-scheme-changes) says.
 
 The digest is a review aid, not a sandbox: it tells you when what you reviewed has moved, and the list above is what it cannot tell you.
 
@@ -172,11 +179,28 @@ Some approvals let a run act without asking you. ynh gives them only to a harnes
 
 | What | A trusted harness | A folder run, or an installed harness you have not accepted |
 |---|---|---|
-| MCP tools of the harness's own servers on a one-shot run or an `ynh agent run` worker (Codex's `default_tools_approval_mode` for each server) | pre-approved | not pre-approved; the vendor asks as it always did. When there are servers to approve, ynh says so once on stderr |
+| MCP tools of the harness's own servers on a one-shot Codex run or an `ynh agent run --backend codex` worker (`default_tools_approval_mode="approve"` for each server) | pre-approved | not pre-approved; Codex stops at its approval policy as it always did. When there are servers to approve, ynh says so once on stderr |
 | A one-shot Copilot run, which approves every tool (`--allow-all-tools`) | runs | refused before launch, exit 1 |
 | `ynh agent run --auto-approve` with a `--harness` | runs | refused, exit 1, error code `untrusted` |
 
+MCP pre-approval is Codex's only. On Claude Code, trust adds no MCP allow rule to a harness you run directly: the rule `ynh run` adds follows whether the session is an A2A delegate's, not trust ([MCP Servers](mcp.md#claude-code-format), `cmd/ynh/parent_mcp.go`).
+
 An installed harness you have not accepted is refused by the gate before any of this is reached, so in practice the right-hand column is the folder run. Copilot has no narrower grant than "every tool", so ynh refuses the run rather than approve it. A run with no `--harness` runs no harness commands, so `--auto-approve` there is your own grant. See [MCP Servers](mcp.md), [Agent Loop](agent.md) and [Vendors](vendors.md).
+
+### By vendor
+
+What an accepted harness gets that a folder run does not, by the vendor it runs on. The rows marked "every vendor" apply on each:
+
+| Vendor | What an accepted harness gets |
+|---|---|
+| Claude Code | nothing beyond every vendor's. A one-shot run gets no MCP allow rule; allow the tools yourself (`-- --allowedTools=mcp__plugin_<harness>_<server>`) or in your Claude settings. A delegate's one-shot session gets the rule because it is a delegate's: the delegate gate has already refused one that declares commands and is not accepted ([MCP Servers](mcp.md#claude-code-format)) |
+| Codex | MCP tools of the harness's own servers approved on a one-shot run and on every `ynh agent run --backend codex` turn, unless `mcp_manual_approval` is set; its hooks trusted ([Codex hook trust](hooks.md#codex-hook-trust)) |
+| Copilot CLI | a one-shot run, which passes `--allow-all-tools` and so approves every tool; a folder run is refused it |
+| Cursor | `--trust`, so Cursor's Workspace Trust does not prompt. ynh approves no MCP tools on Cursor |
+| OpenCode | nothing beyond every vendor's. ynh approves no MCP tools on OpenCode, which needed no allow rule for `ynh-delegates` either ([Allow rules for the tools](delegates-reference.md#allow-rules-for-the-tools)) |
+| every vendor | the harness's requested `workspace` folders, granted when no allow-list is set ([Workspace Folders](workspace.md)); `ynh agent run --auto-approve` with `--harness` |
+
+Codex's hook trust, Cursor's `--trust` and the workspace grant ask that the record is accepted and current; MCP pre-approval, Copilot's one-shot and `--auto-approve` ask that the harness passed the gate as trusted, which a harness with nothing to accept also does. Because the vendor is not in the digest, an acceptance given while running on Claude Code also allows a one-shot Copilot run later.
 
 A one-shot Copilot run of a folder harness, and `--auto-approve` on one, as ynh prints them:
 
@@ -208,7 +232,7 @@ Review them: ynh trust show local/acme
 Then accept:  ynh trust accept local/acme
 ```
 
-An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one. `--from <source>`, which builds from a Git URL or a local path rather than an installed harness, is not checked and bakes no record and no label. On a base image whose ynh has the gate, such an image of a harness with hooks, MCP servers or sensors refuses at start, because it carries no record; a harness with nothing to accept runs. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
+An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one. `--from <source>`, which builds from a Git URL or a local path rather than an installed harness, is not checked and bakes no record and no label. On a base image whose ynh has the gate, such an image of a harness with hooks, MCP servers or sensors refuses at start, because it carries no record; a harness with nothing to accept runs. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review. That is the policy as built (`imageTrustRecord` and `writeImageTrust` in `cmd/ynh/image_trust.go`): the build host's acceptance is the only one. The host that runs the image is never asked, and its own `$YNH_HOME/trust.json` is not read, because the image has a home of its own. Inside the image the gate still computes the digest again at every run, so a harness changed after the build (by a layer on top) no longer matches the baked record and is refused (from code; not run). Who should review an image on the running side, if anyone (a registry policy, a signature), is not decided.
 
 ## Related
 
