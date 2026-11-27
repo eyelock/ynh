@@ -687,10 +687,10 @@ func includePinState(ref string) string {
 // settingText is the info line's part for one resolved setting: "  model=x
 // (entry)", or "  model=(vendor default)", or nothing when it is unknown.
 func settingText(name, value, from string) string {
-	switch {
-	case from == "":
+	switch from {
+	case "":
 		return ""
-	case from == delegation.FromVendorDefault:
+	case delegation.FromVendorDefault:
 		return "  " + name + "=(vendor default)"
 	}
 	return "  " + name + "=" + value + " (" + strings.ReplaceAll(from, "_", " ") + ")"
