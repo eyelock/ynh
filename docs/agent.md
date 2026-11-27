@@ -169,6 +169,12 @@ It does so only for a harness that passed the trust gate as trusted: an
 installed harness whose commands you accepted (`ynh trust accept`). A harness
 run from a folder, or one you have not accepted, gets no approval.
 
+**Claude Code and MCP approval.** A `claude` worker of a trusted harness has
+the tools of the harness's own MCP servers allowed (`--allowedTools=mcp__plugin_<harness>_<server>`),
+the same rule as a one-shot `ynh run` and as Codex above, and
+`mcp_manual_approval` turns it off. It allows nothing else: not your own
+servers, and not `ynh-delegates`.
+
 ### Delegates
 
 A worker carries the harness's delegates (`delegates_to`) as subagents, as

@@ -816,6 +816,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	sess, err := wb.Start(ctx, StartOptions{
 		TrustedHooks:   trustedHooks,
 		TrustedHarness: harnessTrusted,
+		HarnessName:    loadedHarnessName(harnessObj),
 		WorktreeDir:    opts.WorktreeDir,
 		Workspace:      workspaceDirs,
 		ConfigPath:     configPath,
@@ -2103,4 +2104,12 @@ func baseCommit(dir string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// loadedHarnessName is the loaded harness's name, or "" when none was loaded.
+func loadedHarnessName(h *harness.Harness) string {
+	if h == nil {
+		return ""
+	}
+	return h.Name
 }

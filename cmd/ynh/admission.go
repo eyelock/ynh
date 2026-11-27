@@ -174,10 +174,10 @@ var grantRows = []struct {
 
 // agentAdmission is what `ynh agent run` hands the loop: the refusal, or the
 // grants of a one-shot run on the backend the loop resolved.
-func agentAdmission(adm Admission, backend string) agent.Admission {
+func agentAdmission(adm Admission, backend string, manualApproval bool) agent.Admission {
 	if err := adm.err(); err != nil {
 		return agent.Admission{Refusal: err}
 	}
-	g := grantsFor(adm, backend, true, false)
+	g := grantsFor(adm, backend, true, manualApproval)
 	return agent.Admission{MCPApprove: g.MCPApprove, AutoApprove: g.AutoApprove}
 }

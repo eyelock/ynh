@@ -240,18 +240,24 @@ func TestDecideTrustPurposeChangesOnlyTheWords(t *testing.T) {
 	}
 }
 
-// ynw-3fsvf: the grants follow the backend the loop resolved, so a resumed
-// Codex worker of a trusted harness keeps its MCP approval even though the
-// CLI was given no --backend.
+// ynw-3fsvf, ynh #1006 T7: ynh agent run decides the grants for the backend
+// the loop resolved, with the same rule as a one-shot ynh run on every vendor:
+// a trusted harness's own MCP tools are approved unless it sets
+// mcp_manual_approval.
 func TestAgentAdmissionFollowsResolvedBackend(t *testing.T) {
 	trusted := Admission{minted: true, Trusted: true}
-	if a := agentAdmission(trusted, "codex"); a.Refusal != nil || !a.MCPApprove || !a.AutoApprove {
-		t.Errorf("codex: %+v, want MCP and auto-approve granted", a)
-	}
-	if a := agentAdmission(trusted, "cursor"); a.MCPApprove {
-		t.Errorf("cursor: MCP approved: %+v", a)
-	}
-	if a := agentAdmission(Admission{}, "codex"); a.Refusal == nil || a.MCPApprove {
-		t.Errorf("zero Admission: %+v, want a refusal", a)
+	for _, v := range grantVendors {
+		t.Run(v.name, func(t *testing.T) {
+			want := v.name == "claude" || v.name == "codex" || v.name == "copilot"
+			if a := agentAdmission(trusted, v.name, false); a.Refusal != nil || a.MCPApprove != want || !a.AutoApprove {
+				t.Errorf("trusted: %+v, want MCPApprove %v", a, want)
+			}
+			if a := agentAdmission(trusted, v.name, true); a.MCPApprove {
+				t.Errorf("mcp_manual_approval: MCP approved: %+v", a)
+			}
+			if a := agentAdmission(Admission{}, v.name, false); a.Refusal == nil || a.MCPApprove {
+				t.Errorf("zero Admission: %+v, want a refusal", a)
+			}
+		})
 	}
 }

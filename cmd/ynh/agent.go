@@ -330,7 +330,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	// not the checkpoint's on --resume.
 	opts.Admit = func(h *harness.Harness, id, backend string) agent.Admission {
 		adm = decideTrust(id, h, purpose, stderr)
-		return agentAdmission(adm, backend)
+		return agentAdmission(adm, backend, h.MCPManualApproval)
 	}
 
 	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {

@@ -125,3 +125,40 @@ func TestBuildClaudeStreamArgs_Isolation(t *testing.T) {
 		})
 	}
 }
+
+// A worker of a trusted harness has its own MCP servers' tools allowed, as a
+// one-shot ynh run does (ynh #1006 T7), and nothing else: not ynh's own servers.
+func TestBuildClaudeStreamArgs_OwnMCPAllowRule(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcp := `{"mcpServers":{"probe":{},"ynh-delegates":{},"ynh-parent":{}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".claude", ".mcp.json"), []byte(mcp), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	has := func(args []string, want string) bool {
+		for _, a := range args {
+			if a == want {
+				return true
+			}
+		}
+		return false
+	}
+	const rule = "--allowedTools=mcp__plugin_seat_probe"
+	base := StartOptions{ConfigPath: dir, HarnessName: "seat"}
+
+	trusted := base
+	trusted.TrustedHarness = true
+	if !has(buildClaudeStreamArgs(trusted), rule) {
+		t.Errorf("trusted harness: no %s in %v", rule, buildClaudeStreamArgs(trusted))
+	}
+	if has(buildClaudeStreamArgs(base), rule) {
+		t.Error("an untrusted harness had its MCP tools allowed")
+	}
+	manual := trusted
+	manual.MCPManualApproval = true
+	if has(buildClaudeStreamArgs(manual), rule) {
+		t.Error("mcp_manual_approval did not withhold the rule")
+	}
+}
