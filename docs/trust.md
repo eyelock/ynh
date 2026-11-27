@@ -185,9 +185,9 @@ Pin it to a 40-character commit SHA and try again. Acceptance is a step for a pe
 | Route | What it accepts | When the pin is checked |
 |---|---|---|
 | `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | the ref before anything is cloned; the native delegate entries and the includes once fetched, before anything is written |
-| `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
-| `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref and its remote includes' refs, after the includes are fetched |
-| `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
+| `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written: its remote includes and its native delegate entries from another repository |
+| `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref, its remote includes' refs and its native delegate entries' refs, after the includes are fetched |
+| `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches: the remote includes and the native delegate entries (the delegates are refused before the includes are warmed) |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
 | `ynh include add <harness> <url> --trust` (with `--replace` too) and `ynh include update <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then |
 
