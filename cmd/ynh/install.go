@@ -19,6 +19,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/sources"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdInstall(args []string) error {
@@ -554,7 +555,8 @@ func repointLauncher(bareName string, survivors []string) string {
 		}
 	}
 	if err := generateLauncher(bareName, survivors[0]); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not regenerate launcher for %s: %v\n", survivors[0], err)
+		// No Fix: the cause is the filesystem error, and no ynh command regenerates a launcher alone.
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not regenerate launcher for %s: %v", survivors[0], err)})
 		return ""
 	}
 	return fmt.Sprintf("Launcher repointed to surviving install %s", survivors[0])

@@ -7,6 +7,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/eyelock/ynh/internal/presence"
 )
 
 func envOf(m map[string]string) func(string) string {
@@ -138,5 +140,36 @@ func stopAll(t *testing.T) {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// The cap counts every live session under the home that ynh ps lists, not only
+// delegations: a delegation is refused while the home holds that many live
+// sessions of any launch mode, and the refusal points at ynh ps, ynh stop and
+// ynh reap.
+func TestGuardCapCountsEveryLiveSession(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	var ends []func()
+	for _, id := range []string{"a", "b"} {
+		s, err := presence.Start(presence.Record{SessionID: id, Harness: "local--h", Vendor: "claude", Cwd: "/x", Mode: presence.ModeInteractive})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ends = append(ends, s.End)
+	}
+	defer func() {
+		for _, e := range ends {
+			e()
+		}
+	}()
+	if n := LiveSessions(); n != 2 {
+		t.Fatalf("LiveSessions = %d, want 2", n)
+	}
+	_, err := Guard("local/a", "local/b", nil, envOf(map[string]string{MaxLiveEnv: "2"}))
+	if err == nil || !strings.Contains(err.Error(), "already live") || !strings.Contains(err.Error(), "ynh stop") || !strings.Contains(err.Error(), "Fix:") {
+		t.Fatalf("a full home must refuse with a Fix, got %v", err)
+	}
+	if _, err := Guard("local/a", "local/b", nil, envOf(map[string]string{MaxLiveEnv: "3"})); err != nil {
+		t.Errorf("under the cap: %v", err)
 	}
 }

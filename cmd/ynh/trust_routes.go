@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -26,17 +27,7 @@ const (
 // isFullSHA reports whether s is a full commit SHA, 40 hexadecimal digits. A
 // tag, a branch and a short SHA are not: they can name another commit
 // tomorrow, so they do not pin what runs (decision 4a).
-func isFullSHA(s string) bool {
-	if len(s) != 40 {
-		return false
-	}
-	for _, c := range s {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
-			return false
-		}
-	}
-	return true
-}
+func isFullSHA(s string) bool { return resolver.IsFullSHA(s) }
 
 // notPinned says why ref is not a full-SHA pin, "" when it is one.
 func notPinned(ref string) string {
@@ -120,10 +111,22 @@ func unpinnedForAcceptance(p *harness.Harness, remote []remoteInclude) []string 
 // refuseUnpinned is the refusal of --trust when something that runs is not
 // pinned: it names each and the way out.
 func refuseUnpinned(what, flag string, reasons []string) error {
-	return fmt.Errorf("%s refuses to accept %s: it is not pinned to a full commit SHA, so what runs could change under the acceptance:\n  %s\n"+
-		"Pin it to a 40-character commit SHA and try again. Acceptance is a step for a person who has reviewed what runs, and it covers only a commit that cannot move",
-		flag, what, strings.Join(reasons, "\n  "))
+	return refuseUnpinnedWith(what, flag, reasons,
+		"Pin it to a 40-character commit SHA and try again. Acceptance is a step for a person who has reviewed what runs, and it covers only a commit that cannot move")
 }
+
+// refuseUnpinnedWith is refuseUnpinned with the closing line named by the
+// caller.
+func refuseUnpinnedWith(what, flag string, reasons []string, closing string) error {
+	return fmt.Errorf("%s refuses to accept %s: it is not pinned to a full commit SHA, so what runs could change under the acceptance:\n  %s\n%s",
+		flag, what, strings.Join(reasons, "\n  "), closing)
+}
+
+// uncachedUnpinnedClosing ends the refusal of an uncached include that is not
+// pinned. `ynh trust accept <folder>` reads includes from the cache and this
+// one is not in it, so it would only point back at --trust (ynh #993).
+const uncachedUnpinnedClosing = "Pin it to a 40-character commit SHA and run it again with --trust. " +
+	"'ynh trust accept' cannot help: it reads an include from the cache, and this one is not in it"
 
 // checkInstallTrust refuses `ynh install --trust` before anything is written
 // when the install is not pinned: a git or registry install needs --ref at a
@@ -222,7 +225,10 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 	if err := refuseUnpinnedDelegates(p.Name, "--trust", p); err != nil {
 		return err
 	}
-	remote, err := remoteIncludes(p)
+	if err := warmFolderIncludes(p); err != nil {
+		return err
+	}
+	remote, err := remoteIncludesFor(p, folderFetchFix)
 	if err != nil {
 		return err
 	}
@@ -249,6 +255,40 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 		_, _ = fmt.Fprint(stdout, listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
 	}
 	return saveTrustStore(store)
+}
+
+// warmFolderIncludes fetches the remote includes of a folder run that are
+// missing from the cache, so the gate can read what they execute (ynh #993).
+// Only an include pinned to a full 40-character SHA is fetched: that makes the
+// fetch deterministic, and --trust is the operator's explicit act. An uncached
+// include that is not pinned refuses the run, and the ones named by the folder
+// itself are judged before anything is fetched. A cached include is not
+// fetched again, so a second run reaches no network.
+func warmFolderIncludes(p *harness.Harness) error {
+	var bad []string
+	for _, inc := range p.Includes {
+		if inc.IsLocal() || inc.Git == "" || resolver.IsOwnRepoSource(inc.GitSource, p.Dir) {
+			continue
+		}
+		if _, ok := resolver.LookupCache(resolver.GitSourceURL(inc.Git, p.Dir), inc.Ref); ok {
+			continue
+		}
+		if why := notPinned(inc.Ref); why != "" {
+			bad = append(bad, fmt.Sprintf("%s: %s", inc.Git, why))
+		}
+	}
+	if len(bad) > 0 {
+		return refuseUnpinnedWith(p.Name, "--trust", bad, uncachedUnpinnedClosing)
+	}
+	err := resolver.WarmPinnedIncludes(p)
+	var unpinned *resolver.UnpinnedUncachedError
+	if errors.As(err, &unpinned) {
+		return refuseUnpinnedWith(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))}, uncachedUnpinnedClosing)
+	}
+	if err != nil {
+		return fmt.Errorf("--trust could not fetch the includes of %s: %w", p.Name, err)
+	}
+	return nil
 }
 
 // acceptFolderRunFor loads the folder harness named by ref and accepts it, for

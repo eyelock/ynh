@@ -226,7 +226,10 @@ func cmdRun(args []string) (runErr error) {
 
 	// A vendor that cannot take a first message starts bare, and says so.
 	if launch.Bare && !launchFocusPromptSupported(adapter) {
-		fmt.Fprintf(os.Stderr, "warning: launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only\n", launch.Name, adapter.Name())
+		warn.Print(os.Stderr, warn.Warning{
+			Message: fmt.Sprintf("launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only", launch.Name, adapter.Name()),
+			Fix:     "run with a vendor that takes a first message, or remove launch_focus from the harness",
+		})
 		ra.Prompt = ""
 	}
 
@@ -547,7 +550,10 @@ func cmdRun(args []string) (runErr error) {
 					return err
 				}
 				if pi.Size > vendor.CodexProjectDocMaxBytes {
-					fmt.Fprintf(os.Stderr, "warning: the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off\n", pi.Size, vendor.CodexProjectDocMaxBytes)
+					warn.Print(os.Stderr, warn.Warning{
+						Message: fmt.Sprintf("the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off", pi.Size, vendor.CodexProjectDocMaxBytes),
+						Fix:     "shorten the project's AGENTS.md, or raise project_doc_max_bytes in Codex's config.toml",
+					})
 				}
 			}
 		}
@@ -1150,11 +1156,12 @@ func updateLegacyRunAlias(bareName, runDirName string) {
 	// pre-re-key assembly — the old flow clobbered it via AssembleTo on
 	// every run anyway, so replacing it with the alias loses nothing.
 	if err := os.RemoveAll(alias); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not refresh legacy run alias %s: %v\n", alias, err)
+		// No Fix: the alias is a legacy convenience, and the filesystem error is the cause.
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not refresh legacy run alias %s: %v", alias, err)})
 		return
 	}
 	if err := os.Symlink(runDirName, alias); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not create legacy run alias %s: %v\n", alias, err)
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not create legacy run alias %s: %v", alias, err)})
 	}
 }
 

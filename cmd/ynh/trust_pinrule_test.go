@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -183,5 +184,28 @@ func TestRunTrust_NestedFloatingIncludeIsRefused(t *testing.T) {
 	}
 	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
 		t.Errorf("a refused --trust recorded %v", store.Harnesses)
+	}
+}
+
+// image --from --trust judges a floating native delegate entry like every
+// other acceptance route, and bakes nothing.
+func TestImageFromTrust_RefusesFloatingNativeDelegate(t *testing.T) {
+	fakeHome(t)
+	dir := t.TempDir()
+	body := `{"name":"imgnd","version":"0.1.0","default_vendor":"claude","hooks":{"on_stop":[{"command":"echo own"}]},` +
+		`"delegates_to":[{"git":"github.com/example/reviewer","ref":"main","transport":"native"}]}`
+	if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	p, err := harness.LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := imageFromTrustRecord(p, &config.Config{}, imageArgs{name: "imgnd", from: dir, trust: true}, true, "")
+	if err == nil || !strings.Contains(err.Error(), "native delegate github.com/example/reviewer") {
+		t.Fatalf("err = %v, rec = %v, want the native delegate named", err, rec)
+	}
+	if rec != nil {
+		t.Errorf("a refused build returned a record: %v", rec)
 	}
 }

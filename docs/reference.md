@@ -113,11 +113,13 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh backend add <name> <vendor>` | `--base-url` (required), `--auth-token`, `--type`, `--env KEY=VALUE` (repeatable) |
 | `ynh backend list` | `--format <text\|json>` |
 | `ynh backend remove <name> [<vendor>]` | |
-| `ynh image <name>` (refuses a harness that is not accepted and bakes the accepted record; see [Trust](trust.md#ynh-image)) | `--tag`, `--base`, `--from`, `--path`, `--entrypoint <run\|agent>`, `--dry-run` |
+| `ynh image <name>` (refuses a harness that is not accepted and bakes the accepted record; see [Trust](trust.md#ynh-image)) | `--tag`, `--base`, `--from`, `--ref`, `--path`, `--trust`, `--entrypoint <run\|agent>`, `--dry-run` |
 | `ynh paths` | `--format <text\|json>` |
 | `ynh telemetry registry` | `--format <text\|json>`. See [Telemetry: The registry](telemetry.md#the-registry) |
 | `ynh status` | |
 | `ynh ps` | `--all`, `--format <text\|json>` or `--json`. Lists live and orphaned sessions; see [Session presence](presence.md) |
+| `ynh stop` | `<session>` (id or `ynh:<id>`) or `--owner <session>`. Stops a live session, or every live session that session started; see [Stopping sessions](presence.md#stopping-sessions) |
+| `ynh reap` | `--history`, `--dry-run`. Stops orphaned sessions (delegates whose owner is gone), and with `--history` deletes ended and dead records; see [Stopping sessions](presence.md#stopping-sessions) |
 | `ynh prune` | |
 | `ynh migrate` | `--dry-run`, `--skip-broken`, `--format <text\|json>` (`--json` is the older spelling). Moves the ynh home to the current schema; most commands do this on first use |
 | `ynh quarantine <list\|restore\|drop>` | `list`, `restore <name>`, `drop <name>`; `--format <text\|json>` on `list`. Manages harnesses quarantined by a failed migration |
