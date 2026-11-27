@@ -358,6 +358,11 @@ func generateDockerfile(data imageTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
+// imageContextHook, when set, is given the build context just before a dry run
+// prints its Dockerfile or a real build writes it, while the context still
+// exists. Tests read what cmdImageTo baked into it; nothing else sets it.
+var imageContextHook func(dir string)
+
 // cmdImage builds a Docker image with a harness baked in.
 func cmdImage(args []string) error {
 	return cmdImageTo(args, os.Stdout, os.Stderr)
@@ -619,6 +624,10 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// labels only, so this neither pulls nor runs anything, in a dry run too.
 	if w, ok := baseVersionWarning(ia.base, config.Version); ok {
 		warn.Print(stderr, w)
+	}
+
+	if imageContextHook != nil {
+		imageContextHook(tmpDir)
 	}
 
 	if ia.dryRun {
