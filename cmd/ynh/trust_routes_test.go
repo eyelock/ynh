@@ -88,6 +88,59 @@ func TestInstallTrust_AtAFullSHA(t *testing.T) {
 	}
 }
 
+// install --ref <full-sha> records the ref (ynh #1038): the install record
+// holds the SHA as its ref, so update --trust and include add/update --trust
+// find it pinned, while an install at a branch is still refused by them.
+func TestInstallRef_RecordedSoTrustRoutesPassTheFullSHARule(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	if out, err := installOut(t, "file://"+src, "--ref", sha, "--trust"); err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	p, err := harness.LoadByID("local/hh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.InstalledFrom == nil || p.InstalledFrom.Ref != sha {
+		t.Fatalf("recorded ref = %+v, want %s", p.InstalledFrom, sha)
+	}
+	if bad, err := pinProblems(p); err != nil || len(bad) > 0 {
+		t.Fatalf("pinProblems = %v, %v", bad, err)
+	}
+	if err := cmdUpdate([]string{"local/hh", "--trust"}); err != nil {
+		t.Fatalf("update --trust: %v", err)
+	}
+	// An update at a SHA keeps the SHA: it must not slide onto the default branch.
+	p, _ = harness.LoadByID("local/hh")
+	if p.InstalledFrom.Ref != sha {
+		t.Errorf("ref after update = %q, want %s", p.InstalledFrom.Ref, sha)
+	}
+	dir := harness.InstalledDirByID("local/hh")
+	writeIncludedHarness(t, dir, "extra", hookFields("echo extra"))
+	var out bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", "local/hh", filepath.Join(dir, "extra"), "--hooks", "--trust"}, &out); err != nil {
+		t.Fatalf("include add --trust: %v\n%s", err, out.String())
+	}
+	if err := cmdIncludeTo([]string{"update", "local/hh", filepath.Join(dir, "extra"), "--ref", sha, "--trust"}, &out); err != nil && strings.Contains(err.Error(), "no ref") {
+		t.Fatalf("include update --trust refused as unpinned: %v", err)
+	}
+}
+
+// The same install at a branch is still refused by update --trust.
+func TestInstallRef_BranchStillRefusedByUpdateTrust(t *testing.T) {
+	fakeHome(t)
+	src, _ := remoteSource(t, "")
+	const branch = "trunk"
+	gitIn(t, src, "branch", "-M", branch)
+	if out, err := installOut(t, "file://"+src, "--ref", branch); err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	err := cmdUpdate([]string{"local/hh", "--trust"})
+	if err == nil || !strings.Contains(err.Error(), "tag or branch") {
+		t.Fatalf("update --trust at a branch: %v", err)
+	}
+}
+
 // A tag, a branch, a short SHA or no ref makes --trust refuse with the reason,
 // and nothing is installed.
 func TestInstallTrust_RefusesWhatIsNotPinned(t *testing.T) {
