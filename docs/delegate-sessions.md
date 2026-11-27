@@ -68,7 +68,7 @@ parent vendor CLI ────┤                (ynh delegate-mcp) ├── A2
 
 - `ynh run` of a parent opens one localhost A2A endpoint for each `a2a` delegate, and puts each
   endpoint's card URL and token in the parent's environment and in the `ynh-delegates` MCP server's entry.
-- The delegate's own session starts on its endpoint's first message, never before.
+- The delegate's task is sent on its endpoint's first message, never before: a session of the delegate starts, or a live one that accepts tasks takes it ([Delegating to a live session](#delegating-to-a-live-session)).
 - The parent never holds the delegate's tools. It sees the delegate's state, its questions and its result.
 - Everything about a delegation is written to a record on disk, so either route, or a parent that
   restarted, reads the same state.
@@ -135,7 +135,7 @@ checks and the Codex sandbox cost are in the [reference](delegates-reference.md#
 
 ## Delegating to a live session
 
-`delegate_to_<name>` used to start a new headless session of the delegate every time, even when you had that harness open in a window. Now the parent's endpoint first asks presence ([Session presence](presence.md)) whether an **interactive session of the delegate's installed harness is live and accepts tasks** (`accepts_tasks`), in any folder of the same `YNH_HOME`. A seat is the same seat wherever it sits.
+`delegate_to_<name>` first asks presence ([Session presence](presence.md)) whether an **interactive session of the delegate's installed harness is live and accepts tasks** (`accepts_tasks`), in any folder of the same `YNH_HOME`. A seat is the same seat wherever it sits.
 
 - **A live session accepts:** the task goes into that harness's **mailbox** and nothing is started. The result says `route: live`, the `session` and its `cwd`.
 - **None does:** a headless session starts as before, `route: headless`.

@@ -58,11 +58,13 @@ const inboxSessionEnv = "YNH_SESSION_ID"
 var inboxVendors = map[string]bool{"claude": true, "codex": true, "copilot": true}
 
 // inboxSession reports whether an interactive session of this vendor and
-// harness can take tasks: the vendor is supported and the harness has not
-// asked for every MCP tool to be approved by hand (mcp_manual_approval), which
-// would put the allow rule out of reach.
-func inboxSession(vendorName string, interactive, manualApproval bool) bool {
-	return interactive && !manualApproval && inboxVendors[vendorName]
+// harness can take tasks: the harness is installed (a delegation names an
+// installed harness, so a run from a folder or an inline manifest has no
+// mailbox anything can address), the vendor is supported and the harness has
+// not asked for every MCP tool to be approved by hand (mcp_manual_approval),
+// which would put the allow rule out of reach.
+func inboxSession(vendorName string, interactive, installed, manualApproval bool) bool {
+	return interactive && installed && !manualApproval && inboxVendors[vendorName]
 }
 
 // inboxMCPEntry is the server `ynh run` adds to an interactive session's MCP

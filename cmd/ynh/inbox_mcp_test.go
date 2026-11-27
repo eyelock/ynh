@@ -14,16 +14,18 @@ import (
 
 func TestInboxSessionOnlyWhereTheAllowRuleIsHonoured(t *testing.T) {
 	for _, tc := range []struct {
-		vendor              string
-		interactive, manual bool
-		want                bool
+		vendor                         string
+		interactive, installed, manual bool
+		want                           bool
 	}{
-		{"claude", true, false, true}, {"codex", true, false, true}, {"copilot", true, false, true},
-		{"opencode", true, false, false}, {"cursor", true, false, false},
-		{"claude", false, false, false}, {"claude", true, true, false},
+		{"claude", true, true, false, true}, {"codex", true, true, false, true}, {"copilot", true, true, false, true},
+		{"opencode", true, true, false, false}, {"cursor", true, true, false, false},
+		{"claude", false, true, false, false}, {"claude", true, true, true, false},
+		// A folder or inline run has no installed id, so no delegation can reach it.
+		{"claude", true, false, false, false}, {"codex", true, false, false, false},
 	} {
-		if got := inboxSession(tc.vendor, tc.interactive, tc.manual); got != tc.want {
-			t.Errorf("inboxSession(%s, interactive %v, manual %v) = %v, want %v", tc.vendor, tc.interactive, tc.manual, got, tc.want)
+		if got := inboxSession(tc.vendor, tc.interactive, tc.installed, tc.manual); got != tc.want {
+			t.Errorf("inboxSession(%s, interactive %v, installed %v, manual %v) = %v, want %v", tc.vendor, tc.interactive, tc.installed, tc.manual, got, tc.want)
 		}
 	}
 }

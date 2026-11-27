@@ -430,7 +430,7 @@ func (s *Server) tools() []any {
 	}
 	for _, d := range names {
 		out = append(out, tool(ToolName(d.Name),
-			fmt.Sprintf("Start the delegate %q as its own session on a task. With no wait it returns at once with a task_id (state working); with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
+			fmt.Sprintf("Give the delegate %q a task. If a live interactive session of it is open and accepts tasks, the task is queued in front of that session (state submitted, route live) and nothing starts; otherwise a session of its own starts (state working, route headless); on_live chooses. With no wait it returns at once with a task_id; with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
 			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp,
 				"on_live": map[string]any{"type": "string", "enum": []string{"queue", "headless"}, "description": "when a live interactive session of the delegate is open and accepts tasks: queue (the default) puts the task in front of that session and starts nothing, headless starts a session of its own. The result's route, session and cwd say which one got it"}},
 			[]string{"task"}))
@@ -441,7 +441,7 @@ func (s *Server) tools() []any {
 		map[string]any{"all": map[string]any{"type": "boolean", "description": "include ended and dead sessions"}}, nil)
 	ps["outputSchema"] = map[string]any{"type": "object", "properties": map[string]any{"sessions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}}, "required": []string{"sessions"}}
 	out = append(out, list, ps,
-		tool("delegate_status", "The state of a delegation: working, input-required (message holds its question), completed, failed or canceled.",
+		tool("delegate_status", "The state of a delegation: submitted (queued at a live session, not yet taken), working, input-required (message holds its question), completed, failed, canceled or rejected (the live session declined it).",
 			map[string]any{"task_id": handleProp, "wait": waitProp}, []string{"task_id"}),
 		tool("delegate_result", "A delegation's result once it has completed; for one still going, its state.",
 			map[string]any{"task_id": handleProp, "wait": waitProp}, []string{"task_id"}),

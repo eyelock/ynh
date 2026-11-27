@@ -493,10 +493,12 @@ func cmdRun(args []string) (runErr error) {
 				servers[parentmcp.ServerName] = *pentry
 			}
 		}
-		// An interactive session gets ynh's inbox server, so a task another
-		// session delegates to this harness can be taken here, on the vendors
-		// the spike showed honour its launch-time allow rule.
-		if action == "" && inboxSession(adapter.Name(), !oneShot && !delegationNamesHarness(runDirName), p.MCPManualApproval) {
+		// An interactive session of an installed harness gets ynh's inbox
+		// server, so a task another session delegates to this harness can be
+		// taken here, on the vendors the spike showed honour its launch-time
+		// allow rule. A folder or inline run has no installed id to address, so
+		// it takes no tasks and records accepts_tasks: false.
+		if action == "" && inboxSession(adapter.Name(), !oneShot && !delegationNamesHarness(runDirName), harnessID != "", p.MCPManualApproval) {
 			ientry, iErr := inboxMCPEntry(runDirName)
 			if iErr != nil {
 				return iErr
