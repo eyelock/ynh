@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/backend"
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -22,6 +24,9 @@ type resolvedDelegate struct {
 	// launch. At most one is set.
 	Profile string
 	Focus   string
+	// Entry is the delegates_to entry itself, which carries the parent's
+	// per-entry model and effort.
+	Entry harness.Delegate
 }
 
 // delegateSource is where a delegates_to entry points, in a form comparable
@@ -163,7 +168,7 @@ func resolveDelegate(parent *harness.Harness, d harness.Delegate, store trustSto
 		st := trustStatusFor(id, h, store, nil)
 		switch st.State {
 		case trustAccepted, trustNoCommands:
-			return &resolvedDelegate{ID: id, Harness: h, Profile: d.Profile, Focus: d.Focus}, nil
+			return &resolvedDelegate{ID: id, Harness: h, Profile: d.Profile, Focus: d.Focus, Entry: d}, nil
 		case trustUnavailable:
 			if refusal == nil {
 				refusal = fmt.Errorf("delegate %s of %s is installed as %s but cannot be read in full: %s\n  Run: ynh update %s",
@@ -204,4 +209,23 @@ func installHint(d harness.Delegate, src delegateSource) string {
 		}
 	}
 	return cmd
+}
+
+// delegateVendor is the vendor name the delegate h runs on: the vendor
+// `ynh run` of it resolves (YNH_VENDOR, the harness's default_vendor, the
+// global config), without a backend's redirection.
+func delegateVendor(h *harness.Harness) (string, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", fmt.Errorf("loading config: %w", err)
+	}
+	spec, err := resolveVendor("", h, cfg)
+	if err != nil {
+		return "", err
+	}
+	vs, err := backend.ParseSpec(spec)
+	if err != nil {
+		return "", err
+	}
+	return vs.Vendor, nil
 }

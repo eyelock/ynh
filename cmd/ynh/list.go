@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
@@ -157,6 +158,16 @@ type listDelegate struct {
 	// default, or the built-in default.
 	Transport     string `json:"transport"`
 	TransportFrom string `json:"transport_from"`
+	// Model and Effort are the model and reasoning effort the delegate opens
+	// with when the call names none, and ModelFrom and EffortFrom where each
+	// comes from (delegation.FromEntry, FromDelegateDefault or
+	// FromVendorDefault; a call's own choice is made per call, so is never
+	// here). ynh list knows only the entry's own; ynh info also reads the
+	// delegate harness's default, and says nothing of one it cannot read.
+	Model      string `json:"model,omitempty"`
+	ModelFrom  string `json:"model_from,omitempty"`
+	Effort     string `json:"effort,omitempty"`
+	EffortFrom string `json:"effort_from,omitempty"`
 }
 
 func cmdList(args []string) error {
@@ -599,7 +610,16 @@ func buildDelegates(p *harness.Harness) []listDelegate {
 			Focus:         del.Focus,
 			Transport:     p.TransportOf(del),
 			TransportFrom: p.TransportOrigin(del),
+			Model:         del.Model,
+			Effort:        del.Effort,
 		})
+		last := &result[len(result)-1]
+		if del.Model != "" {
+			last.ModelFrom = delegation.FromEntry
+		}
+		if del.Effort != "" {
+			last.EffortFrom = delegation.FromEntry
+		}
 	}
 	return result
 }

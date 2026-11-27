@@ -36,6 +36,14 @@ type StartOptions struct {
 	Model   string
 	Profile string
 	Focus   string
+	// Effort is an optional reasoning effort (low, medium or high). ModelFrom
+	// and EffortFrom say where Model and Effort came from (Resolve). Vendor is
+	// the delegate's vendor, which the effort is mapped onto: a vendor with no
+	// effort setting refuses the delegation here, before anything starts.
+	Effort     string
+	ModelFrom  string
+	EffortFrom string
+	Vendor     string
 	// Folder is the working folder: the parent's, and the delegate's.
 	Folder string
 	// Supervisor is the command that starts the session process. The record's
@@ -56,6 +64,15 @@ func Start(o StartOptions) (*Record, string, error) {
 	if o.Profile != "" && o.Focus != "" {
 		return nil, "", errors.New("starting a delegation: an entry names a profile or a focus, not both")
 	}
+	if err := CheckModel(o.Model); err != nil {
+		return nil, "", fmt.Errorf("starting a delegation: %w", err)
+	}
+	if err := CheckEffort(o.Effort); err != nil {
+		return nil, "", fmt.Errorf("starting a delegation: %w", err)
+	}
+	if _, err := VendorEffortArgs(o.Vendor, o.Effort); err != nil {
+		return nil, "", fmt.Errorf("starting a delegation: %w", err)
+	}
 	anc, err := Guard(o.Parent, o.Delegate, Chain(os.Getenv), os.Getenv)
 	if err != nil {
 		return nil, "", err
@@ -71,7 +88,7 @@ func Start(o StartOptions) (*Record, string, error) {
 	path := RecordPath(o.Parent, folder, handle)
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
-		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
+		Task: o.Task, Model: o.Model, ModelFrom: o.ModelFrom, Effort: o.Effort, EffortFrom: o.EffortFrom, Vendor: o.Vendor, Profile: o.Profile, Focus: o.Focus, Chain: anc,
 		Log: strings.TrimSuffix(path, ".json") + ".log",
 	}
 	if err := create(path, rec); err != nil {

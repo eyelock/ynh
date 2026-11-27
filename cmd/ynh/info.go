@@ -13,6 +13,7 @@ import (
 	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
@@ -435,7 +436,8 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 	if len(p.DelegatesTo) == 0 {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
-		for _, del := range p.DelegatesTo {
+		delegates := withDelegateDefaults(p, buildDelegates(p))
+		for i, del := range p.DelegatesTo {
 			line := "  " + del.Git
 			if del.Path != "" {
 				line += "  path=" + del.Path
@@ -450,6 +452,7 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 				line += "  focus=" + del.Focus
 			}
 			line += "  transport=" + p.TransportOf(del) + " (" + p.TransportOrigin(del) + ")"
+			line += settingText("model", delegates[i].Model, delegates[i].ModelFrom) + settingText("effort", delegates[i].Effort, delegates[i].EffortFrom)
 			_, _ = fmt.Fprintln(w, line)
 		}
 	}
@@ -635,7 +638,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 		IsPinned:         base.IsPinned,
 		InstalledFrom:    base.InstalledFrom,
 		Includes:         base.Includes,
-		DelegatesTo:      base.DelegatesTo,
+		DelegatesTo:      withDelegateDefaults(p, base.DelegatesTo),
 		Labels:           base.Labels,
 		Manifest:         compacted,
 	}
@@ -679,4 +682,62 @@ func includePinState(ref string) string {
 	default:
 		return "floating"
 	}
+}
+
+// settingText is the info line's part for one resolved setting: "  model=x
+// (entry)", or "  model=(vendor default)", or nothing when it is unknown.
+func settingText(name, value, from string) string {
+	switch {
+	case from == "":
+		return ""
+	case from == delegation.FromVendorDefault:
+		return "  " + name + "=(vendor default)"
+	}
+	return "  " + name + "=" + value + " (" + strings.ReplaceAll(from, "_", " ") + ")"
+}
+
+// withDelegateDefaults fills in, on each delegates_to entry of p, the model
+// and effort the delegate opens with when a call names none: the entry's own
+// (already there), else the delegate harness's default_model and
+// default_effort, else the vendor's. It reads the installed harness the entry
+// points to, or its local folder, and trusts nothing; an entry whose harness
+// cannot be read keeps only what its own entry says.
+func withDelegateDefaults(p *harness.Harness, in []listDelegate) []listDelegate {
+	for i, d := range p.DelegatesTo {
+		if i >= len(in) {
+			break
+		}
+		dh := lookupDelegateHarness(p, d)
+		if dh == nil {
+			continue
+		}
+		m := delegation.Resolve("", d.Model, dh.DefaultModel)
+		e := delegation.Resolve("", d.Effort, dh.DefaultEffort)
+		in[i].Model, in[i].ModelFrom = m.Value, m.From
+		in[i].Effort, in[i].EffortFrom = e.Value, e.From
+	}
+	return in
+}
+
+// lookupDelegateHarness is the harness a delegates_to entry points to, read
+// without any trust check, or nil when it cannot be found: an installed one
+// from the same source, else the entry's own folder.
+func lookupDelegateHarness(p *harness.Harness, d harness.Delegate) *harness.Harness {
+	src, err := delegateEntrySource(p, d)
+	if err != nil {
+		return nil
+	}
+	entries, _ := harness.ListAll()
+	for _, e := range entries {
+		h, err := harness.LoadByID(canonicalIDForEntry(e))
+		if err == nil && installedMatches(h, src) {
+			return h
+		}
+	}
+	if src.local != "" {
+		if h, err := harness.LoadDir(src.local); err == nil {
+			return h
+		}
+	}
+	return nil
 }
