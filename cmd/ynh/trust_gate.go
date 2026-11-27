@@ -129,7 +129,7 @@ func installedGate(id string, p *harness.Harness, store trustStore) error {
 	if st.State == trustChanged {
 		fmt.Fprintf(&b, "refusing to run %s: its commands differ from what you accepted on %s.\n", id, st.AcceptedAt)
 		if st.LegacyDigest {
-			b.WriteString(legacyNote(st.acceptedScheme) + "\n")
+			b.WriteString(legacyNote(st.acceptedScheme, kindsOf(len(st.Executables), len(st.Hooks), len(st.MCPServers))) + "\n")
 		}
 	} else if len(st.Executables)+len(st.Hooks)+len(st.MCPServers) == 0 && len(p.Workspace) > 0 {
 		// Only workspace folders: nothing executes, but granting folders is
@@ -200,7 +200,7 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	if stderr != nil {
 		_, _ = fmt.Fprintf(stderr, "ynh: %s runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.\n", p.Name)
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "run")
 	if err != nil {
 		return err
 	}
@@ -238,16 +238,18 @@ type remoteInclude struct {
 
 // remoteIncludes returns the remote includes of p that bring commands, each
 // with its own commands, sorted by key. An include whose commands cannot be
-// read is refused, naming `ynh update` (decision 15). Hooks are counted
+// read is refused, naming `ynh update` (decision 15); verb is the act refused,
+// "run" for the gate and "accept" for an acceptance, so a refused acceptance
+// does not say it refuses to run. Hooks are counted
 // whether or not the include is consented to, so the record never covers less
 // than the include could run.
-func remoteIncludes(p *harness.Harness) ([]remoteInclude, error) {
+func remoteIncludes(p *harness.Harness, verb string) ([]remoteInclude, error) {
 	if set := harnessExecutables(p); len(set.Problems) > 0 {
-		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, set.Problems))
+		return nil, untrustedf("refusing to %s %s: %s", verb, p.Name, includesUnreadable(p, set.Problems))
 	}
 	resolved, err := resolver.ResolveIncludesLocal(p, harness.Selection{})
 	if err != nil {
-		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, []string{err.Error()}))
+		return nil, untrustedf("refusing to %s %s: %s", verb, p.Name, includesUnreadable(p, []string{err.Error()}))
 	}
 	seen := map[string]bool{}
 	var out []remoteInclude
@@ -258,7 +260,7 @@ func remoteIncludes(p *harness.Harness) ([]remoteInclude, error) {
 		seen[r.RemoteKey] = true
 		own := harnessExecutables(r.Harness)
 		if len(own.Problems) > 0 {
-			return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, own.Problems))
+			return nil, untrustedf("refusing to %s %s: %s", verb, p.Name, includesUnreadable(p, own.Problems))
 		}
 		set := trustSet{Sensors: own.Sensors, Hooks: own.Hooks, MCPServers: own.MCPServers}
 		if set.count() == 0 {
@@ -297,7 +299,7 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "accept")
 	if err != nil {
 		return cliError(stderr, structured, errCodeConfigError, err.Error())
 	}
@@ -328,7 +330,7 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	if format == "json" {
 		return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": keys, "commands": commands})
 	}
-	_, err = fmt.Fprintf(stdout, "Recorded %d remote include(s) of %s: %d command(s)\n", len(keys), p.Dir, commands)
+	_, err = fmt.Fprintf(stdout, "Accepted %d remote include(s) of %s: %d command(s)\n", len(keys), p.Dir, commands)
 	return err
 }
 

@@ -116,6 +116,33 @@ Three refusals are not "you have not accepted this":
 
 If the trust record itself cannot be read, the run is refused too.
 
+### The messages as printed
+
+Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`):
+
+```
+$ ynh trust accept local/acme
+Accepted local/acme (accept): 2 command(s), sha256:95539ec8b7d7abe6
+$ ynh install ./acme --trust
+Accepted local/acme (install --trust): 2 command(s), sha256:95539ec8b7d7abe6
+It executes:
+  hook before_tool: ./hooks/guard.sh
+  sensor lint (command): gofmt -l .
+```
+
+A refusal says which act it refused. The gate says `refusing to run`; an acceptance that cannot go ahead says `refusing to accept`, for example when a remote include of `./dir` cannot be read:
+
+```
+$ ynh trust accept ./dir
+Error: refusing to accept dir: what its includes execute could not be read in full.
+  the harness: include https://github.com/you/shared.git is not in the cache, so what it executes cannot be read: ...
+Fetch them with 'ynh update', then run it again.
+```
+
+`ynh check` and `ynh run` refuse the same untrusted harness alike: exit 1, error code `untrusted`, the same message, whether the harness is installed or a folder, and including a folder whose remote include cannot be read.
+
+A refusal names each executable by its own kind: `hook <event>`, `MCP server <name>` or `sensor <name> (<field>)`. The note about an acceptance made under an older digest scheme names only the kinds the harness declares, so a harness with only an MCP server reads `the scripts that MCP servers run`, not `sensors`.
+
 Delegates keep their own gate: an A2A delegate that declares commands is refused until you accept it, and workspace grants, Codex's hook trust and Cursor's `--trust` follow the record. See [Sensors: what a command sensor can reach](sensors.md#what-a-command-sensor-can-reach), [Hooks](hooks.md#codex-hook-trust) and [Workspace Folders](workspace.md).
 
 What the gate does not do: it does not sandbox. It decides whether a run starts, on what you reviewed; it does not limit what an accepted command can reach.
@@ -128,7 +155,7 @@ A **folder run** is a run named by a path, not an installed id: `ynh run ./dir`,
 
 - The folder's **own commands run unchecked**, and ynh says so once on stderr: `ynh: <name> runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.`
 - The commands a **remote include** brings are refused unless accepted. A remote include is a Git include of another repository, at any depth; a local include and an include of the harness's own repository are the folder's own files. Each remote include that brings commands needs a record of its own, keyed by repository, subpath and ref, over that include's own commands, so the record means the same to every folder that includes it and accepting one folder never changes another's. An include whose commands cannot be read is refused, naming `ynh update`.
-- **Accept them with `ynh trust accept <dir>`**, which records each remote include and prints how many commands. With none to accept it says so. A folder run gets none of the [pre-approvals that follow trust](#what-follows-trust): its MCP tools are not pre-approved, a one-shot Copilot run is refused and `--auto-approve` is refused.
+- **Accept them with `ynh trust accept <dir>`**, which records each remote include and prints how many commands: `Accepted 1 remote include(s) of /home/you/folder: 2 command(s)`. With none to accept it says so. A folder run gets none of the [pre-approvals that follow trust](#what-follows-trust): its MCP tools are not pre-approved, a one-shot Copilot run is refused and `--auto-approve` is refused.
 - A script the digest could not read in full blocks a remote include's run exactly as it blocks an installed harness.
 
 ## The full-SHA rule and trust flags

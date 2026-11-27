@@ -103,7 +103,7 @@ func checkInstallTrust(p *harness.Harness, cfg *config.Config, isLocal bool, ref
 	if _, err := resolver.Resolve(p, cfg); err != nil {
 		return fmt.Errorf("--trust could not read the includes of %s: %w", p.Name, err)
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "accept")
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func acceptFolderRun(ref string, p *harness.Harness, stdout io.Writer) error {
 // not always a path ref, "hs" for example) or by a manifest in the current
 // folder.
 func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "accept")
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func pinProblems(p *harness.Harness) ([]string, error) {
 			bad = append(bad, "the harness's own ref: "+why)
 		}
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "accept")
 	if err != nil {
 		return nil, err
 	}

@@ -252,7 +252,7 @@ func includeBase(p *harness.Harness, inc harness.Include) (base, source string, 
 	b, _, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
 	if err != nil {
 		return "", "", fmt.Errorf(
-			"include %s is not in the cache, so its sensors cannot be read: %w\nrun `ynh update` (checking a gate must not reach the network)",
+			"include %s is not in the cache, so what it executes cannot be read: %w\nrun `ynh update` (checking a gate must not reach the network)",
 			inc.Git, err)
 	}
 	return b, "include " + inc.Git, nil
