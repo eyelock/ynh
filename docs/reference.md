@@ -20,7 +20,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `YNH_PARENT_ASK_MAX_WAIT` | 45 | `ynh run` of a delegate's session (read when it writes the `ynh-parent` MCP server's entry, which passes it to `ynh parent-mcp` as `--max-wait`) | — |
 | `YNH_DELEGATION_CHAIN` | _(none)_ | a delegate's session (set by ynh when it starts the session: the ids of the harnesses above it, root first, comma-separated; read by the next delegation it starts) | — |
 | `YNH_DELEGATION_MAX_DEPTH` | 4 | any delegation ynh starts (how many harnesses may sit above a delegate; a value that is not a whole number above 0 is refused) | — |
-| `YNH_DELEGATION_MAX_LIVE` | 16 | any delegation ynh starts (how many delegate sessions may be live under one `YNH_HOME`; a value that is not a whole number above 0 is refused) | — |
+| `YNH_DELEGATION_MAX_LIVE` | 16 | any delegation ynh starts (how many sessions may be live under one `YNH_HOME`, every live session `ynh ps` lists counted, the parent's own included; a value that is not a whole number above 0 is refused) | — |
 | `YNH_DELEGATION_RECORD`, `YNH_DELEGATION_HANDLE` | _(none)_ | a delegate's session (set by ynh's delegate launcher; `ynh run` reads the record to add `ynh-parent`, and with `YNH_DELEGATION_HANDLE` set a Copilot run also gets `--silent`, so the delegate's result carries no banner or stats) | — |
 | `YNH_DELEGATE_<NAME>_CARD`, `YNH_DELEGATE_<NAME>_AUTH` | _(none)_ | `ynh run` (set by ynh, not read) | — |
 | `A2ACLI_AGENT_CARD`, `A2ACLI_AUTH` | _(none)_ | `ynh run` (set by ynh, only with exactly one A2A delegate) | — |
