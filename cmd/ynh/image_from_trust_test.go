@@ -23,6 +23,23 @@ func TestImageFromTrust_RemoteFullSHA(t *testing.T) {
 	}
 }
 
+// Accepting through the image route prints the same verb as every other route,
+// on stderr so a --dry-run Dockerfile on stdout stays clean.
+func TestImageFromTrust_PrintsAccepted(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	var out, errb bytes.Buffer
+	if err := cmdImageTo([]string{"hh", "--from", "file://" + src, "--ref", sha, "--trust", "--dry-run"}, &out, &errb); err != nil {
+		t.Fatalf("image --from --trust: %v", err)
+	}
+	if !strings.HasPrefix(errb.String(), "Accepted local/hh (image): ") || !strings.Contains(errb.String(), "command(s), sha256:") {
+		t.Errorf("stderr lacks the Accepted line:\n%s", errb.String())
+	}
+	if strings.Contains(out.String(), "Accepted ") {
+		t.Errorf("stdout (the Dockerfile) carries the Accepted line:\n%s", out.String())
+	}
+}
+
 func TestImageFromTrust_RefusesFloatingSource(t *testing.T) {
 	fakeHome(t)
 	src, _ := remoteSource(t, "")

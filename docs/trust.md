@@ -118,7 +118,7 @@ If the trust record itself cannot be read, the run is refused too.
 
 ### The messages as printed
 
-Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`):
+Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`, `image`). `ynh image <name> --from <source> --trust` prints it on stderr, as `Accepted local/<name> (image): <n> command(s), <digest>`, so a `--dry-run` Dockerfile on stdout stays clean; a build that accepts nothing prints nothing:
 
 ```
 $ ynh trust accept local/acme
@@ -135,8 +135,8 @@ A refusal says which act it refused. The gate says `refusing to run`; an accepta
 ```
 $ ynh trust accept ./dir
 Error: refusing to accept dir: what its includes execute could not be read in full.
-  the harness: include https://github.com/you/shared.git is not in the cache, so what it executes cannot be read: ...
-Fetch them with 'ynh update', then run it again.
+  the harness: include github.com/you/shared is not in the cache, so what it executes cannot be read: resolving github.com/you/shared: not in the include cache
+Fetch them by running it with --trust, once each remote include is pinned to a full 40-character commit SHA (ynh run <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only.
 ```
 
 `ynh check` and `ynh run` refuse the same untrusted harness alike: exit 1, error code `untrusted`, the same message, whether the harness is installed or a folder, and including a folder whose remote include cannot be read.
