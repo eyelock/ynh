@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // ynh image --from <source> --trust (ynh #986): the build bakes a record with
@@ -224,5 +226,78 @@ func TestImageFromTrust_BakedRecordReadsAcceptedInTheImage(t *testing.T) {
 	}
 	if st := trustStatusFor("local/hh", inImage, store, nil); st.State != trustAccepted || st.Moved != "" {
 		t.Errorf("state = %q, moved = %q, want accepted", st.State, st.Moved)
+	}
+}
+
+// The image keeps the --from source and commit (ynh #1040): inside it, the
+// harness reads as installed from that URL at that SHA, not (local), the baked
+// record carries both, and the record still reads accepted against them.
+func TestImageFromTrust_ImageKeepsSourceAndSHA(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	p, err := harness.LoadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "file://" + src
+	ia := imageArgs{name: "hh", from: url, ref: sha, trust: true, sha: sha}
+	rec, err := imageFromTrustRecord(p, cfg, ia, false, sha)
+	if err != nil || rec == nil {
+		t.Fatalf("rec = %v, err = %v", rec, err)
+	}
+
+	image := t.TempDir()
+	dst := filepath.Join(image, "harnesses", "local--hh")
+	if err := assembler.CopyTree(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	prov := &plugin.InstalledJSON{SourceType: "git", Source: url, Ref: sha, SHA: sha}
+	if err := bakeFromProvenance(dst, prov, rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Source != url || rec.SHA != sha {
+		t.Errorf("record source = %q, sha = %q, want %q, %q", rec.Source, rec.SHA, url, sha)
+	}
+	if err := writeImageTrust(image, "hh", *rec); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("YNH_HOME", image)
+	inImage := loadInstalled(t, "local/hh")
+	if inImage.InstalledFrom == nil || inImage.InstalledFrom.Source != url || inImage.InstalledFrom.SHA != sha {
+		t.Fatalf("inside the image the harness reads as %+v, want source %q at %q", inImage.InstalledFrom, url, sha)
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := trustStatusFor("local/hh", inImage, store, nil)
+	if st.State != trustAccepted || st.Moved != "" {
+		t.Errorf("state = %q, moved = %q, want accepted", st.State, st.Moved)
+	}
+	if st.Source != url || st.SHA != sha {
+		t.Errorf("trust show reports source %q at %q, want %q at %q", st.Source, st.SHA, url, sha)
+	}
+	if err := trustGate("local/hh", inImage, io.Discard); err != nil {
+		t.Errorf("the gate refused the image's own harness: %v", err)
+	}
+}
+
+// A local --from folder has no source worth keeping, so nothing is baked.
+func TestBakeFromProvenance_LocalBakesNothing(t *testing.T) {
+	dst := t.TempDir()
+	rec := &trustRecord{}
+	if err := bakeFromProvenance(dst, nil, rec); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(plugin.InstalledPath(dst)); !os.IsNotExist(err) {
+		t.Errorf("installed.json written for a local source: %v", err)
+	}
+	if rec.Source != "" || rec.SHA != "" {
+		t.Errorf("record = %+v, want no source or sha", rec)
 	}
 }
