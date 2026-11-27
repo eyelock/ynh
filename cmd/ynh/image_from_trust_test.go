@@ -3,8 +3,13 @@ package main
 import (
 	"bytes"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // ynh image --from <source> --trust (ynh #986): the build bakes a record with
@@ -173,5 +178,51 @@ func TestImageFromTrust_Flags(t *testing.T) {
 	}
 	if err := cmdImageTo([]string{"x", "--from", t.TempDir(), "--ref", "v1"}, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "--ref") {
 		t.Errorf("--ref on a local source: %v", err)
+	}
+}
+
+// The record an `image --from <git> --trust` build bakes must read accepted
+// inside the image. The image's harness/ folder is a clone with no
+// installed.json, so the record carries no source or commit to compare
+// against it (ynw-8py06).
+func TestImageFromTrust_BakedRecordReadsAcceptedInTheImage(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	p, err := harness.LoadDir(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ia := imageArgs{name: "hh", from: "file://" + src, ref: sha, trust: true, sha: sha}
+	rec, err := imageFromTrustRecord(p, cfg, ia, false, sha)
+	if err != nil || rec == nil {
+		t.Fatalf("rec = %v, err = %v", rec, err)
+	}
+
+	// The image's home: the baked record, and the clone with no installed.json.
+	image := t.TempDir()
+	if err := writeImageTrust(image, "hh", *rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := assembler.CopyTree(src, filepath.Join(image, "harnesses", "local--hh")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YNH_HOME", image)
+	inImage := loadInstalled(t, "local/hh")
+	if inImage.InstalledFrom != nil {
+		t.Fatalf("the image's clone has provenance %+v; the test assumes none", inImage.InstalledFrom)
+	}
+	if err := trustGate("local/hh", inImage, io.Discard); err != nil {
+		t.Fatalf("the gate refused the image's own harness: %v", err)
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := trustStatusFor("local/hh", inImage, store, nil); st.State != trustAccepted || st.Moved != "" {
+		t.Errorf("state = %q, moved = %q, want accepted", st.State, st.Moved)
 	}
 }
