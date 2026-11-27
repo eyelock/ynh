@@ -19,6 +19,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Composing Tools](composing-tools.md) | Carry MCP servers, profiles, focuses and hooks across includes |
 | [Project-Local Config](project-local-config.md) | Zero-install `.agents/harness/plugin.json` in your project root |
 | [Workspace Folders](workspace.md) | Request sibling folders; grant them with an allow-list or trust; see what is never granted |
+| [Your First Trusted Harness](first-trusted-harness.md) | See ynh refuse a harness with a hook, review it, accept it, and see a changed script noticed |
 
 ### Refine
 

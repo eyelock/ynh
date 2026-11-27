@@ -209,4 +209,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Developer Tools](developer-tools.md): scaffold, lint, validate, format, compress, inspect with ynd.
+[Your First Trusted Harness](first-trusted-harness.md): see ynh refuse a harness until you review and accept what it runs.
