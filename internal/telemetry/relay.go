@@ -55,13 +55,15 @@ type relayReady struct {
 }
 
 // StartRelay runs `<bin> relay --spool <spoolDir> --format json
-// --exit-on-stdin-eof` and waits, for at most readyTimeout, for its first
+// --exit-on-stdin-eof [extra...]` and waits, for at most readyTimeout, for its first
 // line: the endpoint. Its stdin is a pipe ynh holds open until Stop, and its stderr is kept in a bounded buffer for Stop to report
 // if it fails. Anything other than a well-formed loopback endpoint in time
 // is a failure, and the process is killed before StartRelay returns, so a
-// relay that cannot be used is never left running.
-func StartRelay(bin, spoolDir string, readyTimeout time.Duration) (*Relay, error) {
-	cmd := exec.Command(bin, "relay", "--spool", spoolDir, "--format", "json", "--exit-on-stdin-eof")
+// relay that cannot be used is never left running. extra are further relay
+// arguments, such as --resource-attr.
+func StartRelay(bin, spoolDir string, readyTimeout time.Duration, extra ...string) (*Relay, error) {
+	args := append([]string{"relay", "--spool", spoolDir, "--format", "json", "--exit-on-stdin-eof"}, extra...)
+	cmd := exec.Command(bin, args...)
 	// The relay's stdin is a pipe only ynh holds, and never writes to. When
 	// ynh exits, by any means, kill -9 included, the kernel closes it, and
 	// --exit-on-stdin-eof makes the relay drain and exit as on SIGTERM. So
