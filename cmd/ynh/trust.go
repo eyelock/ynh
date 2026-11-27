@@ -129,8 +129,11 @@ func saveTrustStore(s trustStore) error {
 // commands only; 2 adds hook commands and MCP servers; 3 adds the contents of
 // the scripts those commands run (see scriptRef). A digest from an older
 // scheme can never equal a current one, because the current input is prefixed
-// with the scheme, so an old acceptance fails closed as "changed".
-const trustScheme = 3
+// with the scheme, so an old acceptance fails closed as "changed". 4 adds the
+// settings that widen what runs or what runs without asking (env_passthrough,
+// mcp_manual_approval, default_vendor) and keeps the full SHA-256 where 1 to 3
+// kept the first 64 bits.
+const trustScheme = 4
 
 // executable is one sensor string a harness can get run through a shell.
 type executable struct {
@@ -192,6 +195,15 @@ type mcpExec struct {
 	Script *scriptRef `json:"script,omitempty"`
 }
 
+// trustSetting is one view's env_passthrough and mcp_manual_approval. A profile
+// view is listed only when it differs from the harness's own, so an unchanged
+// profile adds nothing.
+type trustSetting struct {
+	Profile           string
+	EnvPassthrough    []string
+	MCPManualApproval bool
+}
+
 // trustSet is everything the operator is asked to review, grouped by kind.
 type trustSet struct {
 	Sensors    []executable
@@ -219,6 +231,15 @@ type trustSet struct {
 	// between a2a and native, must still change the digest, so the entry itself
 	// is covered, not only what it resolves to.
 	DelegateSources []string
+	// Settings are the manifest settings that widen what runs, or what runs
+	// without asking: env_passthrough and mcp_manual_approval, as resolved for
+	// the harness and for each profile that changes them. The rule for what
+	// belongs here is in docs/trust.md ("What the digest covers"): a field the
+	// manifest gains later that meets it goes in with the next scheme.
+	Settings []trustSetting
+	// DefaultVendor is the harness's own default_vendor. The vendor a run is
+	// given with -v or YNH_VENDOR is the operator's choice and is not here.
+	DefaultVendor string
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -668,14 +689,25 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		set.Workspace = slices.Sorted(slices.Values(p.Workspace))
 	}
 	set.LaunchFocus = launchFocusFor(p)
+	set.DefaultVendor = p.DefaultVendor
 	views, problems := runViews(p)
 	set.Problems = problems
+	var baseSetting trustSetting
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, v := range views {
 		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
 		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, v, p.Dir, baseHooks)...)
 		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, v.MCPDirs, p.Dir, baseMCP)...)
 		set.MCPServers = append(set.MCPServers, collectDelegateMCP(v.Profile, v.Delegates, p.Dir, baseMCP)...)
+		cur := trustSetting{Profile: v.Profile, EnvPassthrough: slices.Sorted(slices.Values(v.H.EnvPassthrough)), MCPManualApproval: v.H.MCPManualApproval}
+		if v.Profile == "" {
+			baseSetting = cur
+			if len(cur.EnvPassthrough) > 0 || cur.MCPManualApproval {
+				set.Settings = append(set.Settings, cur)
+			}
+		} else if cur.MCPManualApproval != baseSetting.MCPManualApproval || !slices.Equal(cur.EnvPassthrough, baseSetting.EnvPassthrough) {
+			set.Settings = append(set.Settings, cur)
+		}
 		if v.Profile != "" {
 			continue
 		}
@@ -798,7 +830,24 @@ func executablesDigest(set trustSet) string {
 		field(h, df.Profile)
 		field(h, df.Prompt)
 	}
-	return "sha256:" + hex.EncodeToString(h.Sum(nil))[:16]
+	// Likewise only when set. A profile's entry says what the profile changes
+	// to, so removing a profile's override reads as a change too.
+	for _, st := range set.Settings {
+		field(h, "settings")
+		field(h, st.Profile)
+		field(h, fmt.Sprint(len(st.EnvPassthrough)))
+		for _, n := range st.EnvPassthrough {
+			field(h, n)
+		}
+		field(h, fmt.Sprint(st.MCPManualApproval))
+	}
+	if set.DefaultVendor != "" {
+		field(h, "default_vendor")
+		field(h, set.DefaultVendor)
+	}
+	// The whole SHA-256: the digest is an authorisation check, and a 64-bit cut
+	// was too short for one. Compared in full everywhere.
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 // undeclaredEnvNames lists variables a sensor inherits that the harness never
@@ -887,8 +936,18 @@ const scriptDigestNote = "Your acceptance predates the digest covering the conte
 	"harness reads as changed even if nothing in it has. Review the scripts above,\n" +
 	"then accept again."
 
+// settingsDigestNote explains the one-time "changed" on a record accepted under
+// scheme 3, which left out env_passthrough, mcp_manual_approval and
+// default_vendor and kept 64 bits of the digest.
+const settingsDigestNote = "Your acceptance predates the digest covering env_passthrough, mcp_manual_approval\n" +
+	"and default_vendor, and a full-length digest, so this harness reads as changed\n" +
+	"even if nothing in it has. Review them in ynh trust show, then accept again."
+
 // legacyNote is the explanation for a record accepted under the given scheme.
 func legacyNote(scheme int) string {
+	if scheme == 3 {
+		return settingsDigestNote
+	}
 	if scheme < 2 {
 		return legacyDigestNote
 	}

@@ -26,7 +26,7 @@ ynh ls --format json | ynd validate-output --schema list
 
 ## Capability versioning
 
-Every structured response that uses the success envelope carries a `capabilities` field (the bare-shape commands listed under [Envelope shape](#envelope-shape) do not): `config.CapabilitiesVersion`, currently `0.11.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
+Every structured response that uses the success envelope carries a `capabilities` field (the bare-shape commands listed under [Envelope shape](#envelope-shape) do not): `config.CapabilitiesVersion`, currently `0.12.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
 
 **Capability bumps:**
 - Removing a field; renaming a field; changing a field's type

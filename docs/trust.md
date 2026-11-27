@@ -2,7 +2,7 @@
 
 Why ynh asks you to review a harness before it runs, what the review covers, and what it leaves to you. This page explains; the commands are in the [CLI reference](reference.md) and the JSON in [`trust.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust.schema.json).
 
-> **Status.** All of it is built: the digest (scheme 3, [ynh #949](https://github.com/eyelock/ynh/issues/949)), the gate ([ynh #950](https://github.com/eyelock/ynh/pull/970)), the acceptance routes and the full-SHA rule ([ynh #951](https://github.com/eyelock/ynh/pull/973)), pre-approval that follows trust ([ynh #952](https://github.com/eyelock/ynh/pull/974)) and `ynh image` ([ynh #953](https://github.com/eyelock/ynh/pull/976)).
+> **Status.** All of it is built: the digest (scheme 4, [ynh #949](https://github.com/eyelock/ynh/issues/949)), the gate ([ynh #950](https://github.com/eyelock/ynh/pull/970)), the acceptance routes and the full-SHA rule ([ynh #951](https://github.com/eyelock/ynh/pull/973)), pre-approval that follows trust ([ynh #952](https://github.com/eyelock/ynh/pull/974)) and `ynh image` ([ynh #953](https://github.com/eyelock/ynh/pull/976)).
 
 ## What trust is for
 
@@ -17,7 +17,10 @@ The digest covers everything `ynh trust show` prints, as resolved for a run, for
 - sensor `command` and `version_command` strings, including sensors an include contributes;
 - hook commands with their event and matcher, including hooks of an included harness that consented with `"hooks": true`;
 - MCP servers: command, arguments, URL, `cwd` and the values of `env` entries and headers (hashed, never printed), including those a native delegate carries on its own and those of every harness the includes reach;
-- the `workspace` folders, the `launch_focus` prompt, the `delegates_to` entries and the focus prompts they select.
+- the `workspace` folders, the `launch_focus` prompt, the `delegates_to` entries and the focus prompts they select;
+- **the settings that widen what runs, or what runs without asking** (since scheme 4): `env_passthrough` (the names, sorted, so their order is not a change) and `mcp_manual_approval`, each at the top level and in every profile that changes it (a profile that turns `mcp_manual_approval` off under a harness that turns it on is a change), and the harness's own `default_vendor`.
+
+The rule behind that last item is the rule for what belongs in the digest: every manifest field that widens what runs, or what runs without asking. A field the manifest gains later that meets the rule goes in with the next scheme.
 
 Since digest scheme 3 it also covers **the scripts those commands run**, so changing a script's body, with its command text untouched, is noticed.
 
@@ -60,6 +63,8 @@ Only regular files inside the harness are read:
 
 ### What the digest leaves out
 
+- **The vendor a run is given.** `default_vendor` is the harness's own content and is covered. The `-v <vendor>` of one run, or `YNH_VENDOR`, is your choice for that run and is not.
+- **Instructions, skills, agents, rules and commands.** They are context the vendor reads, not something ynh runs or grants, so changing one does not change the digest. A harness's `launch_focus` and the focus a `delegates_to` entry selects are covered, because ynh itself sends those prompts as the user's message.
 - **Project code.** A script in the project (`bash scripts/wake.sh`, a sensor's `./lint.sh`) is the project's, like `make check`. `ynh trust show` says it is not covered.
 - **Anything a covered script reaches outside its own folder.** A script that sources `../lib/common.sh`, or runs another script elsewhere, is covered for its own folder only.
 - **Tools found on `PATH`.** A command such as `gofmt`, `golangci-lint` or `go` has its command string covered, not the binary.
@@ -82,7 +87,21 @@ The JSON has the same facts in a `script` object on each executable, hook and MC
 
 ### When the scheme changes
 
-A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. A harness accepted under scheme 2 (command text only) sees the note about scripts; one accepted under the first scheme (sensors only) sees the note about hooks and MCP servers. Old records are never accepted on your behalf: review, then `ynh trust accept` again.
+A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. A harness accepted under scheme 3 sees the note about `env_passthrough`, `mcp_manual_approval`, `default_vendor` and the full-length digest; under scheme 2 (command text only), the note about scripts; under the first scheme (sensors only), the note about hooks and MCP servers. Old records are never accepted on your behalf and nothing is carried forward: review, then `ynh trust accept` again.
+
+Scheme 4 also stores the whole SHA-256, `sha256:` and 64 hexadecimal characters, in `trust.json`, the JSON, the image label `dev.ynh.harness.trust-digest` and [`trust.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust.schema.json); schemes 1 to 3 kept the first 16. Comparison is always on the full value.
+
+### What invalidates trust
+
+An accepted harness reads `changed` when any of these happens. The rows for scheme 4 are below; the rest of the invalidations are added to this table with the trust guide.
+
+| What happens | Reads as | How to accept again | In CI | In an image |
+|---|---|---|---|---|
+| `env_passthrough` changes, at the top level or in a profile | `changed` | `ynh trust show <harness>`, then `ynh trust accept <harness>` | accept on the machine that builds it, or run with `--trust` at a full SHA | rebuild the image from an accepted harness |
+| `mcp_manual_approval` changes, at the top level or in a profile | `changed` | the same | the same | the same |
+| `default_vendor` changes | `changed` | the same | the same | the same |
+| A run is given `-v <vendor>` or `YNH_VENDOR` | nothing | not needed | not needed | not needed |
+| ynh moves from digest scheme 3 to 4 | `changed` once, with a note | the same | the same | a scheme 3 record baked in an image refuses inside it until the image is rebuilt |
 
 ## The gate
 

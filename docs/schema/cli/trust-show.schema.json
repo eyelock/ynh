@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/trust-show.schema.json",
   "title": "ynh trust show --format json",
   "description": "Output of `ynh trust show <harness> --format json`. Everything a harness can get executed: sensor commands (through /bin/sh -c), hook commands and MCP servers (through the vendor CLI), each as resolved for a run at the top level and in every profile, with the provenance it was installed from and whether the operator has accepted this exact set. A sensor's command running the project's own tools is the feature; the gap this reports is that the harness lives in ~/.ynh/harnesses/ while its sensors run against a tree elsewhere, so the executing code is nowhere near the directory the operator is looking at. The trust gate acts on this: `ynh run`, `ynh agent run` and `ynh check` refuse an installed harness that is unreviewed, changed or unavailable, and a script the digest could not read in full blocks the run.",
-  "x-capabilities": "0.10",
+  "x-capabilities": "0.12",
   "$defs": {
     "ScriptRef": {
       "type": "object",
@@ -193,7 +193,7 @@
     },
     "digest": {
       "type": "string",
-      "description": "Fingerprint of everything reviewed: sensor name, field and value; hook profile, event, matcher and command; every MCP server field including env and header values (hashed, never printed). A harness accepted before hooks and MCP servers were covered has an older digest, never equal to this one, so it reports changed once (see legacy_digest). Comparing it against accepted_digest is how a changed command is noticed."
+      "description": "Fingerprint of everything reviewed: sensor name, field and value; hook profile, event, matcher and command; every MCP server field including env and header values (hashed, never printed); since scheme 4 also env_passthrough and mcp_manual_approval (top level and per profile) and default_vendor. The full SHA-256: sha256: and 64 hexadecimal characters. A harness accepted before hooks and MCP servers were covered has an older digest, never equal to this one, so it reports changed once (see legacy_digest). Comparing it against accepted_digest is how a changed command is noticed."
     },
     "executables": {
       "type": "array",
@@ -218,7 +218,7 @@
     },
     "legacy_digest": {
       "type": "boolean",
-      "description": "True when the accepted digest predates hooks and MCP servers being covered. It is why state is changed; accepting again clears it. Omitted otherwise."
+      "description": "True when the accepted digest predates the current scheme (scheme 4: env_passthrough, mcp_manual_approval, default_vendor and the full-length digest). It is why state is changed; accepting again clears it. Omitted otherwise."
     },
     "state": {
       "type": "string",
