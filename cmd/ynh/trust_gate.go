@@ -171,7 +171,7 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 		if blockers := scriptBlockers(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers); len(blockers) > 0 {
 			return unreadableScriptsError(p.Name, blockers)
 		}
-		if rec, ok := store.Harnesses[includeRecordPrefix+r.Key]; !ok || rec.Digest != executablesDigest(r.Set) || rec.Scheme != trustScheme {
+		if includeState(store, r) != trustAccepted {
 			unaccepted = append(unaccepted, r)
 		}
 	}
@@ -186,6 +186,78 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	}
 	fmt.Fprintf(&b, "Accept them for this folder: ynh trust accept %s", p.Dir)
 	return &untrustedError{msg: b.String()}
+}
+
+// includeState is where a remote include stands against the store: accepted
+// when its record matches what it brings now, changed when a record exists but
+// does not match (or was made under an older digest scheme), unreviewed when
+// there is none.
+func includeState(store trustStore, r remoteInclude) string {
+	rec, ok := store.Harnesses[includeRecordPrefix+r.Key]
+	switch {
+	case !ok:
+		return trustUnreviewed
+	case rec.Digest != executablesDigest(r.Set) || rec.Scheme != trustScheme:
+		return trustChanged
+	}
+	return trustAccepted
+}
+
+// includeShow is one remote include in `ynh trust show <folder>`.
+type includeShow struct {
+	Key      string `json:"key"`
+	Ref      string `json:"ref"`
+	SHA      string `json:"sha,omitempty"`
+	State    string `json:"state"`
+	Commands int    `json:"commands"`
+}
+
+// showFolderIncludes is `ynh trust show <folder>`: it lists each remote include
+// of the folder that brings commands, with its key, commit SHA (when pinned to
+// one) and trust state, so they can be reviewed before `ynh trust accept
+// <folder>`. It changes nothing.
+func showFolderIncludes(path, format string, structured bool, stdout, stderr io.Writer) error {
+	p, err := harness.LoadIDOrPath(path)
+	if err != nil {
+		return cliError(stderr, structured, errCodeNotFound, err.Error())
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return cliError(stderr, structured, errCodeIOError, err.Error())
+	}
+	remote, err := remoteIncludesFor(p, "show", folderFetchFix)
+	if err != nil {
+		return cliError(stderr, structured, errCodeConfigError, err.Error())
+	}
+	shown := []includeShow{}
+	for _, r := range remote {
+		ref := includeRef(r.Key)
+		sha := ""
+		if isFullSHA(ref) {
+			sha = ref
+		}
+		shown = append(shown, includeShow{Key: r.Key, Ref: ref, SHA: sha, State: includeState(store, r), Commands: r.Set.count()})
+	}
+	if format == "json" {
+		return writeJSON(stdout, map[string]any{"harness": p.Dir, "includes": shown})
+	}
+	if len(remote) == 0 {
+		_, err = fmt.Fprintf(stdout, "%s has no remote include that brings commands.\n", p.Dir)
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "%s runs from a folder: its own commands are not trust-checked; its remote includes are.\n", p.Dir)
+	for i, r := range remote {
+		sh := shown[i]
+		_, _ = fmt.Fprintf(stdout, "\n%s\n  state:    %s\n  ref:      %s\n", sh.Key, sh.State, sh.Ref)
+		if sh.SHA != "" {
+			_, _ = fmt.Fprintf(stdout, "  commit:   %s\n", sh.SHA)
+		} else {
+			_, _ = fmt.Fprintf(stdout, "  commit:   (not pinned to a full SHA)\n")
+		}
+		_, _ = fmt.Fprint(stdout, listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
+	}
+	_, err = fmt.Fprintf(stdout, "\nAccept them for this folder: ynh trust accept %s\n", p.Dir)
+	return err
 }
 
 // remoteInclude is one remote include a folder run reaches and the commands
@@ -215,7 +287,7 @@ func remoteIncludes(p *harness.Harness, verb string) ([]remoteInclude, error) {
 const (
 	updateFetchFix = "Fetch them with 'ynh update', then run it again."
 	folderFetchFix = "Fetch them by running it with --trust, once each remote include is pinned to a full 40-character commit SHA " +
-		"(ynh run <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only."
+		"(ynh run <folder> --trust, ynh check <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only."
 )
 
 // remoteIncludesFor is remoteIncludes with the Fix line of its refusals named
