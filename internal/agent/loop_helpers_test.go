@@ -195,12 +195,10 @@ func TestAssembleHarness_AssemblesDelegates(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
-	data, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "probe.md"))
-	if err != nil {
-		t.Fatalf("delegate agent not assembled: %v", err)
-	}
-	if !strings.Contains(string(data), `mcpServers: [{"probe-srv":{"command":"/bin/probe","env":{"PROBE_TOKEN":"${PROBE_TOKEN}"}}}]`) {
-		t.Errorf("agent should carry the delegate's server, unexpanded:\n%s", data)
+	// The delegate is offered once, through the launch file below: a plugin
+	// agent copy would be offered as well, without its servers (ynh #1022).
+	if _, err := os.Stat(filepath.Join(dir, ".claude", "agents", "probe.md")); err == nil {
+		t.Error("a delegate in the launch file must not also be a plugin agent")
 	}
 
 	// The run directory is the loop's config path: the launch file is read

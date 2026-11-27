@@ -103,9 +103,17 @@ An accepted harness reads `changed` when any of these happens. The rows for sche
 | A run is given `-v <vendor>` or `YNH_VENDOR` | nothing | not needed | not needed | not needed |
 | ynh moves from digest scheme 3 to 4 | `changed` once, with a note | the same | the same | a scheme 3 record baked in an image refuses inside it until the image is rebuilt |
 
+## What a record is keyed by
+
+A record is keyed by the harness's installed id, and it carries the `source` and, for a remote harness, the commit (`sha`) it was accepted from. It counts only while all of these hold: the digest matches, the harness is installed from the same source, and it is at the same commit. A harness that matches the digest but was installed from another source, or is at another commit, reads `changed` with a `moved` reason: `ynh trust show` prints it as a `moved:` line and `--format json` carries it as `moved`, and the [gate](#the-gate) names it in its refusal. Review it and `ynh trust accept` again.
+
+An image's baked record is keyed the same way, by what the image will see. `ynh image <name> --from <source> --trust` bakes a record with no source or commit, because the harness inside the image is a plain clone with no install record, and a record that named the `--from` source would read `moved` there and refuse its own harness. The full-SHA rule is enforced at build time instead. An image of an installed harness (`ynh image <id>`) carries that harness's install record, so its baked record keeps the source and commit.
+
+`ynh uninstall` removes the harness's record, so a harness installed later under the same id starts `unreviewed`. The source and commit check is what keeps a record safe if one is left behind (for instance, by editing `trust.json` or a failed removal, which `ynh uninstall` reports as a warning).
+
 ## The gate
 
-`ynh run`, `ynh agent run` (and its `--resume`) and `ynh check` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
+`ynh run`, `ynh agent run` (and its `--resume`), `ynh check` and `ynh sensors run` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
 
 A refusal exits 1 and prints, on stderr (a harness installed from `/home/you/acme`, with a hook, a sensor and two requested workspace folders):
 
@@ -123,7 +131,7 @@ Then accept:  ynh trust accept local/acme
 
 The `It requests workspace folders:` list appears only when the harness requests some, and shows each entry as written and where it resolves to; accepting grants them.
 
-For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` writes the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
+For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` and `ynh sensors run` (which only emits JSON) write the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
 
 What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `It requests workspace folders:` list and the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance.
 
@@ -134,6 +142,33 @@ Three refusals are not "you have not accepted this":
 - **An invalid profile refuses the whole harness.** The digest resolves every profile of a harness, so one that cannot be resolved leaves the set incomplete, and `ynh run` and `ynh check` refuse the harness as a whole, not only that profile. This is intended: a profile nobody can resolve is a profile nobody reviewed.
 
 If the trust record itself cannot be read, the run is refused too.
+
+### The messages as printed
+
+Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`, `image`). `ynh image <name> --from <source> --trust` prints it on stderr, as `Accepted local/<name> (image): <n> command(s), <digest>`, so a `--dry-run` Dockerfile on stdout stays clean; a build that accepts nothing prints nothing:
+
+```
+$ ynh trust accept local/acme
+Accepted local/acme (accept): 2 command(s), sha256:95539ec8b7d7abe6
+$ ynh install ./acme --trust
+Accepted local/acme (install --trust): 2 command(s), sha256:95539ec8b7d7abe6
+It executes:
+  hook before_tool: ./hooks/guard.sh
+  sensor lint (command): gofmt -l .
+```
+
+A refusal says which act it refused. The gate says `refusing to run`; an acceptance that cannot go ahead says `refusing to accept`, for example when a remote include of `./dir` cannot be read:
+
+```
+$ ynh trust accept ./dir
+Error: refusing to accept dir: what its includes execute could not be read in full.
+  the harness: include github.com/you/shared is not in the cache, so what it executes cannot be read: resolving github.com/you/shared: not in the include cache
+Fetch them by running it with --trust, once each remote include is pinned to a full 40-character commit SHA (ynh run <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only.
+```
+
+`ynh check` and `ynh run` refuse the same untrusted harness alike: exit 1, error code `untrusted`, the same message, whether the harness is installed or a folder, and including a folder whose remote include cannot be read.
+
+A refusal names each executable by its own kind: `hook <event>`, `MCP server <name>` or `sensor <name> (<field>)`. The note about an acceptance made under an older digest scheme names only the kinds the harness declares, so a harness with only an MCP server reads `the scripts that MCP servers run`, not `sensors`.
 
 Delegates keep their own gate: an A2A delegate that declares commands is refused until you accept it, and workspace grants, Codex's hook trust and Cursor's `--trust` follow the record. See [Sensors: what a command sensor can reach](sensors.md#what-a-command-sensor-can-reach), [Hooks](hooks.md#codex-hook-trust) and [Workspace Folders](workspace.md).
 
