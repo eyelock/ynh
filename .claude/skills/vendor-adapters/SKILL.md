@@ -175,12 +175,12 @@ converted only by `ynd migrate` and refused by every other command.
 |                   |                                  | = false. Every other field       |                                  |
 |                   |                                  | dropped (model names differ)     |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Delegation:       | Markdown subagent in             | TOML custom agent in             | Markdown subagent in             |
-| (delegates_to)    | .claude/agents/<name>.md (name,  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
-|                   | description); the delegate's MCP | description,                     | description), per                |
-|                   | servers carried (mcpServers,     | developer_instructions); MCP     | cursor.com/docs/subagents; the   |
-|                   | plus --agents at launch)         | servers inherited from the       | delegate's MCP servers not       |
-|                   |                                  | session, the delegate's own not  | carried (warning); live pickup   |
+| Delegation:       | Markdown subagent; a run writes  | TOML custom agent in             | Markdown subagent in             |
+| (delegates_to)    | `.claude/agents/<name>.md` only  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
+|                   | for a delegate with no servers;  | description,                     | description), per                |
+|                   | one with servers goes through    | developer_instructions); MCP     | cursor.com/docs/subagents; the   |
+|                   | --agents only; an export carries | servers inherited from the       | delegate's MCP servers not       |
+|                   | the file, with mcpServers        | session, the delegate's own not  | carried (warning); live pickup   |
 |                   |                                  | carried (warning); run only, not | not checked                      |
 |                   |                                  | export; registered at launch     |                                  |
 |                   |                                  | with -c agents.<name>.           |                                  |

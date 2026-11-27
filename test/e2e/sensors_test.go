@@ -219,6 +219,9 @@ func TestSensors_Run_CommandCapturesExitAndStreams(t *testing.T) {
 
 	src := writeSensorHarness(t, manifest)
 	s.mustRunYnh(t, "install", src)
+	// sensors run executes the harness's command, so it needs the acceptance a
+	// person gives with `ynh trust accept` (ynh #1018).
+	s.mustRunYnh(t, "trust", "accept", "local/sensor-run-cmd")
 
 	// runYnh, not mustRunYnh — sensor command exits non-zero. ynh itself
 	// must still exit 0; the non-zero is reported via JSON.
@@ -480,6 +483,9 @@ func TestSensors_ProfileFocusRoundTrip(t *testing.T) {
 
 	s := newSandbox(t)
 	s.mustRunYnh(t, "install", src)
+	// sensors run and run --install execute what the harness declares, so they
+	// need the acceptance a person gives with `ynh trust accept` (ynh #1018).
+	s.mustRunYnh(t, "trust", "accept", "local/"+harnessName)
 
 	// 1. show — focus reference resolved, profile field surfaced.
 	showOut, _ := s.mustRunYnh(t, "sensors", "show", "local/"+harnessName, "audit-gate", "--format", "json")
