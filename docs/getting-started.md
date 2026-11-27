@@ -31,7 +31,7 @@ The fastest way to see what ynh does is to install the ynh harness itself:
 ```bash
 ynh install github.com/eyelock/ynh
 ynh trust show github.com/eyelock/ynh/ynh-guide    # review what it will run
-ynh trust accept github.com/eyelock/ynh/ynh-guide  # record that you did; no pin needed
+ynh trust accept github.com/eyelock/ynh/ynh-guide  # record that you did; the harness's own ref needs no pin
 ynh-guide
 ```
 

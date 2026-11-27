@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -76,12 +75,15 @@ func unpinnedIncludes(remote []remoteInclude) []string {
 // unpinnedNativeDelegates lists, one line each, the delegates_to entries of p
 // that run natively (inside the vendor's own subagents, their MCP servers part
 // of the digest) from a remote source not pinned to a full SHA. An entry that
-// names the parent's own repository ("."), a local folder, or an A2A delegate
-// is another harness with its own acceptance, so it is not judged here.
+// names the parent's own repository ("." or "./sub", as an include of that
+// source is exempt), a local folder, or an A2A delegate is another harness
+// with its own acceptance, so it is not judged here. A git path to another
+// repository, relative or absolute, is a clone of that repository and is
+// judged like any remote source.
 func unpinnedNativeDelegates(p *harness.Harness) []string {
 	var out []string
 	for _, d := range p.DelegatesTo {
-		if p.TransportOf(d) != harness.TransportNative || d.Git == "" || strings.HasPrefix(d.Git, ".") || filepath.IsAbs(d.Git) {
+		if p.TransportOf(d) != harness.TransportNative || d.Git == "" || resolver.IsOwnRepoSource(d.GitSource, p.Dir) {
 			continue
 		}
 		if why := notPinned(d.Ref); why != "" {

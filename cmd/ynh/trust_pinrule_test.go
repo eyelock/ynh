@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,7 +73,13 @@ func TestTrustAcceptFolder_RefusesFloatingInclude(t *testing.T) {
 // A2A entry, a local one and the parent's own repository are not.
 func TestUnpinnedNativeDelegates(t *testing.T) {
 	sha := strings.Repeat("ab", 20)
+	// The parent lives in its own git repository, so "." is its own repo.
+	parent := t.TempDir()
+	if out, err := exec.Command("git", "-C", parent, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
 	p := &harness.Harness{
+		Dir:       parent,
 		Transport: harness.TransportA2A,
 		DelegatesTo: []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/x/branch", Ref: "main"}, Transport: harness.TransportNative},
@@ -80,16 +87,20 @@ func TestUnpinnedNativeDelegates(t *testing.T) {
 			{GitSource: harness.GitSource{Git: "github.com/x/pinned", Ref: sha}, Transport: harness.TransportNative},
 			{GitSource: harness.GitSource{Git: "github.com/x/a2a", Ref: "main"}},
 			{GitSource: harness.GitSource{Git: ".", Ref: "main"}, Transport: harness.TransportNative},
-			{GitSource: harness.GitSource{Git: "/abs/folder"}, Transport: harness.TransportNative},
 			{GitSource: harness.GitSource{Local: "../x"}, Transport: harness.TransportNative},
+			// A git path to another repository is a clone of it, judged like
+			// an include of the same source (resolver.IsOwnRepoSource).
+			{GitSource: harness.GitSource{Git: "../other", Ref: "main"}, Transport: harness.TransportNative},
+			{GitSource: harness.GitSource{Git: "/abs/folder"}, Transport: harness.TransportNative},
 		},
 	}
 	got := unpinnedNativeDelegates(p)
-	if len(got) != 2 || !strings.Contains(got[0], "github.com/x/branch") || !strings.Contains(got[1], "github.com/x/none") {
-		t.Fatalf("unpinned = %q, want the branch and no-ref native entries", got)
+	if len(got) != 4 || !strings.Contains(got[0], "github.com/x/branch") || !strings.Contains(got[1], "github.com/x/none") ||
+		!strings.Contains(got[2], "../other") || !strings.Contains(got[3], "/abs/folder") {
+		t.Fatalf("unpinned = %q, want the branch, no-ref, relative-path and absolute-path native entries", got)
 	}
 	p.Transport = harness.TransportNative
-	if got := unpinnedNativeDelegates(p); len(got) != 3 {
+	if got := unpinnedNativeDelegates(p); len(got) != 5 {
 		t.Errorf("with a native default, the A2A-looking entry counts too: %q", got)
 	}
 }
