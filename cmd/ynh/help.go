@@ -521,6 +521,9 @@ Flags:
   --calibrate           Run each sensor against its reference fixture instead
                         (not with --profile, --sensor-overlay or baseline flags)
   --sensor-overlay <j>  Substitute sensor declarations from a JSON object
+  --trust               For a folder: fetch each remote include missing from
+                        the cache (only at a full 40-character SHA) and
+                        accept it; not for an installed id
   --format text|json    Output format (default text)
 
 Exit codes:
@@ -544,6 +547,9 @@ are shown and covered by what you accept.
 
   ynh trust                      State of every installed harness
   ynh trust show <harness>       Every command it will run, with provenance
+  ynh trust show <dir>           A folder's remote includes that bring commands,
+                                 with each one's state, to review before
+                                 'ynh trust accept <dir>'
   ynh trust accept <harness>     Record that you have read them
 
 Flags:
@@ -563,7 +569,10 @@ lists what the harness executes and names 'ynh trust show' and 'ynh trust
 accept'. A script the digest cannot read in full blocks the run even once
 accepted. A run from a folder ('ynh run ./dir', 'ynh check ./dir') does not
 check the folder's own commands, but refuses the commands its remote includes
-bring until you run 'ynh trust accept <dir>'. A harness with nothing to review
+bring until you run 'ynh trust accept <dir>', or pass --trust to 'ynh run',
+'ynh check' or 'ynh agent run --harness' to fetch and accept them in the same
+step (each include pinned to a full SHA). Review them first with
+'ynh trust show <dir>'. A harness with nothing to review
 (no-commands) needs no acceptance. 'ynh install --trust' accepts in the same step,
 at full commit SHAs. See docs/trust.md.
 

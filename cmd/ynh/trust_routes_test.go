@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -715,6 +716,17 @@ func TestTrustShowFolder_ListsIncludesAndTheirState(t *testing.T) {
 	}
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, out.String())
+	}
+	var generic any
+	if err := json.Unmarshal(out.Bytes(), &generic); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("trust-show-folder")
+	if err != nil {
+		t.Fatalf("Get trust-show-folder schema: %v", err)
+	}
+	if err := schema.Validate(generic); err != nil {
+		t.Errorf("trust show <folder> JSON does not validate: %v\n%s", err, out.String())
 	}
 	if len(doc.Includes) != 1 || doc.Includes[0].State != trustUnreviewed || doc.Includes[0].SHA != ref || !strings.Contains(doc.Includes[0].Key, src) || doc.Includes[0].Commands == 0 {
 		t.Fatalf("includes = %+v", doc.Includes)

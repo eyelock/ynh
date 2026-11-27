@@ -1,0 +1,12 @@
+{
+  "harness": "/work/acme",
+  "includes": [
+    {
+      "key": "github.com/eyelock/assistants//skills/review@3f4b2c1a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a",
+      "ref": "3f4b2c1a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a",
+      "sha": "3f4b2c1a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a",
+      "state": "unreviewed",
+      "commands": 2
+    }
+  ]
+}
