@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
@@ -91,6 +93,18 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	// And its MCP servers, which codex reads from no file in the worktree
 	// either. Their header values reach the process in its environment (Next).
 	args = append(args, vendor.CodexMCP(opts.ConfigPath).Args...)
+	// And its instructions. codex reads AGENTS.md only from the worktree it
+	// runs in and from ~/.codex, never from the run directory, so the
+	// harness's own would not reach the worker. They go in as the
+	// developer_instructions override, the route `ynh run` uses for runtime
+	// text: nothing is written into the worktree, and they add to the
+	// project's own AGENTS.md instead of replacing it (ynh #987).
+	if opts.ConfigPath != "" {
+		if data, err := os.ReadFile(filepath.Join(opts.ConfigPath, (&vendor.Codex{}).InstructionsFile())); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+			extra, _ := (&vendor.Codex{}).ApplyRuntimeInstructions(opts.ConfigPath, string(data))
+			args = append(args, extra...)
+		}
+	}
 	// A worker has no one to approve an MCP tool call, and codex exec's
 	// policy is "never", so approve the harness's own servers' tools as a
 	// one-shot `ynh run` does, unless the harness opts out (mcp_manual_approval).
