@@ -11,6 +11,10 @@ type Budget struct {
 	MaxTokens int64
 	MaxWall   time.Duration
 
+	// now reads the clock; nil means time.Now. Only tests set it, so a
+	// wall-clock cap can be driven without sleeping or racing the scheduler.
+	now func() time.Time
+
 	startTime time.Time
 	turns     int
 	tokens    int64
@@ -31,7 +35,14 @@ type Budget struct {
 
 // Start records the session start time. Must be called before the loop begins.
 func (b *Budget) Start() {
-	b.startTime = time.Now()
+	b.startTime = b.clock()
+}
+
+func (b *Budget) clock() time.Time {
+	if b.now != nil {
+		return b.now()
+	}
+	return time.Now()
 }
 
 // Resume restores counters from a checkpoint so caps carry across a relaunch.
@@ -51,7 +62,7 @@ func (b *Budget) Resume(cb CheckpointBudget) {
 	b.cacheCreationReported = cb.CacheCreationReported
 	b.costUSD = cb.CostUSD
 	b.costReported = cb.CostReported
-	b.startTime = time.Now().Add(-time.Duration(cb.WallConsumedMS) * time.Millisecond)
+	b.startTime = b.clock().Add(-time.Duration(cb.WallConsumedMS) * time.Millisecond)
 }
 
 // checkpoint returns the budget's accounting in its persisted form.
@@ -77,7 +88,7 @@ func (b *Budget) checkpoint(planIterations int) CheckpointBudget {
 // back-dated) start time. Persisted into a checkpoint so a later Resume can
 // continue the wall-clock budget from where this session left off.
 func (b *Budget) WallConsumed() time.Duration {
-	return time.Since(b.startTime)
+	return b.clock().Sub(b.startTime)
 }
 
 // RecordTurn increments the completed-turn counter.
@@ -145,8 +156,8 @@ func (b *Budget) Exceeded() (reason string, budgetKind BudgetType, exitCode int)
 	if b.MaxTokens > 0 && b.tokens >= b.MaxTokens {
 		return fmt.Sprintf("token budget exceeded (%d/%d)", b.tokens, b.MaxTokens), BudgetTokens, ExitTokenBudget
 	}
-	if b.MaxWall > 0 && time.Since(b.startTime) >= b.MaxWall {
-		elapsed := time.Since(b.startTime).Round(time.Second)
+	if b.MaxWall > 0 && b.clock().Sub(b.startTime) >= b.MaxWall {
+		elapsed := b.clock().Sub(b.startTime).Round(time.Second)
 		return fmt.Sprintf("wall-clock limit reached (%s/%s)", elapsed, b.MaxWall), BudgetWallClock, ExitWallClock
 	}
 	return "", "", 0
