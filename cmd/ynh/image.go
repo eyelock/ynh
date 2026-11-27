@@ -18,6 +18,7 @@ import (
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // imageTemplateData holds the data passed to the harness Dockerfile template.
@@ -32,6 +33,10 @@ type imageTemplateData struct {
 	// orchestrator reads both with `docker inspect`, without running anything.
 	HarnessVersion string
 	HarnessSHA     string
+	// TrustDigest is the trust digest the image carries (also in its
+	// trust.json), "" when the image bakes no trust record. An orchestrator
+	// reads it with `docker inspect`, as it does the SHA.
+	TrustDigest string
 	// Entrypoint is "run" (interactive vendor session) or "agent" (the
 	// autonomous loop). A factory image that can only start an interactive
 	// session cannot do batch work.
@@ -62,8 +67,9 @@ COPY --chown=ynh:ynh vendors/opencode/ /home/ynh/.ynh/run/local--{{.Name}}/openc
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
 
-# Schema version of the layout above, so ynh does not try to migrate it, and
-# the include cache (cache/), so included sensors are read from the build
+# Schema version of the layout above, so ynh does not try to migrate it, the
+# include cache (cache/), so included sensors are read from the build, and the
+# accepted trust record (trust.json), which the run's trust gate checks
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
@@ -80,6 +86,9 @@ LABEL dev.ynh.harness="{{.Name}}" \
       dev.ynh.harness.default-vendor="{{.DefaultVendor}}" \
       dev.ynh.harness.version="{{.HarnessVersion}}" \
       dev.ynh.harness.sha="{{.HarnessSHA}}" \
+{{- if .TrustDigest}}
+      dev.ynh.harness.trust-digest="{{.TrustDigest}}" \
+{{- end}}
       dev.ynh.entrypoint="{{.Entrypoint}}" \
       dev.ynh.assembled-by="{{.YnhVersion}}"
 `))
@@ -244,11 +253,18 @@ type imageArgs struct {
 	dryRun     bool
 	from       string
 	path       string
+	ref        string // --ref: the commit, tag or branch of a remote --from source
 	entrypoint string
+	// trust is --trust: with --from, accept what the source executes and bake
+	// the acceptance (via: image), refusing a source that is not pinned.
+	trust bool
 	// sha is the commit resolved from --from, filled in during the build
 	// rather than parsed from a flag.
 	sha string
 }
+
+// imageUsage is the usage line shown for a missing name or an unknown flag.
+const imageUsage = "usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--ref <commit|tag|branch>] [--entrypoint run|agent] [--trust] [--dry-run]"
 
 // parseImageArgs parses flags for the image command.
 func parseImageArgs(args []string) (imageArgs, error) {
@@ -284,6 +300,8 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			}
 		case "--dry-run":
 			ia.dryRun = true
+		case "--trust":
+			ia.trust = true
 		case "--from":
 			if i+1 >= len(args) {
 				return ia, fmt.Errorf("--from requires a value")
@@ -296,15 +314,31 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			}
 			i++
 			ia.path = args[i]
+		case "--ref":
+			if i+1 >= len(args) {
+				return ia, fmt.Errorf("--ref requires a value")
+			}
+			i++
+			ia.ref = args[i]
 		default:
+			if strings.HasPrefix(args[i], "-") {
+				return ia, fmt.Errorf("unknown flag: %s\n%s", args[i], imageUsage)
+			}
 			remaining = append(remaining, args[i])
 		}
 	}
 
 	if len(remaining) < 1 {
-		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--entrypoint run|agent] [--dry-run]")
+		return ia, fmt.Errorf("%s", imageUsage)
 	}
 	ia.name = remaining[0]
+
+	if ia.ref != "" && ia.from == "" {
+		return ia, fmt.Errorf("--ref is for an image built with --from")
+	}
+	if ia.trust && ia.from == "" {
+		return ia, fmt.Errorf("--trust is for an image built with --from; an installed harness is accepted with 'ynh trust accept %s' before it is built", ia.name)
+	}
 
 	if ia.tag == "" {
 		ia.tag = "ynh-" + ia.name + ":latest"
@@ -348,11 +382,23 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	var p *harness.Harness
 	var harnessSrcDir string
 
+	var trustID string // install id of an installed harness, "" for --from
+	var fromRef string // the ref --from resolved to, "" for a local source
+	fromLocal := false
 	if ia.from != "" {
 		// Build from source (Git or local)
 		resolved, err := resolveInstallSource(ia.from, ia.path, cfg)
 		if err != nil {
 			return fmt.Errorf("resolving source: %w", err)
+		}
+
+		// --ref overrides any registry-resolved ref, as `ynh install --ref` does.
+		if ia.ref != "" {
+			if isLocalPath(ia.from) {
+				return fmt.Errorf("--ref is not valid for a local --from source")
+			}
+			resolved.ref = ia.ref
+			resolved.sha = ""
 		}
 
 		source := ia.from
@@ -370,7 +416,15 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 				return err
 			}
 			harnessSrcDir = absPath
+			fromLocal = true
 		} else {
+			fromRef = resolved.ref
+			// --trust refuses a floating source before anything is fetched.
+			if ia.trust {
+				if why := notPinned(resolved.ref); why != "" {
+					return refuseUnpinned("this image", "--trust", []string{"the source's own ref: " + why})
+				}
+			}
 			if err := cfg.CheckSource(source, ""); err != nil {
 				return err
 			}
@@ -382,6 +436,9 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 				return err
 			}
 			ia.sha = resolved.sha
+			if ia.sha == "" && isFullSHA(resolved.ref) {
+				ia.sha = resolved.ref
+			}
 			harnessSrcDir = result.Path
 		}
 
@@ -403,6 +460,29 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		harnessSrcDir = p.Dir
+		trustID = ia.name
+	}
+
+	// An installed harness must be one the operator accepted, as at run time
+	// (design decision 9). The check comes before anything is copied or built.
+	var bakedTrust *trustRecord
+	if trustID != "" {
+		rec, err := imageTrustRecord(trustID, p)
+		if err != nil {
+			return err
+		}
+		bakedTrust = rec
+	} else {
+		rec, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
+		if err != nil {
+			return err
+		}
+		bakedTrust = rec
+		if rec != nil {
+			// The same verb every other way of accepting prints. It goes to
+			// stderr: with --dry-run stdout is the Dockerfile.
+			_, _ = fmt.Fprintf(stderr, "Accepted local/%s (%s): %d command(s), %s\n", p.Name, viaImage, rec.Commands, rec.Digest)
+		}
 	}
 
 	// Create temp build context
@@ -466,7 +546,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("assembling %s layout: %w", adapter.Name(), err)
 		}
 
-		if _, err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, RootName: p.Name}); err != nil {
+		if _, err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, RootName: p.Name, RootTransport: p.Transport}); err != nil {
 			return fmt.Errorf("assembling %s delegates: %w", adapter.Name(), err)
 		}
 	}
@@ -481,6 +561,16 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// was built from and nothing is fetched at run time.
 	if err := bakeIncludeCache(p, append(append([]harness.Include{}, p.Includes...), profileIncs...), homeDir, imageHarnessDir(p.Name)); err != nil {
 		return err
+	}
+
+	// Bake the accepted trust record, so the gate the image's entrypoint goes
+	// through finds what the operator accepted at build time.
+	trustDigest := ""
+	if bakedTrust != nil {
+		if err := writeImageTrust(homeDir, p.Name, *bakedTrust); err != nil {
+			return err
+		}
+		trustDigest = bakedTrust.Digest
 	}
 
 	// Determine default vendor
@@ -498,6 +588,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		HarnessVersion: p.Version,
 		HarnessSHA:     harnessSHA(p, ia),
 		Entrypoint:     ia.entrypoint,
+		TrustDigest:    trustDigest,
 	}
 
 	dockerfile, err := generateDockerfile(data)
@@ -507,8 +598,8 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 
 	// The image runs the base's ynh, not this one. Read from a local image's
 	// labels only, so this neither pulls nor runs anything, in a dry run too.
-	if w := baseVersionWarning(ia.base, config.Version); w != "" {
-		_, _ = fmt.Fprint(stderr, w)
+	if w, ok := baseVersionWarning(ia.base, config.Version); ok {
+		warn.Print(stderr, w)
 	}
 
 	if ia.dryRun {

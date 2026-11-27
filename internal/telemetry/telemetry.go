@@ -44,8 +44,10 @@ const (
 	// DestinationSpool writes OTLP JSON lines into a spool folder.
 	DestinationSpool Destination = "spool"
 	// DestinationOTLP is an operator's OTEL_EXPORTER_OTLP_* endpoint, sent to
-	// over OTLP/HTTP with JSON bodies. A setting that exporter cannot honour
-	// (grpc, custom certificates, compression) writes nothing and says so.
+	// over OTLP/HTTP with JSON or protobuf bodies, as OTEL_EXPORTER_OTLP_PROTOCOL
+	// asks (http/json or http/protobuf). A setting that exporter cannot honour
+	// (custom certificates, compression) writes nothing and says so; a protocol it
+	// cannot speak (grpc) goes to the spool instead.
 	DestinationOTLP Destination = "otlp"
 )
 
@@ -61,20 +63,41 @@ func ChooseDestination() (Destination, string) {
 	if _, configured, unsupported := spool.HTTPOptionsFromEnv(os.Getenv); configured || unsupported != "" {
 		return DestinationOTLP, ""
 	}
+	if dir := spoolFolder(); dir != "" {
+		return DestinationSpool, dir
+	}
+	return DestinationNone, ""
+}
+
+// spoolFolder is the spool folder a run writes to when the operator chose no
+// OTLP endpoint: YNR_SPOOL, made absolute (children are handed this folder and
+// run in other directories), else the laptop default if that folder exists,
+// else "".
+func spoolFolder() string {
 	if dir := os.Getenv("YNR_SPOOL"); dir != "" {
-		// Absolute, because children are handed this folder and run in
-		// other directories.
 		if abs, err := filepath.Abs(dir); err == nil {
 			dir = abs
 		}
-		return DestinationSpool, dir
+		return dir
 	}
 	if dir := defaultSpool(); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			return DestinationSpool, dir
+			return dir
 		}
 	}
-	return DestinationNone, ""
+	return ""
+}
+
+// protocolUnsupported reports whether the operator's OTLP protocol (general or
+// per-signal) is one the exporter cannot speak (anything but http/json and
+// http/protobuf, in practice grpc), and names the first such variable.
+func protocolUnsupported(getenv func(string) string) (string, bool) {
+	for _, name := range []string{"OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL"} {
+		if v := strings.TrimSpace(getenv(name)); v != "" && !strings.EqualFold(v, "http/json") && !strings.EqualFold(v, "http/protobuf") {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // defaultSpool is $XDG_STATE_HOME/ynr/spool/local. The XDG specification
@@ -112,6 +135,7 @@ type Options struct {
 type Telemetry struct {
 	version string
 	opts    Options
+	stderr  io.Writer // for the one note about dropped operator labels; may be nil
 	errors  atomic.Int64
 	// abandoned is set once a flush has run out of time: the destination is
 	// stuck, so later flushes give up at once rather than wait again, and the
@@ -121,15 +145,20 @@ type Telemetry struct {
 	mu       sync.Mutex
 	dest     Destination
 	spoolDir string
-	tracer   trace.Tracer
-	logger   otellog.Logger
-	tp       *sdktrace.TracerProvider
-	lp       *sdklog.LoggerProvider
-	writer   *spool.Writer
-	sender   *spool.HTTPSender
-	run      *Run
-	stop     chan struct{}
-	stopped  bool
+	// operatorOTLP is set when the operator's environment names an OTLP
+	// destination (OTEL_EXPORTER_OTLP_*), whatever ynh itself does with the
+	// run's record: a protocol the exporter cannot speak sends the record to
+	// the spool, but the vendor's telemetry stays the operator's to direct.
+	operatorOTLP bool
+	tracer       trace.Tracer
+	logger       otellog.Logger
+	tp           *sdktrace.TracerProvider
+	lp           *sdklog.LoggerProvider
+	writer       *spool.Writer
+	sender       *spool.HTTPSender
+	run          *Run
+	stop         chan struct{}
+	stopped      bool
 }
 
 // Setup chooses a destination and builds the providers for it. It never
@@ -145,20 +174,42 @@ type Telemetry struct {
 // minute). An agent run can last an hour; a `ynr serve` started after it
 // still receives it. Shutdown stops the search.
 func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
-	stripOperatorLabels(stderr)
 	dest, dir := ChooseDestination()
+	if dest != DestinationNone {
+		// With no destination the process's environment is left exactly as
+		// it was. A spool that appears later is handled in activate, which
+		// filters the resource instead.
+		stripOperatorLabels(stderr)
+	}
 	t := &Telemetry{
-		version: version,
-		opts:    opts,
-		dest:    dest,
-		tracer:  tracenoop.NewTracerProvider().Tracer(ScopeName),
-		logger:  lognoop.NewLoggerProvider().Logger(ScopeName),
+		stderr:       stderr,
+		version:      version,
+		opts:         opts,
+		dest:         dest,
+		operatorOTLP: dest == DestinationOTLP,
+		tracer:       tracenoop.NewTracerProvider().Tracer(ScopeName),
+		logger:       lognoop.NewLoggerProvider().Logger(ScopeName),
 	}
 	switch dest {
 	case DestinationOTLP:
 		// The operator chose; ynh does not look for a spool behind them.
 		opts, _, unsupported := spool.HTTPOptionsFromEnv(os.Getenv)
 		if unsupported != "" {
+			// A protocol the exporter cannot speak (grpc, say; http/json and
+			// http/protobuf are both spoken) is not a reason
+			// to lose the run: it goes to the spool, as it would had the
+			// operator set nothing. The other unsupported settings
+			// (certificates, compression) still write nothing.
+			if name, ok := protocolUnsupported(os.Getenv); ok {
+				if dir := spoolFolder(); dir != "" {
+					_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json or http/protobuf, and ynh sends only OTLP/HTTP; writing this run to the spool instead\n", name)
+					t.dest = DestinationSpool
+					t.activate(dir, nil)
+					break
+				}
+				_, _ = fmt.Fprintf(stderr, "ynh: %s is not http/json or http/protobuf, and ynh sends only OTLP/HTTP; there is no spool (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local), so nothing was recorded for this run\n", name)
+				break
+			}
 			_, _ = fmt.Fprintf(stderr, "ynh: %s; no telemetry is written for this run\n", unsupported)
 		} else {
 			t.activate("", spool.NewHTTPSender(opts))
@@ -262,6 +313,7 @@ func (t *Telemetry) recheck(interval time.Duration) {
 // them. They write to the spool folder dir, or, when sender is not nil, post
 // to the operator's OTLP endpoint and write no spool.
 func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
+	stripOperatorLabels(t.stderr)
 	instanceID := newInstanceID()
 	// The operator's OTEL_RESOURCE_ATTRIBUTES are honoured, but ynh's own
 	// identity wins: service.name and service.version say which registry
@@ -271,8 +323,14 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 		semconv.ServiceVersion(t.version),
 		semconv.ServiceInstanceID(instanceID),
 	}
-	// The labels are ynh's too. Only these were validated; Setup already
-	// removed every operator ynh.label.* from OTEL_RESOURCE_ATTRIBUTES.
+	// The labels are ynh's too. Only these were validated. The SDK merges
+	// the process environment into every provider's resource, so every
+	// operator ynh.label.* must be out of OTEL_RESOURCE_ATTRIBUTES before the
+	// providers are built. Setup did that when it started with a
+	// destination; a spool that appeared mid-launch has not, so it is done
+	// here (a no-op when already done). It happens once, at the moment
+	// telemetry starts, which is also when ynh puts the trace context into
+	// the environment, so it never changes under a process already started.
 	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),
@@ -346,6 +404,16 @@ func (t *Telemetry) Destination() Destination {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.dest
+}
+
+// OperatorOTLP reports whether the operator's environment names an OTLP
+// destination (OTEL_EXPORTER_OTLP_*), even when ynh's own record goes to the
+// spool because the protocol is one its exporter cannot speak. The relay
+// leaves the vendor's telemetry alone then.
+func (t *Telemetry) OperatorOTLP() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.operatorOTLP
 }
 
 // SpoolDir is the spool folder telemetry writes to, absolute, or "" when

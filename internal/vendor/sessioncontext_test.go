@@ -260,7 +260,7 @@ func TestSessionContextUnsupportedWarns(t *testing.T) {
 	hooks := map[string][]plugin.HookEntry{"on_session_start": {{Command: "x"}}}
 	var found bool
 	for _, w := range HookWarnings("codex", hooks) {
-		if strings.Contains(w, "on_session_start output does not reach the model on codex: no hook output channel") {
+		if strings.Contains(w.Message, "on_session_start output does not reach the model on codex: no hook output channel") {
 			found = true
 		}
 	}
@@ -272,7 +272,7 @@ func TestSessionContextUnsupportedWarns(t *testing.T) {
 	}
 	for _, v := range []string{"claude", "copilot", "cursor"} {
 		for _, w := range HookWarnings(v, hooks) {
-			if strings.Contains(w, "does not reach the model") {
+			if strings.Contains(w.Message, "does not reach the model") {
 				t.Errorf("%s must not warn: %s", v, w)
 			}
 		}

@@ -40,6 +40,48 @@ reads the env file, replaces ${VAR} in the command's arguments and in its own
 environment values with the file's variables only (an unknown reference is an
 error), then becomes the command, so stdin and stdout are the server's.`,
 
+	"delegate-run": `ynh delegate-run <start|status|cancel|supervise> ...
+
+Internal. Run a delegates_to delegate as its own detached ynh session, and keep
+its delegation record under $YNH_HOME/delegations.
+
+  start --parent <id> --entry <n> --task <text> [--model <m>] [--folder <dir>]
+      Resolve entry n of the parent's delegates_to to its installed, trusted
+      harness and start it, then print its handle and record path as JSON.
+  status --record <path>   Print the record.
+  cancel --record <path>   Stop the delegate's process group and record it
+                           cancelled.
+  supervise <record-path>  What a started session runs as; never typed.
+
+The delegate server calls this; it is not meant to be typed.`,
+
+	"delegate-mcp": `ynh delegate-mcp --parent <id> --folder <dir> [--max-wait <seconds>]
+
+Internal. The MCP server a vendor starts over stdio for a parent with A2A
+delegates: one delegate_to_<name> tool per delegate, and delegate_list,
+delegate_status, delegate_result, delegate_cancel and delegate_reply. It reaches
+each delegate through the endpoint named in its environment (YNH_DELEGATES,
+YNH_DELEGATE_<NAME>_CARD and _AUTH).
+
+  --parent <id>        The parent's id; only its delegations are visible.
+  --folder <dir>       The parent's working folder.
+  --max-wait <seconds> The longest a call may be held (30, or YNH_DELEGATE_MAX_WAIT).
+
+ynh run writes the entry that calls this; it is not meant to be typed.`,
+
+	"parent-mcp": `ynh parent-mcp --record <path> [--max-wait <seconds>]
+
+Internal. The MCP server a vendor starts over stdio for a delegate session: one
+tool, ask_parent, which puts a question to the parent that started the delegate
+and waits for the answer (docs/delegate-sessions.md, "Questions from a
+delegate"). The question goes on the delegation record at --record.
+
+  --record <path>      The delegation record of this session.
+  --max-wait <seconds> The longest one call may be held (45, or YNH_PARENT_ASK_MAX_WAIT).
+
+ynh run writes the entry that calls this, for a delegate's session; it is not
+meant to be typed.`,
+
 	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
 
 Internal. Print the headers of a remote MCP server as a JSON object, with
@@ -59,6 +101,11 @@ Install a harness from a Git URL, a registry id, or a local path.
 Flags:
   --path <subdir>    Install from a subdirectory of the repository
   --ref <ref>        Pin to a tag, branch or commit
+  --trust            Accept what the harness executes as part of the install; only
+                     at a full 40-character commit SHA, with every remote include
+                     that brings commands pinned to one too. Recorded as
+                     'install --trust'. Without it, the harness runs only after
+                     'ynh trust accept'
   --allow-shadow     Install even when the harness's name matches a command on PATH
                      (its launcher would replace that command; refused by default)
 
@@ -82,9 +129,14 @@ Examples:
   ynh uninstall local/david
   ynh uninstall local/david github.com/org/repo/planner`,
 
-	"update": `ynh update <name>
+	"update": `ynh update <name> [--trust]
 
-Refresh the cached Git repositories a harness resolves from.`,
+Refresh the cached Git repositories a harness resolves from.
+
+An update can move what the harness executes, which leaves an accepted harness
+refused until it is accepted again. --trust accepts it again in one step, only
+when the harness and every include that brings commands are pinned to a full
+commit SHA, and records the acceptance as 'update --trust'.`,
 
 	"run": `ynh run [<harness-id|path>] [flags] [prompt]
 
@@ -110,17 +162,35 @@ Flags:
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
+  --trust                  For a run from a folder only: accept the commands its
+                           remote includes bring, if each is pinned to a full
+                           commit SHA. An installed harness refuses it (accept
+                           it with 'ynh trust accept' or 'ynh install --trust')
   --session-name <name>    Claude: bind --resume to this name's session (a fresh
                            launch starts a new one). Other vendors: a label
   --resume                 Continue the previous session in this directory
   --resume=<id>            Continue one specific session by id
                            A trailing prompt is sent to the resumed session,
                            a --focus prompt is not; some vendors refuse it
+  --on-live refuse|allow   When a session of the harness is already live (ynh ps):
+                           refuse stops this run, allow starts it quietly. Without
+                           it the harness's on_live applies; unset, ynh warns
+                           and starts it
   --no-workspace           Grant none of the harness's requested workspace folders
                            for this run (see docs/workspace.md)
   --label key:value        A label for the run (repeatable; key: removes one).
                            Merged over config.json, the harness manifest and
                            YNH_LABELS; see docs/telemetry.md
+  --telemetry-relay        Start ynr relay for the session and send the vendor's
+                           own telemetry to the spool (claude, copilot,
+                           codex). Also
+                           YNH_TELEMETRY_RELAY, or "telemetry_relay": true in
+                           config.json
+  --telemetry-relay-endpoint <url>
+                           Send the vendor's own telemetry to a standing relay
+                           at this loopback http endpoint and start none. Also
+                           YNH_TELEMETRY_RELAY_ENDPOINT, or
+                           "telemetry_relay_endpoint" in config.json
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
@@ -152,9 +222,26 @@ Flags:
   --format text|json   Output format (default text)
   --check-updates      Check each harness's source for newer content
   --label key:value    Only harnesses whose own manifest labels include this
-                       (repeatable; every one must match)`,
+                       (repeatable; every one must match)
+  --source repo        Only harnesses installed from this repository
+                       (repeatable; any one may match)
+  --includes repo      Only harnesses that include or delegate to this
+                       repository (repeatable; any one may match)
+  --columns a,b,...    Columns to show: id, kind, vendor, source, artifacts,
+                       includes, delegates, labels (text only)
 
-	"info": `ynh info <name> [flags]
+A repo is owner/repo, host/owner/repo or a URL (all the same repository), a
+subpath narrows it, and a local path matches by prefix. Different filters must
+all match.
+
+On a terminal, a row wider than the terminal is cut to fit: INCLUDES and
+DELEGATES TO first (ending "… (+N)"), then SOURCE, then LABELS. Piped output is
+never cut. An empty INCLUDES or DELEGATES TO shows "-".`,
+
+	"info": `ynh info <harness-id|path> [flags]
+
+Takes an installed harness id, or a path to a harness folder ("." for the
+current one), as ynh run, ynh check and ynh delegate add do.
 
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
@@ -236,6 +323,38 @@ Show symlink installations across projects.
 Flags:
   --format text|json   Output format (default text)`,
 
+	"ps": `ynh ps [flags]
+
+List the sessions ynh has launched that are live or orphaned (a delegate whose
+owner session is gone). Each row has the harness, vendor, launch mode
+(interactive, one-shot, delegate), wrapper and vendor pid, start time and
+address. A session whose process is gone, or whose pid now belongs to another
+process, is dead and is not listed without --all.
+
+Flags:
+  --all                Include ended and dead sessions (history)
+  --format text|json   Output format (default text)
+  --json               Same as --format json`,
+
+	"stop": `ynh stop <session> | ynh stop --owner <session>
+
+Stop a live session: ask its vendor process to terminate, and kill it if it
+has not gone within a few seconds. A session is named by its id or its address
+(ynh:<id>), as ynh ps shows it. --owner stops every live session that session
+started (its delegates).
+
+Flags:
+  --owner <session>    Stop every live session owned by that session`,
+
+	"reap": `ynh reap [flags]
+
+Stop the orphaned sessions: delegates whose owner session is gone, which ynh ps
+lists as orphaned.
+
+Flags:
+  --history   Also delete the records of ended and dead sessions
+  --dry-run   Say what would be done and do nothing`,
+
 	"search": `ynh search <term> [flags]
 
 Search configured registries and sources for a harness.
@@ -266,7 +385,9 @@ Run 'ynh backend <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"delegate": `ynh delegate <add|remove|update> <harness> <url> [flags]
 
-Manage a harness's Git delegates.
+Manage a harness's Git delegates. <harness> is an installed harness id, or a
+path to a harness folder ("." for the current one), the same forms ynh info
+takes.
 
   ynh delegate add <harness> <url>      Add a delegate
   ynh delegate remove <harness> <url>   Remove a delegate
@@ -289,6 +410,10 @@ Manage a harness's Git includes.
   ynh include add <harness> <url|path> Add an include (Git URL or local path)
   ynh include remove <harness> <url>   Remove an include
   ynh include update <harness> <url>   Change an include's path, picks or ref
+
+add and update take --trust, which accepts the harness again after the change in
+one step, only when everything that runs is pinned to a full commit SHA, and
+records it as 'include --trust'.
 
 Run 'ynh include <subcommand> --help' for a subcommand's arguments and flags.`,
 
@@ -431,12 +556,16 @@ States:
   accepted     The commands match what you accepted.
   changed      The commands differ from what you accepted.
 
-This reports; it does not block. Nothing refuses to run because a harness is
-unreviewed. A direct "ynh run", and a harness's launcher, is not gated by trust,
-and that covers "changed" too. Its hooks and MCP servers start with your user's
-permissions, whether or not you have run "ynh trust accept", so read a harness
-with "ynh trust show" before you first run it. The record earns its place by pinning the exact command set you
-read, so that "changed" can be reported when an update alters it.
+This blocks. 'ynh run', 'ynh agent run' (and --resume) and 'ynh check' refuse an
+installed harness that is unreviewed, changed or unavailable, before any vendor
+starts: exit 1, with the error code untrusted under --format json. The refusal
+lists what the harness executes and names 'ynh trust show' and 'ynh trust
+accept'. A script the digest cannot read in full blocks the run even once
+accepted. A run from a folder ('ynh run ./dir', 'ynh check ./dir') does not
+check the folder's own commands, but refuses the commands its remote includes
+bring until you run 'ynh trust accept <dir>'. A harness with nothing to review
+(no-commands) needs no acceptance. 'ynh install --trust' accepts in the same step,
+at full commit SHAs. See docs/trust.md.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising
@@ -464,7 +593,8 @@ Flags:
   --profile <name>            Apply a named profile overlay
   --backend <name>            Worker backend: claude (default), codex, cursor,
                               opencode.
-                              On --resume, the session's backend
+                              On --resume, the session's own backend is
+                              used; naming a different one is refused.
   --model <name>              Model override
   --effort low|medium|high    Reasoning effort, mapped to the backend's own
                               setting (claude, codex; refused on cursor and
@@ -479,7 +609,12 @@ Flags:
   --no-plan                   Skip the planning phase
   --interactive               Stay in session
   --sandbox none|srt          Wrap the worker in srt with ynh's network and
-                              write allowlist (claude only); none by default
+                              write allowlist (claude, codex, cursor; opencode
+                              on Linux only, refused on macOS); none by default
+  --trust                     For a run from a folder only (--harness <path>):
+                              accept the commands its remote includes bring, if
+                              each is pinned to a full commit SHA. Refused for
+                              an installed harness
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor, opencode). Only for runs inside
@@ -501,7 +636,16 @@ Flags:
 
 	"image": `ynh image <name> [flags]
 
-Build a Docker image with a harness baked in.`,
+Build a Docker image with a harness baked in.
+
+Flags:
+  --from <source>   Build from a Git URL or local path instead of an installed harness
+  --ref <ref>       The commit, tag or branch of a remote --from source
+  --trust           With --from, accept what the harness executes and bake the
+                    acceptance (via: image). Needs --ref at a full 40-character
+                    commit SHA for a remote source and its remote includes.
+                    Without it, a --from harness with hooks, MCP servers,
+                    sensors or workspace folders is refused at build time.`,
 
 	"prune": `ynh prune
 

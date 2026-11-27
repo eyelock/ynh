@@ -177,16 +177,36 @@ func telemetryRelaySetting(flag bool, stderr io.Writer) bool {
 	return err == nil && cfg.TelemetryRelay
 }
 
+// relayDestination is where the run's telemetry goes: a *telemetry.Telemetry
+// for `ynh agent run`, or the chosen destination for `ynh run`, which writes
+// no records of its own.
+type relayDestination interface {
+	Destination() telemetry.Destination
+	SpoolDir() string
+	// OperatorOTLP is true when the operator set OTEL_EXPORTER_OTLP_*, even
+	// when ynh's own record goes to the spool (grpc, or another protocol its
+	// exporter cannot speak).
+	OperatorOTLP() bool
+}
+
 // runRelay is the `ynr relay` for one run. It starts when the loop is about
 // to start the worker, only if the conditions hold, and is stopped once the
 // worker has exited. When a condition fails, or the relay cannot start,
 // the run carries on without the vendor's own telemetry, after one note.
 type runRelay struct {
-	tel    *telemetry.Telemetry
+	tel    relayDestination
 	stderr io.Writer
+	// supported reports whether ynh configures backend's telemetry for this
+	// kind of run; nil means agent.SupportsTelemetryRelay (`ynh agent run`).
+	supported func(backend string) bool
 	// sandbox is the run's --sandbox. Under srt the worker cannot reach a
 	// loopback relay, so none is started.
 	sandbox string
+	// standing is a configured standing relay endpoint. When set, the vendor
+	// is pointed at it and no relay is started.
+	standing string
+	// endpointURL is the standing endpoint once it has passed the checks.
+	endpointURL string
 
 	once  sync.Once
 	relay *telemetry.Relay
@@ -203,6 +223,9 @@ func (r *runRelay) endpoint(backend string) string {
 		return ""
 	}
 	r.once.Do(func() { r.start(backend) })
+	if r.endpointURL != "" {
+		return r.endpointURL
+	}
 	if r.relay == nil {
 		return ""
 	}
@@ -210,10 +233,18 @@ func (r *runRelay) endpoint(backend string) string {
 }
 
 func (r *runRelay) start(backend string) {
-	skip := func(why string) {
-		_, _ = fmt.Fprintf(r.stderr, "ynh: the telemetry relay is on, but %s; the run continues without %s's own telemetry\n", why, backend)
+	what := "the telemetry relay is on"
+	if r.standing != "" {
+		what = "a standing relay endpoint is set"
 	}
-	if !agent.SupportsTelemetryRelay(backend) {
+	skip := func(why string) {
+		_, _ = fmt.Fprintf(r.stderr, "ynh: %s, but %s; the run continues without %s's own telemetry\n", what, why, backend)
+	}
+	supported := r.supported
+	if supported == nil {
+		supported = agent.SupportsTelemetryRelay
+	}
+	if !supported(backend) {
 		skip("ynh does not configure " + backend + "'s telemetry yet")
 		return
 	}
@@ -230,11 +261,20 @@ func (r *runRelay) start(backend string) {
 		return
 	}
 	// Only into the spool. An operator's OTEL_EXPORTER_OTLP_* is their
-	// choice, and the vendor reads it for itself (contract rule 1).
-	switch r.tel.Destination() {
-	case telemetry.DestinationOTLP:
+	// choice, and the vendor reads it for itself (contract rule 1), whatever
+	// protocol it names: ynh's own record may go to the spool for grpc (or
+	// another protocol it cannot speak), but the vendor's telemetry stays the operator's.
+	if r.tel.OperatorOTLP() {
 		skip("OTEL_EXPORTER_OTLP_* is set, so the vendor's telemetry is left to it")
 		return
+	}
+	if r.standing != "" {
+		// A standing relay writes to its own spool: no spool folder here,
+		// and no relay to start or stop.
+		r.endpointURL = r.standing
+		return
+	}
+	switch r.tel.Destination() {
 	case telemetry.DestinationNone:
 		skip("there is no spool folder (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local)")
 		return

@@ -12,6 +12,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // LayoutProvider describes the vendor layout information that the assembler
@@ -53,7 +54,7 @@ type ArtifactTransformer interface {
 // warnings for what its transform of one artifact drops, such as the tools
 // list of an agent Codex writes as a custom agent. Assembly prints each one.
 type ArtifactWarner interface {
-	ArtifactWarnings(artifactType, name string, data []byte) []string
+	ArtifactWarnings(artifactType, name string, data []byte) []warn.Warning
 }
 
 // CommandSkiller is an optional capability a LayoutProvider may implement when
@@ -85,7 +86,7 @@ func Assemble(adapter LayoutProvider, content []resolver.ResolvedContent) (strin
 
 // AssembleTo populates a specific directory with vendor-specific config layout.
 // The directory is cleaned and recreated. Use this for deterministic paths that
-// survive process replacement (syscall.Exec).
+// outlive the launching process: a vendor session reads its run dir to the end.
 func AssembleTo(dir string, adapter LayoutProvider, content []resolver.ResolvedContent) error {
 	// Clean previous run
 	if err := os.RemoveAll(dir); err != nil {
@@ -114,8 +115,8 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 	// file replaces the earlier copy, and its warnings replace that copy's,
 	// so each agent staged warns once, about the copy that was staged.
 	var transform ArtifactTransform
-	var warned []string               // target paths, in first-written order
-	warnings := map[string][]string{} // target path -> that copy's warnings
+	var warned []string                     // target paths, in first-written order
+	warnings := map[string][]warn.Warning{} // target path -> that copy's warnings
 	if t, ok := adapter.(ArtifactTransformer); ok {
 		transform = t.TransformArtifact
 		if w, ok := adapter.(ArtifactWarner); ok {
@@ -135,9 +136,7 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 	}
 	defer func() {
 		for _, key := range warned {
-			for _, w := range warnings[key] {
-				_, _ = fmt.Fprintf(warnOut, "  warning: %s\n", w)
-			}
+			warn.Print(warnOut, warnings[key]...)
 		}
 	}()
 
@@ -211,7 +210,10 @@ func commandsAsSkills(configDir string, artifactDirs map[string]string, cs Comma
 		stem := strings.TrimSuffix(e.Name(), ".md")
 		dst := filepath.Join(configDir, skillDir, stem)
 		if _, err := os.Lstat(dst); err == nil {
-			_, _ = fmt.Fprintf(warnOut, "  warning: command %q: a skill of the same name exists, so the command is not written as a skill\n", stem)
+			warn.Print(warnOut, warn.Warning{
+				Message: fmt.Sprintf("command %q: a skill of the same name exists, so the command is not written as a skill", stem),
+				Fix:     fmt.Sprintf("rename the command %q or the skill %q", stem, stem),
+			})
 			continue
 		} else if !os.IsNotExist(err) {
 			return err

@@ -138,7 +138,7 @@ func ListModels(cfg *config.Config, backendName string) ([]string, error) {
 // Apply redirects vendorName's CLI at the given backend connection,
 // returning extra args to prepend to the vendor invocation. Env vars are set
 // on the current process so they're inherited by the vendor CLI at launch
-// (syscall.Exec and exec.Command both pick up os.Environ() at launch time,
+// (exec.Command picks up os.Environ() at launch time,
 // after Apply runs).
 func Apply(vendorName string, backendName string, conn config.BackendConnection, model string) ([]string, error) {
 	switch vendorName {
@@ -217,7 +217,7 @@ var tomlSectionHeader = regexp.MustCompile(`^\[(.+)\]$`)
 // into ~/.codex/config.toml, replacing any existing section with the same
 // name and leaving all other content untouched. Codex has no config.toml
 // writer of its own in ynh today, so this is a minimal section-level
-// read/replace/write rather than a general TOML library (zero external deps).
+// read/replace/write rather than a general TOML library (no TOML dependency).
 func ensureCodexProvider(name string, conn config.BackendConnection) error {
 	path, err := codexConfigPath()
 	if err != nil {

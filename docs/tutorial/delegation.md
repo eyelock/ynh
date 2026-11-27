@@ -1,6 +1,6 @@
-# Delegation
+# Native Delegation
 
-Chain harnesses together. A parent harness can invoke other harnesses as subagents — each with their own instructions, rules, and skills.
+This tutorial runs a delegate the other way: as the vendor's own subagent, inside the parent's session, with `"transport": "native"`. By default a delegate runs as its own ynh session instead; start with [A First Delegate Session](first-delegate-session.md) for that. A native delegate carries only part of its harness: its instructions everywhere, its MCP servers only on Claude Code, and its hooks and workspace folders nowhere ([limit L12](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
 
 ## Prerequisites
 
@@ -64,6 +64,7 @@ cat > /tmp/ynh-tutorial/team-lead/.agents/harness/plugin.json << 'EOF'
   "version": "0.1.0",
   "description": "Team lead harness with specialist delegates",
   "default_vendor": "claude",
+  "transport": "native",
   "delegates_to": [
     {"git": "/tmp/ynh-tutorial/specialist"},
     {"git": "github.com/eyelock/assistants", "path": "ynh/researcher"}
@@ -95,17 +96,19 @@ Installed harness "team-lead"
 ynh ls
 ```
 
-Expected:
+This lists every harness installed on your machine, so other rows may appear. Find the `local/team-lead` row: its source is `/tmp/ynh-tutorial/team-lead`, and its `DELEGATES TO` column shows two delegates. The column may be shortened to `… (+2)`, which is the two delegates.
+
+On an otherwise empty install the row reads:
 ```
-ID               KIND   VENDOR  SOURCE                       ARTIFACTS  INCLUDES  DELEGATES TO
-local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
+ID               KIND   VENDOR  SOURCE                       ARTIFACTS  INCLUDES  DELEGATES TO                                                     LABELS
+local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          -         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher  -
 ```
 
 ## Inspect delegate agent files
 
 Delegate repos are fetched at install time and cached locally. Agent files are generated at runtime from the cached repos. Run the harness to trigger assembly:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--team-lead/.claude --add-dir ~/.ynh/run/local--team-lead --append-system-prompt You are a team lead. ... -p list your available agents`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--team-lead/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--team-lead/.../**) --append-system-prompt You are a team lead. ... -p list your available agents`
 ```bash
 team-lead "list your available agents"
 ```
@@ -126,14 +129,14 @@ Expected: frontmatter with name/description, then an Instructions section and an
 
 ## Test delegation
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--team-lead/.claude --add-dir ~/.ynh/run/local--team-lead --append-system-prompt You are a team lead. ... -p delegate to the specialist agent and ask it to analyze this project's main.go`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--team-lead/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--team-lead/.../**) --append-system-prompt You are a team lead. ... -p delegate to the specialist agent and ask it to analyze this project's main.go`
 ```bash
 team-lead "delegate to the specialist agent and ask it to analyze this project's main.go"
 ```
 
 The specialist's `instructions.md` says to provide detailed technical analysis with file paths. If you see that style of response, delegation is working.
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--team-lead/.claude --add-dir ~/.ynh/run/local--team-lead --append-system-prompt You are a team lead. ... -p ask the researcher delegate to review the project structure`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--team-lead/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--team-lead/.../**) --append-system-prompt You are a team lead. ... -p ask the researcher delegate to review the project structure`
 ```bash
 team-lead "ask the researcher delegate to review the project structure"
 ```
@@ -149,9 +152,9 @@ rm -rf /tmp/ynh-tutorial
 
 ## What you learned
 
-- `delegates_to` in .agents/harness/plugin.json references other harnesses as subagents
+- `delegates_to` in .agents/harness/plugin.json references other harnesses; with `"transport": "native"` they run as subagents, and by default (`a2a`) as their own sessions
 - Delegates must be Git repos (local or remote)
-- ynh generates vendor-native agent files from delegate harnesses at runtime
+- ynh generates vendor-native agent files from `native` delegate harnesses at runtime; an `a2a` delegate gets none
 - Agent files inline the delegate's own instructions, rules, and skill list, when it has them
 - Delegate repos are fetched at install time and cached — `ynh run` works offline
 - Use `ynh update` to refresh cached delegate repos (a delegate in the harness's own repo, `"git": "."`, is refreshed on every run)

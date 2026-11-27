@@ -390,6 +390,12 @@ are not in the output: a `${VAR}` reference is shown as written, and any other
 value is printed as `(literal, not shown)`, because a literal may be a
 credential. Read the manifest in the harness directory to see one.
 
+**Scripts.** From digest scheme 3 the digest also covers the script a hook, MCP server or sensor command
+runs, and every file in that script's folder, so changing a script's body alone makes the harness read
+`changed`. A path into the project (`bash scripts/wake.sh`) is project code and is not covered. How a
+script is found, what is and is not covered, how links are treated and what `trust show` prints are in
+[Trust](trust.md#what-the-digest-covers).
+
 **Upgrading.** Until hooks and MCP servers were covered (#577), the digest covered sensor commands only. A harness
 you accepted then shows `changed` once, even if nothing in it has, and says so.
 That is intended: you were never shown its hooks and MCP servers, so the old
@@ -401,22 +407,23 @@ acceptance does not cover them. Review them with `ynh trust show`, then
 | `unreviewed` | Never accepted. Also every install predating this command. |
 | `accepted` | The commands match what you accepted. |
 | `changed` | The commands differ from what you accepted. |
-| `no-commands` | The harness executes nothing. Most harnesses. |
+| `no-commands` | Nothing to review: no commands, workspace folders or focuses of delegates. Most harnesses. |
 | `unavailable` | What the harness executes could not be read in full, because an include is not in the cache. Nothing can be accepted; run `ynh update`. |
 
-**This reports; it does not block.** Nothing refuses to run because a harness is
-unreviewed, and `ynh check` warns only on `changed`, never on `unreviewed`: a
-warning that appears on almost every run is one nobody reads.
-
-**`ynh run` is not gated by trust.** `ynh run` (and a harness's launcher, such
-as `david`) does not refuse a harness that is `unreviewed` or `changed`. Its
-hooks and MCP servers are assembled and started by the vendor CLI as soon as you
-run it, with your user's permissions and your environment, whether or not you
-have run `ynh trust accept`. Read a harness with `ynh trust show <harness-id>`
-before you first run it, not after. Acceptance changes only two things today: a
-requested [workspace folder](harnesses.md#workspace-optional) can be granted by trust when no
-allow-list is set, and Codex is told to trust the harness's hooks for the run
-([Codex hook trust](hooks.md#codex-hook-trust)).
+**It blocks.** `ynh run`, `ynh agent run` (and `--resume`) and `ynh check`
+refuse an installed harness that is `unreviewed`, `changed` or `unavailable`,
+before any vendor starts: exit 1, with the error code `untrusted` under
+`--format json`. The refusal lists what the harness executes and names
+`ynh trust show` and `ynh trust accept`. A harness that only requests
+workspace folders is refused too, until you accept it. A script the digest cannot read in full (a
+link out of the harness, to a device, dangling or looping, a link to a folder, or
+a missing script or script folder) blocks the run too, accepted or not, because
+accepting cannot make it reviewable; `ynh trust show` marks each such entry
+"this blocks a run". A run from a folder (`ynh run ./dir`) says on stderr that
+its own commands are not trust-checked and launches, but the commands a remote
+include of another repository brings are refused until `ynh trust accept <dir>`
+records them, per include and ref. When the harness requests workspace folders
+and no allow-list is set, accepting is also what grants the folders.
 
 The record lives in `$YNH_HOME/trust.json`, deliberately outside the harness
 directory. A harness carrying its own trust record would be authorising itself.
@@ -1091,6 +1098,8 @@ Print the fully-resolved sensor block as JSON. Inline focuses are kept inline; s
 
 Mechanically execute a sensor and emit a JSON result. There is no `passed` boolean — ynh returns raw exit codes, output, and file contents. Pass/fail thresholds are loop-driver policy.
 
+An installed harness must be accepted first. `ynh sensors run` refuses an unaccepted or changed installed harness before it looks up the sensor or starts anything, exits 1, and writes the error envelope with code `untrusted` (the command only emits JSON). See [Trust](trust.md#the-gate) for how to accept it.
+
 For a `command` sensor:
 
 ```json
@@ -1113,6 +1122,7 @@ For a `files` sensor, the result includes file contents (or just metadata with `
 Flags:
 - `--cwd <dir>` — working directory for `command` sensors and base for relative `files` globs. Defaults to current directory.
 - `--no-content` — omit file contents for `files` sensors. Use when only metadata (path, size) is needed.
+- `--sensor-overlay-json <json>` — overlay sensors for this run; it comes from your own command line, so it is not checked by the gate.
 
 ## Relationship to hooks
 

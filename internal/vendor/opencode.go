@@ -15,10 +15,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func init() {
@@ -38,9 +38,9 @@ const opencodeConfigDirEnv = "OPENCODE_CONFIG_DIR"
 // than half-supported.
 const opencodeSupportedMajor = 2
 
-// opencodeExec replaces the process. A variable so tests can observe the
-// launch instead of becoming OpenCode.
-var opencodeExec = syscall.Exec
+// opencodeExec runs OpenCode as a child of ynh. A variable so tests can observe
+// the launch instead of starting OpenCode.
+var opencodeExec = execVendor
 
 // opencodeVersionTimeout bounds `opencode --version`, which a wedged install
 // could otherwise hang forever. A variable so a test can shorten it.
@@ -61,8 +61,7 @@ var opencodeVersionProbe = func(bin string) (string, error) {
 // vendor-adapters skill, references/opencode.md.
 //
 // Launch strategy: native bundle loading by environment variable.
-// OPENCODE_CONFIG_DIR points at <run dir>/.opencode, and syscall.Exec gives a
-// clean process replacement with no symlinks. CONFIRMED: 2.x runs commands
+// OPENCODE_CONFIG_DIR points at <run dir>/.opencode, which needs no symlinks. CONFIRMED: 2.x runs commands
 // through a shared background service that ignores the client's environment,
 // so the variable has no effect unless the invocation is `--standalone`, which
 // starts a private server that does honour it. --standalone is therefore on
@@ -607,18 +606,19 @@ func (o *OpenCode) LaunchWithInitialPrompt(configPath string, prompt string, ext
 
 func (o *OpenCode) SupportsInitialPrompt() bool { return true }
 
-// IsolateMCP cannot isolate on OpenCode: ynh has not verified a way to keep
-// the servers in the user's own OpenCode config out of a run, so it says so
-// and launches normally, as for Codex and Cursor.
-func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
-	return nil, "MCP isolation is not supported by OpenCode: servers in your OpenCode config will still load"
+// IsolateMCP is OpenCode's isolation as launch arguments, and there are none:
+// OpenCode's isolation is an environment variable, IsolateMCPEnv, which `ynh
+// run` uses in its place. This is what a caller that only reads arguments gets.
+// No fix: ynh run applies OpenCode isolation through IsolateMCPEnv; nothing the user edits changes what this caller gets.
+func (o *OpenCode) IsolateMCP(configPath string) ([]string, []warn.Warning) {
+	return nil, []warn.Warning{{Message: "MCP isolation on OpenCode is applied through the environment, not launch arguments: servers in your OpenCode config will still load"}}
 }
 
 func (o *OpenCode) SupportsResume() bool { return true }
 
 // ResolveLastSession cannot resolve an id: OpenCode's session store is SQLite
-// (~/.local/share/opencode/opencode.db) and ynh takes no driver, the same
-// reason Codex gives. Callers resume with an empty id, which LaunchResume turns
+// (~/.local/share/opencode/opencode.db) and ynh takes no driver. Codex and
+// Cursor read their own stores and do not return this. Callers resume with an empty id, which LaunchResume turns
 // into -c.
 func (o *OpenCode) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	return "", ErrSessionLookupUnavailable
@@ -1188,6 +1188,9 @@ func (o *OpenCode) ExportArtifactDirs() map[string]string { return nil }
 
 func (o *OpenCode) SupportsExportDelegates() bool { return false }
 
+// Claude Code, Codex, Copilot CLI and OpenCode have subagents (each carrying only part of a harness: limit L12 on docs/vendor-parity.md).
+func (o *OpenCode) SupportsNativeSubagents() bool { return true }
+
 func (o *OpenCode) MarketplaceManifestDir() string { return "" }
 
 func (o *OpenCode) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
@@ -1244,8 +1247,17 @@ func PrepareOpenCode(configPath, bin string) error {
 	if configPath == "" {
 		return nil
 	}
-	runOpencodeSessionStart(configPath)
-	return composeOpencodeAgents(configPath)
+	return (&OpenCode{}).PrepareLaunch(configPath)
+}
+
+// PrepareLaunch writes the files OpenCode reads at start-up into runDir: the
+// output of the harness's on_session_start hooks, and the composed
+// .opencode/AGENTS.md. It is the vendor's LaunchPreparer step, which `ynh run`
+// calls on the staged tree before the snapshot is sealed, so that a launch only
+// reads the run dir and a snapshot is never written to under a live session.
+func (o *OpenCode) PrepareLaunch(runDir string) error {
+	runOpencodeSessionStart(runDir)
+	return composeOpencodeAgents(runDir)
 }
 
 // opencodeEnviron returns env with OPENCODE_CONFIG_DIR set to dir. Any earlier
@@ -1270,7 +1282,9 @@ func launchOpencodeArgs(configPath string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := PrepareOpenCode(configPath, bin); err != nil {
+	// The launch only reads the run dir: the session-start output and the
+	// composed AGENTS.md were written by PrepareLaunch before the seal.
+	if err := checkOpencodeVersion(bin); err != nil {
 		return err
 	}
 	dir := filepath.Join(configPath, ".opencode")

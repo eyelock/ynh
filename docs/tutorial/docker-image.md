@@ -199,8 +199,9 @@ COPY --chown=ynh:ynh vendors/opencode/ /home/ynh/.ynh/run/local--docker-demo/ope
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
 
-# Schema version of the layout above, so ynh does not try to migrate it, and
-# the include cache (cache/), so included sensors are read from the build
+# Schema version of the layout above, so ynh does not try to migrate it, the
+# include cache (cache/), so included sensors are read from the build, and the
+# accepted trust record (trust.json), which the run's trust gate checks
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)

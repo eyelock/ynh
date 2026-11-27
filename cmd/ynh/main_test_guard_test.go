@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/baseline"
+	"github.com/eyelock/ynh/internal/delegation"
 )
 
 // TestMain fails the package if the suite left a baseline in the source tree.
@@ -28,10 +30,28 @@ func TestMain(m *testing.M) {
 	if record := os.Getenv(fakeClaudeEnv); record != "" {
 		os.Exit(fakeClaude(record))
 	}
+	// Run as a delegation's supervisor, for a test that needs a live record.
+	if os.Getenv("YNH_TEST_SUPERVISE") == "1" {
+		err := delegation.Supervise(os.Args[len(os.Args)-1], func(r *delegation.Record) *exec.Cmd {
+			return exec.Command("sh", "-c", r.Task)
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	// Run as ynh itself, for a test that needs a real process to kill.
 	if os.Getenv(execMainEnv) == "1" {
 		main()
 		os.Exit(0)
+	}
+	// YNH_HOME takes precedence over the HOME these tests set, so an exported value would send
+	// their launchers, harnesses and caches into the developer's real ynh home. A test that wants
+	// YNH_HOME sets its own with t.Setenv.
+	if err := os.Unsetenv("YNH_HOME"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	state, err := isolateTelemetry()
 	if err != nil {

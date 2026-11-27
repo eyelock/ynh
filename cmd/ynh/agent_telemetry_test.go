@@ -184,7 +184,7 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 						if err := migration.WriteSchemaVersion(home, migration.CurrentSchemaVersion); err != nil {
 							t.Fatal(err)
 						}
-						installListTestHarness(t, home, "probe", `{"name":"probe","version":"0.1.0","default_vendor":"claude",`+
+						installTrustedTestHarness(t, home, "probe", `{"name":"probe","version":"0.1.0","default_vendor":"claude",`+
 							`"sensors":{"probe":{"category":"maintainability","source":{"command":"env > '`+sensorEnvFile+`'"},"output":{"format":"text"}}}}`)
 					}
 					state := t.TempDir()

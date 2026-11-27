@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // workspace is a request only the operator running the harness can grant, so
@@ -32,7 +34,7 @@ func TestExportWarnsWorkspaceIsNotCarried(t *testing.T) {
 	}
 	has := func(results []ExportResult) bool {
 		for _, r := range results {
-			for _, w := range r.Warnings {
+			for _, w := range warn.Messages(r.Warnings) {
 				if strings.Contains(w, warning) {
 					return true
 				}
@@ -63,7 +65,7 @@ func TestExportWarnsWorkspaceIsNotCarried(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, r := range results {
-				for _, w := range r.Warnings {
+				for _, w := range warn.Messages(r.Warnings) {
 					if strings.Contains(w, "workspace") {
 						t.Errorf("warning without a workspace: %s", w)
 					}

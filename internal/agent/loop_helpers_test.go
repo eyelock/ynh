@@ -187,7 +187,7 @@ func TestAssembleHarness_AssemblesDelegates(t *testing.T) {
 	h := &harness.Harness{
 		Name:        "root",
 		Dir:         t.TempDir(),
-		DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: del}}},
+		DelegatesTo: []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: del}}},
 	}
 	dir, _, err := assembleHarness(h, "claude", harness.Selection{})
 	if err != nil {

@@ -359,6 +359,23 @@ seen them. Read a real one from your own harness, then pick a period: longer
 answers more questions later and is a larger thing to be holding when something
 goes wrong.
 
+## What Pinning Means Here
+
+Pinning is per include, and it is only as strong as the `ref` you write:
+
+| `ref` of an include | State | What `ynh update` does |
+|---|---|---|
+| a full 40-character commit SHA | **pinned** | stays on that commit |
+| a branch name, or no `ref` | **floating** | follows the branch (or the remote's default branch) to its new tip |
+| a tag | **floating** | re-resolves the tag, which a publisher can move |
+| a short SHA, such as `abc1234` | **floating** (not pinned) | `ynh info` says so; `ynh install` refuses it with a message naming the fix: use the full 40-character SHA (`git rev-parse <short>`) |
+
+`ynh info` shows each include as `pinned` or `floating` (a short SHA shows `floating: short SHA is not pinned, use the full 40 characters`), and `ynh info --format json`
+carries the same as `is_pinned` on each include. There is no lock file: the
+installed SHA that `installed.json` records is a record of what was fetched, not
+a constraint on the next update. If a factory needs a reproducible harness, pin
+every include to a full SHA.
+
 ## Where ynh Stops
 
 The [containment doctrine](harness-engineering.md#ynh-does-not-own-containment)

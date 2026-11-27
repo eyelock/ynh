@@ -13,9 +13,44 @@ import (
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdUpdate(args []string) error {
+	args, trustFlag := takeTrustFlag(args)
+	if len(args) < 1 {
+		return fmt.Errorf("usage: ynh update <harness-name> [--trust]")
+	}
+	if trustFlag {
+		// --trust accepts the harness as it is after the update, so it refuses,
+		// before anything is fetched, one that is not pinned to full SHAs.
+		if gateRef(args[0]) == "" {
+			return fmt.Errorf("--trust is for an installed harness id, not a path")
+		}
+		p, err := harness.LoadQualified(args[0])
+		if err != nil {
+			return err
+		}
+		bad, err := pinProblems(p)
+		if err != nil {
+			return err
+		}
+		if len(bad) > 0 {
+			return refuseUnpinned(args[0], "--trust", bad)
+		}
+	}
+	if err := updateHarness(args, trustFlag); err != nil {
+		return err
+	}
+	if trustFlag {
+		return acceptAfterChange(args[0], viaUpdateTrust, os.Stdout)
+	}
+	return nil
+}
+
+// updateHarness refreshes the harness; quiet leaves out the "no longer
+// trusted" note, for --trust, which accepts it again straight after.
+func updateHarness(args []string, quiet bool) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: ynh update <harness-name>")
 	}
@@ -26,6 +61,9 @@ func cmdUpdate(args []string) error {
 	if err != nil {
 		return err
 	}
+	// An update can move what the harness executes; if it was accepted and now
+	// differs, it is refused until accepted again, and the update says so.
+	before := trustStateOf(name)
 
 	if p.InstalledFrom != nil && p.InstalledFrom.ForkedFrom != nil {
 		return fmt.Errorf("harness %q is a fork — ynh update cannot pull upstream changes for a fork\n"+
@@ -199,10 +237,14 @@ func cmdUpdate(args []string) error {
 			}
 		}
 		if err := harness.SaveInstalledRecord(name, p, ins); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not update install record: %v\n", err)
+			// No Fix: the cause is the filesystem error writing the record.
+			warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not update install record: %v", err)})
 		}
 	}
 
 	fmt.Printf("Checked %d source(s) for harness %q, %d updated.\n", checked, name, updated)
+	if !quiet {
+		noteUntrustedAfterChange(name, before, os.Stdout)
+	}
 	return nil
 }

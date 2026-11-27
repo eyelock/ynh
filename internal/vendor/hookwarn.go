@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // hookEventSupport returns, for a vendor, the canonical hook events it maps
@@ -35,7 +36,7 @@ func hookEventSupport(vendorName string) (native, unsupported map[string]string,
 // out of its config), and a matcher it cannot honour. It never fails: the
 // output is still valid, so assembly, export and `ynd validate` print these
 // without stopping. A vendor ynh has no hook map for returns nothing.
-func HookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []string {
+func HookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []warn.Warning {
 	native, unsupported, ok := hookEventSupport(vendorName)
 	if !ok {
 		return nil
@@ -51,7 +52,8 @@ func HookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []stri
 			if reason := unsupported[event]; reason != "" {
 				msg += ": " + reason
 			}
-			warnings = append(warnings, msg)
+			// No fix: the vendor has no such event, so no edit to the hook makes it run there.
+			warnings = append(warnings, warn.Warning{Message: msg})
 			continue
 		}
 		warnings = append(warnings, matcherWarnings(vendorName, event, nativeEvent, hooks[event])...)
@@ -64,12 +66,12 @@ func HookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []stri
 // runs the hook with its own default, and a vendor that caps the event below
 // the request gets the cap. Both say so, naming the event, the vendor and the
 // numbers, so a declared timeout is never dropped or changed silently.
-func timeoutWarnings(vendorName, event string, entries []plugin.HookEntry) []string {
+func timeoutWarnings(vendorName, event string, entries []plugin.HookEntry) []warn.Warning {
 	field, reason, caps, ok := hookTimeoutSupport(vendorName)
 	if !ok {
 		return nil
 	}
-	var warnings []string
+	var warnings []warn.Warning
 	for _, e := range entries {
 		if e.Timeout <= 0 {
 			continue
@@ -79,11 +81,15 @@ func timeoutWarnings(vendorName, event string, entries []plugin.HookEntry) []str
 			if reason != "" {
 				msg += ": " + reason
 			}
-			warnings = append(warnings, msg)
+			// No fix: the vendor has no timeout field to carry the value.
+			warnings = append(warnings, warn.Warning{Message: msg})
 			continue
 		}
 		if limit, capped := caps[event]; capped && e.Timeout > limit {
-			warnings = append(warnings, fmt.Sprintf("hook timeout %ds on %s exceeds the %ds %s allows for it, so %ds is written", e.Timeout, event, limit, vendorName, limit))
+			warnings = append(warnings, warn.Warning{
+				Message: fmt.Sprintf("hook timeout %ds on %s exceeds the %ds %s allows for it, so %ds is written", e.Timeout, event, limit, vendorName, limit),
+				Fix:     fmt.Sprintf("set the hook's timeout to %d or less", limit),
+			})
 		}
 	}
 	return warnings
@@ -91,7 +97,7 @@ func timeoutWarnings(vendorName, event string, entries []plugin.HookEntry) []str
 
 // matcherWarnings covers the vendors that scope a matcher on some native
 // events only. Claude and Codex pass a matcher through on every event.
-func matcherWarnings(vendorName, event, nativeEvent string, entries []plugin.HookEntry) []string {
+func matcherWarnings(vendorName, event, nativeEvent string, entries []plugin.HookEntry) []warn.Warning {
 	var scoped map[string]bool
 	switch vendorName {
 	case "cursor":
@@ -103,18 +109,24 @@ func matcherWarnings(vendorName, event, nativeEvent string, entries []plugin.Hoo
 	default:
 		return nil
 	}
-	var warnings []string
+	var warnings []warn.Warning
 	for _, e := range entries {
 		if e.Matcher == "" {
 			continue
 		}
 		if !scoped[nativeEvent] {
-			warnings = append(warnings, fmt.Sprintf("hook matcher %q on %s is ignored on %s: %s documents a matcher for tool events only, so the hook runs unfiltered", e.Matcher, event, vendorName, nativeEvent))
+			warnings = append(warnings, warn.Warning{
+				Message: fmt.Sprintf("hook matcher %q on %s is ignored on %s: %s documents a matcher for tool events only, so the hook runs unfiltered", e.Matcher, event, vendorName, nativeEvent),
+				Fix:     fmt.Sprintf("remove the matcher from the %s hook, or filter inside the hook script", event),
+			})
 			continue
 		}
 		// Cursor matches its own tool types, not Claude's tool names.
 		if vendorName == "cursor" && usesClaudeToolName(e.Matcher) {
-			warnings = append(warnings, fmt.Sprintf("hook matcher %q on %s is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match", e.Matcher, event))
+			warnings = append(warnings, warn.Warning{
+				Message: fmt.Sprintf("hook matcher %q on %s is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match", e.Matcher, event),
+				Fix:     fmt.Sprintf("use Cursor's tool types in the matcher on %s, such as Shell for Bash and Write for Edit", event),
+			})
 		}
 	}
 	return warnings

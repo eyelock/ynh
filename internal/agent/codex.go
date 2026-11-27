@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // CodexBackend implements WorkerBackend for OpenAI Codex CLI.
@@ -39,17 +39,18 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		opts:     opts,
 		threadID: opts.ResumeToken,
 	}
+	if opts.IsolatedMCP {
+		s.isolation, _ = workerMCPIsolation(&vendor.Codex{}, opts.ConfigPath, workerEnvFor(opts.Env), opts.WorktreeDir, opts.Stderr)
+	}
 	// Each turn registers the agents again (buildCodexArgs); say once which
 	// cannot be.
 	if _, warnings := vendor.CodexAgentArgs(opts.ConfigPath); opts.Stderr != nil {
 		warnings = append(warnings, vendor.CodexMCP(opts.ConfigPath).Warnings...)
 		// Say once, not per turn, which servers keep the user's own approval.
-		if !opts.MCPManualApproval {
+		if !opts.MCPManualApproval && opts.TrustedHarness {
 			_ = (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, opts.Stderr)
 		}
-		for _, msg := range warnings {
-			_, _ = fmt.Fprintf(opts.Stderr, "warning: %s\n", msg)
-		}
+		warn.Print(opts.Stderr, warnings...)
 	}
 	// codex reports the thread's running token totals, so each turn's usage
 	// is the difference from the totals already counted. A fresh thread starts
@@ -93,8 +94,15 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	// A worker has no one to approve an MCP tool call, and codex exec's
 	// policy is "never", so approve the harness's own servers' tools as a
 	// one-shot `ynh run` does, unless the harness opts out (mcp_manual_approval).
-	if !opts.MCPManualApproval {
+	// Only a harness the trust gate vouched for gets this (ynh #952).
+	if !opts.MCPManualApproval && opts.TrustedHarness {
 		args = append(args, (&vendor.Codex{}).ApproveMCPTools(opts.ConfigPath, nil, nil)...)
+	}
+	// And its hooks, which codex reads from the project layer of its working
+	// directory, the worktree, and so would never find in ConfigPath. Passed
+	// only for an accepted harness; otherwise codex runs none, as before.
+	if opts.TrustedHooks {
+		args = append(args, vendor.CodexSessionHookArgs(opts.ConfigPath)...)
 	}
 	args = append(args, "--json")
 	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
@@ -274,6 +282,9 @@ type codexSession struct {
 	// known (see Start).
 	totals      codexTotals
 	totalsKnown bool
+	// isolation turns off the operator's own MCP servers (IsolatedMCP), found
+	// once in Start and passed on every turn.
+	isolation []string
 }
 
 // ResumeToken returns the codex thread id once known: the one resumed, or
@@ -295,7 +306,11 @@ func (s *codexSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending, s.hasMsg = "", false
 
-	cmd := exec.CommandContext(s.ctx, s.codexBin, buildCodexArgs(s.opts, s.threadID)...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, codexSrtPolicy, s.codexBin, withIsolationArgs(buildCodexArgs(s.opts, s.threadID), s.isolation, 1))
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir

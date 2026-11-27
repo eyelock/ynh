@@ -77,13 +77,14 @@ harness() {
 	[ -z "${6:-}" ] || file "$1" "$2/instructions.md" "$6"
 }
 
-# publish <repo> <tag>: commit the working tree, tag it, and serve it as a bare repository.
+# publish <repo> [tag...]: commit the working tree, tag it with each tag given, and serve it as a bare repository.
 publish() {
 	local src=$REMOTES/src/$1 bare=$REMOTES/repos/github.com/$1.git
 	git -C "$src" init --quiet --initial-branch=main
 	git -C "$src" add -A
 	git -C "$src" -c commit.gpgsign=false commit --quiet -m "fixtures for $1"
-	[ -z "${2:-}" ] || git -C "$src" -c tag.gpgsign=false tag "$2"
+	local t
+	for t in "${@:2}"; do git -C "$src" -c tag.gpgsign=false tag "$t"; done
 	mkdir -p "$(dirname "$bare")"
 	git clone --quiet --bare "$src" "$bare"
 	# ynh fetches a pinned commit by SHA, which a server refuses unless this is set.
@@ -111,24 +112,31 @@ file $A plugins/media-management/.claude-plugin/plugin.json '{
   "description": "Music library processing and Apple Music import"
 }'
 
-inc() { # inc <path> <pick,...>
+# The real includes each pin a release tag of their package (assistants #321), so
+# a stand-in carries the same ref, and publish tags the stand-in with each one so
+# ynh can fetch it. Moving a pin upstream means moving it here too.
+PIN_DEV=@eyelock-assistants/dev-skills@0.2.0
+PIN_TECH=@eyelock-assistants/tech-skills@0.2.1
+PIN_INFRA=@eyelock-assistants/infra-skills@0.2.0
+PIN_PAUSE=@eyelock-assistants/pause-skills@0.1.1
+inc() { # inc <path> <ref> <pick,...>
 	local picks
-	picks=$(printf '"skills/%s", ' ${2//,/ })
-	printf '\n    {"git": "github.com/eyelock/assistants", "path": "%s", "pick": [%s]}' "$1" "${picks%, }"
+	picks=$(printf '"skills/%s", ' ${3//,/ })
+	printf '\n    {"git": "github.com/eyelock/assistants", "path": "%s", "ref": "%s", "pick": [%s]}' "$1" "$2" "${picks%, }"
 }
 # The harnesses match the real ones on eyelock/assistants' default branch in
-# name, description, default_vendor, includes and delegates, and in which of
+# name, description, default_vendor, includes (each with its pinned ref) and delegates, and in which of
 # their own files they have (none of the four has instructions, rules, skills,
 # agents or commands of its own):
 # `make check-eval-stand-ins` compares them, and a difference is fixed here.
 harness $A ynh/david david "David's personal development persona with full skill set" \
-	"$(inc skills/dev dev-project,dev-quality,dev-review,dev-security,dev-backend,dev-ui,dev-debug),$(inc skills/tech go-lang),$(inc skills/infra gh-os-repo,terraform-backend-aws),$(inc skills/pause help-me-answer,take-a-moment)"
+	"$(inc skills/dev $PIN_DEV dev-project,dev-quality,dev-review,dev-security,dev-backend,dev-ui,dev-debug),$(inc skills/tech $PIN_TECH go-lang),$(inc skills/infra $PIN_INFRA gh-os-repo,terraform-backend-aws),$(inc skills/pause $PIN_PAUSE help-me-answer,take-a-moment)"
 harness $A ynh/planner planner "Architecture and implementation planning persona" \
-	"$(inc skills/dev dev-project,dev-review),$(inc skills/infra gh-os-repo)"
+	"$(inc skills/dev $PIN_DEV dev-project,dev-review),$(inc skills/infra $PIN_INFRA gh-os-repo)"
 harness $A ynh/tester tester "Testing and quality assurance persona" \
-	"$(inc skills/dev dev-quality),$(inc skills/tech go-lang)"
-harness $A ynh/researcher researcher "Research and analysis persona for investigating codebases, APIs, and technical topics" "$(inc skills/dev dev-review)"
-publish $A v1.0.0
+	"$(inc skills/dev $PIN_DEV dev-quality),$(inc skills/tech $PIN_TECH go-lang)"
+harness $A ynh/researcher researcher "Research and analysis persona for investigating codebases, APIs, and technical topics" "$(inc skills/dev $PIN_DEV dev-review)"
+publish $A v1.0.0 "$PIN_DEV" "$PIN_TECH" "$PIN_INFRA" "$PIN_PAUSE"
 
 # --- github.com/anthropics/skills ---------------------------------------------
 for s in frontend-design pdf docx; do skill anthropics/skills skills "$s"; done
@@ -153,6 +161,15 @@ file $P README.md "# agent-plugins-example
 A reference Agent Plugin."
 file $P LICENSE "Fixture licence text."
 publish $P
+
+# --- github.com/eyelock/ynh ---------------------------------------------------
+# ynh's own tutorial harnesses (docs/tutorial/harnesses), copied from this
+# checkout rather than written out here, so the fixture is the real file.
+Y=eyelock/ynh
+YNH_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+mkdir -p "$REMOTES/src/$Y/docs/tutorial"
+cp -R "$YNH_ROOT/docs/tutorial/harnesses" "$REMOTES/src/$Y/docs/tutorial/harnesses"
+publish $Y
 
 # Served from the sandbox's own home, so only this sandbox's git sees it.
 cp "$REMOTES/gitconfig" "$SANDBOX/home/.gitconfig"

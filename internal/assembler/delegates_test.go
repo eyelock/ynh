@@ -34,7 +34,7 @@ func TestBuildDelegateAgent(t *testing.T) {
 	content := BuildDelegateAgent(p, dir, nil, nil, nil, "")
 
 	// Check frontmatter
-	if !strings.Contains(content, "name: team-dev") {
+	if !strings.Contains(content, `name: "team-dev"`) {
 		t.Error("missing name in frontmatter")
 	}
 	if !strings.Contains(content, "description:") {
@@ -63,7 +63,7 @@ func TestBuildDelegateAgent_NoRulesNoSkills(t *testing.T) {
 
 	content := BuildDelegateAgent(p, dir, nil, nil, nil, "")
 
-	if !strings.Contains(content, "name: minimal") {
+	if !strings.Contains(content, `name: "minimal"`) {
 		t.Error("missing name")
 	}
 	// Should not have Rules or Skills sections
@@ -109,7 +109,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 	}
 
 	delegates := []harness.Delegate{
-		{GitSource: harness.GitSource{Git: delegateDir}},
+		{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: delegateDir}},
 	}
 
 	if _, err := AssembleDelegates(workDir, adapter, delegates, "", DelegateOptions{}); err != nil {
@@ -124,7 +124,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "name: team-ops") {
+	if !strings.Contains(content, `name: "team-ops"`) {
 		t.Error("agent file missing name")
 	}
 	if !strings.Contains(content, "Always check before deploying.") {
@@ -155,7 +155,7 @@ func TestAssembleDelegates_RelativeSourceUsesHarnessDir(t *testing.T) {
 
 	workDir := t.TempDir()
 	adapter := &mockAdapter{}
-	delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: "./team"}}}
+	delegates := []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: "./team"}}}
 	if _, err := AssembleDelegates(workDir, adapter, delegates, harnessDir, DelegateOptions{}); err != nil {
 		t.Fatalf("AssembleDelegates failed: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestAssembleDelegates_OwnRepoDelegateAddedLater(t *testing.T) {
 	assemble := func(name string) error {
 		adapter := &mockAdapter{}
 		workDir := t.TempDir()
-		delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: ".", Path: "harnesses/" + name}}}
+		delegates := []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: ".", Path: "harnesses/" + name}}}
 		if _, err := AssembleDelegates(workDir, adapter, delegates, harnessDir, DelegateOptions{}); err != nil {
 			return err
 		}

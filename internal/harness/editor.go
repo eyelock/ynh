@@ -93,7 +93,11 @@ type AddOptions struct {
 
 // newIncludeMeta builds the manifest entry for source under opts.
 func newIncludeMeta(source string, opts AddOptions) plugin.IncludeMeta {
-	m := plugin.IncludeMeta{Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As, Hooks: opts.Hooks}
+	m := plugin.IncludeMeta{Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As}
+	if opts.Hooks {
+		t := true
+		m.Hooks = &t
+	}
 	if opts.Local {
 		m.Local = source
 	} else {

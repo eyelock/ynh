@@ -24,10 +24,11 @@ skill owns the per-vendor references this skill asks you to write.
    `make check-vendor-parity` (check A) fails until the row exists.
 4. Decide the **launch strategy** up front. It drives most other decisions:
    - **Native bundle loading by flag** (Claude, Copilot: `--plugin-dir`):
-     `syscall.Exec`, no symlinks, `NeedsSymlinks() == false`.
+     launched as a child process (`execVendor`), no symlinks,
+     `NeedsSymlinks() == false`. Every vendor is a child of ynh; none is exec'd.
    - **Native bundle loading by environment variable** (a CLI that takes a
-     config file or config directory from an env var): also `syscall.Exec`
-     with the variable added to the environment, no symlinks. Confirm by hand
+     config file or config directory from an env var): also a child
+     process (`execVendor`) with the variable added to the environment, no symlinks. Confirm by hand
      which artifact types the vendor actually reads from that location; docs
      often list fewer than the loader takes, or more.
    - **No native bundle loading** (Codex, Cursor): symlink install into the
@@ -55,8 +56,9 @@ surface; "not supported" is a valid answer if documented (see pitfalls).
 | Workspace | `<x>WorkspaceFlag`, `<x>WorkspaceUnsupported` | A flag that grants a folder beside the project (`--add-dir`), or why there is none |
 | MCP | `GenerateMCPConfig` (+ `PluginMCPGenerator`) | Config key and shape; transport spelling for `stdio`, `streamable-http`, `sse` |
 | MCP in a plugin | `mcpPluginRootVar` | A variable the plugin loader expands to the plugin's install path in an MCP server's command and cwd |
-| MCP isolation | `IsolateMCP` | A flag that runs with only the given MCP config and ignores the user's own servers (full isolation: Claude's `--strict-mcp-config`). Partial is a valid answer: a flag plus a warning for what still loads (Copilot's `--disable-builtin-mcps` drops only the built-in servers; `~/.copilot/mcp-config.json` still loads). "Not supported" is valid with a one-line warning. Record the vendor in the isolation table in `docs/mcp.md` |
+| MCP isolation | `IsolateMCP` (+ `MCPEnvIsolator` when the switch is an environment variable) | A flag that runs with only the given MCP config (full isolation: Claude's `--strict-mcp-config`). Without one, look for the vendor listing the servers it would load and turning one off per launch, and turn off every listed server the harness does not compose (Codex: `codex mcp list --json` and `-c mcp_servers.<name>.enabled=false`; Copilot: `copilot mcp list --json` and `--disable-mcp-server`; OpenCode: `opencode debug config` and a disabled placeholder per server in `OPENCODE_CONFIG_CONTENT`, via `MCPEnvIsolator`; see `internal/vendor/mcp_isolation.go`). Never copy a listed server's command, url, environment or headers into a launch: a listing can show `{env:NAME}` values substituted. "Not supported" is valid with a one-line warning when the vendor has neither (Cursor). Record the vendor in the isolation table in `docs/mcp.md`
 | Artifact rewrite | `ArtifactTransformer` (optional) | Does it need a different file name or frontmatter (Cursor's `.mdc`)? |
+| Native subagents | `SupportsNativeSubagents` | `true` if a delegate can run as one of the vendor's own subagents (`transport: native`), else `false`: a native delegate is then refused. A bare `true` or `false`; `scripts/subagent-parity.sh` checks it |
 | Export / plugin | `GeneratePluginManifest`, `PluginManifestDir`, `ExportArtifactDirs`, `SupportsExportDelegates` (+ `ExportManifestGenerator`) | A plugin manifest format? Which artifact types a plugin may carry |
 | Marketplace | `MarketplaceManifestDir`, `GenerateMarketplaceIndex` | A marketplace index format, or none |
 | Agent Plugins | `AgentPluginLayout` | Does it read agent-plugins.org packages? Its namespace |
@@ -121,8 +123,11 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
   come from the vendor's on-disk store, never from terminal output, and a bare
   resume flag is never emitted (it opens a picker and hangs an unattended
   relaunch). Return `ErrNoResumableSession` and
-  `ErrSessionLookupUnavailable` for the two different cases; callers fall back
-  differently.
+  `ErrSessionLookupUnavailable` for the two different cases. The second is for
+  a vendor with no readable store at all (OpenCode, SQLite), which then resumes
+  with its continue-last form. A vendor with a readable store (Codex, Cursor)
+  returns the first when it finds nothing, and `ynh run --resume` refuses
+  rather than falling back to continue-last.
 - [ ] `LaunchResume(configPath, sessionID, prompt, interactive, extraArgs)`:
   an empty prompt resumes interactively; a prompt is sent into the resumed
   session, which stays open when `interactive` is true and is a one-shot run
@@ -269,13 +274,27 @@ both in the same PR since they share research.
     are declared.
   - G: `scripts/workspace-parity.sh`: the vendor declares a workspace flag or
     the reason it has none.
+  - H: `scripts/parity-page.sh`: `docs/vendor-parity.md` has a column for the
+    vendor, in `ynh vendors` order, and every cell in it is a legend mark.
+    Add the column with every cell **U** (unverified) until you have verified
+    it live; a non-Y cell also needs a limit with its Owner and Evidence, and
+    an **N** needs a linked issue. The Hooks, Session context and Workspace
+    folders cells must match what the adapter declares. The page is the only
+    copy of the table: do not repeat it on another page.
+  - I: `scripts/subagent-parity.sh`: `internal/vendor/<vendor>.go` declares
+    `SupportsNativeSubagents` exactly once, returning a bare `true` or `false`
+    (not a computed value). `false` means a delegate set to `transport: native`
+    is refused on that vendor.
 
 ### Documentation
 
 Every file that enumerates vendors. The grep above finds them; at the time of
 writing these were:
 
-- [ ] Reference: `docs/vendors.md`, `docs/hooks.md`, `docs/mcp.md`,
+- [ ] Reference: `docs/vendor-parity.md` (a column for the vendor in each
+  matrix, in `ynh vendors` order, every cell a legend mark, **U** until
+  verified; assertion H of `make check-vendor-parity` fails without it),
+  `docs/vendors.md`, `docs/hooks.md`, `docs/mcp.md`,
   `docs/marketplace.md`, `docs/artifacts.md`, `docs/skills-standard.md`,
   `docs/docker.md`, `docs/ynd.md`, `docs/agent.md` (the `ynh agent run`
   backends, and the `--auto-approve` table, which has a column per backend),

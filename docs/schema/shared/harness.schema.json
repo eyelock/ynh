@@ -256,7 +256,9 @@
         "is_pinned": {"type": "boolean"},
         "path": {"type": "string"},
         "profile": {"type": "string", "description": "The profile of the delegate's own that the entry selects. Present only when it names one. The manifest refuses an entry with both."},
-        "focus": {"type": "string", "description": "The focus of the delegate's own that the entry selects: its profile applies and its prompt becomes the delegate's standing instructions. Present only when it names one. The manifest refuses an entry with both."}
+        "focus": {"type": "string", "description": "The focus of the delegate's own that the entry selects: its profile applies and its prompt becomes the delegate's standing instructions. Present only when it names one. The manifest refuses an entry with both."},
+        "transport": {"type": "string", "enum": ["a2a", "native"], "description": "How the parent reaches the delegate, as resolved: the entry's own transport, else the harness's, else a2a."},
+        "transport_from": {"type": "string", "enum": ["entry", "harness", "default"], "description": "Where transport came from: the entry itself, the harness's transport default, or the built-in default (a2a)."}
       },
       "required": ["git", "is_pinned"],
       "additionalProperties": false

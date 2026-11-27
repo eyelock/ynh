@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // CursorBackend implements WorkerBackend for Cursor's headless agent CLI.
@@ -33,9 +33,7 @@ func (b *CursorBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	// The worker runs Cursor in print mode, which skips beforeSubmitPrompt and
 	// stop hooks.
 	if opts.ConfigPath != "" {
-		for _, w := range vendor.CursorPrintModeWarnings(opts.ConfigPath) {
-			_, _ = fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, vendor.CursorPrintModeWarnings(opts.ConfigPath)...)
 	}
 
 	// Resume token = cursor chatId. cursor already persists chats on disk and
@@ -95,7 +93,11 @@ func (s *cursorSession) Next() (Turn, error) {
 	args := buildCursorArgs(s.opts, s.chatID, s.firstTurn, msg)
 	s.firstTurn = false
 
-	cmd := exec.CommandContext(s.ctx, s.cursorBin, args...)
+	cmd, cleanup, err := workerCommand(s.ctx, s.opts, cursorSrtPolicy, s.cursorBin, args)
+	if err != nil {
+		return Turn{}, err
+	}
+	defer cleanup()
 	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir

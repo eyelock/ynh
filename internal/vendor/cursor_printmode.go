@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // CursorPrintModeWarnings returns a warning naming each assembled Cursor hook
@@ -19,7 +22,7 @@ import (
 // that called no tool: only sessionStart and sessionEnd fired (preToolUse and
 // postToolUse were not exercised outside ynh), so this is Cursor's limit, not ynh's; interactive CLI and IDE behaviour is
 // UNVERIFIED. configPath is the assembled directory holding .cursor/hooks.json.
-func CursorPrintModeWarnings(configPath string) []string {
+func CursorPrintModeWarnings(configPath string) []warn.Warning {
 	data, err := os.ReadFile(filepath.Join(configPath, ".cursor", "hooks.json"))
 	if err != nil {
 		return nil
@@ -30,15 +33,16 @@ func CursorPrintModeWarnings(configPath string) []string {
 	if json.Unmarshal(data, &doc) != nil {
 		return nil
 	}
-	var warnings []string
+	var warnings []warn.Warning
 	for _, ev := range []struct{ native, canonical string }{
 		{cursorHookEventMap["before_prompt"], "before_prompt"},
 		{cursorHookEventMap["on_stop"], "on_stop"},
 	} {
 		if _, ok := doc.Hooks[ev.native]; ok {
-			warnings = append(warnings, fmt.Sprintf("hook event %s: Cursor's CLI does not run %s hooks in print mode (confirmed live), so those hooks will not fire this session", ev.canonical, ev.native))
+			// No fix: print mode is Cursor's limit. The hooks do run in an interactive session.
+			warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("hook event %s: Cursor's CLI does not run %s hooks in print mode (confirmed live), so those hooks will not fire this session", ev.canonical, ev.native)})
 		}
 	}
-	slices.Sort(warnings)
+	slices.SortFunc(warnings, func(a, b warn.Warning) int { return strings.Compare(a.Message, b.Message) })
 	return warnings
 }

@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,16 +18,20 @@ import (
 	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/parentmcp"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/runsnap"
 	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
-func cmdRun(args []string) error {
+func cmdRun(args []string) (runErr error) {
 	if err := config.EnsureDirs(); err != nil {
 		return fmt.Errorf("ensuring directories: %w", err)
 	}
@@ -117,6 +122,23 @@ func cmdRun(args []string) error {
 	// against it.
 	loaded := p
 
+	// The trust gate: an installed harness whose commands are not accepted is
+	// refused before anything launches, and a folder run says it is not
+	// checked (ynh #950).
+	// --trust first accepts a folder run's remote includes, if every one is
+	// pinned to a full SHA; an installed harness never takes it (ynh #951).
+	if ra.Trust {
+		if harnessID != "" {
+			return fmt.Errorf("--trust is for a run from a folder; an installed harness is accepted with 'ynh trust accept %s', or at install with 'ynh install --trust'", harnessID)
+		}
+		if err := acceptFolderRunOf(loaded, os.Stderr); err != nil {
+			return err
+		}
+	}
+	if err := trustGate(harnessID, loaded, os.Stderr); err != nil {
+		return err
+	}
+
 	// A resume continues a task, so only a prompt typed on the command line
 	// travels with it; a focus prompt starts one. Captured before the focus
 	// overwrites ra.Prompt. (--focus and a trailing prompt are exclusive.)
@@ -164,10 +186,12 @@ func cmdRun(args []string) error {
 	// precedence chain, so a local model backend is just another vendor
 	// spec, not a separate flag.
 	// The run's labels, refused here when they break the rule. They go to
-	// every process this run starts as YNH_LABELS. `ynh run` writes no record
-	// of its own yet, so nothing else carries them (docs/telemetry.md).
+	// every process this run starts as YNH_LABELS, and the launch's own
+	// record (docs/telemetry.md) carries them as resource attributes.
+	var runLabels labels.Set
 	if action == "" {
-		if _, err := resolveRunLabels(ra.Labels, loaded); err != nil {
+		var err error
+		if runLabels, err = resolveRunLabels(ra.Labels, loaded); err != nil {
 			return err
 		}
 	}
@@ -186,10 +210,26 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := p.CheckDelegateTransports(vendorName); err != nil {
+		return err
+	}
+
+	// The launch's own record, for every vendor: ynh.session.started now, and
+	// ynh.session.finished however the launch ends. With no destination this
+	// writes nothing and the vendor's environment is untouched. A launch ynh
+	// refuses from here on still shows, as refused.
+	var launchRec *launchRecord
+	if action == "" {
+		launchRec = startLaunchRecord(adapter.Name(), loaded, harnessID, ra.FocusFlag, profileName, ra.Resume, runLabels, os.Stderr)
+		defer func() { launchRec.end(runErr) }()
+	}
 
 	// A vendor that cannot take a first message starts bare, and says so.
 	if launch.Bare && !launchFocusPromptSupported(adapter) {
-		fmt.Fprintf(os.Stderr, "warning: launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only\n", launch.Name, adapter.Name())
+		warn.Print(os.Stderr, warn.Warning{
+			Message: fmt.Sprintf("launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only", launch.Name, adapter.Name()),
+			Fix:     "run with a vendor that takes a first message, or remove launch_focus from the harness",
+		})
 		ra.Prompt = ""
 	}
 
@@ -223,6 +263,16 @@ func cmdRun(args []string) error {
 		prompt = nsFocus.Prompt
 	}
 
+	// Pre-approval follows trust (ynh #952): MCP tools, and Copilot's
+	// one-shot approval of every tool, are given only to a harness the gate
+	// vouched for. Copilot's one-shot has no narrower grant, so an untrusted
+	// harness is refused before anything launches.
+	trusted := gateTrusted(harnessID, loaded)
+	oneShot := prompt != "" && !ra.Interactive
+	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
+		return copilotOneShotRefusal(harnessID, loaded)
+	}
+
 	// Print per-source status
 	for _, r := range resolved {
 		source := r.Source
@@ -251,9 +301,9 @@ func cmdRun(args []string) error {
 	}
 	content = append(content, localContent)
 
-	// Assemble vendor config into deterministic run dir.
-	// We use a stable path instead of a temp dir because syscall.Exec
-	// replaces this process — deferred cleanup would never run.
+	// Assemble vendor config into a run snapshot behind a stable link, not a
+	// temp dir: the config outlives this process for project symlinks and
+	// resumed sessions, and snapshots are kept for later runs to reuse.
 	//
 	// Run-dir naming uses the canonical id's fs name ("local/foo" →
 	// "local--foo") so same-named installs with distinct canonical ids get
@@ -266,15 +316,80 @@ func cmdRun(args []string) error {
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
 	}
-	runDir := filepath.Join(config.RunDir(), runDirName)
+	// A live session of this harness: warn, refuse or say nothing, as the
+	// harness and --on-live decide (docs/presence.md). A delegate's own run is
+	// not checked: it is started by a parent for this harness on purpose.
+	if ra.Action == "" && !delegationNamesHarness(runDirName) {
+		if err := checkOnLive(runDirName, harnessRunRef(harnessID, harnessDir), p.OnLive, ra.OnLive, os.Stderr); err != nil {
+			return err
+		}
+	}
+	var runDir string // the snapshot, or a baked image's vendor dir
+	// The stable path of the run dir: the link <run>/<name> that always
+	// resolves to the newest snapshot. Project symlinks are planted through
+	// it, so a project shows the newest snapshot, not the first one it met.
+	// For a baked image it is the image's own dir.
+	linkDir := ""
+	// Held from the clean of the run dir to the last read or write of it
+	// before the vendor takes over (see the launch below); a no-op for a baked
+	// image.
+	unlockRun := func() {}
+	var declaredMCP []string // the MCP servers the harness declares, once composed
+	instructionsApplied := false
+	// The workspace folders granted for this launch, decided once. OpenCode
+	// reads the grant from rules in its agent files, so on a host assembly
+	// it is decided and written before the seal (see below).
+	var wsGranted []string
+	wsDecided := false
 	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
+	var endpoints *openedEndpoints
+	decideWorkspace := func() error {
+		if wsDecided {
+			return nil
+		}
+		wsDecided = true
+		g, err := workspaceGrantFor(loaded, harnessID, adapter.Name(), preassembled, ra.NoWorkspace, os.Stderr)
+		wsGranted = g
+		return err
+	}
 	if preassembled {
 		// Pre-assembled layout (baked harness image) — use directly.
 		// Skip AssembleTo, delegate allow-list check, AND AssembleDelegates —
 		// everything was vetted and assembled at image build time.
 		runDir = preassembledDir
+		linkDir = preassembledDir
+		// Not a snapshot: nothing else shares it, and the vendor still needs
+		// its launch-time files.
+		if prep, ok := adapter.(vendor.LaunchPreparer); ok {
+			if err := prep.PrepareLaunch(runDir); err != nil {
+				return fmt.Errorf("preparing launch: %w", err)
+			}
+		}
 	} else {
-		// Normal host flow — assemble now
+		// Normal host flow — assemble now. Assembly of one run dir is
+		// serialised across ynh processes: parallel runs of one harness
+		// would otherwise interleave the clean and the writes below.
+		unlock, err := assembler.LockRunDir(filepath.Join(config.CacheDir(), "run-locks", runDirName+".lock"))
+		if err != nil {
+			return fmt.Errorf("assembling config: %w", err)
+		}
+		unlockRun = unlock
+		defer unlockRun()
+		// Assemble into a staging folder; the tree is sealed as a
+		// content-addressed snapshot below and runDir then names it. A
+		// session already running on an earlier snapshot never sees this
+		// run's writes (ynh #765).
+		stagingDir, err := runsnap.Stage(config.RunDir(), runDirName)
+		if err != nil {
+			return fmt.Errorf("assembling config: %w", err)
+		}
+		sealed := false
+		defer func() {
+			if !sealed {
+				_ = os.RemoveAll(stagingDir)
+			}
+		}()
+		runDir = stagingDir
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 			return fmt.Errorf("assembling config: %w", err)
 		}
@@ -287,8 +402,14 @@ func cmdRun(args []string) error {
 		}
 
 		// Assemble delegate harnesses as agent files
-		delegateMCP, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: p.Name})
+		delegateMCP, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: p.Name, RootTransport: p.Transport})
 		if err != nil {
+			return fmt.Errorf("assembling delegates: %w", err)
+		}
+
+		// A parent with A2A delegates reaches them with the a2a CLI: its skill
+		// and ynh's companion skill go in the vendor's skill folder.
+		if err := writeA2ACLISkills(p, adapter, runDir); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
@@ -299,9 +420,7 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		for _, w := range hookWarnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, hookWarnings...)
 
 		// Generate vendor-native MCP config files. The servers are the
 		// root's and those of every included harness, composed.
@@ -315,6 +434,58 @@ func cmdRun(args []string) error {
 		servers, _, expErr := harness.ComposeMCPServers(p, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
 		if expErr != nil {
 			return expErr
+		}
+		// What the harness declares, before ynh adds its own servers.
+		declaredMCP = slices.Sorted(maps.Keys(servers))
+
+		// A parent with A2A delegates gets ynh's own MCP server for them
+		// (docs/delegate-sessions.md). It needs the endpoints, which a launch
+		// opens, so they open here, before the config that names them is
+		// written; the snapshot of such a run is its own, since the token in
+		// it is fresh.
+		if action != "install" && action != "clean" {
+			endpointFolder, _ := os.Getwd()
+			opened, epErr := openEndpointsWith(p, harnessID, endpointFolder, nil, os.Stderr)
+			if epErr != nil {
+				return epErr
+			}
+			endpoints = opened
+			defer opened.close()
+			// The companion skill lists each delegate's card address, so the
+			// parent's command needs no variable.
+			if err := writeLiveA2ACLICompanion(adapter, runDir, opened.eps); err != nil {
+				return fmt.Errorf("assembling delegates: %w", err)
+			}
+			entry, eErr := delegateMCPEntry(opened.eps, parentIDOf(p, harnessID), endpointFolder, delegateQuestionsFor(p.DelegateQuestions, oneShot))
+			if eErr != nil {
+				return eErr
+			}
+			if entry != nil {
+				if _, taken := servers[delegateMCPServerName]; taken {
+					return fmt.Errorf("the harness declares an MCP server named %q, which ynh uses for its A2A delegates\n  Fix: rename the server", delegateMCPServerName)
+				}
+				if servers == nil {
+					servers = map[string]plugin.MCPServer{}
+				}
+				servers[delegateMCPServerName] = *entry
+			}
+		}
+		// A delegate session gets ynh's one tool for asking its parent a
+		// question (docs/delegate-sessions.md, "Questions from a delegate").
+		if action != "install" && action != "clean" {
+			pentry, pErr := parentMCPEntry()
+			if pErr != nil {
+				return pErr
+			}
+			if pentry != nil {
+				if _, taken := servers[parentmcp.ServerName]; taken {
+					return fmt.Errorf("the harness declares an MCP server named %q, which ynh uses for a delegate's questions to its parent\n  Fix: rename the server", parentmcp.ServerName)
+				}
+				if servers == nil {
+					servers = map[string]plugin.MCPServer{}
+				}
+				servers[parentmcp.ServerName] = *pentry
+			}
 		}
 		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -379,10 +550,68 @@ func cmdRun(args []string) error {
 					return err
 				}
 				if pi.Size > vendor.CodexProjectDocMaxBytes {
-					fmt.Fprintf(os.Stderr, "warning: the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off\n", pi.Size, vendor.CodexProjectDocMaxBytes)
+					warn.Print(os.Stderr, warn.Warning{
+						Message: fmt.Sprintf("the composed AGENTS.md is %d bytes; Codex reads only the first %d (project_doc_max_bytes), so the end of the project's instructions will be cut off", pi.Size, vendor.CodexProjectDocMaxBytes),
+						Fix:     "shorten the project's AGENTS.md, or raise project_doc_max_bytes in Codex's config.toml",
+					})
 				}
 			}
 		}
+
+		// The per-run instructions are appended into the tree (Copilot,
+		// Cursor, OpenCode), so they go in before the seal: written into a
+		// shared, reused snapshot they would pile up across runs and leak
+		// into other sessions. They are part of the hash, so runs with
+		// different instructions get different snapshots.
+		if ra.Instructions != "" {
+			extraArgs, err := adapter.ApplyRuntimeInstructions(runDir, ra.Instructions)
+			if err != nil {
+				return fmt.Errorf("applying runtime instructions: %w", err)
+			}
+			vendorArgs = append(vendorArgs, extraArgs...)
+			instructionsApplied = true
+		}
+
+		// OpenCode's workspace grant is a rule appended to each agent file,
+		// so it is written into the tree before the seal, like the per-run
+		// instructions: it is part of the hash, and a later run that was not
+		// granted the folder (--no-workspace, a withdrawn grant) hashes to a
+		// different snapshot instead of reusing this one with the rule in it.
+		if action != "install" && action != "clean" && adapter.Name() == "opencode" {
+			if err := decideWorkspace(); err != nil {
+				return err
+			}
+			if len(wsGranted) > 0 {
+				if err := vendor.GrantOpenCodeWorkspace(runDir, wsGranted); err != nil {
+					return err
+				}
+			}
+		}
+
+		// Files a vendor writes at launch (OpenCode's session-start context
+		// and composed AGENTS.md) go in before the seal too, so a launch only
+		// reads the run dir.
+		if prep, ok := adapter.(vendor.LaunchPreparer); ok {
+			if err := prep.PrepareLaunch(runDir); err != nil {
+				return fmt.Errorf("preparing launch: %w", err)
+			}
+		}
+
+		// Seal the staged tree as a snapshot (or reuse the identical one) and
+		// swap <run>/<name> to it. From here the run dir is the snapshot's
+		// real path. ynh stays the parent of the vendor process, so the
+		// deferred Release holds the shared lock on the snapshot for the
+		// child's whole life, and the snapshot is never deleted under it.
+		snap, err := runsnap.Seal(config.RunDir(), runDirName, stagingDir, func(hash string) string {
+			return filepath.Join(config.CacheDir(), "run-locks", runDirName, hash+".lock")
+		})
+		if err != nil {
+			return fmt.Errorf("sealing run snapshot: %w", err)
+		}
+		sealed = true
+		defer snap.Release()
+		runDir = snap.Dir
+		linkDir = filepath.Join(config.RunDir(), runDirName)
 
 		// Keep the legacy bare-name run path resolving for project symlinks
 		// planted before run dirs were keyed by canonical id.
@@ -391,8 +620,9 @@ func cmdRun(args []string) error {
 		}
 	}
 
-	// Inject per-invocation instructions into the vendor's pipeline.
-	if ra.Instructions != "" {
+	// Inject per-invocation instructions into the vendor's pipeline (a host
+	// assembly already did, before sealing).
+	if ra.Instructions != "" && !instructionsApplied {
 		extraArgs, err := adapter.ApplyRuntimeInstructions(runDir, ra.Instructions)
 		if err != nil {
 			return fmt.Errorf("applying runtime instructions: %w", err)
@@ -407,7 +637,7 @@ func cmdRun(args []string) error {
 			fmt.Printf("%s uses native plugin loading - no symlink installation needed.\n", adapter.Name())
 			return nil
 		}
-		return cmdInstallVendor(adapter, runDir, p.Name)
+		return cmdInstallVendor(adapter, linkDir, p.Name)
 	case "clean":
 		if !adapter.NeedsSymlinks() {
 			fmt.Printf("%s uses native plugin loading - no symlinks to clean.\n", adapter.Name())
@@ -433,7 +663,7 @@ func cmdRun(args []string) error {
 				inst = nil
 			}
 			if inst == nil {
-				planned, err := vendor.PlanSymlinks(runDir, projectDir, adapter.ConfigDir(), adapter.ArtifactDirs())
+				planned, err := vendor.PlanSymlinks(linkDir, projectDir, adapter.ConfigDir(), adapter.ArtifactDirs())
 				if err != nil {
 					return err
 				}
@@ -444,12 +674,15 @@ func cmdRun(args []string) error {
 						rel, _ := filepath.Rel(projectDir, entry.Link)
 						fmt.Printf("  %s -> %s\n", rel, entry.Target)
 					}
+					if !stdinIsTerminal() {
+						return symlinkConsentError(adapter.Name(), harnessRunRef(harnessID, harnessDir), len(planned))
+					}
 					fmt.Printf("\nInstall %d symlinks? [Y/n] ", len(planned))
 					reader := bufio.NewReader(os.Stdin)
 					answer, _ := reader.ReadString('\n')
 					answer = strings.TrimSpace(strings.ToLower(answer))
 					if answer == "" || answer == "y" || answer == "yes" {
-						if err := cmdInstallVendor(adapter, runDir, p.Name); err != nil {
+						if err := cmdInstallVendor(adapter, linkDir, p.Name); err != nil {
 							return err
 						}
 					}
@@ -465,14 +698,50 @@ func cmdRun(args []string) error {
 
 		// One-shot runs have no one to approve an MCP tool call: approve the
 		// tools of the harness's own servers on the vendors that refuse them,
-		// unless the harness opts out (mcp_manual_approval).
-		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
-			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		// unless the harness opts out (mcp_manual_approval). Only for a
+		// trusted harness: a folder run, or one not accepted, gets none and
+		// the vendor asks as it always did.
+		if a, ok := adapter.(vendor.MCPToolApprover); ok && oneShot && !p.MCPManualApproval {
+			if !trusted {
+				// Say so only when there is something to approve.
+				if len(vendor.CodexMCP(runDir).Servers) > 0 {
+					fmt.Fprintf(os.Stderr, "ynh: MCP tools are not pre-approved for %s: a harness is pre-approved only when installed and accepted (ynh trust accept)\n", p.Name)
+				}
+			} else {
+				vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+			}
+		}
+
+		// Claude Code ignores a project allow rule while the workspace is
+		// untrusted, so a delegate's one-shot session allows the tools of the
+		// servers its harness declares (docs/mcp.md, "Claude Code Format"). Only
+		// a delegate's: its trust gate holds, and a harness run directly has none.
+		// The record is inherited by every process of the delegate's session, so
+		// it must name this harness: another harness the delegate runs gets none.
+		isDelegateSession := delegationNamesHarness(runDirName)
+		if preassembled {
+			// A baked image's servers were composed at build time.
+			declaredMCP = mcpServerNames(runDir)
+		}
+		if rule := claudeDelegateMCPAllowRule(adapter.Name(), isDelegateSession, prompt != "" && !ra.Interactive, p.MCPManualApproval, p.Name, declaredMCP); rule != "" {
+			vendorArgs = append([]string{rule}, vendorArgs...)
+		}
+
+		// A delegate's one-shot session has no one to approve ask_parent
+		// either (docs/delegate-sessions.md, "Questions from a delegate").
+		// Codex approves it with the harness's own servers above, Copilot's
+		// --allow-all-tools covers it and OpenCode needs no rule; Claude Code
+		// needs an allow rule for the server.
+		if adapter.Name() == "claude" && isDelegateSession && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+			vendorArgs = append([]string{parentAllowRule(p.Name)}, vendorArgs...)
 		}
 
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
-		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), runDir, preassembled, ra.NoWorkspace, os.Stderr)
+		if wsErr := decideWorkspace(); wsErr != nil {
+			return wsErr
+		}
+		wsArgs, _, wsErr := vendor.WorkspaceArgs(adapter.Name(), wsGranted)
 		if wsErr != nil {
 			return wsErr
 		}
@@ -480,23 +749,97 @@ func cmdRun(args []string) error {
 
 		// Codex hook and project trust, granted only for an accepted harness.
 		vendorArgs = append(codexHookTrustLaunchArgs(loaded, harnessID, adapter.Name(), runDir, os.Stderr), vendorArgs...)
+		// Cursor's Workspace Trust, on the same terms: a snapshot is a new
+		// folder whenever the harness changes, and cursor-agent asks once per
+		// folder.
+		vendorArgs = append(cursorTrustLaunchArgs(loaded, harnessID, adapter.Name()), vendorArgs...)
+
+		// The A2A endpoints of the delegates whose transport is a2a, open for
+		// as long as the session runs (docs/delegate-sessions.md).
+		// A host run opened them above, to write the delegates' MCP server
+		// into the config; a baked image's run opens them here, and the image
+		// has no such server (its config was written at build time).
+		if endpoints == nil {
+			endpointFolder, _ := os.Getwd()
+			closeEndpoints, epErr := openDelegateEndpoints(p, harnessID, endpointFolder, os.Stderr)
+			if epErr != nil {
+				return epErr
+			}
+			defer closeEndpoints()
+		}
 
 		// Launch
 		if launch.Bare {
 			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)
 		}
+		// The vendor's own telemetry, through a relay that lives as long as
+		// the session (the child ynh supervises).
+		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, ra.RelayEndpoint, os.Stderr)
+		defer stopRelay()
+		vendorArgs = append(relayArgs, vendorArgs...)
+		vendorArgs = append(delegateQuietArgs(adapter.Name(), vendorArgs, os.Getenv(delegationHandleEnv)), vendorArgs...)
+
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		// The launch only reads the run dir: every file a vendor writes at
+		// launch went in before the seal (PrepareLaunch), and Copilot projects
+		// its instructions into the project, not the run dir. What it still
+		// reads (Codex's MCP environment, Claude's session-end environment,
+		// Copilot's instructions) is the sealed snapshot, which the snapshot's
+		// shared lock protects, so those reads do not need the assembly lock.
+		// It is nonetheless held up to the child's start, where the hook below
+		// releases it. Every vendor runs as a child of ynh, and the deferred
+		// snap.Release holds the shared lock on the snapshot until the child
+		// has exited.
+		removeHook := vendor.OnChildStart(func() {
+			unlockRun()
+			launchRec.markStarted()
+		})
+		defer removeHook()
+		endPresence := startPresence(adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession)
+		defer endPresence()
+		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// delegationHandleEnv is set by the delegate launcher on the ynh run it
+// supervises: its presence means the run's output is a delegate's result.
+const delegationHandleEnv = "YNH_DELEGATION_HANDLE"
+
+// delegateQuietArgs returns the vendor arguments that keep a delegate's own
+// chrome out of the result its parent receives, which is the tail of the run's
+// output. Copilot CLI prints a model-selection banner and a stats block
+// around the answer in a -p run; --silent ("Output only the agent response")
+// leaves just the answer. It applies only to a delegate's run (handle set), so
+// a person running copilot through ynh keeps the stats, and not when the
+// vendor arguments already carry the flag.
+func delegateQuietArgs(vendorName string, vendorArgs []string, handle string) []string {
+	if handle == "" || vendorName != "copilot" {
+		return nil
+	}
+	for _, a := range vendorArgs {
+		if a == "-s" || a == "--silent" || strings.HasPrefix(a, "--silent=") {
+			return nil
+		}
+	}
+	return []string{"--silent"}
 }
 
 // isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
 // servers, printing the vendor's warning when it cannot isolate fully.
 func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
-	args, warning := adapter.IsolateMCP(runDir)
-	if warning != "" {
-		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
+	if e, ok := adapter.(vendor.MCPEnvIsolator); ok {
+		env, warnings := e.IsolateMCPEnv(runDir)
+		warn.Print(stderr, warnings...)
+		// The vendor inherits ynh's environment when it is launched.
+		for _, kv := range env {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				_ = os.Setenv(k, v)
+			}
+		}
+		return nil
 	}
+	args, warnings := adapter.IsolateMCP(runDir)
+	warn.Print(stderr, warnings...)
 	return args
 }
 
@@ -563,6 +906,10 @@ func launchFocusPromptSupported(adapter vendor.Adapter) bool {
 // harnessKey identifies the harness for session binding: with --session-name on
 // a vendor that supports it, the session is bound to (harnessKey, directory,
 // name) rather than to the newest session in the directory.
+// launchSessionFn is launchSession; a variable so tests can stand in for the
+// vendor launch and observe the run dir at the moment it would start.
+var launchSessionFn = launchSession
+
 func launchSession(adapter vendor.Adapter, runDir, harnessKey string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
 	if binder, ok := adapter.(vendor.SessionBinder); ok && ra.SessionName != "" {
 		if flag := conflictingSessionFlag(vendorArgs); flag != "" {
@@ -574,6 +921,13 @@ func launchSession(adapter vendor.Adapter, runDir, harnessKey string, ra runArgs
 	if ra.Resume {
 		if !adapter.SupportsResume() {
 			return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
+		}
+		if sn, ok := adapter.(vendor.SnapshotSessions); ok && sn.SessionsKeyedBySnapshot() && ra.ResumeID == "" {
+			sessionID, err := resolveSnapshotSession(adapter, harnessKey, stderr)
+			if err != nil {
+				return err
+			}
+			return launchResume(adapter, runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
 		}
 		sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, stderr)
 		if resumed {
@@ -677,16 +1031,41 @@ func launchBound(adapter vendor.Adapter, binder vendor.SessionBinder, runDir, ha
 	return binder.LaunchWithSessionID(runDir, id, prompt, ra.Interactive, vendorArgs)
 }
 
+// resolveSnapshotSession is --resume for Codex and Cursor, which key their
+// sessions by the directory they started in, and a harness starts in a new
+// snapshot folder whenever it changes. It finds the newest session that started
+// in any snapshot of the harness; the caller resumes it in the newest snapshot.
+//
+// There is no fall back: a vendor's own "last session" could be another
+// project's, so when no session is found, or the store cannot be read, the run
+// stops and says so.
+func resolveSnapshotSession(adapter vendor.Adapter, harnessKey string, _ io.Writer) (string, error) {
+	root := filepath.Join(config.RunDir(), runsnap.SnapshotsDirName, harnessKey)
+	id, err := adapter.ResolveLastSession(root, time.Time{})
+	switch {
+	case err == nil:
+		return id, nil
+	case errors.Is(err, vendor.ErrNoResumableSession):
+		return "", fmt.Errorf("no %s session to resume for %s: none started in a snapshot of this harness; pass --resume=<session-id> to name one", adapter.Name(), harnessKey)
+	default:
+		return "", fmt.Errorf("cannot find the %s session to resume for %s (%w); pass --resume=<session-id> to name one", adapter.Name(), harnessKey, err)
+	}
+}
+
 // resolveResumeSession decides which session `--resume` should continue.
 //
 // It returns the session id to resume and whether to resume at all. An empty id
 // with resume==true means "use the vendor's continue-last form" — which is a
-// real, working resume, not a fallback to nothing.
+// real, working resume, not a fallback to nothing. Only a vendor that cannot
+// look up ids at all (OpenCode) reaches that case: Codex and Cursor are
+// resolved by resolveSnapshotSession, which refuses when no snapshot holds a
+// session, and never use continue-last.
 //
 // The three outcomes:
 //
 //   - explicit id given            → resume that session
-//   - vendor cannot look up ids    → resume with an empty id (continue-last)
+//   - vendor cannot look up ids    → resume with an empty id (continue-last;
+//     OpenCode only)
 //   - store readable, nothing here → do not resume; the caller launches cold
 //
 // The last case is deliberately not an error. Relaunching a terminal whose
@@ -777,11 +1156,12 @@ func updateLegacyRunAlias(bareName, runDirName string) {
 	// pre-re-key assembly — the old flow clobbered it via AssembleTo on
 	// every run anyway, so replacing it with the alias loses nothing.
 	if err := os.RemoveAll(alias); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not refresh legacy run alias %s: %v\n", alias, err)
+		// No Fix: the alias is a legacy convenience, and the filesystem error is the cause.
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not refresh legacy run alias %s: %v", alias, err)})
 		return
 	}
 	if err := os.Symlink(runDirName, alias); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not create legacy run alias %s: %v\n", alias, err)
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not create legacy run alias %s: %v", alias, err)})
 	}
 }
 
@@ -854,22 +1234,26 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 // forwarded too: "first -- second" prompts "second" and forwards "first".
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
-	HarnessName  string   // positional name, if given
-	HarnessFile  string   // --harness-file or YNH_HARNESS_FILE
-	VendorFlag   string   // -v or YNH_VENDOR
-	ProfileFlags []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
-	FocusFlag    string   // --focus or YNH_FOCUS
-	SessionName  string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
-	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
-	Prompt       string   // trailing prompt after --
-	VendorArgs   []string // passthrough args for vendor CLI
-	Action       string   // "install", "clean", or ""
-	Interactive  bool     // --interactive: stay in session after initial prompt
-	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
-	Resume       bool     // --resume: continue a previous session
-	ResumeID     string   // --resume=<id>: continue one specific session
-	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
-	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
+	HarnessName   string   // positional name, if given
+	HarnessFile   string   // --harness-file or YNH_HARNESS_FILE
+	VendorFlag    string   // -v or YNH_VENDOR
+	ProfileFlags  []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
+	FocusFlag     string   // --focus or YNH_FOCUS
+	SessionName   string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
+	Instructions  string   // --instructions: per-invocation context injected into vendor pipeline
+	Prompt        string   // trailing prompt after --
+	VendorArgs    []string // passthrough args for vendor CLI
+	Action        string   // "install", "clean", or ""
+	Interactive   bool     // --interactive: stay in session after initial prompt
+	IsolatedMCP   bool     // --isolated-mcp: run with only the harness's MCP servers
+	Resume        bool     // --resume: continue a previous session
+	ResumeID      string   // --resume=<id>: continue one specific session
+	OnLive        string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
+	NoWorkspace   bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
+	Labels        []string // --label key:value, repeatable; key: removes a label; not forwarded
+	Trust         bool     // --trust: accept the folder run's full-SHA-pinned remote includes; not forwarded
+	Relay         bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
+	RelayEndpoint string   // --telemetry-relay-endpoint: a standing relay's loopback endpoint; not forwarded
 }
 
 // ynhValueFlags are ynh's own run flags that take the next argument as their
@@ -877,7 +1261,7 @@ type runArgs struct {
 var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
-	"--label": true,
+	"--label": true, "--on-live": true, "--telemetry-relay-endpoint": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -952,8 +1336,22 @@ func parseRunArgs(args []string) runArgs {
 		case strings.HasPrefix(flagArgs[i], "--resume="):
 			ra.Resume = true
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
+		case flagArgs[i] == "--on-live" && i+1 < len(flagArgs):
+			ra.OnLive = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--on-live="):
+			ra.OnLive = strings.TrimPrefix(flagArgs[i], "--on-live=")
 		case flagArgs[i] == "--no-workspace":
 			ra.NoWorkspace = true
+		case flagArgs[i] == "--telemetry-relay":
+			ra.Relay = true
+		case flagArgs[i] == "--trust":
+			ra.Trust = true
+		case flagArgs[i] == "--telemetry-relay-endpoint" && i+1 < len(flagArgs):
+			ra.RelayEndpoint = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--telemetry-relay-endpoint="):
+			ra.RelayEndpoint = strings.TrimPrefix(flagArgs[i], "--telemetry-relay-endpoint=")
 		case flagArgs[i] == "--label" && i+1 < len(flagArgs):
 			ra.Labels = append(ra.Labels, flagArgs[i+1])
 			i++
@@ -1002,4 +1400,49 @@ func parseRunArgs(args []string) runArgs {
 	}
 
 	return ra
+}
+
+// stdinIsTerminal reports whether stdin is a terminal a person can answer on.
+// A pipe, a file and /dev/null are not. A variable so tests can stand in.
+var stdinIsTerminal = func() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	if null, err := os.Stat(os.DevNull); err == nil && os.SameFile(fi, null) {
+		return false
+	}
+	return true
+}
+
+// harnessRunRef returns the reference to print in a hint that tells the user
+// to run `ynh run <ref>`: the canonical id when the harness was run by id,
+// otherwise the harness directory's absolute path. A bare name is never
+// returned, because `ynh run` refuses it (#851). A path with anything a shell
+// would act on is single-quoted (an embedded single quote is closed, escaped
+// and reopened), so the printed command pastes as it is for any path.
+func harnessRunRef(id, dir string) string {
+	if id != "" {
+		return id
+	}
+	return shellQuote(dir)
+}
+
+// shellQuote returns s as one POSIX shell word: unchanged when it holds only
+// characters a shell leaves alone, else single-quoted.
+func shellQuote(s string) string {
+	const plain = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-+=:@%,"
+	if s != "" && strings.Trim(s, plain) == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// symlinkConsentError is the refusal when a vendor needs symlinks in the
+// project and nobody can be asked: consent to write into a project is never
+// assumed from a closed or piped stdin.
+func symlinkConsentError(vendorName, ref string, n int) error {
+	return fmt.Errorf("%s needs %d symlinks in this project and there is no terminal to ask on; nothing was installed. "+
+		"Give consent explicitly by running `ynh run %s -v %s --install` once (it records the install, so later runs go ahead), or run from a terminal",
+		vendorName, n, ref, vendorName)
 }

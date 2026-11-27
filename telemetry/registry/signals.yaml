@@ -27,6 +27,23 @@ groups:
       - {ref: gen_ai.usage.output_tokens, requirement_level: recommended}
       - {ref: gen_ai.usage.cache_read.input_tokens, requirement_level: recommended}
       - {ref: gen_ai.usage.cache_creation.input_tokens, requirement_level: recommended}
+  - id: span.ynh.session
+    type: span
+    span_kind: internal
+    stability: development
+    brief: "One `ynh run` launch of a vendor CLI, from start to end, whichever vendor ran."
+    attributes:
+      - {ref: ynh.session.id, requirement_level: required}
+      - {ref: ynh.session.outcome, requirement_level: required}
+      - {ref: process.exit.code, requirement_level: required}
+      - {ref: ynh.session.signal, requirement_level: recommended}
+      - {ref: ynh.session.vendor, requirement_level: recommended}
+      - {ref: ynh.run.focus, requirement_level: recommended}
+      - {ref: ynh.run.profile, requirement_level: recommended}
+      - {ref: ynh.run.resumed, requirement_level: recommended}
+      - {ref: ynh.harness.name, requirement_level: recommended}
+      - {ref: ynh.harness.version, requirement_level: recommended}
+      - {ref: ynh.harness.commit, requirement_level: recommended}
   - id: span.ynh.check
     type: span
     span_kind: client
@@ -77,3 +94,34 @@ groups:
       - {ref: gen_ai.usage.output_tokens, requirement_level: recommended}
       - {ref: gen_ai.usage.cache_read.input_tokens, requirement_level: recommended}
       - {ref: gen_ai.usage.cache_creation.input_tokens, requirement_level: recommended}
+  - id: event.ynh.session.started
+    type: event
+    name: ynh.session.started
+    stability: development
+    brief: A `ynh run` launch began, before the vendor CLI started. A start with no finish is how a crash shows.
+    attributes:
+      - {ref: ynh.session.id, requirement_level: required}
+      - {ref: ynh.session.vendor, requirement_level: recommended}
+      - {ref: ynh.run.focus, requirement_level: recommended}
+      - {ref: ynh.run.profile, requirement_level: recommended}
+      - {ref: ynh.run.resumed, requirement_level: recommended}
+      - {ref: ynh.harness.name, requirement_level: recommended}
+      - {ref: ynh.harness.version, requirement_level: recommended}
+      - {ref: ynh.harness.commit, requirement_level: recommended}
+  - id: event.ynh.session.finished
+    type: event
+    name: ynh.session.finished
+    stability: development
+    brief: A `ynh run` launch ended. It carries the started event's attributes and how the launch ended.
+    attributes:
+      - {ref: ynh.session.id, requirement_level: required}
+      - {ref: ynh.session.outcome, requirement_level: required}
+      - {ref: process.exit.code, requirement_level: required}
+      - {ref: ynh.session.signal, requirement_level: recommended}
+      - {ref: ynh.session.vendor, requirement_level: recommended}
+      - {ref: ynh.run.focus, requirement_level: recommended}
+      - {ref: ynh.run.profile, requirement_level: recommended}
+      - {ref: ynh.run.resumed, requirement_level: recommended}
+      - {ref: ynh.harness.name, requirement_level: recommended}
+      - {ref: ynh.harness.version, requirement_level: recommended}
+      - {ref: ynh.harness.commit, requirement_level: recommended}

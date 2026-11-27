@@ -18,6 +18,7 @@ import (
 // concurrent use.
 type Run struct {
 	t         *Telemetry
+	kind      runKind
 	parent    context.Context
 	startTime time.Time
 	start     []attribute.KeyValue
@@ -27,6 +28,18 @@ type Run struct {
 	span     trace.Span
 	finished bool
 }
+
+// runKind names what a Run emits: `ynh agent run` and `ynh run` share the
+// machinery and differ in these names.
+type runKind struct {
+	span, started, finished string
+	outcome                 attribute.Key
+}
+
+var (
+	agentRunKind = runKind{SpanRun, EventRunStarted, EventRunFinished, AttrRunOutcome}
+	sessionKind  = runKind{SpanSession, EventSessionStarted, EventSessionFinished, AttrSessionOutcome}
+)
 
 // StartRun joins the trace named by TRACEPARENT and TRACESTATE, or starts
 // one, opens the run's span and emits ynh.run.started. The event is flushed
@@ -38,12 +51,17 @@ type Run struct {
 // When telemetry starts later, because the spool appeared mid-run, the span
 // and the started event are written then, with the run's real start time.
 func (t *Telemetry) StartRun(attrs ...attribute.KeyValue) *Run {
+	return t.start(agentRunKind, attrs)
+}
+
+func (t *Telemetry) start(kind runKind, attrs []attribute.KeyValue) *Run {
 	carrier := propagation.MapCarrier{
 		"traceparent": os.Getenv("TRACEPARENT"),
 		"tracestate":  os.Getenv("TRACESTATE"),
 	}
 	r := &Run{
 		t:         t,
+		kind:      kind,
 		parent:    propagation.TraceContext{}.Extract(context.Background(), carrier),
 		startTime: time.Now(),
 		start:     attrs,
@@ -64,11 +82,11 @@ func (r *Run) activate() {
 		r.mu.Unlock()
 		return
 	}
-	r.ctx, r.span = st.tracer.Start(r.parent, SpanRun,
+	r.ctx, r.span = st.tracer.Start(r.parent, r.kind.span,
 		trace.WithSpanKind(trace.SpanKindInternal),
 		trace.WithTimestamp(r.startTime),
 		trace.WithAttributes(r.start...))
-	emit(r.ctx, st.logger, EventRunStarted, r.startTime, r.start)
+	emit(r.ctx, st.logger, r.kind.started, r.startTime, r.start)
 	r.mu.Unlock()
 	r.t.Flush()
 }
@@ -146,7 +164,7 @@ func (r *Run) Finish(outcome string, succeeded bool, attrs ...attribute.KeyValue
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.finished = true
-	attrs = append([]attribute.KeyValue{AttrRunOutcome.String(outcome)}, attrs...)
+	attrs = append([]attribute.KeyValue{r.kind.outcome.String(outcome)}, attrs...)
 	r.span.SetAttributes(attrs...)
 	if succeeded {
 		r.span.SetStatus(codes.Ok, "")
@@ -154,7 +172,7 @@ func (r *Run) Finish(outcome string, succeeded bool, attrs ...attribute.KeyValue
 		r.span.SetStatus(codes.Error, outcome)
 	}
 	merged := attribute.NewSet(append(append([]attribute.KeyValue{}, r.start...), attrs...)...)
-	emit(r.ctx, st.logger, EventRunFinished, time.Now(), merged.ToSlice())
+	emit(r.ctx, st.logger, r.kind.finished, time.Now(), merged.ToSlice())
 	r.span.End()
 }
 

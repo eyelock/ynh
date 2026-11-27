@@ -33,7 +33,7 @@ Structured output is always **opt-in** via a single flag:
 
 - `--format text` is the default and explicit equivalent of omitting the flag.
 - Other values are rejected with a non-zero exit and an error on `stderr`.
-- No `-o json`, no bare `--json`, no per-command variants. One convention, one flag name.
+- No `-o json` and no per-command variants. One convention, one flag name. Three commands still also accept `--json`, the older spelling of `--format json`: `ynh ps`, `ynh migrate` and `ynh quarantine list`. Every other command rejects it as an unknown flag.
 - The flag is **space-separated only**: `--format json`, not `--format=json`. This matches every existing flag in `ynh` and `ynd`. The `=` form is rejected as an unknown flag.
 
 Commands that do not yet have structured output do not accept `--format`; the flag is added per-command as structured mode is implemented.
@@ -42,7 +42,7 @@ Commands that do not yet have structured output do not accept `--format`; the fl
 
 When a command invoked with `--format json` fails:
 
-- Exit code is non-zero (conventional: `1` for user/runtime errors, `2` for usage errors).
+- Exit code is non-zero: `1` for user, runtime and usage errors alike (a bad flag exits 1, not 2). Two commands choose their own codes: `ynh check` exits 1 when a blocking sensor fails and 2 when it could not run the check at all (its usage errors included), and `ynh agent run` exits with the code its run result reports.
 - `stdout` is empty, or contains a partial result only if the command explicitly documents streaming semantics (none do today).
 - `stderr` contains a single JSON object:
 
@@ -133,9 +133,11 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
 
-- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup), `delegate-graph-flattens` (`delegates_to` is flattened: a delegate's own delegates are followed, and every harness reached is one agent, once, with the root never its own delegate), `include-cycles-resolve` (an include cycle resolves, with every harness in it included once and the include that closes it noted in `ynh info`'s `include_notes`, and one git source reached at two versions is an error), `run-labels` (run labels from config.json, the manifest, `YNH_LABELS` and `--label`; `ynh ls --label`), `trust-counts-composed-mcp-servers` (`ynh trust` and `ynh trust show` list in `mcp_servers` the servers of included harnesses, each with its `source`, and those carried by delegates, each with its `delegate`; a delegate's servers are not the session's) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
+- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup), `delegate-graph-flattens` (`delegates_to` is flattened: a delegate's own delegates are followed, and every harness reached is one agent, once, with the root never its own delegate), `include-cycles-resolve` (an include cycle resolves, with every harness in it included once and the include that closes it noted in `ynh info`'s `include_notes`, and one git source reached at two versions is an error), `run-labels` (run labels from config.json, the manifest, `YNH_LABELS` and `--label`; `ynh ls --label`), `trust-counts-composed-mcp-servers` (`ynh trust` and `ynh trust show` list in `mcp_servers` the servers of included harnesses, each with its `source`, and those carried by `native` delegates, each with its `delegate`; a delegate's servers are not the session's, and from v0.18.0 an `a2a` delegate's are under its own trust grant and not listed) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
+
+Capabilities `0.11.0` adds the error code `untrusted`, the refusal of the trust gate ([#950](https://github.com/eyelock/ynh/issues/950)): `ynh check --format json` writes it in the error envelope, and `ynh agent run --format json` carries it as `error_code` in its result, with exit code 1. `ynh run` and an `ynh agent run` of an installed harness refuse until `ynh trust accept <harness>`, so a consumer that branches on error codes must handle it. The error-code enum is closed, so adding a member bumps the version.
 
 Capabilities `0.10.0` is a breaking bump. `ynh info`'s harness carries `mcp_servers`, the servers a run would get with its includes composed, as a required field (with an optional `mcp_servers_error` when an include could not be read, and an optional `selection` when `--profile` or `--focus` chose what a run carries) and `hooks`, the hooks a run carries with their source, also as a required field (with an optional `hooks_not_active` for included hooks without consent and an optional `hooks_error` when an include could not be read), and the trajectory's `session_start` no longer writes the deprecated `model` (read `model_requested`, and `worker_model` for what ran). `ynh trust` and `ynh trust show` are not enveloped, so the change in what their `mcp_servers` counts is reported by the `trust-counts-composed-mcp-servers` feature instead.
 
@@ -151,7 +153,7 @@ Each structured-output command documents its own field reference in `docs/refere
 
 ## Published JSON Schemas
 
-Every `--format json` command has a published JSON Schema embedded in the binary. The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
+Every `--format json` command except `ynh sensors run` has a published JSON Schema embedded in the binary (`ynh sensors run` is JSON-only and has none yet; `delegate-run` and `mcp-headers` are internal and take no `--format`). The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
 
 - `ynh schema <name>` — print one embedded schema (`version`, `list`, `info`, `installed`, `fork`, `error`, etc.).
 - `ynh schema --all --format json` — manifest of every embedded schema, for tools that load them at startup.

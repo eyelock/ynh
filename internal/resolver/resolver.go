@@ -58,10 +58,23 @@ type ResolveResult struct {
 	// with "hooks": true (see includeResolver.hooksConsent). Without it the
 	// hooks are declared but not carried.
 	HooksActive bool
+	// HooksDeclined is whether the root's own side said "hooks": false, on
+	// this include or on one it was reached through: the hooks are off by
+	// choice. It is false when they are off only because nothing consented.
+	HooksDeclined bool
 	// Notes are remarks about the include graph that concern this include:
 	// an include cycle its harness closes (see includeResolver.resolve). A
 	// cycle is not an error; ynh info and ynd preview show the note.
 	Notes []string
+
+	// Remote is true for a git include of another repository, at any depth.
+	// A local include, and a git include of the harness's own repository
+	// (IsOwnRepoSource), are the harness's own files and are not remote.
+	Remote bool
+	// RemoteKey names a remote include for a trust record: its repository and
+	// subpath, then "@" and the ref as written ("" when it floats). Empty
+	// unless Remote.
+	RemoteKey string
 
 	// node is the include's identity in the include graph (see
 	// includeResolver.parents), empty for a plain artifact package.
@@ -228,7 +241,7 @@ type sourceVersion struct {
 // include consents to its hooks.
 type hookLink struct {
 	parent string
-	hooks  bool
+	hooks  *bool
 }
 
 // seenHarness is one harness met under a namespace.
@@ -505,13 +518,34 @@ func (r *includeResolver) hooksConsent(id string, memo map[string]bool) bool {
 	}
 	consent := len(links) > 0
 	for _, l := range links {
-		if !l.hooks || !r.hooksConsent(l.parent, memo) {
+		if l.hooks == nil || !*l.hooks || !r.hooksConsent(l.parent, memo) {
 			consent = false
 			break
 		}
 	}
 	memo[id] = consent
 	return consent
+}
+
+// hooksDeclined reports whether the routes that decide the hooks of the
+// harness with identity id (the same ones hooksConsent weighs) include an
+// explicit "hooks": false, at the include itself or at a link above it.
+func (r *includeResolver) hooksDeclined(id string, seen map[string]bool) bool {
+	if id == r.rootID || seen[id] {
+		return false
+	}
+	seen[id] = true
+	links := r.hookLinks[id]
+	direct := slices.DeleteFunc(slices.Clone(links), func(l hookLink) bool { return l.parent != r.rootID })
+	if len(direct) > 0 {
+		links = direct
+	}
+	for _, l := range links {
+		if l.hooks != nil && !*l.hooks || r.hooksDeclined(l.parent, seen) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyHooksConsent sets HooksActive on each included harness (see
@@ -521,6 +555,7 @@ func (r *includeResolver) applyHooksConsent(results []ResolveResult) {
 	for i := range results {
 		if results[i].id != "" {
 			results[i].HooksActive = r.hooksConsent(results[i].id, memo)
+			results[i].HooksDeclined = !results[i].HooksActive && r.hooksDeclined(results[i].id, map[string]bool{})
 		}
 	}
 }
@@ -733,9 +768,16 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 	}
 	sourceKey := ShortGitURL(GitSourceURL(inc.Git, p.Dir)) + "//" + inc.Path
 	id := sourceKey + "@" + version
+	remote := !IsOwnRepoSource(inc.GitSource, p.Dir)
+	remoteKey := ""
+	if remote {
+		remoteKey = sourceKey + "@" + inc.Ref
+	}
 	return ResolveResult{
 		sourceKey: sourceKey,
 		version:   version,
+		Remote:    remote,
+		RemoteKey: remoteKey,
 		Content: ResolvedContent{
 			BasePath:       basePath,
 			Paths:          inc.Pick,
@@ -835,10 +877,12 @@ type RepoResult struct {
 	SHA  string // resolved commit SHA at HEAD after fetch/checkout
 	// ResolvedRef is the branch name actually tracked by this clone.
 	// For non-empty input refs it equals the input ref. For empty input
-	// refs it is read from the cache's origin/HEAD symref (the default
-	// branch as of clone time, which never auto-updates with upstream
-	// default-branch changes). Used by --check-updates to probe the same
-	// ref that ynh update tracks, so the two stay consistent.
+	// refs it is read from the cache's origin/HEAD symref, the remote's
+	// default branch as of the last clone or update (an update with no ref
+	// follows the remote's HEAD and re-points the symref to match; it is
+	// empty when the remote's HEAD names no branch). Used by --check-updates
+	// to probe the same ref that ynh update tracks, so the two stay
+	// consistent.
 	ResolvedRef string
 	Cloned      bool // true if freshly cloned (not previously cached)
 	Changed     bool // true if HEAD moved during update
@@ -884,6 +928,9 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		}
 		// Branch/tag: use clone --branch for the depth-1 shortcut.
 		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
+			if harness.IsShortSHARef(ref) {
+				return RepoResult{}, shortSHAError(fullURL, ref, err)
+			}
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
@@ -892,12 +939,15 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 	// Update existing clone — capture HEAD before and after
 	before := gitHead(repoDir)
 
-	var fetchErr error
-	if ref != "" {
-		fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
-	} else {
-		fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
+	// With no ref, fetch the remote's HEAD by name. A source checkout on a
+	// detached HEAD has no default branch for a clone to track (no
+	// origin/HEAD symref, or one that names an unrelated branch), so
+	// "origin/HEAD" cannot be reset to; the remote's own HEAD always can.
+	fetchRef := ref
+	if fetchRef == "" {
+		fetchRef = "HEAD"
 	}
+	fetchErr := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef)
 
 	if fetchErr != nil {
 		// Stale lock file from an interrupted fetch — remove it and retry once
@@ -905,11 +955,7 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		if strings.Contains(fetchErr.Error(), ".lock") {
 			_ = os.Remove(filepath.Join(repoDir, ".git", "shallow.lock"))
 			_ = os.Remove(filepath.Join(repoDir, ".git", "index.lock"))
-			if ref != "" {
-				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
-			} else {
-				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
-			}
+			fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", fetchRef)
 		}
 	}
 
@@ -922,6 +968,9 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			return RepoResult{}, fmt.Errorf("removing stale registry cache: %w", err)
 		}
 		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
+			if harness.IsShortSHARef(ref) {
+				return RepoResult{}, shortSHAError(fullURL, ref, err)
+			}
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
@@ -940,7 +989,7 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			return RepoResult{}, fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
 		}
 	} else {
-		if err := gitCmd("-C", repoDir, "reset", "--hard", "origin/HEAD"); err != nil {
+		if err := gitCmd("-C", repoDir, "reset", "--hard", "FETCH_HEAD"); err != nil {
 			return RepoResult{}, fmt.Errorf("git reset in %s: %w", repoDir, err)
 		}
 	}
@@ -948,8 +997,37 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		return RepoResult{}, fmt.Errorf("git clean in %s: %w", repoDir, err)
 	}
 
+	if ref == "" {
+		syncOriginHead(repoDir)
+	}
+
 	after := gitHead(repoDir)
 	return RepoResult{Path: repoDir, SHA: after, ResolvedRef: effectiveRef(repoDir, ref), Changed: before != after}, nil
+}
+
+// syncOriginHead points the clone's origin/HEAD symref at the branch the
+// remote's HEAD names now, or removes it when the remote's HEAD names none (a
+// source on a detached HEAD). An update with no ref resets to the remote's
+// live HEAD, so the symref ResolvedRef is read from has to follow it:
+// otherwise installed.json records the clone-time branch while the cache holds
+// another, and --check-updates reports drift that an update cannot clear. Best
+// effort: with the remote unreachable the fetch before it would have failed.
+func syncOriginHead(repoDir string) {
+	out, err := exec.Command(gitBin, "-C", repoDir, "ls-remote", "--symref", "origin", "HEAD").Output()
+	if err != nil {
+		return
+	}
+	// "ref: refs/heads/<branch>\tHEAD" names the branch; a detached HEAD
+	// prints only the commit line.
+	for _, line := range strings.Split(string(out), "\n") {
+		if name, ok := strings.CutPrefix(line, "ref: refs/heads/"); ok {
+			if branch, _, ok := strings.Cut(name, "\t"); ok {
+				_ = gitCmd("-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/"+branch)
+				return
+			}
+		}
+	}
+	_ = gitCmd("-C", repoDir, "remote", "set-head", "origin", "--delete")
 }
 
 // refuseToResetClone reports why repoDir must not be handed to the commands
@@ -1058,8 +1136,8 @@ func resolveGitBin() string {
 //
 // We capture this so --check-updates probes the same ref that ynh update
 // tracks. Git pins this symref at clone time and does not auto-update it
-// when upstream changes its default branch — which is exactly the divergence
-// that makes phantom drift possible.
+// when upstream changes its default branch, so an update with no ref
+// re-points it (syncOriginHead) after following the remote's HEAD.
 func resolvedBranchName(repoDir string) string {
 	cmd := exec.Command(gitBin, "-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	out, err := cmd.Output()
@@ -1215,6 +1293,14 @@ func repoDirPrefix(url string) string {
 // shaLike matches a 40-character hex commit SHA. Git refuses to take a
 // SHA via `clone --branch`, so SHA pinning has to go through init+fetch.
 var shaLike = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// shortSHAError explains a failed clone of a ref that looks like an
+// abbreviated SHA. git cannot clone one, so the ref must be the full
+// 40-character SHA, or a branch or tag name.
+func shortSHAError(url, ref string, cause error) error {
+	return fmt.Errorf("git clone %s: ref %q looks like a short commit SHA, which ynh cannot fetch; "+
+		"use the full 40-character SHA (git rev-parse %s) or a branch or tag name: %w", url, ref, ref, cause)
+}
 
 func isShaLike(ref string) bool {
 	return shaLike.MatchString(ref)

@@ -77,13 +77,13 @@ func TestAssembleDelegates_ProfileAndFocus(t *testing.T) {
 		focus       string // a line the body must hold, "" for no focus section
 		noFocusText []string
 	}{
-		{name: "neither", del: harness.Delegate{GitSource: src}, servers: "base",
+		{name: "neither", del: harness.Delegate{Transport: harness.TransportNative, GitSource: src}, servers: "base",
 			noFocusText: []string{"## Focus", "Review only", "Triage"}},
-		{name: "profile", del: harness.Delegate{GitSource: src, Profile: "ci"}, servers: "ci",
+		{name: "profile", del: harness.Delegate{Transport: harness.TransportNative, GitSource: src, Profile: "ci"}, servers: "ci",
 			noFocusText: []string{"## Focus"}},
-		{name: "focus with a profile", del: harness.Delegate{GitSource: src, Focus: "triage"}, servers: "ci",
+		{name: "focus with a profile", del: harness.Delegate{Transport: harness.TransportNative, GitSource: src, Focus: "triage"}, servers: "ci",
 			focus: "## Focus: triage\n\nTriage the failing build first."},
-		{name: "focus without a profile", del: harness.Delegate{GitSource: src, Focus: "review"}, servers: "base",
+		{name: "focus without a profile", del: harness.Delegate{Transport: harness.TransportNative, GitSource: src, Focus: "review"}, servers: "base",
 			focus: "## Focus: review\n\nReview only; change nothing."},
 	}
 	for _, tt := range tests {
@@ -117,9 +117,9 @@ func TestAssembleDelegates_SelectionErrors(t *testing.T) {
 		del  harness.Delegate
 		want string
 	}{
-		{"both", harness.Delegate{GitSource: src, Profile: "ci", Focus: "triage"}, `names both profile "ci" and focus "triage"`},
-		{"unknown profile", harness.Delegate{GitSource: src, Profile: "nope"}, `profile "nope" not defined`},
-		{"unknown focus", harness.Delegate{GitSource: src, Focus: "nope"}, `focus "nope" not defined in its manifest (available: [review triage])`},
+		{"both", harness.Delegate{Transport: harness.TransportNative, GitSource: src, Profile: "ci", Focus: "triage"}, `names both profile "ci" and focus "triage"`},
+		{"unknown profile", harness.Delegate{Transport: harness.TransportNative, GitSource: src, Profile: "nope"}, `profile "nope" not defined`},
+		{"unknown focus", harness.Delegate{Transport: harness.TransportNative, GitSource: src, Focus: "nope"}, `focus "nope" not defined in its manifest (available: [review triage])`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,7 +142,7 @@ func TestAssembleDelegates_CodexDelegateCarriesFocus(t *testing.T) {
 	}
 	workDir := t.TempDir()
 	var warn strings.Builder
-	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", DelegateOptions{Warn: &warn}); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{Transport: harness.TransportNative, GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", DelegateOptions{Warn: &warn}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(workDir, ".codex", "agents", "probe.toml"))

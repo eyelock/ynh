@@ -260,15 +260,15 @@ func TestHookWarnings(t *testing.T) {
 	t.Run("opencode names what it cannot carry", func(t *testing.T) {
 		w := HookWarnings("opencode", allCanonicalHooks())
 		if len(w) != 1 ||
-			!strings.Contains(w[0], "hook event on_session_end has no equivalent on opencode") ||
-			!strings.Contains(w[0], "no session-end") {
+			!strings.Contains(w[0].Message, "hook event on_session_end has no equivalent on opencode") ||
+			!strings.Contains(w[0].Message, "no session-end") {
 			t.Fatalf("warnings = %q", w)
 		}
 	})
 
 	t.Run("opencode matcher on a non-tool event", func(t *testing.T) {
 		w := HookWarnings("opencode", map[string][]plugin.HookEntry{"on_stop": {{Matcher: "x", Command: "x"}}})
-		if len(w) != 1 || !strings.Contains(w[0], "ignored on opencode") {
+		if len(w) != 1 || !strings.Contains(w[0].Message, "ignored on opencode") {
 			t.Fatalf("warnings = %q", w)
 		}
 		if w := HookWarnings("opencode", map[string][]plugin.HookEntry{"before_tool": {{Matcher: "Bash", Command: "x"}}}); len(w) != 0 {
@@ -280,7 +280,7 @@ func TestHookWarnings(t *testing.T) {
 		delete(cursorHookEventMap, "on_session_end")
 		t.Cleanup(func() { cursorHookEventMap["on_session_end"] = "sessionEnd" })
 		w := HookWarnings("cursor", allCanonicalHooks())
-		if len(w) != 1 || !strings.Contains(w[0], "on_session_end") || !strings.Contains(w[0], "cursor") {
+		if len(w) != 1 || !strings.Contains(w[0].Message, "on_session_end") || !strings.Contains(w[0].Message, "cursor") {
 			t.Fatalf("warnings = %q", w)
 		}
 		// The hook is left out of the file, and the others are kept.
@@ -301,14 +301,14 @@ func TestHookWarnings(t *testing.T) {
 			copilotHookEventMap["on_session_end"] = "SessionEnd"
 		})
 		w := HookWarnings("copilot", map[string][]plugin.HookEntry{"on_session_end": {{Command: "x"}}})
-		if len(w) != 1 || !strings.HasSuffix(w[0], ": no such event") {
+		if len(w) != 1 || !strings.HasSuffix(w[0].Message, ": no such event") {
 			t.Fatalf("warnings = %q", w)
 		}
 	})
 
 	t.Run("matcher where the vendor ignores it", func(t *testing.T) {
 		w := HookWarnings("cursor", map[string][]plugin.HookEntry{"on_session_start": {{Matcher: "startup", Command: "x"}}})
-		if len(w) != 1 || !strings.Contains(w[0], "ignored") {
+		if len(w) != 1 || !strings.Contains(w[0].Message, "ignored") {
 			t.Fatalf("warnings = %q", w)
 		}
 		if w := HookWarnings("claude", map[string][]plugin.HookEntry{"on_session_start": {{Matcher: "startup", Command: "x"}}}); len(w) != 0 {
@@ -318,7 +318,7 @@ func TestHookWarnings(t *testing.T) {
 
 	t.Run("claude tool name on cursor", func(t *testing.T) {
 		w := HookWarnings("cursor", map[string][]plugin.HookEntry{"before_tool": {{Matcher: "Bash", Command: "x"}}})
-		if len(w) != 1 || !strings.Contains(w[0], "Shell") {
+		if len(w) != 1 || !strings.Contains(w[0].Message, "Shell") {
 			t.Fatalf("warnings = %q", w)
 		}
 		if w := HookWarnings("cursor", map[string][]plugin.HookEntry{"before_tool": {{Matcher: "Shell", Command: "x"}}}); len(w) != 0 {
@@ -426,8 +426,8 @@ func TestHookTimeoutClamped(t *testing.T) {
 				t.Errorf("Stop timeout = %d, want 120 (no cap)", got)
 			}
 			w := HookWarnings(tc.vendor, hooks)
-			if len(w) != 1 || !strings.Contains(w[0], "on_session_end") || !strings.Contains(w[0], tc.vendor) ||
-				!strings.Contains(w[0], "120s") || !strings.Contains(w[0], tc.cap+"s") {
+			if len(w) != 1 || !strings.Contains(w[0].Message, "on_session_end") || !strings.Contains(w[0].Message, tc.vendor) ||
+				!strings.Contains(w[0].Message, "120s") || !strings.Contains(w[0].Message, tc.cap+"s") {
 				t.Errorf("warnings = %q", w)
 			}
 		})
@@ -452,8 +452,8 @@ func TestHookTimeoutUnsupportedVendor(t *testing.T) {
 		t.Errorf("no timeout field must be written:\n%s", s)
 	}
 	w := HookWarnings("cursor", hooks)
-	if len(w) != 1 || !strings.Contains(w[0], "on_stop") || !strings.Contains(w[0], "cursor") ||
-		!strings.Contains(w[0], "9s") || !strings.Contains(w[0], "default applies") || !strings.HasSuffix(w[0], ": no such field") {
+	if len(w) != 1 || !strings.Contains(w[0].Message, "on_stop") || !strings.Contains(w[0].Message, "cursor") ||
+		!strings.Contains(w[0].Message, "9s") || !strings.Contains(w[0].Message, "default applies") || !strings.HasSuffix(w[0].Message, ": no such field") {
 		t.Errorf("warnings = %q", w)
 	}
 }
@@ -528,7 +528,7 @@ func TestClaudeSessionEndEnv(t *testing.T) {
 func TestExportHookWarnings_ClaudeSessionEnd(t *testing.T) {
 	long := map[string][]plugin.HookEntry{"on_session_end": {{Command: "x", Timeout: 10}}}
 	w := ExportHookWarnings("claude", long)
-	if len(w) != 1 || !strings.Contains(w[0], ClaudeSessionEndEnvVar+"=10000") || !strings.Contains(w[0], "ignores") {
+	if len(w) != 1 || !strings.Contains(w[0].Fix, ClaudeSessionEndEnvVar+"=10000") || !strings.Contains(w[0].Message, "ignores") {
 		t.Fatalf("warnings = %q", w)
 	}
 	for name, hooks := range map[string]map[string][]plugin.HookEntry{
@@ -565,8 +565,8 @@ func TestCursorPrintModeWarnings(t *testing.T) {
 	}
 
 	w := CursorPrintModeWarnings(write(allCanonicalHooks()))
-	if len(w) != 2 || !strings.Contains(w[0], "before_prompt") || !strings.Contains(w[0], "beforeSubmitPrompt") ||
-		!strings.Contains(w[1], "on_stop") || !strings.Contains(w[1], "stop") || !strings.Contains(w[1], "will not fire") {
+	if len(w) != 2 || !strings.Contains(w[0].Message, "before_prompt") || !strings.Contains(w[0].Message, "beforeSubmitPrompt") ||
+		!strings.Contains(w[1].Message, "on_stop") || !strings.Contains(w[1].Message, "stop") || !strings.Contains(w[1].Message, "will not fire") {
 		t.Errorf("warnings = %q", w)
 	}
 	if w := CursorPrintModeWarnings(write(map[string][]plugin.HookEntry{"before_tool": {{Command: "x"}}, "on_session_end": {{Command: "y"}}})); len(w) != 0 {

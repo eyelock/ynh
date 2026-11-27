@@ -22,7 +22,9 @@
 # skills/, agents/, commands/): a delegate's agent file has an Instructions
 # section, and an export an AGENTS.md, only when the harness has instructions.
 # The files' contents are not compared. It fails when it finds no stand-in
-# harness to compare, since that means it checked nothing.
+# harness to compare, since that means it checked nothing. The stand-in of
+# eyelock/ynh is skipped: eval-remotes.sh copies it from this checkout's
+# docs/tutorial/harnesses, so it cannot differ from the real one.
 #
 # It needs the network, so it is not part of `make check`. When it fails, update
 # the stand-in in scripts/eval-remotes.sh to match the real harness, and any
@@ -79,6 +81,14 @@ for repo_dir in "$SRC"/*/*; do
 	[ -n "$manifests" ] || continue
 
 	echo "== github.com/$repo =="
+	# ynh's own tutorial harnesses are copied from this checkout by
+	# scripts/eval-remotes.sh, so they are the real files by construction.
+	# Comparing them with the default branch would only fail a pull request
+	# that adds one (it is MISSING there until the pull request merges).
+	if [ "$repo" = eyelock/ynh ]; then
+		echo "  SKIP     copied from this checkout by scripts/eval-remotes.sh, not written out"
+		continue
+	fi
 	real=$SB/real/$repo
 	if ! git clone --quiet --depth 1 "https://github.com/$repo" "$real" 2> "$SB/clone.log"; then
 		sed 's/^/  /' "$SB/clone.log"

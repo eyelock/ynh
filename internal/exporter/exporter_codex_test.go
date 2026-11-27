@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func TestExportSingleVendorCodex(t *testing.T) {
@@ -37,7 +39,7 @@ func TestExportSingleVendorCodex(t *testing.T) {
 	// export says so (docs/vendors.md).
 	assertFileNotExists(t, filepath.Join(codexDir, "AGENTS.md"))
 	found := false
-	for _, w := range r.Warnings {
+	for _, w := range warn.Messages(r.Warnings) {
 		if strings.Contains(w, "cannot carry instructions") {
 			found = true
 		}
@@ -59,7 +61,7 @@ func TestExportSingleVendorCodex(t *testing.T) {
 		t.Error("expected warnings about skipped artifacts")
 	}
 	foundSkipWarning := false
-	for _, w := range r.Warnings {
+	for _, w := range warn.Messages(r.Warnings) {
 		if strings.Contains(w, "codex: skipping") {
 			foundSkipWarning = true
 		}
@@ -204,7 +206,7 @@ func TestExportMergedCodexNote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("per-vendor Export: %v", err)
 	}
-	wantCodex := perVendor[0].Warnings
+	wantCodex := warn.Messages(perVendor[0].Warnings)
 	if len(wantCodex) == 0 {
 		t.Fatal("per-vendor Codex export gave no note to compare against")
 	}
@@ -231,7 +233,7 @@ func TestExportMergedCodexNote(t *testing.T) {
 				t.Fatalf("Export: %v", err)
 			}
 			var codex []string
-			for _, w := range results[0].Warnings {
+			for _, w := range warn.Messages(results[0].Warnings) {
 				if strings.HasPrefix(w, "codex: ") {
 					codex = append(codex, w)
 				}
@@ -267,7 +269,7 @@ func TestExportCopilotCarriesCommands(t *testing.T) {
 	}
 	assertFileNotExists(t, filepath.Join(dir, "rules"))
 
-	for _, w := range results[0].Warnings {
+	for _, w := range warn.Messages(results[0].Warnings) {
 		if strings.Contains(w, "commands") && strings.Contains(w, "not supported") {
 			t.Errorf("warning still says commands are not supported: %s", w)
 		}

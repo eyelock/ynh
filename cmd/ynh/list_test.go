@@ -956,7 +956,7 @@ func TestCmdList_LocalIncludes(t *testing.T) {
 		{
 			name:     "none",
 			includes: `[]`,
-			wantCell: "0",
+			wantCell: "-",
 			wantJSON: []listInclude{},
 		},
 		{
