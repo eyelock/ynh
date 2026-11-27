@@ -121,8 +121,8 @@ func TestInstallRef_RecordedSoTrustRoutesPassTheFullSHARule(t *testing.T) {
 	if err := cmdIncludeTo([]string{"add", "local/hh", filepath.Join(dir, "extra"), "--hooks", "--trust"}, &out); err != nil {
 		t.Fatalf("include add --trust: %v\n%s", err, out.String())
 	}
-	if err := cmdIncludeTo([]string{"update", "local/hh", filepath.Join(dir, "extra"), "--ref", sha, "--trust"}, &out); err != nil && strings.Contains(err.Error(), "no ref") {
-		t.Fatalf("include update --trust refused as unpinned: %v", err)
+	if err := cmdIncludeTo([]string{"update", "local/hh", filepath.Join(dir, "extra"), "--ref", sha, "--trust"}, &out); err != nil {
+		t.Fatalf("include update --trust: %v\n%s", err, out.String())
 	}
 }
 
