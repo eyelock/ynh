@@ -160,10 +160,19 @@ func resolveDelegate(parent *harness.Harness, d harness.Delegate, store trustSto
 	var refusal error
 	for _, m := range matches {
 		id, h := m.id, m.h
-		st := trustStatusFor(id, h, store, nil)
-		switch st.State {
-		case trustAccepted, trustNoCommands:
+		adm := decideTrustIn(store, id, h, purposeDelegate, nil)
+		if err := adm.err(); err == nil {
 			return &resolvedDelegate{ID: id, Harness: h, Profile: d.Profile, Focus: d.Focus}, nil
+		} else if len(scriptBlockers(adm.Status.Executables, adm.Status.Hooks, adm.Status.MCPServers)) > 0 {
+			// A script the digest could not read in full blocks a delegate as
+			// it blocks a run: accepting cannot make it reviewable.
+			if refusal == nil {
+				refusal = fmt.Errorf("delegate %s of %s is installed as %s: %w", src, parent.Name, id, err)
+			}
+			continue
+		}
+		st := adm.Status
+		switch st.State {
 		case trustUnavailable:
 			if refusal == nil {
 				refusal = fmt.Errorf("delegate %s of %s is installed as %s but cannot be read in full: %s\n  Run: ynh update %s",

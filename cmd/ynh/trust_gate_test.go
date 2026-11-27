@@ -36,7 +36,7 @@ func TestTrustGate_UnacceptedInstalledHarnessIsRefused(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 	id := installListTestHarness(t, home, "hooked", hookedHarness)
 
-	err := trustGate(id, loadInstalled(t, id), io.Discard)
+	err := gateErr(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(err) {
 		t.Fatalf("err = %v, want an untrusted refusal", err)
 	}
@@ -55,7 +55,7 @@ func TestTrustGate_AcceptedAndCommandlessPass(t *testing.T) {
 	plain := installListTestHarness(t, home, "plain", plainHarness)
 
 	for _, id := range []string{hooked, plain} {
-		if err := trustGate(id, loadInstalled(t, id), io.Discard); err != nil {
+		if err := gateErr(id, loadInstalled(t, id), io.Discard); err != nil {
 			t.Errorf("%s: %v", id, err)
 		}
 	}
@@ -69,7 +69,7 @@ func TestTrustGate_ChangedHarnessIsRefused(t *testing.T) {
 	id := installTrustedTestHarness(t, home, "hooked", hookedHarness)
 	installListTestHarness(t, home, "hooked", strings.Replace(hookedHarness, "echo done", "echo changed", 1))
 
-	err := trustGate(id, loadInstalled(t, id), io.Discard)
+	err := gateErr(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(err) || !strings.Contains(err.Error(), "differ from what you accepted") {
 		t.Fatalf("err = %v, want a changed refusal", err)
 	}
@@ -84,7 +84,7 @@ func TestTrustGate_ChangedHarnessIsRefused(t *testing.T) {
 	if serr := saveTrustStore(store); serr != nil {
 		t.Fatal(serr)
 	}
-	err = trustGate(id, loadInstalled(t, id), io.Discard)
+	err = gateErr(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(err) || !strings.Contains(err.Error(), scriptDigestNote) {
 		t.Fatalf("err = %v, want scheme 3's note", err)
 	}
@@ -97,7 +97,7 @@ func TestTrustGate_UnreadableIncludeIsRefused(t *testing.T) {
 	id := installListTestHarness(t, home, "inc",
 		`{"name":"inc","version":"0.1.0","includes":[{"git":"https://example.invalid/none.git"}]}`)
 
-	err := trustGate(id, loadInstalled(t, id), io.Discard)
+	err := gateErr(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(err) || !strings.Contains(err.Error(), "ynh update") {
 		t.Fatalf("err = %v, want a refusal naming ynh update", err)
 	}
@@ -190,7 +190,7 @@ func TestTrustGate_FolderRunLaunchesWithItsNotice(t *testing.T) {
 		t.Fatal(err)
 	}
 	var stderr bytes.Buffer
-	if gerr := trustGate("", p, &stderr); gerr != nil {
+	if gerr := gateErr("", p, &stderr); gerr != nil {
 		t.Fatalf("a folder's own commands are not gated: %v", gerr)
 	}
 	if !strings.Contains(stderr.String(), "not trust-checked") {
@@ -207,7 +207,7 @@ func TestTrustGate_FolderRunRefusesAnUnacceptedRemoteInclude(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gerr := trustGate("", p, io.Discard)
+	gerr := gateErr("", p, io.Discard)
 	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "/remote//") || !strings.Contains(gerr.Error(), "remote-sensor") ||
 		!strings.Contains(gerr.Error(), "ynh trust accept "+folder) {
 		t.Fatalf("err = %v, want a refusal naming the include, its sensor and the accept command", gerr)
@@ -220,7 +220,7 @@ func TestTrustGate_FolderRunRefusesAnUnacceptedRemoteInclude(t *testing.T) {
 	if !strings.Contains(out.String(), "Recorded 1 remote include") {
 		t.Errorf("accept output: %q", out.String())
 	}
-	if gerr = trustGate("", p, io.Discard); gerr != nil {
+	if gerr = gateErr("", p, io.Discard); gerr != nil {
 		t.Fatalf("after accepting: %v", gerr)
 	}
 
@@ -235,7 +235,7 @@ func TestTrustGate_FolderRunRefusesAnUnacceptedRemoteInclude(t *testing.T) {
 	if _, uerr := resolver.EnsureRepo("file://"+src, ""); uerr != nil {
 		t.Fatal(uerr)
 	}
-	if gerr = trustGate("", p, io.Discard); !isUntrusted(gerr) {
+	if gerr = gateErr("", p, io.Discard); !isUntrusted(gerr) {
 		t.Fatalf("err = %v, want the changed include refused", gerr)
 	}
 }
@@ -248,7 +248,7 @@ func TestTrustGate_LocalIncludeIsNotRemote(t *testing.T) {
 	writeIncludedHarness(t, root, "up", hookFields("./hooks/up.sh"))
 	writeScript(t, filepath.Join(root, "up"), "hooks/up.sh", "#!/bin/sh\nexit 0\n")
 	p := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}, Hooks: hooksOn(true)}}}
-	if err := trustGate("", p, io.Discard); err != nil {
+	if err := gateErr("", p, io.Discard); err != nil {
 		t.Fatalf("a local include is the folder's own: %v", err)
 	}
 }
@@ -259,7 +259,7 @@ func TestTrustGate_FolderRunWithUnreadableIncludeIsRefused(t *testing.T) {
 	p := &harness.Harness{Name: "consumer", Dir: t.TempDir(), Includes: []harness.Include{
 		{GitSource: harness.GitSource{Git: "https://example.invalid/none.git"}},
 	}}
-	err := trustGate("", p, io.Discard)
+	err := gateErr("", p, io.Discard)
 	if !isUntrusted(err) || !strings.Contains(err.Error(), "ynh update") {
 		t.Fatalf("err = %v", err)
 	}
@@ -399,7 +399,7 @@ func TestTrustGate_SkippedScriptBlocksTheRun(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			err := trustGate(id, loadInstalled(t, id), io.Discard)
+			err := gateErr(id, loadInstalled(t, id), io.Discard)
 			if !isUntrusted(err) {
 				t.Fatalf("err = %v, want an untrusted refusal", err)
 			}
@@ -423,7 +423,7 @@ func TestTrustGate_ProjectAndRegularScriptsDoNotBlock(t *testing.T) {
 	if err := cmdTrustTo([]string{"accept", id}, io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if err := trustGate(id, loadInstalled(t, id), io.Discard); err != nil {
+	if err := gateErr(id, loadInstalled(t, id), io.Discard); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -449,7 +449,7 @@ func TestTrustGate_FolderRunRefusesAnUnreadableScriptOfARemoteInclude(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	gerr := trustGate("", p, io.Discard)
+	gerr := gateErr("", p, io.Discard)
 	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "x.sh") || !strings.Contains(gerr.Error(), "Fix:") {
 		t.Fatalf("err = %v", gerr)
 	}
@@ -512,17 +512,17 @@ func TestTrustGate_FoldersSharingARemoteIncludeShareItsRecord(t *testing.T) {
 	if aerr := cmdTrustTo([]string{"accept", a}, io.Discard, io.Discard); aerr != nil {
 		t.Fatal(aerr)
 	}
-	if gerr := trustGate("", pa, io.Discard); gerr != nil {
+	if gerr := gateErr("", pa, io.Discard); gerr != nil {
 		t.Fatalf("A after accepting A: %v", gerr)
 	}
 	// B shares A's acceptance of the remote include: its local hook needs none.
-	if gerr := trustGate("", pb, io.Discard); gerr != nil {
+	if gerr := gateErr("", pb, io.Discard); gerr != nil {
 		t.Fatalf("B reads A's record of the shared include, and its local include is its own: %v", gerr)
 	}
 	if aerr := cmdTrustTo([]string{"accept", b}, io.Discard, io.Discard); aerr != nil {
 		t.Fatal(aerr)
 	}
-	if gerr := trustGate("", pa, io.Discard); gerr != nil {
+	if gerr := gateErr("", pa, io.Discard); gerr != nil {
 		t.Fatalf("accepting B undid A's acceptance: %v", gerr)
 	}
 }
@@ -558,7 +558,7 @@ func TestTrustGate_LocalIncludeCommandsAreNotTheRemoteIncludesRecord(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gerr := trustGate("", p, io.Discard); gerr != nil {
+	if gerr := gateErr("", p, io.Discard); gerr != nil {
 		t.Fatalf("a remote include with no commands, and a local hook: %v", gerr)
 	}
 }
@@ -571,7 +571,7 @@ func TestTrustGate_WorkspaceOnlyRefusalListsFolders(t *testing.T) {
 	id := installListTestHarness(t, home, "folders", `{"name":"folders","version":"0.1.0","default_vendor":"claude",`+
 		`"workspace":["../sibling","~/notes"]}`)
 
-	err := trustGate(id, loadInstalled(t, id), io.Discard)
+	err := gateErr(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(err) {
 		t.Fatalf("err = %v, want an untrusted refusal", err)
 	}

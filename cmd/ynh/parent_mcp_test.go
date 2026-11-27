@@ -94,24 +94,6 @@ func TestMCPServerNamesReadsTheRunDirsFile(t *testing.T) {
 	}
 }
 
-func TestClaudeDelegateMCPAllowRuleOnlyForADelegatesOneShotSession(t *testing.T) {
-	servers := []string{"probe"}
-	want := "--allowedTools=mcp__plugin_h_probe"
-	if got := claudeDelegateMCPAllowRule("claude", true, true, false, "h", servers); got != want {
-		t.Errorf("delegate one-shot: got %q, want %q", got, want)
-	}
-	for name, got := range map[string]string{
-		"a harness run directly (no delegation record)": claudeDelegateMCPAllowRule("claude", false, true, false, "h", servers),
-		"an interactive delegate run":                   claudeDelegateMCPAllowRule("claude", true, false, false, "h", servers),
-		"mcp_manual_approval":                           claudeDelegateMCPAllowRule("claude", true, true, true, "h", servers),
-		"another vendor":                                claudeDelegateMCPAllowRule("codex", true, true, false, "h", servers),
-	} {
-		if got != "" {
-			t.Errorf("%s: got %q, want no rule", name, got)
-		}
-	}
-}
-
 func TestDelegationNamesHarnessOnlyForTheRecordsDelegate(t *testing.T) {
 	rec := filepath.Join(t.TempDir(), "dlg-1.json")
 	if err := os.WriteFile(rec, []byte(`{"handle":"dlg-1","parent":"local/p","delegate":"local/dlg","folder":"/f"}`), 0o600); err != nil {

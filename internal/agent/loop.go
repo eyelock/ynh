@@ -50,6 +50,20 @@ func (e *ExitError) Error() string {
 	return fmt.Sprintf("agent loop exited with code %d", e.Code)
 }
 
+// Admission is the trust decision Admit returns: the refusal, and what an
+// acceptance unlocks on the run's backend (the CLI's grantsFor). The zero
+// value grants nothing.
+type Admission struct {
+	// Refusal, when non-nil, refuses the run.
+	Refusal error
+	// AutoApprove: --auto-approve is accepted.
+	AutoApprove bool
+	// MCPApprove: the tools of the harness's own MCP servers are approved on
+	// the backend. The run still withholds them when the harness's profile
+	// sets mcp_manual_approval, which only the run has resolved.
+	MCPApprove bool
+}
+
 // RunOptions configures a single agent loop session.
 type RunOptions struct {
 	// HarnessName is the qualified name of the harness to load and assemble.
@@ -125,20 +139,16 @@ type RunOptions struct {
 	// reports a refusal itself. Nil trusts nothing; the decision needs the
 	// operator's trust record, which this package does not read.
 	HookTrust func(h *harness.Harness, id, backend, configDir string) bool
-	// TrustGate decides whether the harness may run at all (ynh #950). It is
-	// handed the harness as loaded and the installed id ("" for a harness
-	// given by path) before anything is assembled or started, and a non-nil
-	// error refuses the run with exit 1 and error_code "untrusted". On
-	// --resume it is handed the harness the checkpoint names, and a
-	// checkpoint that names none is refused. Nil runs ungated, which only
+	// Admit is the one trust decision for the harness (ynh #950, #952, #1006).
+	// It is handed the harness as loaded and the installed id ("" for a
+	// harness given by path) before anything is assembled or started. A
+	// non-nil Refusal refuses the run with exit 1 and error_code "untrusted".
+	// On --resume it is handed the harness the checkpoint names, and a
+	// checkpoint that names none is refused. --auto-approve is accepted, and
+	// the MCP tools of the harness's servers are approved, only as the
+	// returned Admission grants them. Nil runs ungated and trusts nothing, which only
 	// tests do: the CLI always sets it.
-	TrustGate func(h *harness.Harness, id string) error
-	// Trusted reports whether the harness passed the gate as trusted: an
-	// installed harness whose commands are accepted, never a folder run
-	// (ynh #952). Pre-approval follows it: the MCP tools of the harness's
-	// servers are approved, and --auto-approve is accepted, only when it
-	// reports true. Nil reports false.
-	Trusted func(h *harness.Harness, id string) bool
+	Admit func(h *harness.Harness, id string) Admission
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -389,7 +399,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// the harness as loaded, before any focus or profile, as for workspaces.
 	var loadedHarness *harness.Harness
 	var loadedID string
-	var harnessTrusted bool
+	var harnessTrusted, autoApproveGranted bool
 
 	if opts.HarnessName != "" {
 		// An installed id or a local harness directory, resolved exactly as
@@ -410,16 +420,17 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if namespace.Classify(opts.HarnessName) == namespace.RefID {
 			loadedID = opts.HarnessName
 		}
-		if opts.TrustGate != nil {
-			if gerr := opts.TrustGate(harnessObj, loadedID); gerr != nil {
-				return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: gerr.Error()}
+		if opts.Admit != nil {
+			adm := opts.Admit(harnessObj, loadedID)
+			if adm.Refusal != nil {
+				return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: adm.Refusal.Error()}
 			}
+			harnessTrusted, autoApproveGranted = adm.MCPApprove, adm.AutoApprove
 		}
-		harnessTrusted = opts.Trusted != nil && opts.Trusted(harnessObj, loadedID)
 		// --auto-approve widens what the harness's commands may do without
 		// asking, so a harness the gate did not vouch for does not get it
 		// (decision 5c).
-		if opts.TrustGate != nil && opts.AutoApprove != "" && !harnessTrusted {
+		if opts.Admit != nil && opts.AutoApprove != "" && !autoApproveGranted {
 			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: autoApproveRefusal(harnessObj, loadedID, opts.AutoApprove)}
 		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
@@ -521,7 +532,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// A resume re-checks the trust gate for the harness its checkpoint
 		// names (decision 13), so one that names none has nothing to check
 		// and is refused rather than run unchecked.
-		if opts.HarnessName == "" && opts.TrustGate != nil {
+		if opts.HarnessName == "" && opts.Admit != nil {
 			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode,
 				Message: "refusing to resume: the checkpoint names no harness, so there is nothing to check against what you accepted"}
 		}

@@ -12,11 +12,11 @@ import (
 // codexHookTrustLaunchArgs is the Codex overrides that trust the run
 // directory as a project and each hook ynh wrote there, or nil. It grants
 // only when the installed harness is accepted and current in `ynh trust`, the
-// same rule as workspaceTrusted: an unreviewed, changed or path-run harness
+// same rule as every grant (grantsFor): an unreviewed, changed or path-run harness
 // gets no grant, so Codex skips its hooks, and one line on stderr says so and
 // what to run. A harness with no hooks needs no grant and prints nothing.
-func codexHookTrustLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string, stderr io.Writer) []string {
-	if !codexHooksTrusted(loaded, id, vendorName, runDir, stderr) {
+func codexHookTrustLaunchArgs(loaded *harness.Harness, adm Admission, vendorName, runDir string, stderr io.Writer) []string {
+	if !codexHooksTrusted(loaded, adm, vendorName, runDir, stderr) {
 		return nil
 	}
 	return vendor.CodexHookTrustArgs(runDir)
@@ -26,16 +26,17 @@ func codexHookTrustLaunchArgs(loaded *harness.Harness, id, vendorName, runDir st
 // runDir: the harness has some, and it is accepted and current in `ynh trust`.
 // When it has some and is not, it says so on stderr, once. `ynh run` and
 // `ynh agent run` share this rule.
-func codexHooksTrusted(loaded *harness.Harness, id, vendorName, runDir string, stderr io.Writer) bool {
+func codexHooksTrusted(loaded *harness.Harness, adm Admission, vendorName, runDir string, stderr io.Writer) bool {
 	if vendorName != "codex" {
 		return false
 	}
 	if vendor.CodexHookTrustArgs(runDir) == nil {
 		return false
 	}
-	if workspaceTrusted(id, loaded) {
+	if grantsFor(adm, vendorName, false, false).CodexHooks {
 		return true
 	}
+	id := adm.ID
 	if id == "" {
 		warn.Print(stderr, warn.Warning{
 			Message: "codex: hooks not trusted, so Codex will skip them: a harness run from a path has no trust record",

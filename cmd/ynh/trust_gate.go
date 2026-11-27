@@ -40,56 +40,16 @@ func isUntrusted(err error) bool {
 // run, so it can never collide with an installed harness id.
 const includeRecordPrefix = "include:"
 
-// checkTrustGate is the gate `ynh check` applies. A variable so the tests of
-// check's own refusals, which use harnesses a trust record cannot cover (an
+// checkTrustGate is the decision `ynh check` asks for. A variable so the tests
+// of check's own refusals, which use harnesses a trust record cannot cover (an
 // invalid profile makes a harness unreviewable), can stand it aside.
-var checkTrustGate = trustGate
+var checkTrustGate = func(id string, p *harness.Harness, stderr io.Writer) error {
+	return decideTrust(id, p, purposeCheck, stderr).err()
+}
 
 // maxListed caps how many executables a refusal lists before pointing at
 // `ynh trust show`, which lists them all.
 const maxListed = 8
-
-// trustGate decides whether a harness may run, before anything launches.
-// id is the harness's install id, "" for a run from a folder (design decision
-// 18: `ynh run ./dir`, --harness-file, a manifest in the current folder,
-// `ynh agent run --harness <path>`). p is the harness as loaded, before a
-// focus or profile reshapes it, which is the form a trust record covers.
-//
-// An installed harness, a local install or a remote one alike, must match an
-// accepted record (decision 1), and one whose includes cannot be read is
-// refused (decision 15). A folder run's own commands run unchecked, with one
-// line saying so; the commands its remote includes bring are refused unless
-// accepted (decision 3b). A refusal is an *untrustedError.
-func trustGate(id string, p *harness.Harness, stderr io.Writer) error {
-	if p == nil {
-		return nil
-	}
-	store, err := loadTrustStore()
-	if err != nil {
-		return untrustedf("refusing to run %s: the trust record could not be read: %v", gateName(id, p), err)
-	}
-	if id != "" {
-		return installedGate(id, p, store)
-	}
-	return folderGate(p, store, stderr)
-}
-
-// gateTrusted reports whether the harness passed the gate as trusted: an
-// installed harness whose current commands match an accepted record (or that
-// has none). A folder run is never trusted, since the gate does not check its
-// own commands (design decisions 5, 5a, 5c, ynh #952). Every pre-approval
-// (MCP tools, Copilot's --allow-all-tools, --auto-approve) asks this, so none
-// can be given to a harness the gate did not vouch for.
-func gateTrusted(id string, p *harness.Harness) bool {
-	if id == "" || p == nil {
-		return false
-	}
-	store, err := loadTrustStore()
-	if err != nil {
-		return false
-	}
-	return installedGate(id, p, store) == nil
-}
 
 // copilotOneShotRefusal refuses a one-shot Copilot run of a harness that
 // is not trusted: Copilot's one-shot mode approves every tool, so there is no

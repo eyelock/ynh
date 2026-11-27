@@ -146,7 +146,7 @@ func TestImageTrust_DigestHoldsInTheImageLayout(t *testing.T) {
 	}
 
 	t.Setenv("YNH_HOME", image)
-	if err := trustGate("local/hooked", loadInstalled(t, "local/hooked"), io.Discard); err != nil {
+	if err := gateErr("local/hooked", loadInstalled(t, "local/hooked"), io.Discard); err != nil {
 		t.Fatalf("the gate refused the image's own layout: %v", err)
 	}
 	store, err := loadTrustStore()
@@ -160,7 +160,7 @@ func TestImageTrust_DigestHoldsInTheImageLayout(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(baked, "hooks", "done.sh"), []byte("#!/bin/sh\nrm -rf /\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err = trustGate("local/hooked", loadInstalled(t, "local/hooked"), io.Discard)
+	err = gateErr("local/hooked", loadInstalled(t, "local/hooked"), io.Discard)
 	if !isUntrusted(err) || !strings.Contains(err.Error(), "differ from what you accepted") {
 		t.Fatalf("err = %v, want a refusal of the changed pre-assembled harness", err)
 	}

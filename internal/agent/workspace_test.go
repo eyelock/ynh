@@ -188,8 +188,9 @@ func TestRunLoop_PreApprovalFollowsTrust(t *testing.T) {
 		return dir, t.TempDir()
 	}
 	gated := func(opts *RunOptions, trusted bool) {
-		opts.TrustGate = func(*harness.Harness, string) error { return nil }
-		opts.Trusted = func(*harness.Harness, string) bool { return trusted }
+		opts.Admit = func(*harness.Harness, string) Admission {
+			return Admission{MCPApprove: trusted, AutoApprove: trusted}
+		}
 	}
 
 	for _, trusted := range []bool{true, false} {
@@ -213,7 +214,7 @@ func TestRunLoop_PreApprovalFollowsTrust(t *testing.T) {
 		mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
 		opts := resumeOpts(mb, session)
 		opts.HarnessName = dir
-		opts.TrustGate = func(*harness.Harness, string) error { return nil }
+		opts.Admit = func(*harness.Harness, string) Admission { return Admission{} }
 		if _, err := RunLoop(opts); err != nil {
 			t.Fatal(err)
 		}

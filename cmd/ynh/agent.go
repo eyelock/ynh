@@ -303,8 +303,11 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	}
 	opts.Telemetry = rt
 
+	// The one trust decision of this run, made by Admit below and read by the
+	// grants that follow trust (workspace folders, Codex hook trust).
+	var adm Admission
 	opts.WorkspaceGrant = func(h *harness.Harness, id, backend, worktree string) []string {
-		return workspaceGrant(h, id, backend, worktree, false, stderr)
+		return workspaceGrant(h, adm, backend, worktree, false, stderr)
 	}
 
 	// --trust accepts a folder harness's full-SHA-pinned remote includes
@@ -318,14 +321,21 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		}
 	}
 
-	opts.TrustGate = func(h *harness.Harness, id string) error {
-		return trustGate(id, h, stderr)
+	purpose := purposeRun
+	if opts.Resume != "" {
+		purpose = purposeResume
+	}
+	opts.Admit = func(h *harness.Harness, id string) agent.Admission {
+		adm = decideTrust(id, h, purpose, stderr)
+		if err := adm.err(); err != nil {
+			return agent.Admission{Refusal: err}
+		}
+		g := grantsFor(adm, opts.Backend, true, false)
+		return agent.Admission{MCPApprove: g.MCPApprove, AutoApprove: g.AutoApprove}
 	}
 
-	opts.Trusted = func(h *harness.Harness, id string) bool { return gateTrusted(id, h) }
-
 	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {
-		return codexHooksTrusted(h, id, backend, configDir, stderr)
+		return codexHooksTrusted(h, adm, backend, configDir, stderr)
 	}
 
 	result, err := agent.RunLoop(opts)
