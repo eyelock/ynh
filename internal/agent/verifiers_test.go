@@ -327,10 +327,11 @@ func TestRunLoop_FailingVerifierFeedbackReachesWorker(t *testing.T) {
 // The wall clock is spent by the time the gate is green: the run ends as it
 // does for a wall cap at a turn boundary, and the verifiers never run.
 func TestRunLoop_WallClockSpentBeforeVerifiers(t *testing.T) {
-	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}, delays: []time.Duration{300 * time.Millisecond}}
+	clk := newFakeClock()
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}, delays: []time.Duration{300 * time.Millisecond}, sleep: clk.Advance}
 	res, calls, out, err := verifierLoop(t, mb,
 		[]gate.Result{cmdResult("alpha", gate.StatusPass), cmdResult("zeta", gate.StatusPass)},
-		func(o *RunOptions) { o.MaxWall = 150 * time.Millisecond })
+		func(o *RunOptions) { o.MaxWall = 150 * time.Millisecond; o.testNow = clk.Now })
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitWallClock {
 		t.Fatalf("err = %v, want ExitWallClock (%d)", err, ExitWallClock)

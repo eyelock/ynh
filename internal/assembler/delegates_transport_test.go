@@ -67,6 +67,14 @@ func TestAssembleDelegates_TransportDecidesTheSubagent(t *testing.T) {
 				}
 				files := agentFilesOf(t, workDir, adapter)
 				if tc.wantAgent {
+					// Claude Code's delegate declares servers, so the launch
+					// file offers it and no plugin agent copy exists.
+					if name == "claude" {
+						if _, err := os.Stat(filepath.Join(workDir, vendor.ClaudeDelegateAgentsFile)); err != nil || len(files) != 0 {
+							t.Fatalf("a native delegate must be offered once, by the launch file only: files %v, launch file: %v", files, err)
+						}
+						return
+					}
 					if len(files) != 1 {
 						t.Fatalf("a native delegate must be one subagent, got %v", files)
 					}

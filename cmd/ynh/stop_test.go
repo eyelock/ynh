@@ -153,7 +153,8 @@ func TestStopNeverSignalsAReusedVendorPID(t *testing.T) {
 	if err := bystander.Start(); err != nil {
 		t.Skipf("sleep unavailable: %v", err)
 	}
-	go func() { _ = bystander.Wait() }()
+	exited := make(chan struct{})
+	go func() { _ = bystander.Wait(); close(exited) }()
 	t.Cleanup(func() { _ = bystander.Process.Kill() })
 
 	sleeper(t, "s1", "local--a", presence.ModeInteractive, "")
@@ -179,8 +180,12 @@ func TestStopNeverSignalsAReusedVendorPID(t *testing.T) {
 	if now, err := presence.ProcessStart(bystander.Process.Pid); err != nil || now != start {
 		t.Fatalf("the bystander was disturbed: start %v err %v", now, err)
 	}
-	if bystander.ProcessState != nil {
+	// Read the Wait goroutine's result only through the channel it closes:
+	// bystander.ProcessState is written by that goroutine.
+	select {
+	case <-exited:
 		t.Error("the bystander process ended")
+	default:
 	}
 	// And a vendor whose start does match is the one signalled.
 	sleeper(t, "s2", "local--b", presence.ModeInteractive, "")
