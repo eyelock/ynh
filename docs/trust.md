@@ -86,7 +86,7 @@ A record carries the digest scheme it was made under. A harness accepted under a
 
 ## The gate
 
-`ynh run`, `ynh agent run` (and its `--resume`) and `ynh check` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
+`ynh run`, `ynh agent run` (and its `--resume`), `ynh check` and `ynh sensors run` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
 
 A refusal exits 1 and prints, on stderr (a harness installed from `/home/you/acme`, with a hook, a sensor and two requested workspace folders):
 
@@ -104,7 +104,7 @@ Then accept:  ynh trust accept local/acme
 
 The `It requests workspace folders:` list appears only when the harness requests some, and shows each entry as written and where it resolves to; accepting grants them.
 
-For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` writes the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
+For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` and `ynh sensors run` (which only emits JSON) write the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
 
 What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `It requests workspace folders:` list and the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance.
 
