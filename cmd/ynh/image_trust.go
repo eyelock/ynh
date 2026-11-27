@@ -141,7 +141,7 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		}
 		return nil, &untrustedError{msg: b.String()}
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "run")
 	if err != nil {
 		return nil, err
 	}

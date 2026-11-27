@@ -116,6 +116,33 @@ Three refusals are not "you have not accepted this":
 
 If the trust record itself cannot be read, the run is refused too.
 
+### The messages as printed
+
+Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`, `image`). `ynh image <name> --from <source> --trust` prints it on stderr, as `Accepted local/<name> (image): <n> command(s), <digest>`, so a `--dry-run` Dockerfile on stdout stays clean; a build that accepts nothing prints nothing:
+
+```
+$ ynh trust accept local/acme
+Accepted local/acme (accept): 2 command(s), sha256:95539ec8b7d7abe6
+$ ynh install ./acme --trust
+Accepted local/acme (install --trust): 2 command(s), sha256:95539ec8b7d7abe6
+It executes:
+  hook before_tool: ./hooks/guard.sh
+  sensor lint (command): gofmt -l .
+```
+
+A refusal says which act it refused. The gate says `refusing to run`; an acceptance that cannot go ahead says `refusing to accept`, for example when a remote include of `./dir` cannot be read:
+
+```
+$ ynh trust accept ./dir
+Error: refusing to accept dir: what its includes execute could not be read in full.
+  the harness: include github.com/you/shared is not in the cache, so what it executes cannot be read: resolving github.com/you/shared: not in the include cache
+Fetch them by running it with --trust, once each remote include is pinned to a full 40-character commit SHA (ynh run <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only.
+```
+
+`ynh check` and `ynh run` refuse the same untrusted harness alike: exit 1, error code `untrusted`, the same message, whether the harness is installed or a folder, and including a folder whose remote include cannot be read.
+
+A refusal names each executable by its own kind: `hook <event>`, `MCP server <name>` or `sensor <name> (<field>)`. The note about an acceptance made under an older digest scheme names only the kinds the harness declares, so a harness with only an MCP server reads `the scripts that MCP servers run`, not `sensors`.
+
 Delegates keep their own gate: an A2A delegate that declares commands is refused until you accept it, and workspace grants, Codex's hook trust and Cursor's `--trust` follow the record. See [Sensors: what a command sensor can reach](sensors.md#what-a-command-sensor-can-reach), [Hooks](hooks.md#codex-hook-trust) and [Workspace Folders](workspace.md).
 
 What the gate does not do: it does not sandbox. It decides whether a run starts, on what you reviewed; it does not limit what an accepted command can reach.

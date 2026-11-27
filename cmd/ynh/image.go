@@ -472,6 +472,11 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		bakedTrust = rec
+		if rec != nil {
+			// The same verb every other way of accepting prints. It goes to
+			// stderr: with --dry-run stdout is the Dockerfile.
+			_, _ = fmt.Fprintf(stderr, "Accepted local/%s (%s): %d command(s), %s\n", p.Name, viaImage, rec.Commands, rec.Digest)
+		}
 	}
 
 	// Create temp build context
