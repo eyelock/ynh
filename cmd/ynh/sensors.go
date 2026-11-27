@@ -426,6 +426,16 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
+	// The trust gate, before any sensor command starts: this command runs the
+	// harness's own executable through /bin/sh, so it passes the gate `ynh run`
+	// and `ynh check` pass, on the harness as loaded (a profile or an include
+	// merge reshapes p, and the trust record covers the harness before them).
+	// A refusal exits 1 with code untrusted (ynh #1010).
+	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
+		if gerr := trustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
+			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
+		}
+	}
 	s, ok := p.Sensors[sensorName]
 	if !ok {
 		return cliError(stderr, structured, errCodeNotFound,

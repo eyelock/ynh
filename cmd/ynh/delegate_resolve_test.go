@@ -54,7 +54,8 @@ func accepted(t *testing.T, id string) trustStore {
 		t.Fatal(err)
 	}
 	st := trustStatusFor(id, h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
-	return trustStore{Harnesses: map[string]trustRecord{id: {Digest: st.Digest, Scheme: trustScheme}}}
+	// Source and SHA are copied from provenance, as an acceptance does.
+	return trustStore{Harnesses: map[string]trustRecord{id: {Digest: st.Digest, Scheme: trustScheme, Source: st.Source, SHA: st.SHA}}}
 }
 
 func remoteEntry(url, path, ref string) harness.Delegate {

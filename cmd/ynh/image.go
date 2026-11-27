@@ -263,6 +263,9 @@ type imageArgs struct {
 	sha string
 }
 
+// imageUsage is the usage line shown for a missing name or an unknown flag.
+const imageUsage = "usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--ref <commit|tag|branch>] [--entrypoint run|agent] [--trust] [--dry-run]"
+
 // parseImageArgs parses flags for the image command.
 func parseImageArgs(args []string) (imageArgs, error) {
 	var ia imageArgs
@@ -318,12 +321,15 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			i++
 			ia.ref = args[i]
 		default:
+			if strings.HasPrefix(args[i], "-") {
+				return ia, fmt.Errorf("unknown flag: %s\n%s", args[i], imageUsage)
+			}
 			remaining = append(remaining, args[i])
 		}
 	}
 
 	if len(remaining) < 1 {
-		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--ref <commit|tag|branch>] [--entrypoint run|agent] [--trust] [--dry-run]")
+		return ia, fmt.Errorf("%s", imageUsage)
 	}
 	ia.name = remaining[0]
 
@@ -472,6 +478,11 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		bakedTrust = rec
+		if rec != nil {
+			// The same verb every other way of accepting prints. It goes to
+			// stderr: with --dry-run stdout is the Dockerfile.
+			_, _ = fmt.Fprintf(stderr, "Accepted local/%s (%s): %d command(s), %s\n", p.Name, viaImage, rec.Commands, rec.Digest)
+		}
 	}
 
 	// Create temp build context

@@ -116,7 +116,7 @@ func checkInstallTrust(p *harness.Harness, cfg *config.Config, isLocal bool, ref
 	if _, err := resolver.Resolve(p, cfg); err != nil {
 		return fmt.Errorf("--trust could not read the includes of %s: %w", p.Name, err)
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "accept")
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 	if err := warmFolderIncludes(p); err != nil {
 		return err
 	}
-	remote, err := remoteIncludesFor(p, folderFetchFix)
+	remote, err := remoteIncludesFor(p, "accept", folderFetchFix)
 	if err != nil {
 		return err
 	}
@@ -345,7 +345,7 @@ func unpinnedOwnRef(p *harness.Harness) []string {
 // each remote include that brings commands (decisions 4b and 14).
 func pinProblems(p *harness.Harness) ([]string, error) {
 	bad := unpinnedOwnRef(p)
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludes(p, "accept")
 	if err != nil {
 		return nil, err
 	}

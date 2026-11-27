@@ -882,17 +882,43 @@ const legacyDigestNote = "Your acceptance predates the digest covering hooks and
 
 // scriptDigestNote explains the one-time "changed" on a record accepted under
 // scheme 2, which covered what a command says and not the script it runs.
-const scriptDigestNote = "Your acceptance predates the digest covering the contents of the scripts that\n" +
-	"hooks, MCP servers and sensors run (it covered only the command text), so this\n" +
-	"harness reads as changed even if nothing in it has. Review the scripts above,\n" +
-	"then accept again."
+func scriptDigestNote(kinds string) string {
+	if kinds == "" {
+		kinds = "its commands"
+	}
+	return "Your acceptance predates the digest covering the contents of the scripts that\n" +
+		kinds + " run (it covered only the command text), so this\n" +
+		"harness reads as changed even if nothing in it has. Review the scripts above,\n" +
+		"then accept again."
+}
 
-// legacyNote is the explanation for a record accepted under the given scheme.
-func legacyNote(scheme int) string {
+// kindsOf names, in the order the gate lists them, the kinds of executable a
+// harness declares: "hooks", "MCP servers", "sensors", joined with commas and
+// "and". Empty when it declares none.
+func kindsOf(sensors, hooks, servers int) string {
+	var kinds []string
+	if hooks > 0 {
+		kinds = append(kinds, "hooks")
+	}
+	if servers > 0 {
+		kinds = append(kinds, "MCP servers")
+	}
+	if sensors > 0 {
+		kinds = append(kinds, "sensors")
+	}
+	if len(kinds) < 2 {
+		return strings.Join(kinds, "")
+	}
+	return strings.Join(kinds[:len(kinds)-1], ", ") + " and " + kinds[len(kinds)-1]
+}
+
+// legacyNote is the explanation for a record accepted under the given scheme,
+// naming only the kinds of executable the harness declares.
+func legacyNote(scheme int, kinds string) string {
 	if scheme < 2 {
 		return legacyDigestNote
 	}
-	return scriptDigestNote
+	return scriptDigestNote(kinds)
 }
 
 // trustStatus is the report for one harness.
@@ -939,6 +965,10 @@ type trustStatus struct {
 	DelegateFocuses []delegateFocusReport `json:"delegate_focuses,omitempty"`
 	// delegateFocuses is the set's, for `trust show` to fill the field.
 	delegateFocuses []delegateFocusReport
+	// Moved is why a record that matches the digest still does not count:
+	// the harness is installed from another source or at another commit than
+	// the one accepted. Set only when the state is "changed" for that reason.
+	Moved string `json:"moved,omitempty"`
 	// acceptedScheme is the digest scheme of the record, for the note that
 	// explains why a legacy record reads as changed.
 	acceptedScheme int
@@ -985,7 +1015,8 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 		st.AcceptedDigest, st.AcceptedAt, st.AcceptedVia = rec.Digest, rec.AcceptedAt, rec.Via
 		st.LegacyDigest = rec.Scheme < trustScheme
 		st.acceptedScheme = rec.Scheme
-		if rec.Digest == st.Digest {
+		st.Moved = provenanceMoved(rec, st)
+		if rec.Digest == st.Digest && st.Moved == "" {
 			st.State = trustAccepted
 		} else {
 			st.State = trustChanged
@@ -998,6 +1029,29 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 		st.State = trustNoCommands
 	}
 	return st
+}
+
+// provenanceMoved says why a record does not cover the harness installed under
+// its id, "" when it does. A record is keyed by id alone and outlives an
+// uninstall, so a different harness installed under the same id, from another
+// source or at another commit, must not read as accepted just because its
+// digest matches (ynh #1001). A record written without provenance (a local
+// harness) matches only an install without it.
+func provenanceMoved(rec trustRecord, st trustStatus) string {
+	if rec.Source != st.Source {
+		return fmt.Sprintf("it was accepted from %s, and is now installed from %s", describeSource(rec.Source), describeSource(st.Source))
+	}
+	if rec.SHA != st.SHA {
+		return fmt.Sprintf("it was accepted at commit %s, and is now at %s", describeSource(rec.SHA), describeSource(st.SHA))
+	}
+	return ""
+}
+
+func describeSource(s string) string {
+	if s == "" {
+		return "(none)"
+	}
+	return s
 }
 
 // cmdTrust dispatches `ynh trust <ls|show|accept>`.
@@ -1177,7 +1231,7 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	if n := len(set.Workspace); n > 0 {
 		workspaceNote = fmt.Sprintf(", %d workspace folder(s)", n)
 	}
-	_, err = fmt.Fprintf(stdout, "Recorded %s: %d command(s)%s, %s\n", name, rec.Commands, workspaceNote, rec.Digest)
+	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest)
 	return err
 }
 
@@ -1242,6 +1296,9 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	_, _ = fmt.Fprintf(w, "  digest:   %s\n", s.Digest)
 	if s.State == trustChanged {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
+	}
+	if s.Moved != "" {
+		_, _ = fmt.Fprintf(w, "  moved:    %s\n", s.Moved)
 	}
 	if s.AcceptedVia != "" {
 		_, _ = fmt.Fprintf(w, "  via:      %s\n", s.AcceptedVia)
@@ -1319,7 +1376,12 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "\nNot yet reviewed. 'ynh trust accept %s' records that you have read the above.\n", s.Harness)
 	case trustChanged:
 		if s.LegacyDigest {
-			_, _ = fmt.Fprintf(w, "\n%s\n", legacyNote(s.acceptedScheme))
+			_, _ = fmt.Fprintf(w, "\n%s\n", legacyNote(s.acceptedScheme, kindsOf(len(s.Executables), len(s.Hooks), len(s.MCPServers))))
+		}
+		if s.Moved != "" {
+			_, _ = fmt.Fprintf(w, "\nThis record does not cover what is installed: %s.\n"+
+				"'ynh trust accept %s' records what you review now.\n", s.Moved, s.Harness)
+			break
 		}
 		_, _ = fmt.Fprintf(w, "\nThese commands have changed since you accepted them.\n"+
 			"'ynh trust accept %s' records the new set.\n", s.Harness)
