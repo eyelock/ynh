@@ -56,10 +56,13 @@ func TestTrustAccept_OwnRefMustBeFullSHA(t *testing.T) {
 			if err != nil {
 				msg += err.Error()
 			}
-			for _, want := range []string{"the harness's own ref", tc.wantErr, "Pin it to a 40-character commit SHA", "ynh trust accept"} {
+			for _, want := range []string{"the harness's own ref", tc.wantErr, "Pin it to a 40-character commit SHA", "ynh install github.com/acme/hooked --ref <40-character SHA>"} {
 				if !strings.Contains(msg, want) {
 					t.Errorf("refusal lacks %q:\n%s", want, msg)
 				}
+			}
+			if strings.Contains(msg, "accept it by hand") {
+				t.Errorf("refusal sends the operator back to the command that refused:\n%s", msg)
 			}
 			if recorded {
 				t.Error("a refused accept recorded the harness")

@@ -96,6 +96,18 @@ func refuseUnpinnedWith(what, flag string, reasons []string, closing string) err
 		flag, what, strings.Join(reasons, "\n  "), closing)
 }
 
+// ownRefClosing ends the refusal of `ynh trust accept` for a harness whose own
+// ref is not a full SHA. The shared line sends the operator back to 'ynh trust
+// accept', which is the command that just refused; accepting needs the install
+// itself to be at a full SHA, so the way out is to reinstall there.
+func ownRefClosing(p *harness.Harness) string {
+	src := "<source>"
+	if p.InstalledFrom != nil && p.InstalledFrom.Source != "" {
+		src = p.InstalledFrom.Source
+	}
+	return fmt.Sprintf("Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install %s --ref <40-character SHA>', then run 'ynh trust accept %s' again", src, p.Name)
+}
+
 // uncachedUnpinnedClosing ends the refusal of an uncached include that is not
 // pinned. `ynh trust accept <folder>` reads includes from the cache and this
 // one is not in it, so it would only point back at --trust (ynh #993).

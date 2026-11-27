@@ -1207,7 +1207,7 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	// ref, as --trust requires: a branch or tag can move under the record
 	// (ynh #1023).
 	if bad := unpinnedOwnRef(p); len(bad) > 0 {
-		return cliError(stderr, structured, errCodeConfigError, refuseUnpinned(name, "ynh trust accept", bad).Error())
+		return cliError(stderr, structured, errCodeConfigError, refuseUnpinnedWith(name, "ynh trust accept", bad, ownRefClosing(p)).Error())
 	}
 	rec := trustRecord{
 		Digest:     executablesDigest(set),
