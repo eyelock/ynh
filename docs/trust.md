@@ -147,6 +147,7 @@ Pin it to a 40-character commit SHA, or review it and accept it by hand with 'yn
 |---|---|---|
 | `ynh install <git-or-registry-source> --ref <sha> --trust` | the harness just installed | before anything is written |
 | `ynh install ./dir --trust` | the harness just installed from a folder, as `local/<name>` (no `--ref`: a folder has none) | before anything is written, for its remote includes only |
+| `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref and its remote includes' refs, after the includes are fetched |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches |
 | `ynh update <harness> --trust` | the harness again, after the update | before anything is fetched |
 | `ynh include add <harness> <url> --trust` (with `--replace` too) and `ynh include update <harness> <url> --trust` | the harness again, after the change | after the change, because the includes are only known then |
@@ -220,7 +221,7 @@ An accepted harness is built, and the image **bakes the accepted record**: the t
 ynh image acme --from github.com/org/acme --ref 0123456789abcdef0123456789abcdef01234567 --trust
 ```
 
-`--trust` is only valid with `--from`; an installed harness is accepted with `ynh trust accept`. `--ref` is likewise `--from` only, and not valid for a local folder. A baked record is the acceptance you gave on the command line carried to where the harness runs; it is not a fresh review. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
+`--trust` is only valid with `--from`; an installed harness is accepted with `ynh trust accept`. `--ref` is likewise `--from` only, and not valid for a local folder. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
 
 ## Related
 

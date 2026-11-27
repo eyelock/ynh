@@ -93,6 +93,27 @@ func TestImageFromTrust_RefusesFloatingInclude(t *testing.T) {
 	}
 }
 
+// A cold include cache must not stop --trust: the includes are fetched before
+// the gate reads them (ynw-twt3a). A floating include is judged once fetched.
+func TestImageFromTrust_ColdIncludeCache(t *testing.T) {
+	fakeHome(t)
+	pinned := coldFolder(t, "sha")
+	var out bytes.Buffer
+	if err := cmdImageTo([]string{"fld", "--from", pinned, "--trust", "--dry-run"}, &out, io.Discard); err != nil {
+		t.Fatalf("cold pinned include: %v", err)
+	}
+	if !strings.Contains(out.String(), "trust-digest") {
+		t.Errorf("Dockerfile lacks the digest label:\n%s", out.String())
+	}
+	for _, ref := range []string{"", "branch"} {
+		floating := coldFolder(t, ref)
+		err := cmdImageTo([]string{"fld", "--from", floating, "--trust", "--dry-run"}, io.Discard, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "--trust refuses") || strings.Contains(err.Error(), "not in the cache") {
+			t.Fatalf("cold floating include (%q): err = %v, want the unpinned refusal", ref, err)
+		}
+	}
+}
+
 // A harness with nothing to accept builds as before, with or without --trust.
 func TestImageFromTrust_CommandlessBuildsAsBefore(t *testing.T) {
 	fakeHome(t)

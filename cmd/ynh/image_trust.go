@@ -90,6 +90,15 @@ func writeImageTrust(homeDir, name string, rec trustRecord) error {
 func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, isLocal bool, ref string) (*trustRecord, error) {
 	id := "local/" + p.Name
 	empty := trustStore{Version: 1, Harnesses: map[string]trustRecord{}}
+	// --trust judges what the includes execute, so they are fetched before
+	// the gate reads them, as `ynh install --trust` does (checkInstallTrust).
+	// Without this a cold include cache reads as unavailable and --trust can
+	// never get past the gate (ynw-twt3a).
+	if ia.trust {
+		if err := fetchIncludesForTrust(p, cfg); err != nil {
+			return nil, err
+		}
+	}
 	st := trustStatusFor(id, p, empty, nil)
 	if st.State == trustNoCommands {
 		return nil, nil
@@ -117,9 +126,6 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		}
 		return nil, &untrustedError{msg: b.String()}
 	}
-	if _, err := resolver.Resolve(p, cfg); err != nil {
-		return nil, fmt.Errorf("--trust could not read the includes of %s: %w", p.Name, err)
-	}
 	remote, err := remoteIncludes(p)
 	if err != nil {
 		return nil, err
@@ -138,4 +144,23 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		rec.Source, rec.Ref, rec.SHA = ia.from, ref, ia.sha
 	}
 	return &rec, nil
+}
+
+// fetchIncludesForTrust fetches every include of p, those a profile adds
+// included, into the include cache, so the trust gate can read what they
+// execute. A fetch that fails refuses --trust, naming the harness.
+func fetchIncludesForTrust(p *harness.Harness, cfg *config.Config) error {
+	if _, err := resolver.Resolve(p, cfg); err != nil {
+		return fmt.Errorf("--trust could not read the includes of %s: %w", p.Name, err)
+	}
+	profileIncs, err := profileOnlyIncludes(p)
+	if err != nil {
+		return err
+	}
+	if len(profileIncs) > 0 {
+		if _, err := resolver.Resolve(&harness.Harness{Dir: p.Dir, Includes: profileIncs}, cfg); err != nil {
+			return fmt.Errorf("--trust could not read the profile includes of %s: %w", p.Name, err)
+		}
+	}
+	return nil
 }

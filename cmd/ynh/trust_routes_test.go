@@ -121,6 +121,18 @@ func TestInstallTrust_RefusesWhatIsNotPinned(t *testing.T) {
 // installFolder makes a local folder harness with a remote include, at ref.
 func installFolder(t *testing.T, includeRef string) (folder string) {
 	t.Helper()
+	return makeFolder(t, includeRef, true)
+}
+
+// coldFolder is installFolder with the include cache left empty, as on a
+// machine that has never fetched the include (ynw-twt3a).
+func coldFolder(t *testing.T, includeRef string) (folder string) {
+	t.Helper()
+	return makeFolder(t, includeRef, false)
+}
+
+func makeFolder(t *testing.T, includeRef string, warm bool) (folder string) {
+	t.Helper()
 	root := t.TempDir()
 	remote := filepath.Join(root, "remote")
 	gitRepo(t, remote, "remote-sensor")
@@ -146,8 +158,10 @@ func installFolder(t *testing.T, includeRef string) (folder string) {
 	case "branch":
 		cacheRef = "main"
 	}
-	if _, err := resolver.EnsureRepo("file://"+remote, cacheRef); err != nil {
-		t.Fatal(err)
+	if warm {
+		if _, err := resolver.EnsureRepo("file://"+remote, cacheRef); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return folder
 }

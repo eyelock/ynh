@@ -620,8 +620,8 @@ Flags:
   --trust           With --from, accept what the harness executes and bake the
                     acceptance (via: image). Needs --ref at a full 40-character
                     commit SHA for a remote source and its remote includes.
-                    Without it, a --from harness with hooks, MCP servers or
-                    sensors is refused at build time.`,
+                    Without it, a --from harness with hooks, MCP servers,
+                    sensors or workspace folders is refused at build time.`,
 
 	"prune": `ynh prune
 
