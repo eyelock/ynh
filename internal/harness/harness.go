@@ -648,6 +648,25 @@ func LoadByID(id string) (*Harness, error) {
 	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
 }
 
+// includesOf is the includes a manifest declares, as the harness holds them.
+func includesOf(hj *plugin.HarnessJSON) ([]Include, error) {
+	var out []Include
+	for _, inc := range hj.Includes {
+		if err := ValidateIncludeAlias(inc.As); err != nil {
+			return nil, err
+		}
+		out = append(out, Include{
+			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
+			Pick:         inc.Pick,
+			Sensors:      inc.Sensors,
+			As:           inc.As,
+			Hooks:        inc.Hooks,
+			Instructions: inc.Instructions,
+		})
+	}
+	return out, nil
+}
+
 // LoadDir loads a harness from a directory. The format chain runs first:
 // it converts an install ynh owns and refuses, with the `ynd migrate` fix,
 // any other tree whose manifest ynh no longer reads, so callers never handle
@@ -730,19 +749,11 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		p.Dir = dir
 	}
 
-	for _, inc := range hj.Includes {
-		if err := ValidateIncludeAlias(inc.As); err != nil {
-			return nil, err
-		}
-		p.Includes = append(p.Includes, Include{
-			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:         inc.Pick,
-			Sensors:      inc.Sensors,
-			As:           inc.As,
-			Hooks:        inc.Hooks,
-			Instructions: inc.Instructions,
-		})
+	includes, err := includesOf(hj)
+	if err != nil {
+		return nil, err
 	}
+	p.Includes = includes
 	for _, del := range hj.DelegatesTo {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
 			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
@@ -1063,19 +1074,11 @@ func LoadFile(path string) (*Harness, error) {
 		Author: hj.Author, Keywords: hj.Keywords, Manifest: hj}
 	p.DefaultVendor = hj.DefaultVendor
 
-	for _, inc := range hj.Includes {
-		if err := ValidateIncludeAlias(inc.As); err != nil {
-			return nil, err
-		}
-		p.Includes = append(p.Includes, Include{
-			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:         inc.Pick,
-			Sensors:      inc.Sensors,
-			As:           inc.As,
-			Hooks:        inc.Hooks,
-			Instructions: inc.Instructions,
-		})
+	includes, err := includesOf(hj)
+	if err != nil {
+		return nil, err
 	}
+	p.Includes = includes
 	for _, del := range hj.DelegatesTo {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
 			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},

@@ -150,3 +150,57 @@ func TestIncludeRemove_OneBehaviour(t *testing.T) {
 		}
 	})
 }
+
+// A refusal that comes from the include check, not the pin rule, also writes
+// nothing and prints nothing as done: A is pinned, but A's own include of B at
+// 'main' is not in the cache, so what A brings cannot be read in full.
+func TestIncludeAddTrust_NestedUncachedRefusesBeforeWriting(t *testing.T) {
+	id := acceptedHarness(t, "ian")
+	b := filepath.Join(t.TempDir(), "b")
+	gitRepo(t, b, "b-sensor")
+	a := filepath.Join(t.TempDir(), "a")
+	body := `{"name":"outer","version":"1.0.0","includes":[{"git":"file://` + b + `","ref":"main"}]}`
+	if err := writePluginJSONFile(a, []byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, a, "init", "-q", "-b", "main")
+	gitIn(t, a, "add", "-A")
+	gitIn(t, a, "commit", "-qm", "init")
+	sha := gitRevParse(t, a)
+	beforeManifest := manifestBytes(t, id)
+	beforeStore, _ := loadTrustStore()
+
+	var out bytes.Buffer
+	err := cmdIncludeTo([]string{"add", id, "file://" + a, "--ref", sha, "--trust"}, &out)
+	if err == nil || !strings.Contains(err.Error(), "could not be read in full") {
+		t.Fatalf("err = %v", err)
+	}
+	if !bytes.Equal(manifestBytes(t, id), beforeManifest) {
+		t.Error("a refused include add --trust left the include written")
+	}
+	if out.Len() != 0 {
+		t.Errorf("a refused call printed output:\n%s", out.String())
+	}
+	if afterStore, _ := loadTrustStore(); afterStore.Harnesses[id] != beforeStore.Harnesses[id] {
+		t.Error("the trust record changed")
+	}
+	if got := trustStateOf(id); got != trustAccepted {
+		t.Errorf("state = %q, want accepted as before", got)
+	}
+}
+
+// A refused call, whichever of add, update or remove, prints no success line.
+func TestIncludeTrust_RefusalPrintsNothingAsDone(t *testing.T) {
+	id := acceptedHarness(t, "ipn")
+	remote := filepath.Join(t.TempDir(), "remote")
+	gitRepo(t, remote, "remote-sensor")
+	var out bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", id, "file://" + remote, "--trust"}, &out); err == nil {
+		t.Fatal("an unpinned include add --trust was accepted")
+	}
+	for _, bad := range []string{"Added include", "Accepted"} {
+		if strings.Contains(out.String(), bad) {
+			t.Errorf("a refused call printed %q:\n%s", bad, out.String())
+		}
+	}
+}

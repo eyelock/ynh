@@ -1,9 +1,9 @@
 package harness
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -29,21 +29,59 @@ func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 	return plugin.LoadPluginJSON(dir)
 }
 
-// SnapshotManifest records the manifest of the harness at dir, as `ynh include`
-// edits it, and returns a function that puts it back exactly as it was. It
-// lets a caller that finds, after a change, that the change must be refused
-// leave the harness untouched (ynh #1041). It is taken after the manifest is
-// loaded, so any format migration has already run and the path is final.
-func SnapshotManifest(dir string) (restore func() error, err error) {
-	if _, err := loadManifest(dir); err != nil {
+// ManifestEdit is a change to a harness's manifest, held apart from the
+// write so a caller can judge the harness as the change would leave it before
+// anything is written (ynh #1041).
+type ManifestEdit func(hj *plugin.HarnessJSON) error
+
+// applyEdit loads the manifest of the harness at dir, applies edit and saves it.
+func applyEdit(dir string, edit ManifestEdit) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if err := edit(hj); err != nil {
+		return err
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// WithManifestEdit is the harness as it would be once edit is applied to its
+// manifest, built in memory: nothing is written, and p itself is not changed.
+// Only the manifest and its includes differ from p.
+func (p *Harness) WithManifestEdit(edit ManifestEdit) (*Harness, error) {
+	if p.Manifest == nil {
+		return nil, fmt.Errorf("harness %q has no manifest to edit", p.Name)
+	}
+	raw, err := json.Marshal(p.Manifest)
+	if err != nil {
 		return nil, err
 	}
-	path := plugin.PluginPath(dir)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", path, err)
+	var hj plugin.HarnessJSON
+	if err := json.Unmarshal(raw, &hj); err != nil {
+		return nil, err
 	}
-	return func() error { return os.WriteFile(path, data, 0o644) }, nil
+	if err := edit(&hj); err != nil {
+		return nil, err
+	}
+	includes, err := includesOf(&hj)
+	if err != nil {
+		return nil, err
+	}
+	// An include that was already there keeps the commit installed.json
+	// resolved for it.
+	for i := range includes {
+		for _, old := range p.Includes {
+			if old.GitSource == includes[i].GitSource {
+				includes[i].SHA, includes[i].ResolvedRef = old.SHA, old.ResolvedRef
+				break
+			}
+		}
+	}
+	c := *p
+	c.Manifest = &hj
+	c.Includes = includes
+	return &c, nil
 }
 
 // ResolveEditTarget resolves a harness reference to the directory where
@@ -183,63 +221,70 @@ type UpdateOptions struct {
 // If the URL+path already exists and Replace is false, it returns an error.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func AddInclude(dir, url string, opts AddOptions) error {
-	if err := ValidateIncludeAlias(opts.As); err != nil {
-		return err
-	}
-	hj, err := loadManifest(dir)
+	edit, err := AddIncludeEdit(url, opts)
 	if err != nil {
 		return err
 	}
+	return applyEdit(dir, edit)
+}
 
-	idx := findInclude(hj.Includes, url, opts.Path)
-	if idx >= 0 {
-		if !opts.Replace {
-			msg := fmt.Sprintf("include %q already present in harness %q", url, hj.Name)
-			if opts.Path != "" {
-				msg = fmt.Sprintf("include %q (path: %q) already present in harness %q", url, opts.Path, hj.Name)
-			}
-			return fmt.Errorf("%s.\nUse 'ynh include update' to change its options, or pass --replace to overwrite", msg)
-		}
-		hj.Includes[idx] = newIncludeMeta(url, opts)
-	} else {
-		hj.Includes = append(hj.Includes, newIncludeMeta(url, opts))
+// AddIncludeEdit is the manifest change AddInclude makes.
+func AddIncludeEdit(url string, opts AddOptions) (ManifestEdit, error) {
+	if err := ValidateIncludeAlias(opts.As); err != nil {
+		return nil, err
 	}
-
-	return plugin.SavePluginJSON(dir, hj)
+	return func(hj *plugin.HarnessJSON) error {
+		idx := findInclude(hj.Includes, url, opts.Path)
+		if idx >= 0 {
+			if !opts.Replace {
+				msg := fmt.Sprintf("include %q already present in harness %q", url, hj.Name)
+				if opts.Path != "" {
+					msg = fmt.Sprintf("include %q (path: %q) already present in harness %q", url, opts.Path, hj.Name)
+				}
+				return fmt.Errorf("%s.\nUse 'ynh include update' to change its options, or pass --replace to overwrite", msg)
+			}
+			hj.Includes[idx] = newIncludeMeta(url, opts)
+		} else {
+			hj.Includes = append(hj.Includes, newIncludeMeta(url, opts))
+		}
+		return nil
+	}, nil
 }
 
 // RemoveInclude removes an include identified by URL and optional path.
 // If the URL matches multiple includes and no path is given, an error is
 // returned listing the paths that would disambiguate.
 func RemoveInclude(dir, url string, opts RemoveOptions) error {
-	hj, err := loadManifest(dir)
-	if err != nil {
-		return err
-	}
+	return applyEdit(dir, RemoveIncludeEdit(url, opts))
+}
 
-	matches := findAllIncludes(hj.Includes, url)
-	if len(matches) == 0 {
-		return fmt.Errorf("include %q not found in harness %q", url, hj.Name)
-	}
-
-	if opts.Path == "" && len(matches) > 1 {
-		return ambiguousIncludeError(url, hj.Includes, matches)
-	}
-
-	keep := hj.Includes[:0]
-	for _, inc := range hj.Includes {
-		if includeSource(inc) == url && (opts.Path == "" || inc.Path == opts.Path) {
-			continue
+// RemoveIncludeEdit is the manifest change RemoveInclude makes.
+func RemoveIncludeEdit(url string, opts RemoveOptions) ManifestEdit {
+	return func(hj *plugin.HarnessJSON) error {
+		matches := findAllIncludes(hj.Includes, url)
+		if len(matches) == 0 {
+			return fmt.Errorf("include %q not found in harness %q", url, hj.Name)
 		}
-		keep = append(keep, inc)
-	}
 
-	if len(keep) == len(hj.Includes) {
-		return fmt.Errorf("include %q (path: %q) not found in harness %q", url, opts.Path, hj.Name)
-	}
+		if opts.Path == "" && len(matches) > 1 {
+			return ambiguousIncludeError(url, hj.Includes, matches)
+		}
 
-	hj.Includes = keep
-	return plugin.SavePluginJSON(dir, hj)
+		keep := hj.Includes[:0]
+		for _, inc := range hj.Includes {
+			if includeSource(inc) == url && (opts.Path == "" || inc.Path == opts.Path) {
+				continue
+			}
+			keep = append(keep, inc)
+		}
+
+		if len(keep) == len(hj.Includes) {
+			return fmt.Errorf("include %q (path: %q) not found in harness %q", url, opts.Path, hj.Name)
+		}
+
+		hj.Includes = keep
+		return nil
+	}
 }
 
 // UpdateInclude updates fields on an existing include.
@@ -248,28 +293,29 @@ func RemoveInclude(dir, url string, opts RemoveOptions) error {
 // are updated; omitted fields are left unchanged.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func UpdateInclude(dir, url string, opts UpdateOptions) error {
-	hj, err := loadManifest(dir)
-	if err != nil {
-		return err
-	}
+	return applyEdit(dir, UpdateIncludeEdit(url, opts))
+}
 
-	targetIdx, findErr := findUpdateTarget(hj.Includes, url, opts.FromPath, hj.Name)
-	if findErr != nil {
-		return findErr
-	}
+// UpdateIncludeEdit is the manifest change UpdateInclude makes.
+func UpdateIncludeEdit(url string, opts UpdateOptions) ManifestEdit {
+	return func(hj *plugin.HarnessJSON) error {
+		targetIdx, findErr := findUpdateTarget(hj.Includes, url, opts.FromPath, hj.Name)
+		if findErr != nil {
+			return findErr
+		}
 
-	inc := &hj.Includes[targetIdx]
-	if opts.NewPath != nil {
-		inc.Path = *opts.NewPath
+		inc := &hj.Includes[targetIdx]
+		if opts.NewPath != nil {
+			inc.Path = *opts.NewPath
+		}
+		if opts.SetPick {
+			inc.Pick = opts.Pick
+		}
+		if opts.Ref != nil {
+			inc.Ref = *opts.Ref
+		}
+		return nil
 	}
-	if opts.SetPick {
-		inc.Pick = opts.Pick
-	}
-	if opts.Ref != nil {
-		inc.Ref = *opts.Ref
-	}
-
-	return plugin.SavePluginJSON(dir, hj)
 }
 
 // FindUpdateTarget loads the harness from dir and returns the include that

@@ -74,7 +74,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh delegate remove <harness> <url>` | `--path` |
 | `ynh delegate update <harness> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh include add <harness> <url\|path>` | `--path`, `--pick`, `--ref`, `--as <alias>`, `--git`, `--hooks`, `--replace`, `--trust` (accept the harness again after the change, only at full SHAs; recorded as `include --trust`) |
-| `ynh include remove <harness> <url>` | `--path` |
+| `ynh include remove <harness> <url>` | `--path`, `--trust` (accept the harness again after the removal, only at full SHAs; recorded as `include --trust`) |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref`, `--trust` (accept the harness again after the change, only at full SHAs; recorded as `include --trust`) |
 | `ynh focus ls <harness>` | `--format <text\|json>` |
 | `ynh focus add <harness> <name> <prompt>` | `--profile <name>` |

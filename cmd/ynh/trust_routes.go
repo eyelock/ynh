@@ -318,11 +318,12 @@ func takeTrustFlag(args []string) ([]string, bool) {
 	out := make([]string, 0, len(args))
 	found := false
 	for _, a := range args {
-		if a == "--trust" {
+		switch a {
+		case "--trust":
 			found = true
-			continue
+		default:
+			out = append(out, a)
 		}
-		out = append(out, a)
 	}
 	return out, found
 }
@@ -344,25 +345,38 @@ func pinProblems(p *harness.Harness) ([]string, error) {
 	return append(bad, unpinnedIncludes(remote)...), nil
 }
 
-// acceptIncludeChange is the --trust of ynh include add, update and remove: it
-// judges the harness as the change left it and, when something that runs is
-// not pinned to a full SHA, puts the manifest back with restore, so a refused
-// call leaves the harness and its trust record as they were (ynh #1041).
-func acceptIncludeChange(id string, restore func() error, stdout io.Writer) error {
+// checkIncludeChange is the check before the write of --trust on ynh include
+// add, update and remove: it builds the harness id as the change would leave
+// it, in memory, and refuses the change when something that runs would not be
+// pinned to a full SHA, or when the includes cannot be read in full. Nothing
+// has been written when it returns, so a refusal leaves the manifest and the
+// trust record as they were (ynh #1041).
+func checkIncludeChange(id string, edit harness.ManifestEdit) error {
 	p, err := harness.LoadByID(id)
 	if err != nil {
 		return err
 	}
-	bad, err := pinProblems(p)
+	candidate, err := p.WithManifestEdit(edit)
+	if err != nil {
+		return err
+	}
+	bad, err := pinProblems(candidate)
 	if err != nil {
 		return err
 	}
 	if len(bad) > 0 {
-		if rerr := restore(); rerr != nil {
-			return fmt.Errorf("%s was not accepted and the change could not be undone: %w", id, rerr)
-		}
 		return refuseUnpinnedWith(id+" after this change", "--trust", bad,
 			"The include change was not made. Pin it to a 40-character commit SHA, or make the change without --trust and accept it by hand with 'ynh trust accept'")
+	}
+	return nil
+}
+
+// acceptIncludeChange records the acceptance of id once the include change
+// that checkIncludeChange passed has been written.
+func acceptIncludeChange(id string, stdout io.Writer) error {
+	p, err := harness.LoadByID(id)
+	if err != nil {
+		return err
 	}
 	return recordAcceptance(id, p, viaIncludeTrus, stdout)
 }

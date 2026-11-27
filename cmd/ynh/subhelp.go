@@ -66,6 +66,8 @@ var (
 		flagHelp{"--clear-headers", "Remove all headers (with --header, replace them)"},
 	)
 
+	includeTrustFlag = flagHelp{"--trust", "Accept the harness as it is after the change, only if everything that runs is pinned to a full 40-character commit SHA. The change is checked before it is written: a refused call changes nothing"}
+
 	includeUpdateNote = "At least one of the flags must be given. Flags not given are left as they are."
 )
 
@@ -84,15 +86,20 @@ var subcommandHelp = map[string]subHelp{
 			{"--git", "Treat a path as a Git repository on disk instead of a local include"},
 			hooksFlag,
 			{"--replace", "Replace an existing include of the same url and path"},
+			includeTrustFlag,
 		},
-		Parsers: []string{"cmdIncludeAdd"},
+		Parsers: []string{"cmdIncludeAdd", "takeTrustFlag"},
 	},
 	"include remove": {
 		Usage:   "ynh include remove <harness> <url> [flags]",
 		Summary: "Remove a Git include from a harness.",
 		Args:    []argHelp{harnessArg, urlArg},
-		Flags:   []flagHelp{{"--path <subdir>", "Remove only the include with this path (needed when a url is included more than once)"}},
-		Parsers: []string{"cmdIncludeRemove"},
+		Flags: []flagHelp{
+			{"--path <subdir>", "Remove only the include with this path (needed when a url is included more than once)"},
+			includeTrustFlag,
+		},
+		Notes:   "Removing an include changes what an accepted harness executes, so it reads 'changed' afterwards. Without --trust the output says so and names 'ynh trust accept'. With --trust the new digest is accepted in the same step, still only if what remains is pinned to a full SHA.",
+		Parsers: []string{"cmdIncludeRemove", "takeTrustFlag"},
 	},
 	"include update": {
 		Usage:   "ynh include update <harness> <url> [flags]",
@@ -103,9 +110,10 @@ var subcommandHelp = map[string]subHelp{
 			{"--path <subdir>", "Set the include's path"},
 			{"--pick <items>", "Replace the picks with this comma-separated list (empty clears them)"},
 			{"--ref <ref>", "Set the pinned tag, branch or commit"},
+			includeTrustFlag,
 		},
 		Notes:   includeUpdateNote + "\n\nExample:\n  ynh include update my-harness https://github.com/eyelock/ynm --path integrations --pick skills/ynm-memory",
-		Parsers: []string{"cmdIncludeUpdate"},
+		Parsers: []string{"cmdIncludeUpdate", "takeTrustFlag"},
 	},
 
 	"mcp add": {

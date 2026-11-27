@@ -23,7 +23,7 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 	// An include change can move what an installed harness executes, which
 	// leaves an accepted harness refused until it is accepted again: say so
 	// (ynh #951, decision 14).
-	var run func([]string, io.Writer) error
+	var run func([]string, io.Writer, includeGate) error
 	switch args[0] {
 	case "add":
 		run = cmdIncludeAdd
@@ -46,24 +46,18 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 		id = ref
 		before = trustStateOf(id)
 	}
-	// --trust accepts the harness as it is after the change, which is only
-	// known once the change is made. The manifest is kept so that a refusal
-	// puts it back: a refused call changes nothing (ynh #1041).
-	var restore func() error
+	// --trust accepts the harness as it is after the change. The change is
+	// built in memory and judged before it is written: a refused call writes
+	// nothing and prints nothing as done (ynh #1041).
+	var gate includeGate
 	if trustFlag {
-		dir, _, err := harness.ResolveEditTarget(id)
-		if err != nil {
-			return err
-		}
-		if restore, err = harness.SnapshotManifest(dir); err != nil {
-			return err
-		}
+		gate = func(edit harness.ManifestEdit) error { return checkIncludeChange(id, edit) }
 	}
-	if err := run(args[1:], stdout); err != nil {
+	if err := run(args[1:], stdout, gate); err != nil {
 		return err
 	}
 	if trustFlag {
-		return acceptIncludeChange(id, restore, stdout)
+		return acceptIncludeChange(id, stdout)
 	}
 	if id != "" && !trustFlag {
 		noteUntrustedAfterChange(id, before, stdout)
@@ -71,7 +65,12 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdIncludeAdd(args []string, stdout io.Writer) error {
+// includeGate is called with the manifest change an include command is about
+// to write, after everything it fetches and before the write. An error stops
+// the command with the manifest untouched. It is nil without --trust.
+type includeGate func(edit harness.ManifestEdit) error
+
+func cmdIncludeAdd(args []string, stdout io.Writer, gate includeGate) error {
 	var opts harness.AddOptions
 	var positional []string
 	var forceGit bool
@@ -157,6 +156,15 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 		}
 	}
 
+	if gate != nil {
+		edit, err := harness.AddIncludeEdit(url, opts)
+		if err != nil {
+			return err
+		}
+		if err := gate(edit); err != nil {
+			return err
+		}
+	}
 	if err := harness.AddInclude(dir, url, opts); err != nil {
 		return err
 	}
@@ -179,7 +187,7 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdIncludeRemove(args []string, stdout io.Writer) error {
+func cmdIncludeRemove(args []string, stdout io.Writer, gate includeGate) error {
 	var opts harness.RemoveOptions
 	var positional []string
 
@@ -211,6 +219,11 @@ func cmdIncludeRemove(args []string, stdout io.Writer) error {
 	}
 	url = includeArgAsStored(dir, url)
 
+	if gate != nil {
+		if err := gate(harness.RemoveIncludeEdit(url, opts)); err != nil {
+			return err
+		}
+	}
 	if err := harness.RemoveInclude(dir, url, opts); err != nil {
 		return err
 	}
@@ -223,7 +236,7 @@ func cmdIncludeRemove(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdIncludeUpdate(args []string, stdout io.Writer) error {
+func cmdIncludeUpdate(args []string, stdout io.Writer, gate includeGate) error {
 	var opts harness.UpdateOptions
 	var positional []string
 
@@ -299,6 +312,11 @@ func cmdIncludeUpdate(args []string, stdout io.Writer) error {
 				return err
 			}
 		}
+		if gate != nil {
+			if err := gate(harness.UpdateIncludeEdit(url, opts)); err != nil {
+				return err
+			}
+		}
 		if err := harness.UpdateInclude(dir, url, opts); err != nil {
 			return err
 		}
@@ -320,6 +338,11 @@ func cmdIncludeUpdate(args []string, stdout io.Writer) error {
 		}
 	}
 
+	if gate != nil {
+		if err := gate(harness.UpdateIncludeEdit(url, opts)); err != nil {
+			return err
+		}
+	}
 	if err := harness.UpdateInclude(dir, url, opts); err != nil {
 		return err
 	}
