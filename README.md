@@ -5,8 +5,12 @@
 ```bash
 brew tap eyelock/tap && brew install ynh
 ynh install github.com/eyelock/ynh
+ynh trust show github.com/eyelock/ynh/ynh-guide     # read the hooks and sensors it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide   # accept them
 ynh-guide
 ```
+
+The ynh harness runs hooks and sensors, so ynh refuses to start it until you accept it.
 
 That gets you a guided session that teaches you ynh — and helps you create your own harness. Once you have one:
 
@@ -29,6 +33,10 @@ david -v codex                     # same harness, different vendor
 
 **Compose from anywhere.** Cherry-pick skills from community repos, your team's private config, open-source libraries — and mix them with your own. Like a package manager for AI capabilities, backed by Git.
 
+**Nothing runs until you say so.** A harness can bring hooks, sensors and MCP servers: commands that run on your machine. ynh shows you every one of them and runs none until you accept the harness. Change a command, or install a new version, and ynh asks again. Start with the tutorial [Your First Trusted Harness](docs/tutorial/first-trusted-harness.md), then [Why ynh Asks for Trust](docs/why-trust.md).
+
+**Delegate to a whole harness.** Your personal harness can hand a piece of work to a team harness, its delegate. By default (`transport: a2a`) the delegate runs as its own ynh session, with its own vendor, instructions, MCP servers, hooks and workspace folders, and its answer comes back to your session. A `transport: native` delegate is a vendor subagent instead, and carries only part of a harness ([L12](docs/vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)). See [Delegate Sessions](docs/delegate-sessions.md).
+
 ## Known gaps
 
 Not every vendor gets every feature of a harness yet: some gaps are ynh's to fix, and some are things a vendor cannot do. [Vendor Feature Parity](docs/vendor-parity.md) has the matrix for `ynh run`, `ynh agent run` and `ynd export`, and says for each gap whose it is and the evidence, with its tracking issue where one exists.
@@ -43,8 +51,12 @@ brew tap eyelock/tap && brew install ynh
 
 # Try the ynh harness — it teaches you ynh
 ynh install github.com/eyelock/ynh
+ynh trust show github.com/eyelock/ynh/ynh-guide     # read the hooks and sensors it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide   # accept them
 ynh-guide
 ```
+
+The ynh harness runs hooks and sensors, so until you accept it ynh refuses to start it, lists what it would run, and names these two commands.
 
 Inside the session, use `/ynh-create-harness` to build your own. Or do it manually:
 
@@ -58,6 +70,8 @@ EOF
 ynh install ./david
 david
 ```
+
+This harness runs no commands of its own, so it starts at once. Once you add a hook, a sensor or an MCP server, ynh asks you to accept it first: `ynh trust show local/david`, then `ynh trust accept local/david`.
 
 Add skills, agents, rules, and commands to the harness directory. Pull from Git repos. Compose across sources. Switch vendors. Delegate to team harnesses.
 
@@ -83,10 +97,12 @@ Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 
 - **[Getting Started](https://eyelock.github.io/ynh/#/getting-started)** — Create and run your first harness
 - **[Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering)** — Why harness management matters
-- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 24 progressive tutorials from first harness to sensors
+- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 26 progressive tutorials from first harness to sensors
 - **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
 - **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
 - **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget
+- **[Trust](https://eyelock.github.io/ynh/#/tutorial/first-trusted-harness)** — What a harness will run, accepting it, and when ynh asks again
+- **[Delegates](https://eyelock.github.io/ynh/#/delegate-sessions)** — Hand work to another harness, as its own session
 - **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor, Copilot and OpenCode capabilities
 
 ## License

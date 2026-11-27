@@ -614,6 +614,10 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 	}
 
 	base := buildListEntry(p)
+	if namespace.Classify(name) == namespace.RefID {
+		// The id the harness was asked for by is the one it is installed under.
+		base = withInstalledID(base, name)
+	}
 	if checkUpdates {
 		single := []listEntry{base}
 		fillUpdates(single, defaultProbe())

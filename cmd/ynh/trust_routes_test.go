@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -676,5 +677,119 @@ func TestCheckFolder_UncachedIncludeDoesNotNameUpdate(t *testing.T) {
 	}
 	if !strings.Contains(msg, "ynh run <folder> --trust") {
 		t.Errorf("no route named:\n%v", msg)
+	}
+}
+
+// ynh #1039: ynh check <folder> --trust fetches and accepts a full-SHA include
+// the way run --trust does, so a CI job that only runs sensors can pass the gate.
+func TestCheckFolder_TrustFetchesAndAcceptsAFullSHAInclude(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "sha")
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{folder, "--trust", "--cwd", t.TempDir()}, &stdout, &stderr)
+	if isUntrusted(err) || (err != nil && strings.Contains(err.Error(), "refusing")) {
+		t.Fatalf("check --trust was refused: %v\n%s", err, stderr.String())
+	}
+	if _, ok := resolver.LookupCache(url, ref); !ok {
+		t.Fatal("ynh check --trust did not fetch the include")
+	}
+	store, serr := loadTrustStore()
+	if serr != nil {
+		t.Fatal(serr)
+	}
+	found := false
+	for k, rec := range store.Harnesses {
+		if strings.HasPrefix(k, includeRecordPrefix) && rec.Via == viaRunTrust {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no include record written: %+v", store.Harnesses)
+	}
+}
+
+// A floating include is refused by check --trust, as by run --trust, and
+// nothing is fetched.
+func TestCheckFolder_TrustRefusesAFloatingInclude(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "branch")
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{folder, "--trust", "--cwd", t.TempDir()}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "40-character commit SHA") {
+		t.Fatalf("a floating include must be refused with the pin message: %v", err)
+	}
+	if _, ok := resolver.LookupCache(url, ref); ok {
+		t.Error("a floating include was fetched")
+	}
+}
+
+// check --trust is for a folder: an installed id is pointed at trust accept.
+func TestCheckTrust_RefusesAnInstalledID(t *testing.T) {
+	fakeHome(t)
+	var stdout, stderr bytes.Buffer
+	err := cmdCheck([]string{"local/demo", "--trust"}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "ynh trust accept local/demo") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// ynh #1039: ynh trust show <folder> lists each remote include that brings
+// commands, with key, SHA and state, in text and JSON, and follows an accept.
+func TestTrustShowFolder_ListsIncludesAndTheirState(t *testing.T) {
+	fakeHome(t)
+	folder, url, ref := uncachedFolder(t, "sha")
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := warmFolderIncludes(p); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb bytes.Buffer
+	if err := cmdTrustShow([]string{folder}, &out, &errb); err != nil {
+		t.Fatalf("show: %v\n%s", err, errb.String())
+	}
+	src := strings.TrimPrefix(url, "file://")
+	for _, want := range []string{src, "state:    unreviewed", "commit:   " + ref, "ynh trust accept"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("text lacks %q:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	if err := cmdTrustShow([]string{folder, "--format", "json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Includes []includeShow `json:"includes"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out.String())
+	}
+	var generic any
+	if err := json.Unmarshal(out.Bytes(), &generic); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("trust-show-folder")
+	if err != nil {
+		t.Fatalf("Get trust-show-folder schema: %v", err)
+	}
+	if err := schema.Validate(generic); err != nil {
+		t.Errorf("trust show <folder> JSON does not validate: %v\n%s", err, out.String())
+	}
+	if len(doc.Includes) != 1 || doc.Includes[0].State != trustUnreviewed || doc.Includes[0].SHA != ref || !strings.Contains(doc.Includes[0].Key, src) || doc.Includes[0].Commands == 0 {
+		t.Fatalf("includes = %+v", doc.Includes)
+	}
+
+	if err := cmdTrustAccept([]string{folder}, io.Discard, &errb); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTrustShow([]string{folder, "--format", "json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil || doc.Includes[0].State != trustAccepted {
+		t.Fatalf("after accept: %v %s", err, out.String())
 	}
 }
