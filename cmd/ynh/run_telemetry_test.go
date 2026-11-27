@@ -63,7 +63,7 @@ func TestStartRunRelay(t *testing.T) {
 			}
 
 			var stderr bytes.Buffer
-			stop, args := startRunRelay(tt.backend, tt.flag, "", &stderr)
+			stop, args := startRunRelay(tt.backend, tt.flag, "", nil, &stderr)
 			if got := stub.started(); got != tt.started {
 				t.Fatalf("relay started = %v, want %v (stderr %q)", got, tt.started, stderr.String())
 			}
@@ -177,7 +177,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 		stub := setup(t)
 		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", true, "", &stderr)
+		stop, args := startRunRelay("claude", true, "", nil, &stderr)
 		if !stub.started() {
 			t.Fatalf("no relay started (stderr %q)", stderr.String())
 		}
@@ -214,7 +214,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 		stub := setup(t)
 		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", false, "http://127.0.0.1:4318", &stderr)
+		stop, args := startRunRelay("claude", false, "http://127.0.0.1:4318", nil, &stderr)
 		defer stop()
 		if stub.started() {
 			t.Fatal("a relay started with a standing endpoint")
@@ -255,7 +255,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 	t.Run("a standing endpoint off the loopback is refused", func(t *testing.T) {
 		stub := setup(t)
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", false, "http://collector.example:4318", &stderr)
+		stop, args := startRunRelay("claude", false, "http://collector.example:4318", nil, &stderr)
 		defer stop()
 		if stub.started() || len(args) != 0 {
 			t.Errorf("started %v, args %q", stub.started(), args)
@@ -278,7 +278,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 				t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
 				var stderr bytes.Buffer
-				stop, args := startRunRelay("claude", tt.flag, tt.endpoint, &stderr)
+				stop, args := startRunRelay("claude", tt.flag, tt.endpoint, nil, &stderr)
 				defer stop()
 				if stub.started() || len(args) != 0 {
 					t.Errorf("started %v, args %q", stub.started(), args)
@@ -301,7 +301,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 		before := os.Environ()
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", false, "", &stderr)
+		stop, args := startRunRelay("claude", false, "", nil, &stderr)
 		stop()
 		if stub.started() || len(args) != 0 || stderr.Len() != 0 {
 			t.Errorf("started %v, args %q, stderr %q", stub.started(), args, stderr.String())
@@ -314,7 +314,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 	t.Run("unsupported vendor with a standing endpoint: a note, no change", func(t *testing.T) {
 		setup(t)
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("opencode", false, "http://127.0.0.1:4318", &stderr)
+		stop, args := startRunRelay("opencode", false, "http://127.0.0.1:4318", nil, &stderr)
 		defer stop()
 		if len(args) != 0 || !strings.Contains(stderr.String(), "does not configure opencode's telemetry") {
 			t.Errorf("args %q stderr %q", args, stderr.String())

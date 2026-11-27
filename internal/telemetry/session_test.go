@@ -43,3 +43,18 @@ func TestSession_OffGivesNoEnvironment(t *testing.T) {
 	}
 	s.Finish(SessionOutcomeExited, true)
 }
+
+func TestWithLabels(t *testing.T) {
+	l := map[string]string{"wheelhouse": "ynw", "batch": "a/b#1"}
+	for _, tt := range []struct{ name, raw, want string }{
+		{"empty", "", "ynh.label.batch=a%2Fb%231,ynh.label.wheelhouse=ynw"},
+		{"kept, and an operator's label replaced", "team=a,ynh.label.site=lab", "team=a,ynh.label.batch=a%2Fb%231,ynh.label.wheelhouse=ynw"},
+	} {
+		if got := WithLabels(tt.raw, l); got != tt.want {
+			t.Errorf("%s: %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	if got := WithLabels("team=a,ynh.label.site=lab", nil); got != "team=a" {
+		t.Errorf("no labels: %q", got)
+	}
+}

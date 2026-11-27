@@ -29,6 +29,10 @@ func (d runDestination) Destination() telemetry.Destination { return d.dest }
 func (d runDestination) SpoolDir() string                   { return d.dir }
 func (d runDestination) OperatorOTLP() bool                 { return d.dest == telemetry.DestinationOTLP }
 
+// resourceAttributesEnv is the standard OpenTelemetry variable a vendor reads
+// its resource attributes from.
+const resourceAttributesEnv = "OTEL_RESOURCE_ATTRIBUTES"
+
 // telemetryRelayEndpointEnv names the standing relay endpoint setting's
 // variable.
 const telemetryRelayEndpointEnv = "YNH_TELEMETRY_RELAY_ENDPOINT"
@@ -80,11 +84,12 @@ func standingRelayEndpoint(flag string, stderr io.Writer) string {
 // (agent.SupportsRunRelay), and an operator's OTEL_EXPORTER_OTLP_* wins over
 // both. With neither route on, nothing changes and nothing starts: ynr being
 // installed starts nothing (ynr ADR-006, rule 14). The conditions and the
-// notes are those of `ynh agent run` (docs/telemetry.md). It returns the
+// notes are those of `ynh agent run` (docs/telemetry.md). When it wires one,
+// it also appends runLabels to the vendor's OTEL_RESOURCE_ATTRIBUTES. It returns the
 // function that stops the relay, safe to defer and to call when no relay
 // started, and the vendor arguments that point a vendor configured on its
 // command line (Claude Code, Codex) at the relay.
-func startRunRelay(backend string, flag bool, endpointFlag string, stderr io.Writer) (func(), []string) {
+func startRunRelay(backend string, flag bool, endpointFlag string, runLabels map[string]string, stderr io.Writer) (func(), []string) {
 	standing := standingRelayEndpoint(endpointFlag, stderr)
 	if standing == "" && !telemetryRelaySetting(flag, stderr) {
 		return func() {}, nil
@@ -106,6 +111,10 @@ func startRunRelay(backend string, flag bool, endpointFlag string, stderr io.Wri
 	for _, kv := range agent.RunRelayEnv(backend, endpoint) {
 		_ = os.Setenv(kv[0], kv[1])
 	}
+	// The run's labels ride on the vendor's own records too, as resource
+	// attributes, so ynr can group them by Wheelhouse or batch. Only now:
+	// with no relay endpoint the environment is left exactly as it was.
+	_ = os.Setenv(resourceAttributesEnv, telemetry.WithLabels(os.Getenv(resourceAttributesEnv), runLabels))
 	return r.stop, agent.RunRelayArgs(backend, endpoint)
 }
 
