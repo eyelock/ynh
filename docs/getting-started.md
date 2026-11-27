@@ -35,7 +35,7 @@ ynh trust accept github.com/eyelock/ynh/ynh-guide  # record that you did; the ha
 ynh-guide
 ```
 
-The ynh harness declares sensors, so ynh refuses to launch it until you have accepted what it executes (exit 1, with the exact commands to run). Review it with `ynh trust show`, then `ynh trust accept`. See [Trust](trust.md).
+The ynh harness declares hooks and sensors, so ynh refuses to launch it until you have accepted what it executes (exit 1, with the exact commands to run). Review it with `ynh trust show`, then `ynh trust accept`. See [Trust](trust.md).
 
 This gives you an AI session with skills that teach you ynh — including `/ynh-create-harness` to build your own harness interactively.
 

@@ -13,6 +13,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/eyelock/ynh/internal/namespace"
+
 	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/freshness"
@@ -26,7 +28,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	cwd := ""
 	var harnessName, profileName string
 	var only []string
-	var updateBaseline, ignoreBaseline, calibrate bool
+	var updateBaseline, ignoreBaseline, calibrate, trustFolder bool
 	overlay := map[string]json.RawMessage{}
 
 	for i := 0; i < len(args); i++ {
@@ -39,6 +41,10 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			cwd = args[i]
 		case "--calibrate":
 			calibrate = true
+		case "--trust":
+			// As `ynh run <folder> --trust`: fetch the folder's uncached
+			// full-SHA includes and accept them (ynh #1039).
+			trustFolder = true
 		case "--update-baseline":
 			updateBaseline = true
 		case "--no-baseline":
@@ -109,7 +115,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 
 	if harnessName == "" {
 		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh check <harness-id|path> [--only a,b] [--profile name] [--cwd dir] [--format text|json]"))
+			"usage: ynh check <harness-id|path> [--only a,b] [--profile name] [--cwd dir] [--trust] [--format text|json]"))
 	}
 
 	// A path or an installed id, deciding which by the same classifier every
@@ -126,6 +132,19 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	// p, and the trust record covers the harness before it), so a harness the
 	// gate refuses is refused the same way here as by `ynh run`: a folder whose
 	// remote include cannot be read is untrusted (exit 1), not not_found.
+	if trustFolder {
+		if namespace.Classify(harnessName) != namespace.RefPath {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("--trust is for a check of a folder; an installed harness is accepted with 'ynh trust accept %s'", harnessName)))
+		}
+		folder, ferr := harness.LoadIDOrPath(harnessName)
+		if ferr != nil {
+			return checkExecErr(cliError(stderr, structured, errCodeNotFound, ferr.Error()))
+		}
+		if aerr := acceptFolderRunOf(folder, stderr); aerr != nil {
+			return cliError(stderr, structured, errCodeUntrusted, aerr.Error())
+		}
+	}
 	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
 		if gerr := checkTrustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
 			// Exit 1, a refusal, not 2: the check was not unable to run, it was not allowed to.
@@ -810,6 +829,6 @@ func folderCheckHint(ref, msg string) string {
 		return msg
 	}
 	const hint = "\nrun `ynh update` (checking a gate must not reach the network)"
-	return strings.ReplaceAll(msg, hint, "\nynh check reads the cache only and has no --trust. Fetch each remote include by running "+
-		"'ynh run <folder> --trust' once it is pinned to a full 40-character commit SHA, then check again. 'ynh update' takes installed harnesses only.")
+	return strings.ReplaceAll(msg, hint, "\nynh check reads the cache only unless you pass --trust. Fetch each remote include with "+
+		"'ynh check <folder> --trust' once it is pinned to a full 40-character commit SHA, then check again. 'ynh update' takes installed harnesses only.")
 }

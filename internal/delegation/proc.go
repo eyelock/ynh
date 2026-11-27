@@ -103,6 +103,11 @@ func Reconcile(path string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	if rec.Route == RouteLive {
+		// A task for a live session has no session process of its own: it
+		// follows the live session it was queued at (settleLive).
+		return settleLive(path, rec)
+	}
 	if rec.Status.Final() || supervisorAlive(rec) {
 		return rec, nil
 	}
