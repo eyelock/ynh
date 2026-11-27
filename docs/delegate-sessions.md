@@ -172,10 +172,13 @@ rule holds whichever vendor the parent runs on.
 - **Depth.** A delegation is refused when it would put the delegate more than 4 levels below the
   harness that was run (the root's own delegate is level 1). Set `YNH_DELEGATION_MAX_DEPTH` to a
   whole number above 0 to change it.
-- **Live sessions.** A delegation is refused while 16 delegate sessions are live (started, running
-  or waiting on a question) under the same `YNH_HOME`, which bounds a chain that is wide rather than
-  deep. Set `YNH_DELEGATION_MAX_LIVE` to a whole number above 0 to change it. A session whose
-  process is gone is settled first and does not count.
+- **Live sessions.** A delegation is refused while 16 sessions are live under the same `YNH_HOME`,
+  which bounds a chain that is wide rather than deep. The count is every live session `ynh ps` lists,
+  whatever its launch mode (an interactive or one-shot `ynh run` counts, not only delegates), or the
+  delegations started and not yet final when there are more of those. Set `YNH_DELEGATION_MAX_LIVE`
+  to a whole number above 0 to change it. A session whose process is gone is settled first and does
+  not count. The refusal's Fix line names `ynh ps`, `ynh stop` and `ynh reap`
+  ([Stopping sessions](presence.md#stopping-sessions)).
 
 A refusal is the delegate tool's result to the parent (the failed task over A2A, so the parent's
 model reads it and can change course), never a crash, and no session or record is started. It names

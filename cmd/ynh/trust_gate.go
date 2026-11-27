@@ -202,7 +202,7 @@ func folderGate(p *harness.Harness, store trustStore, stderr io.Writer) error {
 	if stderr != nil {
 		_, _ = fmt.Fprintf(stderr, "ynh: %s runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.\n", p.Name)
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludesFor(p, folderFetchFix)
 	if err != nil {
 		return err
 	}
@@ -244,12 +244,27 @@ type remoteInclude struct {
 // whether or not the include is consented to, so the record never covers less
 // than the include could run.
 func remoteIncludes(p *harness.Harness) ([]remoteInclude, error) {
+	return remoteIncludesFor(p, updateFetchFix)
+}
+
+// What a refusal tells the operator to do about an include that is not in the
+// cache. `ynh update` takes installed ids only, so a folder run is pointed at
+// --trust, which fetches an include pinned to a full SHA (ynh #993).
+const (
+	updateFetchFix = "Fetch them with 'ynh update', then run it again."
+	folderFetchFix = "Fetch them by running it with --trust, once each remote include is pinned to a full 40-character commit SHA " +
+		"(ynh run <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only."
+)
+
+// remoteIncludesFor is remoteIncludes with the Fix line of its refusals named
+// by the caller.
+func remoteIncludesFor(p *harness.Harness, fix string) ([]remoteInclude, error) {
 	if set := harnessExecutables(p); len(set.Problems) > 0 {
-		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, set.Problems))
+		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, set.Problems, fix))
 	}
 	resolved, err := resolver.ResolveIncludesLocal(p, harness.Selection{})
 	if err != nil {
-		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, []string{err.Error()}))
+		return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, []string{err.Error()}, fix))
 	}
 	seen := map[string]bool{}
 	var out []remoteInclude
@@ -260,7 +275,7 @@ func remoteIncludes(p *harness.Harness) ([]remoteInclude, error) {
 		seen[r.RemoteKey] = true
 		own := harnessExecutables(r.Harness)
 		if len(own.Problems) > 0 {
-			return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, own.Problems))
+			return nil, untrustedf("refusing to run %s: %s", p.Name, includesUnreadable(p, own.Problems, fix))
 		}
 		set := trustSet{Sensors: own.Sensors, Hooks: own.Hooks, MCPServers: own.MCPServers}
 		if set.count() == 0 {
@@ -272,9 +287,15 @@ func remoteIncludes(p *harness.Harness) ([]remoteInclude, error) {
 	return out, nil
 }
 
-func includesUnreadable(p *harness.Harness, problems []string) string {
-	return fmt.Sprintf("what its includes execute could not be read in full.\n  %s\nFetch them with 'ynh update', then run it again.",
-		strings.Join(problems, "\n  "))
+func includesUnreadable(p *harness.Harness, problems []string, fix string) string {
+	// The resolver's own hint names ynh update; the Fix line below names the
+	// right route for this run, and two routes would contradict.
+	problems = slices.Clone(problems)
+	for i, pr := range problems {
+		problems[i] = strings.ReplaceAll(pr, "\nrun `ynh update` (checking a gate must not reach the network)", "")
+	}
+	return fmt.Sprintf("what its includes execute could not be read in full.\n  %s\n%s",
+		strings.Join(problems, "\n  "), fix)
 }
 
 // gateRef is the install id of a harness argument, "" when it is a path.
@@ -299,7 +320,7 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
-	remote, err := remoteIncludes(p)
+	remote, err := remoteIncludesFor(p, folderFetchFix)
 	if err != nil {
 		return cliError(stderr, structured, errCodeConfigError, err.Error())
 	}

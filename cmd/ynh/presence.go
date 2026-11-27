@@ -16,6 +16,7 @@ import (
 	"github.com/eyelock/ynh/internal/presence"
 	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // startPresence records the session this run is about to launch and returns
@@ -255,6 +256,9 @@ func checkOnLive(runName, id, setting, flag string, stderr io.Writer) error {
 	if mode == "refuse" {
 		return fmt.Errorf("%s\n  Fix: use that session, end it, or run `ynh run --on-live=allow %s` to start another", what, id)
 	}
-	_, _ = fmt.Fprintf(stderr, "warning: %s. Starting another; set on_live to refuse in the harness, or pass --on-live=refuse, to stop this.\n", what)
+	warn.Print(stderr, warn.Warning{
+		Message: what + ". Starting another.",
+		Fix:     "pass --on-live=refuse, or set on_live to refuse in the harness, to stop this",
+	})
 	return nil
 }
