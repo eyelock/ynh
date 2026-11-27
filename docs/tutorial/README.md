@@ -12,6 +12,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Vendors & Symlinks](vendors-and-symlinks.md) | Switch between Claude/Codex/Cursor, manage symlinks |
 | [Composition](composition.md) | Pull skills from Git repos with pick, path, and ref |
 | [Include Editing](include-editing.md) | Add, remove, and update includes from the CLI — no manual JSON editing |
+| [Your First Trusted Harness](first-trusted-harness.md) | See ynh refuse a harness with a hook, review it, accept it, and see a changed script noticed |
 | [Hooks](hooks.md) | Declare vendor-agnostic lifecycle hooks, run work at session end, set per-hook timeouts |
 | [MCP Servers](mcp-servers.md) | Declare MCP server dependencies per harness |
 | [Profiles](profiles.md) | Environment-specific overrides with profiles |
@@ -41,7 +42,8 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 
 | Tutorial | What you'll learn |
 |---|---|
-| [Delegation](delegation.md) | Chain harnesses together as subagents |
+| [A First Delegate Session](first-delegate-session.md) | Have one harness hand work to another, running as its own session |
+| [Native Delegation](delegation.md) | Run a delegate as the vendor's own subagent (`transport: native`) |
 | [Export](export.md) | Produce vendor-native distributable plugins |
 | [Marketplace](marketplace.md) | Generate marketplace indexes for team distribution |
 | [Registry & Discovery](registry-and-discovery.md) | Search and install harnesses from curated registries |
@@ -81,7 +83,7 @@ This installs both `ynh` (harness template manager) and `ynd` (developer tools).
 
 #### **Build from Source**
 
-Requires Go 1.25+.
+Requires Go 1.26+.
 
 ```bash
 git clone https://github.com/eyelock/ynh.git

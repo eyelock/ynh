@@ -76,7 +76,7 @@ Fetching 3 include(s) and 0 delegate(s)...
 
 Run it once to trigger assembly, then verify only the picked skills are included:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-dev/.claude --add-dir ~/.ynh/run/local--my-dev -p list your skills`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-dev/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--my-dev/.../**) -p list your skills`
 ```bash
 my-dev "list your skills"
 ```
@@ -89,9 +89,15 @@ ls ~/.ynh/run/local--my-dev/.claude/skills/
 
 ## Own repo — local checkout (no clone)
 
-If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
+If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development.
 
-*Replace `/Users/david/Storage/Workspace/eyelock/assistants` with the path of your checkout (here: `/tmp/ynh-tutorial/assistants`).*
+For this tutorial, put a checkout at `/tmp/ynh-tutorial/assistants`:
+
+```bash
+git clone https://github.com/eyelock/assistants /tmp/ynh-tutorial/assistants
+```
+
+If you already have a checkout of your own, skip the clone and put its full path in `"git"` below instead.
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-dev/.agents/harness
@@ -103,13 +109,26 @@ cat > /tmp/ynh-tutorial/my-dev/.agents/harness/plugin.json << 'EOF'
   "default_vendor": "claude",
   "includes": [
     {
-      "git": "/Users/david/Storage/Workspace/eyelock/assistants",
+      "git": "/tmp/ynh-tutorial/assistants",
       "path": "skills/dev",
       "pick": ["skills/dev-project", "skills/dev-quality"]
     }
   ]
 }
 EOF
+
+ynh install /tmp/ynh-tutorial/my-dev
+```
+
+Run it once, then check that only the two skills picked from the checkout are there:
+
+```bash
+my-dev "list your skills"
+```
+
+```bash
+ls ~/.ynh/run/local--my-dev/.claude/skills/
+# Expected: dev-project/ dev-quality/
 ```
 
 Local paths start with `/` or `.` — ynh uses them directly without cloning.
@@ -144,7 +163,7 @@ ynh install /tmp/ynh-tutorial/with-anthropic
 
 Verify it works:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--with-anthropic/.claude --add-dir ~/.ynh/run/local--with-anthropic -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--with-anthropic/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--with-anthropic/.../**) -p what skills do you have?`
 ```bash
 with-anthropic "what skills do you have?"
 ```
@@ -177,7 +196,7 @@ ynh install /tmp/ynh-tutorial/with-vercel
 
 Verify:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--with-vercel/.claude --add-dir ~/.ynh/run/local--with-vercel -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--with-vercel/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--with-vercel/.../**) -p what skills do you have?`
 ```bash
 with-vercel "what skills do you have?"
 ```
@@ -220,7 +239,7 @@ ynh install /tmp/ynh-tutorial/full-stack
 
 Run it to trigger assembly, then verify all 5 skills from 2 repos are present:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--full-stack/.claude --add-dir ~/.ynh/run/local--full-stack -p list your skills`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--full-stack/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--full-stack/.../**) -p list your skills`
 ```bash
 full-stack "list your skills"
 ```
@@ -267,7 +286,7 @@ ynh install /tmp/ynh-tutorial/mixed
 
 Run it to trigger assembly, then verify both local and remote skills are present:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--mixed/.claude --add-dir ~/.ynh/run/local--mixed -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--mixed/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--mixed/.../**) -p what skills do you have?`
 ```bash
 mixed "what skills do you have?"
 ```
@@ -279,7 +298,7 @@ ls ~/.ynh/run/local--mixed/.claude/skills/
 
 For rapid iteration, keep the harness on disk and reinstall:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--mixed/.claude --add-dir ~/.ynh/run/local--mixed -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--mixed/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--mixed/.../**) -p what skills do you have?`
 ```bash
 # Edit locally, install, test, repeat
 ynh install /tmp/ynh-tutorial/mixed
@@ -327,7 +346,7 @@ ynh install /tmp/ynh-tutorial/local-ref
 
 Run it, then verify:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--local-ref/.claude --add-dir ~/.ynh/run/local--local-ref -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--local-ref/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--local-ref/.../**) -p what skills do you have?`
 ```bash
 local-ref "what skills do you have?"
 ```
@@ -366,7 +385,7 @@ EOF
 ynh install /tmp/ynh-tutorial/with-bundled
 ```
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--with-bundled/.claude --add-dir ~/.ynh/run/local--with-bundled -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--with-bundled/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--with-bundled/.../**) -p what skills do you have?`
 ```bash
 with-bundled "what skills do you have?"
 ```
@@ -413,7 +432,7 @@ ynh install /tmp/ynh-tutorial/pinned
 
 Verify:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--pinned/.claude --add-dir ~/.ynh/run/local--pinned -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--pinned/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--pinned/.../**) -p what skills do you have?`
 ```bash
 pinned "what skills do you have?"
 ```
@@ -535,7 +554,7 @@ EOF
 
 Now the same harness works:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--full-stack/.claude --add-dir ~/.ynh/run/local--full-stack -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--full-stack/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--full-stack/.../**) -p what skills do you have?`
 ```bash
 full-stack "what skills do you have?"
 # Expected: launches successfully with skills from both repos
@@ -560,7 +579,7 @@ Error: resolving includes: include "/tmp/ynh-tutorial/local-lib": source "/tmp/y
 
 The message says "source" rather than "remote source", and names the entry to add. Add it:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--local-ref/.claude --add-dir ~/.ynh/run/local--local-ref -p what skills do you have?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--local-ref/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--local-ref/.../**) -p what skills do you have?`
 ```bash
 cat > ~/.ynh/config.json << 'EOF'
 {

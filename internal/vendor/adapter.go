@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ErrUnknownVendor is returned when a vendor name is not registered.
@@ -38,14 +39,27 @@ var ErrResumePromptNotSupported = errors.New("vendor cannot resume a session wit
 // (or worse, for Copilot, would resume some other directory's session).
 var ErrNoResumableSession = errors.New("no resumable session found")
 
-// ErrSessionLookupUnavailable is returned by ResolveLastSession on vendors that
-// cannot identify a session id locally at all — Codex (store is sqlite, which
-// ynh will not take a driver for) and Cursor (chats are server-side).
+// ErrSessionLookupUnavailable is returned by ResolveLastSession on a vendor
+// that cannot identify a session id locally at all. Today that is OpenCode,
+// whose store is SQLite, which ynh will not take a driver for. Codex
+// (rollout-*.jsonl) and Cursor (chats meta.json) read their stores and do not
+// return it; `ynh run --resume` on them looks the session up in the harness's
+// snapshots and refuses when none is found (resolveSnapshotSession).
 //
 // Distinct from ErrNoResumableSession because it says nothing about whether a
-// session exists: these vendors can still resume via their continue-last form,
-// so callers should resume with an empty id rather than launching cold.
+// session exists: such a vendor can still resume via its continue-last form,
+// so callers resume with an empty id rather than launching cold.
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
+
+// LaunchPreparer is an optional capability for vendors that write files into
+// the run dir to start (OpenCode's composed AGENTS.md and the output of its
+// on_session_start hooks). `ynh run` calls PrepareLaunch on the staged tree
+// before the snapshot is sealed, so those files are part of the snapshot's hash
+// and a Launch* method only reads the run dir: a snapshot is never written to
+// once a session may be running on it (ynh #765).
+type LaunchPreparer interface {
+	PrepareLaunch(runDir string) error
+}
 
 // MCPToolApprover is an optional capability for vendors that refuse an MCP
 // tool call on a one-shot run or an agent worker turn until the tool is approved (Codex: "MCP tool
@@ -55,7 +69,7 @@ var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids 
 // config already settles. Copilot needs no such capability: ynh adds
 // --allow-all-tools there.
 type MCPToolApprover interface {
-	ApproveMCPTools(runDir string, callerArgs []string, warn io.Writer) []string
+	ApproveMCPTools(runDir string, callerArgs []string, w io.Writer) []string
 }
 
 // SessionBinder is an optional capability for vendors whose CLI accepts a
@@ -180,8 +194,9 @@ type Adapter interface {
 	// a bare --resume opens an interactive session *picker* rather than
 	// resuming the latest, which would hang an unattended relaunch waiting for
 	// a keypress. Emit an explicit id, or the vendor's continue-last form
-	// (claude --continue, codex resume --last, cursor --continue) — never
-	// neither.
+	// (claude --continue, opencode -c) — never neither. `ynh run --resume`
+	// does not use codex resume --last or cursor --continue: it resolves an id
+	// from the harness's snapshots and refuses when it finds none.
 	//
 	// prompt, when non-empty, is delivered to the resumed session. With
 	// interactive true the session stays open after the prompt is answered
@@ -194,11 +209,11 @@ type Adapter interface {
 
 	// IsolateMCP returns the extra launch arguments that restrict the vendor
 	// CLI to the MCP servers the harness composes (the assembled config in
-	// configPath), and a one-line warning when the vendor cannot do that
+	// configPath), and a warning when the vendor cannot do that
 	// fully. Either may be empty. The arguments are safe to append after a
 	// positional prompt. It never fails a run: a vendor that cannot isolate
 	// says so in the warning and the run goes ahead.
-	IsolateMCP(configPath string) (args []string, warning string)
+	IsolateMCP(configPath string) (args []string, warnings []warn.Warning)
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to
@@ -254,6 +269,14 @@ type Adapter interface {
 	// SupportsExportDelegates reports whether this vendor supports delegate
 	// harnesses in exported plugins. Codex does not support delegates.
 	SupportsExportDelegates() bool
+
+	// SupportsNativeSubagents reports whether this vendor has subagents a
+	// delegate can run as when its transport is native (a delegates_to entry
+	// or harness "transport": "native"). A vendor without them has a native
+	// delegate refused by ynh install, ynh run and ynd validate
+	// (harness.CheckDelegateTransports). Each adapter declares it as a bare
+	// true or false, which scripts/subagent-parity.sh holds every vendor to.
+	SupportsNativeSubagents() bool
 
 	// MarketplaceManifestDir returns the directory name for marketplace index
 	// files (e.g. ".claude-plugin", ".agents/plugins"). It can differ from

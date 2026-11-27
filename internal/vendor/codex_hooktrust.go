@@ -96,20 +96,25 @@ func jsonString(s string) string {
 	return strings.ReplaceAll(out, `\u2029`, "\u2029")
 }
 
-// CodexHookTrustArgs is the session overrides that let Codex run the hooks
-// ynh wrote to runDir/.codex/hooks.json: the run directory as a trusted
-// project, and each hook's current hash as trusted. It returns nil when there
-// is no hook file or it holds no hook. An unreadable or unexpected hook file
-// also yields nil: the hooks are then skipped, as before.
-func CodexHookTrustArgs(runDir string) []string {
+// codexHookFile is one hook handler of a hooks.json, in file order.
+type codexHookFile struct {
+	Event, Snake, Matcher, Command string
+	Timeout                        int // as declared; 0 when the hook sets none
+	Group, Index                   int
+}
+
+// readCodexHooks reads the command hooks of dir/.codex/hooks.json, events
+// sorted, and the file's path. It returns none when the file is missing,
+// unreadable or unexpected, or holds no hook ynh can name.
+func readCodexHooks(runDir string) ([]codexHookFile, string, string) {
 	dir, err := filepath.EvalSymlinks(runDir)
 	if err != nil {
-		return nil
+		return nil, "", ""
 	}
 	file := filepath.Join(dir, ".codex", "hooks.json")
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return nil
+		return nil, "", ""
 	}
 	var doc struct {
 		Hooks map[string][]struct {
@@ -122,16 +127,14 @@ func CodexHookTrustArgs(runDir string) []string {
 		} `json:"hooks"`
 	}
 	if json.Unmarshal(data, &doc) != nil {
-		return nil
+		return nil, "", ""
 	}
-
 	events := make([]string, 0, len(doc.Hooks))
 	for e := range doc.Hooks {
 		events = append(events, e)
 	}
 	sort.Strings(events)
-
-	var state []string
+	var out []codexHookFile
 	for _, event := range events {
 		snake, ok := codexHookEventSnake[event]
 		if !ok {
@@ -142,15 +145,32 @@ func CodexHookTrustArgs(runDir string) []string {
 				if h.Type != "command" {
 					continue
 				}
-				timeout := h.Timeout
-				if timeout == 0 {
-					timeout = codexDefaultHookTimeout(snake)
-				}
-				id := codexHookIdentity{EventName: snake, Matcher: g.Matcher, Command: h.Command, Timeout: timeout}
-				key := fmt.Sprintf("%s:%s:%d:%d", file, snake, gi, hi)
-				state = append(state, tomlString(key)+"={trusted_hash="+tomlString(id.hash())+"}")
+				out = append(out, codexHookFile{event, snake, g.Matcher, h.Command, h.Timeout, gi, hi})
 			}
 		}
+	}
+	return out, dir, file
+}
+
+func (h codexHookFile) identity() codexHookIdentity {
+	timeout := h.Timeout
+	if timeout == 0 {
+		timeout = codexDefaultHookTimeout(h.Snake)
+	}
+	return codexHookIdentity{EventName: h.Snake, Matcher: h.Matcher, Command: h.Command, Timeout: timeout}
+}
+
+// CodexHookTrustArgs is the session overrides that let Codex run the hooks
+// ynh wrote to runDir/.codex/hooks.json: the run directory as a trusted
+// project, and each hook's current hash as trusted. It returns nil when there
+// is no hook file or it holds no hook. An unreadable or unexpected hook file
+// also yields nil: the hooks are then skipped, as before.
+func CodexHookTrustArgs(runDir string) []string {
+	hooks, dir, file := readCodexHooks(runDir)
+	var state []string
+	for _, h := range hooks {
+		key := fmt.Sprintf("%s:%s:%d:%d", file, h.Snake, h.Group, h.Index)
+		state = append(state, tomlString(key)+"={trusted_hash="+tomlString(h.identity().hash())+"}")
 	}
 	if len(state) == 0 {
 		return nil
@@ -159,4 +179,56 @@ func CodexHookTrustArgs(runDir string) []string {
 		"-c", "projects={" + tomlString(dir) + "={trust_level=\"trusted\"}}",
 		"-c", "hooks.state={" + strings.Join(state, ",") + "}",
 	}
+}
+
+// codexSessionFlagsSource is the source Codex names for hooks given as -c
+// overrides, in a hook's key.
+const codexSessionFlagsSource = "/<session-flags>/config.toml"
+
+// CodexSessionHookArgs is the overrides that give a Codex worker the hooks
+// ynh wrote to runDir/.codex/hooks.json, and trust them. A worker runs in the
+// task's worktree, not in runDir, so Codex never loads runDir's project layer;
+// the hooks are declared inline as -c overrides instead (as the worker's agents
+// and MCP servers are), under the key Codex gives a session-flags hook, with
+// each one's current hash trusted. It returns nil when there is no hook.
+func CodexSessionHookArgs(runDir string) []string {
+	hooks, _, _ := readCodexHooks(runDir)
+	if len(hooks) == 0 {
+		return nil
+	}
+	// Hooks of an event keep their file order, and an event's groups and
+	// handlers are indexed from zero, as Codex keys them.
+	var args, state []string
+	for i := 0; i < len(hooks); {
+		j := i
+		for j < len(hooks) && hooks[j].Event == hooks[i].Event {
+			j++
+		}
+		var groups []string
+		for k := i; k < j; {
+			l := k
+			for l < j && hooks[l].Group == hooks[k].Group {
+				l++
+			}
+			var handlers []string
+			for hi, h := range hooks[k:l] {
+				key := fmt.Sprintf("%s:%s:%d:%d", codexSessionFlagsSource, h.Snake, len(groups), hi)
+				state = append(state, tomlString(key)+"={trusted_hash="+tomlString(h.identity().hash())+"}")
+				d := `{type="command",command=` + tomlString(h.Command)
+				if h.Timeout != 0 {
+					d += ",timeout=" + strconv.Itoa(h.Timeout)
+				}
+				handlers = append(handlers, d+"}")
+			}
+			g := "{"
+			if hooks[k].Matcher != "" {
+				g += "matcher=" + tomlString(hooks[k].Matcher) + ","
+			}
+			groups = append(groups, g+"hooks=["+strings.Join(handlers, ",")+"]}")
+			k = l
+		}
+		args = append(args, "-c", "hooks."+hooks[i].Event+"=["+strings.Join(groups, ",")+"]")
+		i = j
+	}
+	return append(args, "-c", "hooks.state={"+strings.Join(state, ",")+"}")
 }

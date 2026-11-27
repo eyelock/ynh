@@ -252,7 +252,10 @@
       "stability": "development",
       "examples": [
         "wheelhouse:ynw"
-      ]
+      ],
+      "annotations": {
+        "ynr.cardinality": 100
+      }
     }
   ],
   "standard_attributes": [

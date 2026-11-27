@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 const codexApprovalKey = "default_tools_approval_mode"
@@ -23,11 +25,11 @@ const codexApprovalKey = "default_tools_approval_mode"
 // policy) and leaves a server alone whose default_tools_approval_mode the
 // user's config.toml or the caller's own -c already sets, so their choice is
 // merged with, not replaced.
-func (c *Codex) ApproveMCPTools(runDir string, callerArgs []string, warn io.Writer) []string {
-	return codexApproveMCPTools(runDir, callerArgs, codexUserConfigPath(), warn)
+func (c *Codex) ApproveMCPTools(runDir string, callerArgs []string, w io.Writer) []string {
+	return codexApproveMCPTools(runDir, callerArgs, codexUserConfigPath(), w)
 }
 
-func codexApproveMCPTools(runDir string, callerArgs []string, userConfig string, warn io.Writer) []string {
+func codexApproveMCPTools(runDir string, callerArgs []string, userConfig string, w io.Writer) []string {
 	servers := CodexMCP(runDir).Servers
 	if len(servers) == 0 {
 		return nil
@@ -42,8 +44,10 @@ func codexApproveMCPTools(runDir string, callerArgs []string, userConfig string,
 	for _, name := range servers {
 		key := "mcp_servers." + name + "." + codexApprovalKey
 		if codexCallerSetsKey(callerArgs, key) || codexConfigSetsApproval(cfg, name) {
-			if warn != nil {
-				_, _ = fmt.Fprintf(warn, "ynh: MCP server %q: keeping your %s, so ynh does not approve its tools\n", name, codexApprovalKey)
+			if w != nil {
+				// No fix: keeping the user's own setting is the intended behaviour; the
+				// warning only says the one-shot run may still refuse the tool call.
+				warn.Print(w, warn.Warning{Message: fmt.Sprintf("MCP server %q: keeping your %s, so ynh does not approve its tools", name, codexApprovalKey)})
 			}
 			continue
 		}

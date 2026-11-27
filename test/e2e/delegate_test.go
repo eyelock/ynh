@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -28,8 +29,10 @@ type manifestSourceJSON struct {
 	Pick  []string `json:"pick,omitempty"`
 }
 
-// TestDelegate_AddRemove walks a delegate through add → resolved → remove
-// and asserts the manifest and installed.json both reflect each step.
+// TestDelegate_AddRemove pins `ynh delegate remove` on a delegate entry
+// seeded by hand (`delegate add` refuses a local URL, ynh #886): ynh info
+// reads the seeded entry from the source manifest, and remove deletes exactly
+// that entry from it.
 func TestDelegate_AddRemove(t *testing.T) {
 	s := newSandbox(t)
 	repo := newFixtureRepo(t)
@@ -37,23 +40,16 @@ func TestDelegate_AddRemove(t *testing.T) {
 	s.mustRunYnh(t, "install", sourceDir)
 
 	delegateURL := repo.URL
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
-		"--path", "e2e-fixtures/fork-source",
-		"--ref", repo.SHA,
-	)
+	seedDelegate(t, sourceDir, repo.URL, "e2e-fixtures/fork-source", repo.SHA)
 
-	mf := readManifest(t, sourceDir)
-	if len(mf.DelegatesTo) != 1 {
-		t.Fatalf("expected 1 delegate after add, got %d: %+v", len(mf.DelegatesTo), mf.DelegatesTo)
+	infoOut, _ := s.mustRunYnh(t, "info", "local/minimal", "--format", "json")
+	if !strings.Contains(infoOut, delegateURL) {
+		t.Fatalf("ynh info did not read the seeded delegate from the source manifest.\ndelegateURL=%q\noutput:\n%s", delegateURL, infoOut)
 	}
-	d := mf.DelegatesTo[0]
-	assertEqual(t, "delegates_to[0].git", d.Git, delegateURL)
-	assertEqual(t, "delegates_to[0].path", d.Path, "e2e-fixtures/fork-source")
-	assertEqual(t, "delegates_to[0].ref", d.Ref, repo.SHA)
 
 	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
 
-	mf = readManifest(t, sourceDir)
+	mf := readManifest(t, sourceDir)
 	if len(mf.DelegatesTo) != 0 {
 		t.Errorf("expected 0 delegates after remove, got %d", len(mf.DelegatesTo))
 	}
@@ -133,10 +129,11 @@ func TestDelegate_Update(t *testing.T) {
 	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	s.mustRunYnh(t, "install", sourceDir)
 
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", repo.URL,
-		"--path", "e2e-fixtures/fork-source",
-		"--ref", repo.SHA,
-	)
+	seedDelegate(t, sourceDir, repo.URL, "e2e-fixtures/fork-source", repo.SHA)
+
+	// A delegate is a native subagent, and so gets an agent file, only when
+	// its transport is native; the default is a2a, its own ynh session.
+	setManifestTransport(t, sourceDir, "native")
 
 	const updated = "E2E fixture: fork-source as of the second commit."
 	next := repo.commit(t, "fork-source/.agents/harness/plugin.json",
@@ -155,7 +152,7 @@ func TestDelegate_Update(t *testing.T) {
 	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/fork-source")
 
 	agent := assembledDelegateAgent(t, s, "fork-source")
-	if !strings.Contains(agent, "description: "+updated) {
+	if !strings.Contains(agent, "description: "+strconv.Quote(updated)) {
 		t.Errorf("delegate agent was not assembled from the updated commit %s:\n%s", next, agent)
 	}
 }
@@ -219,8 +216,12 @@ func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
 }
 
 // TestDelegate_LocalInstall_WritesToSource is the delegate counterpart to
-// TestInclude_LocalInstall_WritesToSource. Pins the same read/write
-// symmetry — the original bug surfaced through delegates too.
+// TestInclude_LocalInstall_WritesToSource, for the half a delegate still
+// reaches from the CLI. The entry is seeded by hand (`delegate add` refuses a
+// local URL, ynh #886), so what is pinned is the read path and `delegate
+// remove`'s write path: ynh info reads the seeded entry from the user's source
+// tree, no copy dir is made, remove edits the source manifest, and info then
+// stops surfacing the entry.
 func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 	s := newSandbox(t)
 	repo := newFixtureRepo(t)
@@ -230,20 +231,11 @@ func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 	s.mustRunYnh(t, "install", sourceDir)
 
 	delegateURL := repo.URL
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
-		"--path", "e2e-fixtures/fork-source",
-		"--ref", repo.SHA,
-	)
-
-	srcMf := readManifest(t, sourceDir)
-	if len(srcMf.DelegatesTo) != 1 {
-		t.Fatalf("source dir: expected 1 delegate after add, got %d", len(srcMf.DelegatesTo))
-	}
-	assertEqual(t, "source delegates_to[0].git", srcMf.DelegatesTo[0].Git, delegateURL)
+	seedDelegate(t, sourceDir, repo.URL, "e2e-fixtures/fork-source", repo.SHA)
 
 	infoOut, _ := s.mustRunYnh(t, "info", "local/minimal", "--format", "json")
 	if !strings.Contains(infoOut, delegateURL) {
-		t.Errorf("ynh info did not surface the new delegate — write/read split has regressed.\ndelegateURL=%q\noutput:\n%s", delegateURL, infoOut)
+		t.Errorf("ynh info did not surface the seeded delegate — read path no longer follows the source manifest.\ndelegateURL=%q\noutput:\n%s", delegateURL, infoOut)
 	}
 
 	if _, err := os.Stat(copyDir); !os.IsNotExist(err) {
@@ -251,7 +243,7 @@ func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 	}
 
 	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
-	srcMf = readManifest(t, sourceDir)
+	srcMf := readManifest(t, sourceDir)
 	if len(srcMf.DelegatesTo) != 0 {
 		t.Errorf("source dir: expected 0 delegates after remove, got %d", len(srcMf.DelegatesTo))
 	}
@@ -300,6 +292,32 @@ func TestLocalInstall_PluginEditVisibleToInfo(t *testing.T) {
 	}
 }
 
+// seedDelegate writes a delegate entry into the harness's plugin.json by hand,
+// as docs/how-to/add-a-delegate Route 1 says. `ynh delegate add` refuses a
+// local path or file:// URL (delegates are remote, ynh #886), and these tests
+// serve their delegate from a local repository, so the entry is written
+// directly; add's own refusal is covered by TestCmdDelegateAdd_RefusesLocalPath.
+func seedDelegate(t *testing.T, harnessDir, git, path, ref string) {
+	t.Helper()
+	file := manifestFile(harnessDir, "plugin.json")
+	body, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("reading plugin.json: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
+	}
+	raw["delegates_to"], _ = json.Marshal([]manifestSourceJSON{{Git: git, Path: path, Ref: ref}})
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, append(out, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func readManifest(t *testing.T, harnessDir string) pluginManifest {
 	t.Helper()
 	body, err := os.ReadFile(manifestFile(harnessDir, "plugin.json"))
@@ -311,6 +329,29 @@ func readManifest(t *testing.T, harnessDir string) pluginManifest {
 		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
 	}
 	return mf
+}
+
+// setManifestTransport sets the harness's default delegate transport in its
+// source plugin.json, keeping every other field.
+func setManifestTransport(t *testing.T, harnessDir, transport string) {
+	t.Helper()
+	path := manifestFile(harnessDir, "plugin.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading plugin.json: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
+	}
+	raw["transport"], _ = json.Marshal(transport)
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(out, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // assembledDelegateAgent assembles local/minimal for Claude and returns the

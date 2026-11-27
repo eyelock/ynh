@@ -1,5 +1,5 @@
 {
-  "capabilities": "0.10.0",
+  "capabilities": "0.11.0",
   "schema_version": 3,
   "ynh_version": "0.3.1",
   "harnesses": [
@@ -22,7 +22,7 @@
         {"git": "", "local": "extras", "is_pinned": false}
       ],
       "delegates_to": [
-        {"git": "github.com/eyelock/reviewer", "is_pinned": false, "path": "harnesses/strict", "profile": "strict"}
+        {"git": "github.com/eyelock/reviewer", "is_pinned": false, "path": "harnesses/strict", "profile": "strict", "transport": "a2a", "transport_from": "default"}
       ]
     }
   ]

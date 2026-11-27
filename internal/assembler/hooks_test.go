@@ -12,6 +12,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // sessionHookHarness writes a harness directory with one executable hook
@@ -239,9 +240,10 @@ func TestWriteSessionHooks_Warnings(t *testing.T) {
 				"hook script ./../" + filepath.Base(outside) + " is outside the harness, so the session cannot carry it",
 			}
 			sort.Strings(wantWarnings)
-			sort.Strings(warnings)
-			if !slices.Equal(warnings, wantWarnings) {
-				t.Errorf("warnings = %q, want %q", warnings, wantWarnings)
+			gotWarnings := warn.Messages(warnings)
+			sort.Strings(gotWarnings)
+			if !slices.Equal(gotWarnings, wantWarnings) {
+				t.Errorf("warnings = %q, want %q", gotWarnings, wantWarnings)
 			}
 			for _, f := range filesUnder(t, runDir) {
 				if strings.Contains(f, "scripts/") || strings.Contains(f, "escape") {
@@ -277,7 +279,7 @@ func TestCopyHookScripts_NoWriteThroughSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "./scripts/guard.sh") {
+	if len(warnings) != 1 || !strings.Contains(warnings[0].Message, "./scripts/guard.sh") {
 		t.Errorf("warnings = %q, want one naming ./scripts/guard.sh", warnings)
 	}
 	data, err := os.ReadFile(victim)

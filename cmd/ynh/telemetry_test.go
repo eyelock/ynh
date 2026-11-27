@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/agent"
 	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/telemetry"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // ynrRegistry is the shape ynr reads from `<tool> telemetry registry --format
@@ -89,7 +90,8 @@ func TestTelemetryRegistryJSON(t *testing.T) {
 	for _, e := range r.Events {
 		events = append(events, e.Name)
 	}
-	if !slices.Equal(spans, []string{telemetry.SpanRun, telemetry.SpanCheck}) || !slices.Equal(events, []string{telemetry.EventRunStarted, telemetry.EventRunFinished}) {
+	if !slices.Equal(spans, []string{telemetry.SpanRun, telemetry.SpanSession, telemetry.SpanCheck}) ||
+		!slices.Equal(events, []string{telemetry.EventRunStarted, telemetry.EventRunFinished, telemetry.EventSessionStarted, telemetry.EventSessionFinished}) {
 		t.Errorf("spans %v, events %v", spans, events)
 	}
 }
@@ -135,6 +137,17 @@ func TestRunVocabularyIsRegistered(t *testing.T) {
 	for code, word := range runOutcomes {
 		if !slices.Contains(members[string(telemetry.AttrRunOutcome)], word) {
 			t.Errorf("exit %d's outcome %q is not a member of ynh.run.outcome", code, word)
+		}
+	}
+	for _, o := range []string{telemetry.SessionOutcomeExited, telemetry.SessionOutcomeFailed, telemetry.SessionOutcomeSignalled, telemetry.SessionOutcomeRefused} {
+		if !slices.Contains(members[string(telemetry.AttrSessionOutcome)], o) {
+			t.Errorf("session outcome %q is not a member of ynh.session.outcome", o)
+		}
+	}
+	// Every vendor ynh can launch is in the session's vendor enum.
+	for _, v := range vendor.Available() {
+		if !slices.Contains(members[string(telemetry.AttrSessionVendor)], v) {
+			t.Errorf("vendor %q is not a member of ynh.session.vendor", v)
 		}
 	}
 	for _, b := range []agent.BudgetType{agent.BudgetTurns, agent.BudgetTokens, agent.BudgetWallClock} {

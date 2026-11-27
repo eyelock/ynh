@@ -845,6 +845,23 @@ func TestResolveProfile_AppendsIncludes(t *testing.T) {
 	}
 }
 
+func TestIsShortSHARef(t *testing.T) {
+	cases := map[string]bool{
+		"":        false,
+		"main":    false,
+		"abc123":  false, // 6 chars
+		"abc1234": true,
+		"abc1234567890abcdef1234567890abcdef1234":  true,  // 39 chars
+		"abc1234567890abcdef1234567890abcdef12345": false, // 40 chars: full
+		"ABC1234": false,
+	}
+	for ref, want := range cases {
+		if got := IsShortSHARef(ref); got != want {
+			t.Errorf("IsShortSHARef(%q) = %v, want %v", ref, got, want)
+		}
+	}
+}
+
 func TestIsPinnedRef(t *testing.T) {
 	cases := []struct {
 		ref  string
@@ -855,7 +872,7 @@ func TestIsPinnedRef(t *testing.T) {
 		{"HEAD", false},
 		{"v1.2.3", false},
 		{"release-1.0", false},
-		{"abc1234", true}, // 7-char short SHA
+		{"abc1234", false}, // 7-char short SHA: not fetchable, so not pinned
 		{"abc1234567890abcdef1234567890abcdef12345", true}, // 40-char full SHA
 		{"abc123", false},  // 6 chars — too short
 		{"ABC1234", false}, // uppercase rejected (git emits lowercase)
@@ -969,6 +986,22 @@ func TestLoadDir_MCPManualApproval(t *testing.T) {
 		}
 		if p.MCPManualApproval != declared {
 			t.Errorf("MCPManualApproval = %v, want %v", p.MCPManualApproval, declared)
+		}
+	}
+}
+
+func TestLoadDir_OnLive(t *testing.T) {
+	for _, declared := range []string{"", "refuse", "allow"} {
+		dir := t.TempDir()
+		if err := plugin.SavePluginJSON(dir, &plugin.HarnessJSON{Name: "ol", Version: "0.1.0", OnLive: declared}); err != nil {
+			t.Fatal(err)
+		}
+		p, err := LoadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.OnLive != declared {
+			t.Errorf("OnLive = %q, want %q", p.OnLive, declared)
 		}
 	}
 }

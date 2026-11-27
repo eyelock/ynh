@@ -1,0 +1,36 @@
+{
+  "sessions": [
+    {
+      "session_id": "a1b2c3d4",
+      "harness": "local/demo",
+      "vendor": "claude",
+      "vendor_pid": 4243,
+      "wrapper_pid": 4242,
+      "start_time": 1789000000,
+      "started_at": "2026-11-17T09:00:00Z",
+      "cwd": "/Users/example/projects/app",
+      "mode": "interactive",
+      "address": "ynh:a1b2c3d4",
+      "state": "alive",
+      "last_beat": "2026-11-17T09:05:00Z",
+      "ended": false,
+      "status": "live"
+    },
+    {
+      "session_id": "e5f6a7b8",
+      "harness": "local/helper",
+      "vendor": "claude",
+      "wrapper_pid": 4300,
+      "start_time": 1789000100,
+      "started_at": "2026-11-17T09:01:00Z",
+      "cwd": "/Users/example/projects/app",
+      "mode": "delegate",
+      "owner_session": "a1b2c3d4",
+      "address": "ynh:e5f6a7b8",
+      "state": "unknown",
+      "last_beat": "2026-11-17T09:05:00Z",
+      "ended": false,
+      "status": "live"
+    }
+  ]
+}

@@ -44,6 +44,7 @@ func formatErrorCases() []formatErrorCase {
 		{name: "paths", run: cmdPathsTo},
 		{name: "telemetry registry", run: cmdTelemetryTo, prefix: []string{"registry"}},
 		{name: "status", run: cmdStatusTo},
+		{name: "ps", run: cmdPsTo},
 		{name: "search", run: cmdSearchTo, prefix: []string{"term"}},
 		{name: "registry list", run: cmdRegistryTo, prefix: []string{"list"}},
 		{name: "backend list", run: cmdBackendTo, prefix: []string{"list"}},

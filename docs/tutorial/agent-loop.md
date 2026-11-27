@@ -46,6 +46,18 @@ ynh install ./
 A **focus** is a named prompt. Declaring the task in the manifest rather than
 passing it every time is what makes a run reproducible.
 
+The `lint` sensor runs `sh check.sh` on your machine, so `ynh check` and
+`ynh agent run` refuse this harness until you accept it: the
+[trust gate](../trust.md#the-gate) refuses an installed
+harness whose commands you have not reviewed. Review, then accept:
+
+```bash
+ynh trust show local/demo
+ynh trust accept local/demo
+```
+
+Expected output of the accept: `Accepted local/demo (accept): 1 command(s), sha256:...`. It is the same review and acceptance you did in [Your First Trusted Harness](first-trusted-harness.md).
+
 Confirm the gate fails before you start — a loop with nothing to fix teaches
 nothing:
 
@@ -66,9 +78,16 @@ Exit code `1`.
 
 ## Run the loop
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
+The worker has to be allowed to edit `notes.txt`. ynh passes no permission flag
+of its own, and a one-shot Claude Code session asks before each edit, with nobody
+there to answer, so without one the write is declined and the loop runs to its
+cap (see [The controls a run does not have](#the-controls-a-run-does-not-have)).
+`--auto-approve edits` allows file edits, and only those, for this one run. Here
+it edits a scratch folder you just made:
+
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --permission-mode acceptEdits --session-id ...`
 ```bash
-ynh agent run --harness local/demo --focus tidy --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
+ynh agent run --harness local/demo --focus tidy --auto-approve edits --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
 echo "exit=$?"
 ```
 
@@ -340,7 +359,7 @@ That folder is the session directory. Here it is `/tmp/loop-demo`, because
 
 Resume by pointing at the directory that holds it:
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --resume ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --resume ...`
 ```bash
 ynh agent run --resume /tmp/loop-demo
 ```
@@ -367,8 +386,9 @@ Error: no checkpoint found in "deadbeef": open deadbeef/checkpoint.json: no such
 `ynh agent run` starts a worker. It does not contain one.
 
 By default the worker gets whatever permissions your vendor CLI and the project
-grant it, and ynh passes no permission flag. On a machine where the CLI denies
-edits, the loop runs to its cap with the sensor failing identically every turn:
+grant it, and ynh passes no permission flag. Where the CLI denies edits, as a
+one-shot Claude Code session does unless your own settings allow them, the loop
+runs to its cap with the sensor failing identically every turn:
 the trajectory shows the agent reporting a blocked write, and the exit code is
 `10`, not `0`.
 

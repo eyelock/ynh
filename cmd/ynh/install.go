@@ -19,11 +19,12 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/sources"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdInstall(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow] [--trust]")
 	}
 
 	if err := config.EnsureDirs(); err != nil {
@@ -32,11 +33,13 @@ func cmdInstall(args []string) error {
 
 	// Parse --path and --ref flags from args
 	var pathFlag, refFlag string
-	var allowShadow bool
+	var allowShadow, trustFlag bool
 	var remaining []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--allow-shadow" {
 			allowShadow = true
+		} else if args[i] == "--trust" {
+			trustFlag = true
 		} else if args[i] == "--path" && i+1 < len(args) {
 			pathFlag = args[i+1]
 			i++ // skip value
@@ -48,18 +51,22 @@ func cmdInstall(args []string) error {
 		}
 	}
 	if len(remaining) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>] [--allow-shadow] [--trust]")
 	}
 
 	source := remaining[0]
 	originalSource := source
 
 	// Determine source type using disambiguation rules:
-	// 1. Starts with . or / → local path
+	// 1. Starts with . or /, or is an existing relative path such as
+	//    harnesses/x (isLocalPath stats it) → local path
 	// 2. Starts with git@ → Git SSH URL
 	// 3. Starts with https:// or http:// → Git HTTPS URL
 	// 4. Contains @ (not matching 2/3) → registry lookup name@registry-name
-	// 5. Contains / → Git URL shorthand
+	// 5. Contains / → Git URL shorthand when host-qualified; a host-less
+	//    shorthand that isn't on disk is reported as a missing local path
+	//    (use ./ or a host-qualified form, or git@alias:org/repo.git for an
+	//    SSH alias)
 	// 6. Plain word → registry search
 	var srcDir string
 
@@ -207,6 +214,29 @@ func cmdInstall(args []string) error {
 	// ignore, once, here, rather than on every later load.
 	for _, d := range p.Diagnostics {
 		fmt.Printf("  note: %s\n", d)
+	}
+
+	// --trust records the acceptance as well as installing, so it refuses, with
+	// nothing written, unless what runs is pinned: a git or registry install at
+	// a full SHA, and every remote include that brings commands at one too
+	// (decisions 4b and 4c).
+	if trustFlag {
+		isLocalInstall := resolved.sourceType == "local" || resolved.sourceType == "source"
+		if err := checkInstallTrust(p, cfg, isLocalInstall, resolved.ref); err != nil {
+			return err
+		}
+	}
+
+	// A delegate set to transport: native needs a vendor with subagents; the
+	// vendor checked is the one a plain run would use. This runs before
+	// anything is removed or written, so a refused install leaves an existing
+	// install exactly as it was and a fresh one not installed.
+	installVendor := p.DefaultVendor
+	if installVendor == "" {
+		installVendor = cfg.DefaultVendor
+	}
+	if err := p.CheckDelegateTransports(installVendor); err != nil {
+		return err
 	}
 
 	// Reserved name: "ynh" can be installed but gets no launcher script
@@ -450,6 +480,12 @@ func cmdInstall(args []string) error {
 		fmt.Printf("  Vendor:   %s\n", p.DefaultVendor)
 	}
 
+	if trustFlag {
+		if err := acceptInstalled(canonID, os.Stdout); err != nil {
+			return fmt.Errorf("installed %q, but --trust could not record its acceptance: %w", p.Name, err)
+		}
+	}
+
 	return nil
 }
 
@@ -511,7 +547,8 @@ func repointLauncher(bareName string, survivors []string) string {
 		}
 	}
 	if err := generateLauncher(bareName, survivors[0]); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not regenerate launcher for %s: %v\n", survivors[0], err)
+		// No Fix: the cause is the filesystem error, and no ynh command regenerates a launcher alone.
+		warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("could not regenerate launcher for %s: %v", survivors[0], err)})
 		return ""
 	}
 	return fmt.Sprintf("Launcher repointed to surviving install %s", survivors[0])

@@ -55,23 +55,30 @@ func TestBuildClaudeStreamArgs_NoModelWhenEmpty(t *testing.T) {
 }
 
 func TestBuildClaudeStreamArgs_ConfigPath(t *testing.T) {
-	// ConfigPath with no readable CLAUDE.md — should still add --plugin-dir and --add-dir.
+	// ConfigPath with no readable CLAUDE.md — should still add --plugin-dir and a read rule, never --add-dir (ynh #898).
 	args := buildClaudeStreamArgs(StartOptions{ConfigPath: "/nonexistent/path"})
 	hasPluginDir := false
 	hasAddDir := false
-	for i, a := range args {
-		if a == "--plugin-dir" && i+1 < len(args) {
+	hasReadRule := false
+	for _, a := range args {
+		if a == "--plugin-dir" {
 			hasPluginDir = true
 		}
-		if a == "--add-dir" && i+1 < len(args) {
+		if a == "--add-dir" {
 			hasAddDir = true
+		}
+		if a == "--allowedTools=Read(//nonexistent/path/**)" {
+			hasReadRule = true
 		}
 	}
 	if !hasPluginDir {
 		t.Error("expected --plugin-dir with ConfigPath set")
 	}
-	if !hasAddDir {
-		t.Error("expected --add-dir with ConfigPath set")
+	if hasAddDir {
+		t.Error("--add-dir would make Claude Code ask to trust the run dir")
+	}
+	if !hasReadRule {
+		t.Error("expected a read rule for ConfigPath")
 	}
 }
 

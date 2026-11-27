@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // ClaudeBackend implements WorkerBackend for Claude Code CLI.
@@ -74,9 +75,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 			}
 			return "", false
 		})
-		for _, w := range warnings {
-			_, _ = fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, warnings...)
 		cmd.Env = append(cmd.Env, extra...)
 	}
 	tail := &stderrTail{}
@@ -164,7 +163,8 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 
 	if opts.ConfigPath != "" {
 		pluginDir := filepath.Join(opts.ConfigPath, (&vendor.Claude{}).ConfigDir())
-		args = append(args, "--plugin-dir", pluginDir, "--add-dir", opts.ConfigPath)
+		args = append(args, "--plugin-dir", pluginDir)
+		args = append(args, vendor.ClaudeRunDirReadArgs(opts.ConfigPath)...)
 
 		instructionsPath := filepath.Join(opts.ConfigPath, "CLAUDE.md")
 		if data, err := os.ReadFile(instructionsPath); err == nil && len(data) > 0 {

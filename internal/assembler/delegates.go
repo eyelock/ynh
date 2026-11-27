@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
@@ -16,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // DelegateMCPCarrier is implemented by a vendor adapter whose subagent
@@ -27,8 +29,10 @@ import (
 // Claude Code ignores that field for a plugin's subagents, though, and a run
 // loads the assembled directory as a plugin. So a run hands the subagents
 // that declare servers to the CLI directly (DelegateLaunchFile), where the
-// field is honoured. The agent file keeps the field too: it is what an
-// exported agent carries, and what works once copied into .claude/agents/.
+// field is honoured. A run writes no agent file for such a subagent, so the
+// model is offered it once. An export (Launch off) keeps the agent file and the
+// field: it is what an exported agent carries, and what works once copied into
+// .claude/agents/.
 type DelegateMCPCarrier interface {
 	// DelegateMCPFrontmatter returns the frontmatter line (without a
 	// trailing newline) that gives a subagent the servers.
@@ -90,13 +94,19 @@ type DelegateOptions struct {
 	// delegate that reaches it is skipped, as the root is no agent of its
 	// own (see resolver.FlattenDelegates).
 	RootName string
+	// RootTransport is the harness's own transport default, which a
+	// delegates_to entry without one of its own takes ("" means a2a).
+	RootTransport string
 }
 
 // DelegateMCPWarning is the warning for a delegate whose MCP servers a
 // vendor's subagents cannot carry.
-func DelegateMCPWarning(delegate string, servers []string, vendorName string) string {
-	return fmt.Sprintf("delegate %s declares MCP servers (%s) that %s subagents cannot carry; they are not available to it",
-		delegate, strings.Join(servers, ", "), vendorName)
+//
+// No fix: the vendor's subagents cannot carry MCP servers, so no edit makes
+// them available there.
+func DelegateMCPWarning(delegate string, servers []string, vendorName string) warn.Warning {
+	return warn.Warning{Message: fmt.Sprintf("delegate %s declares MCP servers (%s) that %s subagents cannot carry; they are not available to it",
+		delegate, strings.Join(servers, ", "), vendorName)}
 }
 
 // DelegateServers is the MCP servers a delegate carries.
@@ -242,7 +252,7 @@ func writeEnvFile(workDir, delegate string, secrets map[string]string) (string, 
 //
 // The returned list names every server each delegate declares, for preview.
 func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate, harnessDir string, opts DelegateOptions) ([]DelegateMCP, error) {
-	if len(delegates) == 0 {
+	if !anyNativeEntry(delegates, opts.RootTransport) {
 		return nil, nil
 	}
 
@@ -257,12 +267,13 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		return nil, err
 	}
 
-	warn := opts.Warn
-	if warn == nil {
-		warn = os.Stderr
+	warnW := opts.Warn
+	if warnW == nil {
+		warnW = os.Stderr
 	}
 	carrier, _ := adapter.(DelegateMCPCarrier)
 	encoder, _ := adapter.(DelegateAgentEncoder)
+	transformer, _ := adapter.(ArtifactTransformer)
 	vendorName := configDir
 	if n, ok := adapter.(interface{ DisplayName() string }); ok {
 		vendorName = n.DisplayName()
@@ -270,16 +281,22 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 
 	var declared []DelegateMCP
 	var launch []vendor.DelegateLaunchAgent
-	flat, err := resolver.FlattenDelegates(delegates, harnessDir, opts.RootName, func(gs harness.GitSource, dir string) (string, error) {
+	// Only a native delegate is a subagent of this session. An a2a delegate
+	// (the default) is its own ynh session, so it gets no agent file and no
+	// launch entry, and its own delegates are its session's business.
+	flat, _, err := resolver.FlattenDelegatesBy(delegates, harnessDir, opts.RootName, opts.RootTransport, true, func(gs harness.GitSource, dir string) (string, error) {
 		base, _, err := resolver.ResolveSourceForRun(gs, dir)
 		return base, err
 	})
 	if err != nil {
 		return nil, err
 	}
+	if len(flat) == 0 {
+		return nil, nil
+	}
 	for _, fd := range flat {
 		for _, n := range fd.Notes {
-			_, _ = fmt.Fprintf(warn, "  note: %s\n", n)
+			_, _ = fmt.Fprintf(warnW, "  note: %s\n", n)
 		}
 		basePath, delHarness, focus := fd.BasePath, fd.Harness, fd.Focus
 		included, _, err := resolver.ResolveSelectedFromCache(delHarness, opts.Config, harness.Selection{})
@@ -293,6 +310,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		servers := composed.Servers
 
 		mcpLine := ""
+		offeredByLaunch := false
 		if len(servers) > 0 {
 			names := slices.Sorted(maps.Keys(servers))
 			for _, s := range composed.Sources {
@@ -316,15 +334,32 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 						}
 					}
 					launch = append(launch, agent)
+					offeredByLaunch = true
 				}
 			} else {
-				_, _ = fmt.Fprintf(warn, "  warning: %s\n", DelegateMCPWarning(delHarness.Name, names, vendorName))
+				warn.Print(warnW, DelegateMCPWarning(delHarness.Name, names, vendorName))
 			}
+		}
+
+		// A delegate handed to the CLI directly is offered once, by that
+		// launch entry. A copy in the run directory would load as a plugin
+		// agent (<plugin>:<name>) as well, without the MCP servers, which
+		// Claude Code ignores there (ynh #1022).
+		if offeredByLaunch {
+			continue
 		}
 
 		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, focus, fd.Declared, mcpLine))
 		if encoder != nil {
 			if fileName, agentContent, err = encoder.DelegateAgentFile(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included, focus, fd.Declared)); err != nil {
+				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
+			}
+		}
+		// A vendor that rewrites a harness's own agents so its CLI loads them
+		// (OpenCode: a mode that lets the task tool run one) rewrites a
+		// delegate's the same way, as it is staged by the same rule.
+		if encoder == nil && transformer != nil {
+			if fileName, agentContent, err = transformer.TransformArtifact("agents", fileName, agentContent); err != nil {
 				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
 			}
 		}
@@ -347,6 +382,19 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	return declared, nil
 }
 
+// anyNativeEntry reports whether one of the root's delegates_to entries runs
+// as a native subagent. An a2a entry's own delegates are never reached from
+// here, so with none native there is nothing to assemble.
+func anyNativeEntry(entries []harness.Delegate, rootTransport string) bool {
+	h := &harness.Harness{Transport: rootTransport}
+	for _, e := range entries {
+		if h.TransportOf(e) == harness.TransportNative {
+			return true
+		}
+	}
+	return false
+}
+
 func delegateDescription(p *harness.Harness) string {
 	if p.Description != "" {
 		return p.Description
@@ -364,11 +412,11 @@ func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver
 	var b strings.Builder
 
 	b.WriteString("---\n")
-	fmt.Fprintf(&b, "name: %s\n", p.Name)
+	fmt.Fprintf(&b, "name: %s\n", strconv.Quote(p.Name))
 	if p.Description != "" {
-		fmt.Fprintf(&b, "description: %s\n", p.Description)
+		fmt.Fprintf(&b, "description: %s\n", strconv.Quote(p.Description))
 	} else {
-		fmt.Fprintf(&b, "description: Delegate harness %q.\n", p.Name)
+		fmt.Fprintf(&b, "description: %s\n", strconv.Quote(fmt.Sprintf("Delegate harness %q.", p.Name)))
 	}
 	if mcpLine != "" {
 		b.WriteString(mcpLine)

@@ -23,7 +23,7 @@ func calibrationHarness(t *testing.T, sensors string) string {
 	t.Setenv("YNH_AGENT_SESSION", "")
 
 	manifest := `{"name":"cal","version":"0.1.0","default_vendor":"claude","profiles":{"factory":{"sensor_overrides":{}}},"sensors":` + sensors + `}`
-	installListTestHarness(t, home, "cal", manifest)
+	installTrustedTestHarness(t, home, "cal", manifest)
 
 	// Fixtures live inside the installed harness, which is what a reference
 	// path is relative to. They are also outside the agent's worktree — a

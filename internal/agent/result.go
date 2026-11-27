@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"sort"
@@ -28,8 +29,11 @@ type RunResult struct {
 
 	// ExitCode mirrors the process exit code, so a consumer reading the JSON
 	// and a consumer branching on $? never disagree.
-	ExitCode  int    `json:"exit_code"`
-	Reason    string `json:"reason,omitempty"`
+	ExitCode int    `json:"exit_code"`
+	Reason   string `json:"reason,omitempty"`
+	// ErrorCode is the structured code of a refusal: "untrusted" when the
+	// trust gate refused the harness. Absent for every other end.
+	ErrorCode string `json:"error_code,omitempty"`
 	Converged bool   `json:"converged"`
 
 	SessionID  string `json:"session_id,omitempty"`
@@ -48,6 +52,12 @@ type RunResult struct {
 	// AutoApprove is the --auto-approve level the worker ran with. Absent
 	// means none.
 	AutoApprove string `json:"auto_approve,omitempty"`
+	// Sandbox is the sandbox the worker ran under, "srt"; absent means none.
+	Sandbox string `json:"sandbox,omitempty"`
+	// SandboxDenyRead is the paths the worker was denied reading under
+	// --sandbox srt (ynh's credential defaults, adjusted by the srt_deny_read
+	// and srt_allow_read config keys). Absent without --sandbox srt.
+	SandboxDenyRead []string `json:"sandbox_deny_read,omitempty"`
 	// Effort is the reasoning effort the worker reported it ran with. Absent
 	// means the backend did not report one, not that none was in force; it is
 	// never inferred from the model name.
@@ -93,6 +103,9 @@ type RunResult struct {
 	planIterations *int
 }
 
+// untrustedCode is the error_code of a trust-gate refusal.
+const untrustedCode = "untrusted"
+
 // finalise fills the fields that are only knowable once the run has ended.
 //
 // It runs deferred, so it covers every exit path including the ones that
@@ -108,6 +121,7 @@ func (r *RunResult) finalise(err error) {
 		if errors.As(err, &exitErr) {
 			r.ExitCode = exitErr.Code
 			r.Reason = exitErr.Message
+			r.ErrorCode = exitErr.ErrorCode
 		} else {
 			// A plain error is a refusal: the loop stopped before a worker
 			// started, or ynh could not write its own records. Every worker
@@ -280,4 +294,18 @@ func harnessProvenance(name string, h *harness.Harness) *RunHarness {
 		}
 	}
 	return rh
+}
+
+// autoApproveRefusal is the refusal of --auto-approve for a harness that did
+// not pass the trust gate as trusted (ynh #952, decision 5c).
+func autoApproveRefusal(h *harness.Harness, id, level string) string {
+	if id == "" {
+		name := "this harness"
+		if h != nil {
+			name = h.Name
+		}
+		return fmt.Sprintf("refusing --auto-approve %s: %s runs from a folder, which is not trust-checked, so nothing it executes is vouched for.\n"+
+			"Install it and accept what it executes (ynh install <folder>, ynh trust accept local/<name>), or run without --auto-approve.", level, name)
+	}
+	return fmt.Sprintf("refusing --auto-approve %s: you have not accepted what %s executes.\nAccept it: ynh trust accept %s, or run without --auto-approve.", level, id, id)
 }

@@ -262,7 +262,7 @@ func TestSrtSettings_PerVendor(t *testing.T) {
 				t.Errorf("allowWrite = %q, want %q", w, wantWrite)
 			}
 			if r := got["filesystem"]["denyRead"]; len(r) != 0 {
-				t.Errorf("denyRead = %q, want srt's default reads", r)
+				t.Errorf("denyRead = %q, want none: these policies are built without the read policy", r)
 			}
 			if w := got["filesystem"]["denyWrite"]; !slices.Equal(w, []string{settingsPath}) {
 				t.Errorf("denyWrite = %q, want the settings file itself", w)

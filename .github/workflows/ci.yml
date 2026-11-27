@@ -60,6 +60,23 @@ jobs:
               - 'telemetry/**'
               # .ynr/ — the ynr conformance scenarios the Conformance job runs.
               - '.ynr/**'
+              # scripts/ — Go tests run scripts from it (internal/vendor's
+              #              TestHookEventParityScript runs hook-event-parity.sh),
+              #              so a scripts-only PR must run Test.
+              - 'scripts/**'
+              # .golangci.yml — the Lint job's config; a change to it alters
+              #              what Lint accepts.
+              - '.golangci.yml'
+              # **/*.md — internal/docs TestRepoMarkdownLinksResolve checks every
+              #              relative link and anchor in markdown outside docs/
+              #              (README.md, AGENTS.md, .github/, skills/, .claude/).
+              - '**/*.md'
+              # skills/ — cmd/ynd and internal/plugin starter_sets_test read
+              #              skills/ynh-sensors/references/starter-sets.md.
+              - 'skills/**'
+              # **/*.schema.json — internal/clischema TestSingleSchemaTree walks the
+              #              whole repo for a schema outside docs/schema.
+              - '**/*.schema.json'
             # ynh's telemetry registry, an OpenTelemetry Weaver registry
             # (ynr ADR-007), which Weaver itself checks.
             registry:
@@ -90,6 +107,9 @@ jobs:
               - 'scripts/**'
               - 'Makefile'
               - '.github/workflows/**'
+              # check-vendor-parity checks this page (assertion H, #718), so
+              # a PR that edits only the page must still run it.
+              - 'docs/vendor-parity.md'
 
   build:
     name: Build
@@ -98,7 +118,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - run: make build
@@ -110,7 +130,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       # The telemetry relay test against the real ynr (TestAgentRun_RealRelayJoinsRunTrace)
@@ -153,6 +173,43 @@ jobs:
             echo "spoolexporter $lib is newer than the ynr pin $pin: move YNR_VERSION in the Dockerfile" >&2
             exit 1
           fi
+      # The Docker image builds with the Dockerfile's GO_VERSION, not go.mod's
+      # toolchain (the golang images set GOTOOLCHAIN=local); this keeps the two
+      # equal so govulncheck scans the Go the image ships.
+      - name: Dockerfile Go matches go.mod toolchain
+        run: make check-go-pin
+
+  srt:
+    name: Test (real srt, Linux)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+      # srt on Linux needs bubblewrap, socat and ripgrep, and bubblewrap needs
+      # unprivileged user namespaces, which Ubuntu 24.04 restricts by default.
+      - name: Install srt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap socat ripgrep
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo npm install -g @anthropic-ai/sandbox-runtime@0.0.83
+          srt --version
+          lsb_release -d; uname -r; bwrap --version
+          sysctl -a 2>/dev/null | grep -E 'userns|unprivileged' || true
+      # Runs the tests that skip without srt, so ynh #920's Done-when (a
+      # credential read is refused, the worktree still readable) is shown on
+      # Linux on every change. They must run, not skip: -v output is checked.
+      - name: Test against real srt
+        env:
+          YNH_SRT_TEST_NO_SECCOMP: '1'
+        run: |
+          go test -v -run 'TestSrt_' ./internal/agent/ | tee srt-test.log
+          grep -q -- '--- PASS: TestSrt_DeniesCredentialRead' srt-test.log
 
   lint:
     name: Lint
@@ -161,7 +218,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9
@@ -173,7 +230,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - name: Install goimports
@@ -195,7 +252,7 @@ jobs:
     if: needs.changes.outputs.artifacts == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - name: Validate and lint harness artifacts
@@ -242,7 +299,7 @@ jobs:
       - name: Upload SARIF to code scanning
         if: always() && steps.scan.outputs.sarif != ''
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066  # v4.39.3
         with:
           sarif_file: ${{ steps.scan.outputs.sarif }}
           category: skillspector
@@ -316,7 +373,7 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
         with:
           go-version-file: go.mod
       - name: Install ynr and its stub vendor, checked against the release checksums
@@ -347,7 +404,7 @@ jobs:
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry, conformance]
+    needs: [changes, build, test, srt, lint, format, artifacts, skill-security, packaging, registry, conformance]
     if: always()
     steps:
       - name: Check results
@@ -356,6 +413,7 @@ jobs:
           echo "  changes: ${{ needs.changes.result }}"
           echo "  build: ${{ needs.build.result }}"
           echo "  test: ${{ needs.test.result }}"
+          echo "  srt: ${{ needs.srt.result }}"
           echo "  lint: ${{ needs.lint.result }}"
           echo "  format: ${{ needs.format.result }}"
           echo "  artifacts: ${{ needs.artifacts.result }}"

@@ -41,3 +41,6 @@ Thumbs.db
 !terraform.tfvars.example
 
 
+
+# Eval report (scripts/evals.sh)
+/evals-report.txt

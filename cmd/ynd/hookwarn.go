@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // hookVendorWarnings reports each hook the vendors a harness targets will not
@@ -17,7 +18,7 @@ import (
 // and every other vendor still gets the hook. The targeted vendors are the
 // harness's default_vendor, or every registered vendor when it names none.
 // Hooks are read from the top level and from each profile.
-func hookVendorWarnings(hj map[string]any) []string {
+func hookVendorWarnings(hj map[string]any) []warn.Warning {
 	vendors := vendor.Available()
 	if v, _ := hj["default_vendor"].(string); v != "" {
 		vendors = []string{v}
@@ -38,11 +39,12 @@ func hookVendorWarnings(hj map[string]any) []string {
 		}
 	}
 
-	var warnings []string
+	var warnings []warn.Warning
 	for _, s := range scopes {
 		for _, v := range vendors {
 			for _, w := range vendor.HookWarnings(v, s.hooks) {
-				warnings = append(warnings, s.label+w)
+				w.Message = s.label + w.Message
+				warnings = append(warnings, w)
 			}
 		}
 	}
@@ -81,7 +83,9 @@ func printHookWarnings(path string) {
 	if json.Unmarshal(data, &hj) != nil {
 		return
 	}
-	for _, w := range hookVendorWarnings(hj) {
-		fmt.Fprintf(os.Stderr, "%s: warning: %s\n", path, w)
+	warnings := hookVendorWarnings(hj)
+	for i := range warnings {
+		warnings[i].Message = path + ": " + warnings[i].Message
 	}
+	warn.Print(os.Stderr, warnings...)
 }

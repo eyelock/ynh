@@ -202,6 +202,11 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 		{name: "no ynr", setting: "env", spool: "spool", note: "ynr is not on PATH"},
 		{name: "no spool", relay: "serve", setting: "env", spool: "none", note: "there is no spool folder"},
 		{name: "operator's OTLP", relay: "serve", setting: "env", spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
+		// ynh's own record goes to the operator's endpoint (http/protobuf) or,
+		// for grpc, which its exporter cannot speak, to the spool; the vendor's
+		// telemetry is the operator's either way.
+		{name: "operator's OTLP over http/protobuf", relay: "serve", setting: "env", spool: "otlp-protobuf", note: "OTEL_EXPORTER_OTLP_* is set"},
+		{name: "operator's OTLP over grpc", relay: "serve", setting: "env", spool: "otlp-grpc", note: "OTEL_EXPORTER_OTLP_* is set"},
 		{name: "srt", relay: "serve", setting: "env", spool: "spool", backend: "srt", note: "--sandbox srt would block the worker", code: agent.ExitWorkerError},
 		// Codex's relay settings go on its command line (internal/agent's
 		// codex telemetry tests); here the relay starts for it and stops.
@@ -215,11 +220,20 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 	}
 	saved := [2]time.Duration{relayReadyTimeout, relayStopTimeout}
 	t.Cleanup(func() { relayReadyTimeout, relayStopTimeout = saved[0], saved[1] })
-	relayReadyTimeout, relayStopTimeout = 500*time.Millisecond, 500*time.Millisecond
 
 	var baseline map[string]any
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// A stub that prints its endpoint is waited for as long as a
+			// loaded machine needs: a short bound there is a flake, not a
+			// test. Only the two stubs that exercise a bound get a short one.
+			relayReadyTimeout, relayStopTimeout = 30*time.Second, 30*time.Second
+			switch tt.relay {
+			case "silent":
+				relayReadyTimeout = 500 * time.Millisecond
+			case "stubborn":
+				relayStopTimeout = 500 * time.Millisecond
+			}
 			home := t.TempDir()
 			t.Setenv("YNH_HOME", home)
 			t.Setenv("YNH_AGENT_SESSION", "")
@@ -228,7 +242,7 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 			// the relay's settings must still win.
 			t.Setenv("OTEL_LOG_USER_PROMPTS", "1")
 			t.Setenv("OTEL_LOG_TOOL_CONTENT", "1")
-			installListTestHarness(t, home, "relayprobe",
+			installTrustedTestHarness(t, home, "relayprobe",
 				`{"name":"relayprobe","version":"0.1.0","default_vendor":"claude","env_passthrough":["OTEL_LOG_USER_PROMPTS","OTEL_LOG_TOOL_CONTENT"]}`)
 
 			var envFile, argsFile string
@@ -251,6 +265,11 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 				t.Setenv("YNR_SPOOL", spoolDir)
 			case "otlp":
 				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
+			case "otlp-protobuf", "otlp-grpc":
+				protocol := map[string]string{"otlp-protobuf": "http/protobuf", "otlp-grpc": "grpc"}[tt.spool]
+				t.Setenv("YNR_SPOOL", spoolDir)
+				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
+				t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", protocol)
 			}
 			args := []string{"--format", "json", "--worktree", t.TempDir(), "--task", "t", "--no-plan", "--harness", "local/relayprobe"}
 			switch tt.backend {

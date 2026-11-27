@@ -5,6 +5,7 @@
 ```bash
 brew tap eyelock/tap && brew install ynh
 ynh install github.com/eyelock/ynh
+ynh trust accept github.com/eyelock/ynh/ynh-guide
 ynh-guide
 ```
 
@@ -41,11 +42,24 @@ david -v codex                     # same harness, different vendor
 }
 ```
 
-**Delegation is partial.** Your personal harness can delegate to a team harness. A delegate carries its instructions to the vendor (Claude Code also its MCP servers), not yet a full harness, and does not run on OpenCode (see [Vendor Feature Parity](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)). No middleware, no proxy.
+**Nothing runs until you say so.** A harness can bring hooks, sensors and MCP servers: commands that run on your machine. ynh shows you every one of them and runs none until you accept the harness. Change a command, or install a new version, and ynh asks again.
 
 ```bash
-david                              # personal context
-team-dev                           # full team context when you need it
+ynh trust show local/david         # read every command it will run
+ynh trust accept local/david       # record that you have
+ynh trust                          # what you have accepted, and what has changed since
+```
+
+Start with the tutorial [Your First Trusted Harness](tutorial/first-trusted-harness.md), then [Why ynh Asks for Trust](why-trust.md).
+
+**Delegate to a whole harness.** Your personal harness can hand a piece of work to a team harness, its delegate. By default (`transport: a2a`) the delegate runs as its own ynh session, with its own vendor, instructions, MCP servers, hooks and workspace folders, and its answer comes back to your session. A `transport: native` delegate is a vendor subagent instead, and carries only part of a harness ([L12](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)). See [Delegate Sessions](delegate-sessions.md) and [Add a delegate](how-to/add-a-delegate.md).
+
+```json
+{
+  "name": "david",
+  "version": "0.1.0",
+  "delegates_to": [{"git": "github.com/myorg/team-dev"}]
+}
 ```
 
 **Discover and share.** Search registries for harnesses by name or keyword, install with a single command. Export your harness as vendor-native plugins or as one portable [Agent Plugins](https://agent-plugins.org) package, install such a package back as a harness, or build a marketplace indexing multiple harnesses for your team or community.
@@ -68,14 +82,18 @@ brew tap eyelock/tap && brew install ynh
 
 # Try the ynh harness — it teaches you ynh
 ynh install github.com/eyelock/ynh
+ynh trust show github.com/eyelock/ynh/ynh-guide     # read the hooks and sensors it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide   # accept them
 ynh-guide
 ```
+
+The ynh harness runs hooks and sensors, so until you accept it ynh refuses to start it, lists what it would run, and names these two commands.
 
 Inside the session, use `/ynh-create-harness` to build your own. Or do it manually:
 
 ```bash
 # Create a harness
-mkdir david
+mkdir -p david/.agents/harness
 echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/.agents/harness/plugin.json
 
 # Install it
@@ -84,6 +102,8 @@ ynh install ./david
 # It's a command now
 david
 ```
+
+This harness runs no commands of its own, so it starts at once. Once you add a hook, a sensor or an MCP server, ynh asks you to accept it first: `ynh trust show local/david`, then `ynh trust accept local/david`.
 
 Add skills, agents, rules, and commands to the harness directory. Pull from Git repos. Compose across sources. Switch vendors. Delegate to team harnesses.
 
@@ -95,6 +115,8 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
 - **[Harness Reference](harnesses.md)** - Harness manifest, includes, delegates, profiles
+- **[Trust](tutorial/first-trusted-harness.md)** - What a harness will run, accepting it, and when ynh asks again ([why](why-trust.md), [reference](trust.md))
+- **[Delegates](delegate-sessions.md)** - Hand work to another harness, as its own session ([how-to](how-to/add-a-delegate.md), [reference](delegates-reference.md))
 - **[Vendor Support](vendors.md)** - Claude Code, Codex, Cursor, Copilot CLI, OpenCode - capabilities and launch strategies
 - **[Vendor Feature Parity](vendor-parity.md)** - what each vendor gets from a harness, and whose each gap is
 - **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, inspecting, exporting, and marketplace building

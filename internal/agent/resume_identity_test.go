@@ -2,6 +2,7 @@ package agent
 
 import (
 	"io"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -240,12 +241,18 @@ func TestRunLoop_ResumeDuringPlanWithoutTaskFails(t *testing.T) {
 }
 
 // The resumed run drives the checkpoint's backend. The sandbox check proves
-// which one was resolved: srt is claude-only, so on a codex checkpoint it is
-// refused as codex's, where a resume used to fall back to claude and accept it.
+// which one was resolved: srt is refused on opencode, so on an opencode
+// checkpoint it is refused as opencode's, where a resume used to fall back to claude and accept it.
+//
+// opencode is refused under srt on macOS only (ynh #805), so the check runs
+// there; TestValidateSandbox covers the platform split.
 func TestRunLoop_ResumeUsesCheckpointBackend(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		t.Skip("opencode runs under srt on Linux, so srt is not refused as its backend")
+	}
 	dir := t.TempDir()
 	if err := writeCheckpoint(dir, &Checkpoint{
-		SessionID: "s", Backend: "codex", Task: "t", Phase: PhaseAct,
+		SessionID: "s", Backend: "opencode", Task: "t", Phase: PhaseAct,
 		PlanFinalized: true, PendingMessage: "continue", ResumeToken: "thread-1",
 	}); err != nil {
 		t.Fatal(err)
@@ -255,8 +262,8 @@ func TestRunLoop_ResumeUsesCheckpointBackend(t *testing.T) {
 	opts.Resume = dir
 	opts.Sandbox = "srt"
 	_, err := RunLoop(opts)
-	if err == nil || !strings.Contains(err.Error(), "not supported by the codex backend") {
-		t.Fatalf("err = %v, want srt refused as the codex backend's", err)
+	if err == nil || !strings.Contains(err.Error(), "not supported by the opencode backend") {
+		t.Fatalf("err = %v, want srt refused as the opencode backend's", err)
 	}
 }
 

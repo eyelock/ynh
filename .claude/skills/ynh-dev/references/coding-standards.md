@@ -65,7 +65,7 @@
 ## Code Style
 
 - **Go 1.26+ idioms** — use modern stdlib features. No compatibility shims for older Go versions.
-- **Zero external dependencies** — standard library only. This is a deliberate design choice, not an accident.
+- **Standard library by default** — the few direct dependencies are listed with their reasons in `.claude/CLAUDE.md` (Code Conventions); do not add another without a reason of that weight.
 - **`goimports` + `gofmt`** — enforced via `make format`. No manual formatting.
 - **`errcheck` strict** — every returned error must be checked. No `_ = f.Close()` shortcuts.
 - **No dead code** — if it's unused, delete it completely. No `_var` renames, `// removed` comments, or backward-compatibility re-exports.

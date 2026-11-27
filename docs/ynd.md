@@ -118,6 +118,18 @@ and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
 `.agents/harness/marketplace.json` against `marketplace.schema.json`), plus the
 cross-field rules assembly enforces that a schema cannot express.
 
+Given a `marketplace.json` file directly (`ynd validate path/to/marketplace.json`),
+`validate` first tells the three files of that name apart:
+
+| Shape | Where it lives | Validated as |
+|---|---|---|
+| Registry index | `.agents/harness/` | `marketplace.schema.json` |
+| Vendor index | `.claude-plugin/`, `.cursor-plugin/`, `.github/plugin/` or `.agents/plugins/` | a `name` and `plugins`, each with a `name` and a `source`; under `.github/plugin/`, a `git-subdir`, `npm`, `archive` or `command` source is refused |
+| Build config | anywhere else, and it lists `harnesses` | the build config's own checks |
+
+A file that is none of the three is refused, not linted as one of them. See
+[Marketplace & Distribution](marketplace.md) for the shapes in full.
+
 One of those is worth naming. An MCP `env`/`headers` value referencing
 `${VAR}` that the harness does not list in `env_passthrough` **cannot
 assemble** — `ynd preview`, `ynh run` and `ynh agent run` all reject it. It
@@ -484,7 +496,7 @@ ynd marketplace build --clean                     # empty the output dir before 
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex participates like the other vendors: it gets its own index at `.agents/plugins/marketplace.json` using its native `source`/`policy` format
-- A `harness` entry's export warnings are printed to stderr, the same warnings `ynd export --merged` reports, one line each, prefixed with the entry's name: `warning: reviewer: hook script ./scripts/guard.sh is not a file in the harness, so the plugin does not carry it`. Warnings never change the exit code. `plugin` entries are copied, not exported, so they produce none
+- A `harness` entry's export warnings are printed to stderr, the same warnings `ynd export --merged` reports, each as a `warning:` line prefixed with the entry's name, followed by a `  Fix:` line when a fix is known: `warning: reviewer: hook script ./scripts/guard.sh is not a file in the harness, so the plugin does not carry it`. Warnings never change the exit code. `plugin` entries are copied, not exported, so they produce none
 
 ### migrate
 

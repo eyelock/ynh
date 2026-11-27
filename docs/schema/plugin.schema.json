@@ -122,13 +122,26 @@
     "mcp_servers": {
       "$ref": "#/$defs/mcp_servers"
     },
+    "transport": {
+      "description": "How this harness's delegates_to entries are reached when an entry names no transport of its own: a2a (each delegate is its own detached ynh session; the default) or native (the vendor's own subagents). A delegate set to native on a vendor with no native subagents (today Cursor) is refused by ynh install, ynh run and ynd validate.",
+      "type": "string",
+      "enum": ["a2a", "native"]
+    },
     "mcp_isolation": {
-      "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex, Cursor and OpenCode cannot isolate and ynh warns.",
+      "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` and `ynh agent run` start the vendor CLI and does not change an export. Supported on Claude Code, Codex, Copilot CLI (`ynh run` only) and OpenCode; Codex and OpenCode turn off, by name, the servers the vendor lists besides the harness's. Cursor cannot isolate and ynh warns.",
       "type": "boolean"
     },
     "mcp_manual_approval": {
-      "description": "Leave approval of the harness's own MCP tools on a one-shot run or an `ynh agent run` worker to the vendor and the caller. Default false: on Codex, whose one-shot runs and workers refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run. A launch-time setting; it does not change an export. No other vendor needs it: Copilot gets --allow-all-tools regardless.",
+      "description": "Leave approval of the harness's own MCP tools on a one-shot run or an `ynh agent run` worker to the vendor and the caller. Default false: on Codex, whose one-shot runs and workers refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run, and only for a harness that passed the trust gate as trusted (installed and accepted with `ynh trust accept`); a folder run or an unaccepted harness gets no approval. A launch-time setting; it does not change an export. No other vendor needs it: Copilot's one-shot mode approves every tool, so ynh refuses a one-shot Copilot run of a harness that is not trusted rather than approve it.",
       "type": "boolean"
+    },
+    "on_live": {
+      "description": "What `ynh run` does when a session of this harness is already live (see `ynh ps`). `refuse` stops the second run, naming the live session's address, with a Fix line. `allow` starts it with no warning. Absent: warn, naming the address, and start it, as parallel sessions are normal for most harnesses. A Wheelhouse sets `refuse` on every seat. `ynh run --on-live=refuse|allow` overrides it for one run. A launch-time setting; it does not change an export.",
+      "enum": ["refuse", "allow"]
+    },
+    "delegate_questions": {
+      "description": "Where a question from one of this harness's delegates goes. Absent, it is auto by session: an interactive parent gets `client` and a headless parent (`claude -p`, `codex exec`, `copilot -p`, `opencode run`) gets `model`. `model`: the question comes back in the delegate tool's result, naming the delegate that asked, and the harness's model puts it to the person in the parent's chat. `client`: ynh first puts it to the client's own question prompts, for a client that has them (Claude Code's Tasks, and elicitation in the interactive UIs of Codex, Copilot CLI and OpenCode); a client with none, or one that declines, falls back to the result. Set either to force it whatever the session. A launch-time setting; it does not change an export.",
+      "enum": ["model", "client"]
     },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
@@ -731,7 +744,7 @@
           },
           "hooks": {
             "type": "boolean",
-            "description": "Consent to the hooks of the harness this include resolves to. When true they run in the session, ahead of the root's own hooks for each event. Default false: the hooks are not active and a warning names them. A hook is command execution, so the root author opts in per include, and for a harness reached through another, at every link, on every route; a direct include by the root decides alone.",
+            "description": "Consent to the hooks of the harness this include resolves to. When true they run in the session, ahead of the root's own hooks for each event. Absent, false and anything but true all leave the hooks not active; only absent also prints a warning naming them (its Fix offers \"hooks\": true to run them or \"hooks\": false to keep them off), because false is the author's choice. A hook is command execution, so the root author opts in per include, and for a harness reached through another, at every link, on every route; a direct include by the root decides alone.",
             "default": false
           },
           "instructions": {
@@ -780,6 +793,11 @@
             "type": "string",
             "minLength": 1,
             "description": "One of the delegate harness's own focuses: its profile is applied and its prompt becomes standing instructions in the delegate's agent. Not with profile, since a focus carries its profile."
+          },
+          "transport": {
+            "type": "string",
+            "enum": ["a2a", "native"],
+            "description": "How the parent reaches this delegate: a2a (its own detached ynh session) or native (the vendor's subagents). Overrides the harness's transport; a2a when neither is set. native is refused on a vendor with no native subagents (today Cursor)."
           }
         },
         "not": {

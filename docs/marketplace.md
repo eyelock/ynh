@@ -86,9 +86,13 @@ that is already the plugin — not because it gets the shapes wrong.
 ### Or with ynh
 
 ```bash
-ynh install github.com/eyelock/ynh          # ynh-guide
-ynh run ynh-guide --profile ynh-dev         # adds the developer set
+ynh install github.com/eyelock/ynh                          # ynh-guide
+ynh trust show github.com/eyelock/ynh/ynh-guide             # read the hooks and sensors it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide           # accept them
+ynh run github.com/eyelock/ynh/ynh-guide --profile ynh-dev  # adds the developer set
 ```
+
+The ynh harness runs hooks and sensors, so ynh refuses to start it until you accept it.
 
 Same artifacts, one install, plus profiles and focuses that the native plugin
 formats have no equivalent for.
@@ -491,6 +495,17 @@ ynd marketplace build --clean
 # Validate a marketplace.json config
 ynd validate marketplace.json
 ```
+
+Three files are called `marketplace.json`, and `ynd validate <file>` tells them
+apart before it lints one:
+
+| Shape | Where it lives | Validated as |
+|---|---|---|
+| Registry index (what `ynh` reads) | `.agents/harness/` | `marketplace.schema.json` |
+| Vendor index (what `ynd marketplace build` writes) | `.claude-plugin/`, `.cursor-plugin/`, `.github/plugin/` or `.agents/plugins/` | a name and plugins, each with a name and a source; under `.github/plugin/`, a `git-subdir`, `npm`, `archive` or `command` source is refused |
+| Build config (what `ynd marketplace build` reads) | anywhere else, and it lists `harnesses` | the build config's own checks |
+
+A file that is none of the three is refused, not linted as one of them.
 
 ### Distribution
 

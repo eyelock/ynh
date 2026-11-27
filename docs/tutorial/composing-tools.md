@@ -262,7 +262,8 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Error: MCP servers of included harness github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
 ```
 
@@ -276,7 +277,8 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Preview written to out/claude
 
 MCP servers from included harnesses:
@@ -447,7 +449,8 @@ ynd preview my-team -v claude -o out/conflict 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Error: MCP server "tracker" is defined differently by github-lite and other; declare it in the root harness to choose one
 ```
 
@@ -493,7 +496,8 @@ ynd preview my-team -v claude -o out/cycle 2>&1
 Expected output:
 
 ```
-  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+warning: included harness github-lite declares hooks (on_session_start) that are not active
+  Fix: add "hooks": true to its include to run them, or "hooks": false to keep them off
 Preview written to out/cycle
 
 MCP servers from included harnesses:
@@ -524,21 +528,31 @@ mv notes-plugin.json.bak notes/.agents/harness/plugin.json
 
 By default a harness's servers load alongside everything you have already configured: your user MCP servers and, on Claude Code, your claude.ai connectors. `--isolated-mcp` runs with only the servers the harness composes: its own and those of the harnesses it includes, here `notes`, `team` and `tracker`. The harness can also ask for it with `"mcp_isolation": true`.
 
+We run `my-team` by its folder, not as an installed harness, so ynh does not ask you to accept it first:
+a folder you run by its path is yours, and you are looking at it. Each run says so once on stderr:
+
+```
+ynh: my-team runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
+```
+
+Installed with `ynh install`, the same harness would need accepting before its first run, as in
+[Your First Trusted Harness](first-trusted-harness.md).
+
 Without the flag, this is what ynh hands Claude Code:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p list your MCP servers`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers`
 ```bash
 ynh run ./my-team "list your MCP servers"
 ```
 
 With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` pointing at the file ynh generated with the harness's composed servers:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/_inline-.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
 ynh run ./my-team --isolated-mcp "list your MCP servers"
 ```
 
-`--plugin-dir` stays in both, so the harness's hooks and skills still load. Isolation is a launch setting: `ynd preview` and `ynd export` are unchanged by it. Other vendors differ; see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
+`--plugin-dir` stays in both, so the harness's hooks and skills still load. Isolation is a launch setting: `ynd preview` and `ynd export` are unchanged by it. Other vendors differ (Cursor cannot do it); see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
 
 With a real model, ask every server to identify itself. `-p` is added for you when you pass a prompt, so it does not belong on the command line. A `-p` session cannot stop to ask you before it calls a tool, so name the tools it may call with `--allowedTools`, which `ynh run` passes through to Claude Code. Without it, every call is refused for want of permission:
 
@@ -613,7 +627,7 @@ tracker -> tracker-readonly
 
 A focus brings its prompt and its profile. `triage` binds the `readonly` profile to a prompt, so `--focus github-lite:triage` is a non-interactive run with both. The run's prompt comes from the focus; the profile is applied to `github-lite`:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
 ```bash
 ynh run ./my-team --focus github-lite:triage
 ```
@@ -869,7 +883,7 @@ The hook ran when the session started, from the copy in the run directory, and l
 
 ## Give a delegate its own tools
 
-A delegate (`delegates_to`) is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
+A delegate (`delegates_to`) with `transport: native` is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
 
 ```bash
 mkdir -p ops/.agents/harness
@@ -912,7 +926,7 @@ cat > my-team/.agents/harness/plugin.json << 'EOF'
     { "local": "/tmp/ynh-tutorial/composing-tools/github-lite", "hooks": true }
   ],
   "delegates_to": [
-    { "git": "/tmp/ynh-tutorial/composing-tools/ops" }
+    { "git": "/tmp/ynh-tutorial/composing-tools/ops", "transport": "native" }
   ],
   "mcp_servers": {
     "team": {
@@ -981,8 +995,8 @@ notes -> notes
 team -> team
 tracker -> tracker
 ---
-name: ops
-description: Delegate harness "ops".
+name: "ops"
+description: "Delegate harness \"ops\"."
 mcpServers: [{"pager":{"command":"python3","args":["<cache>/server.py"],"env":{"SERVER_NAME":"pager","TOKEN":"${PAGER_TOKEN}"}}}]
 ---
 ```
@@ -998,12 +1012,12 @@ ynd preview my-team -v cursor -o out/delegate-cursor 2>&1 >/dev/null
 Expected output:
 
 ```
-  warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
+warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
 ```
 
 Now launch it. Claude Code ignores `mcpServers` in a plugin's agents, so `ynh run` hands the delegate to Claude with `--agents`. A command line is visible to every process on the machine, and Claude does not expand `${VAR}` inside `--agents`, so the token cannot go there. The server is wrapped in `ynh mcp-exec`, which reads the variables from a file in the run directory and starts the real server. The `...` below stands for text that varies between runs or is too long to show:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/_inline-.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/_inline-.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/.snapshots/_inline-.../.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
 ynh run ./my-team --isolated-mcp "Ask the ops agent to call its whoami tool"
 ```
@@ -1062,4 +1076,4 @@ unset TRACKER_TOKEN PAGER_TOKEN
 
 [Project-Local Config](project-local-config.md): use `.agents/harness/plugin.json` in your project root for zero-install configuration.
 
-To go further with what you built here, [Delegation](delegation.md) chains harnesses as subagents instead of including them, and the [MCP reference](../mcp.md) lists every rule for servers from included harnesses.
+To go further with what you built here, [Native Delegation](delegation.md) chains harnesses as subagents instead of including them, and the [MCP reference](../mcp.md) lists every rule for servers from included harnesses.

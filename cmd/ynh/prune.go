@@ -14,7 +14,9 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/runsnap"
 	"github.com/eyelock/ynh/internal/symlink"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdPrune() error {
@@ -52,7 +54,8 @@ func cmdPrune() error {
 				continue
 			}
 			if err := harness.RemovePointer(e.Name); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: removing pointer %q: %v\n", e.Name, err)
+				// No Fix: the pointer is what prune could not remove, and no other ynh command removes it.
+				warn.Print(os.Stderr, warn.Warning{Message: fmt.Sprintf("removing pointer %q: %v", e.Name, err)})
 				unremoved++
 				continue
 			}
@@ -102,7 +105,10 @@ func cmdPrune() error {
 				continue
 			}
 			if err := os.Remove(launcherPath); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: removing stale launcher %s: %v\n", launcherPath, err)
+				warn.Print(os.Stderr, warn.Warning{
+					Message: fmt.Sprintf("removing stale launcher %s: %v", launcherPath, err),
+					Fix:     fmt.Sprintf("rm %q, then run 'ynh prune' again", launcherPath),
+				})
 				unremoved++
 				continue
 			}
@@ -118,12 +124,15 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if installedNames[name] {
+			if runsnap.IsSnapshotsDir(name) || installedNames[name] {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)
 			if err := os.RemoveAll(staleRun); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: removing stale run dir %s: %v\n", staleRun, err)
+				warn.Print(os.Stderr, warn.Warning{
+					Message: fmt.Sprintf("removing stale run dir %s: %v", staleRun, err),
+					Fix:     fmt.Sprintf("rm -rf %q, then run 'ynh prune' again", staleRun),
+				})
 				unremoved++
 				continue
 			}

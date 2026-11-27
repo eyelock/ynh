@@ -30,12 +30,14 @@ The fastest way to see what ynh does is to install the ynh harness itself:
 
 ```bash
 ynh install github.com/eyelock/ynh
+ynh trust show github.com/eyelock/ynh/ynh-guide    # review what it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide  # record that you did; no pin needed
 ynh-guide
 ```
 
-This gives you an AI session with skills that teach you ynh — including `/ynh-create-harness` to build your own harness interactively.
+The ynh harness declares hooks and sensors, so ynh refuses to launch it until you have accepted what it executes (exit 1, with the exact commands to run). Review it with `ynh trust show`, then `ynh trust accept`. See [Trust](trust.md).
 
-> **Running a harness runs its commands.** `ynh run`, and a harness's launcher such as `ynh-guide`, does not check the harness against `ynh trust` and does not refuse one you have not reviewed. Its hooks and MCP servers start with your user's permissions as soon as you run it. Before you first run a harness you did not write, read what it will run with `ynh trust show <harness-id>`: `ynh trust` lists each installed harness by its id, and this one is `github.com/eyelock/ynh/ynh-guide`. See [What a command sensor can reach](sensors.md#what-a-command-sensor-can-reach).
+This gives you an AI session with skills that teach you ynh — including `/ynh-create-harness` to build your own harness interactively.
 
 ## Create a Harness
 
@@ -68,6 +70,8 @@ ynh install ./david
 david                              # interactive session
 david "explain what this function does"   # one-shot
 ```
+
+A harness that declares commands (sensors, hooks or MCP servers) or requests workspace folders is refused until you accept it: run `ynh trust show local/david` to read what it executes, then `ynh trust accept local/david`, or install it with `ynh install ./david --trust` to do both in one step. A harness with nothing to review runs at once. See [Trust](trust.md).
 
 ## Switch Vendors
 
@@ -239,7 +243,7 @@ By default, harnesses can pull skills and agents from any Git repo via `includes
 | Empty array `[]` | All remote sources blocked |
 | Patterns present | Only matching sources allowed |
 
-The harness you install from a local directory (e.g. `ynh install ./david`) is not checked against the list (this is not `ynh trust`, which gates nothing on a run). Its includes and delegates are checked.
+The harness you install from a local directory (e.g. `ynh install ./david`) is not checked against this list (the list is separate from [`ynh trust`](trust.md)). Its includes and delegates are.
 
 **Pattern syntax:**
 
@@ -332,11 +336,12 @@ ynh resolves install arguments in this order:
 
 | Argument form | Resolution |
 |---|---|
-| Starts with `.` or `/` | Local path |
+| Starts with `.` or `/`, or a relative path that exists on disk | Local path |
 | Starts with `git@` | Git SSH URL |
 | Starts with `https://` or `http://` | Git HTTPS URL |
 | Contains `@` (not SSH) | Registry lookup as `name@registry-name` |
-| Contains `/` | Git URL shorthand (e.g., `github.com/user/repo`) |
+| Contains `/`, first segment has a `.` or `:` (a host) | Git URL shorthand (e.g., `github.com/user/repo`) |
+| Contains `/`, first segment has no `.` or `:`, not on disk | Error: reported as a missing local path (e.g. `harnesses/x`, or a bare `org/repo`). Pass `./harnesses/x`, a host-qualified `github.com/org/repo`, or `git@alias:org/repo.git` for an SSH alias |
 | Plain word | Exact name search across all registries |
 
 Plain word matches: single match installs directly; multiple matches errors with disambiguation guidance; no exact match searches descriptions and suggests similar results.

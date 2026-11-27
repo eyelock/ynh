@@ -58,7 +58,7 @@ Re-run `make install` after any code change you want to test.
 | Create and install test harness | [Create and install a test harness](vendors-and-symlinks.md#create-and-install-a-test-harness) |
 | List available vendors | [List available vendors](vendors-and-symlinks.md#list-available-vendors) |
 | Switch vendors | [Switch vendors](vendors-and-symlinks.md#switch-vendors) |
-| Automatic symlink prompt | [Symlinks — automatic prompt](vendors-and-symlinks.md#symlinks-automatic-prompt) |
+| Automatic symlink prompt | [Symlinks — the prompt needs a terminal](vendors-and-symlinks.md#symlinks-the-prompt-needs-a-terminal) |
 | Explicit install and clean | [Symlinks — explicit install and clean](vendors-and-symlinks.md#symlinks-explicit-install-and-clean) |
 | Claude no-symlinks | [Symlinks — Claude doesn't need them](vendors-and-symlinks.md#symlinks-claude-doesn-t-need-them) |
 | Prune orphans | [Prune orphaned installations](vendors-and-symlinks.md#prune-orphaned-installations) |
@@ -73,7 +73,7 @@ These need a real OpenCode 2.x install (`brew install anomalyco/tap/opencode-v2`
 | Skills, agents and rules load | `ynh run <harness> -v opencode -m opencode/nemotron-3-ultra-free -- "<prompt>"` (flags ynh does not know pass through to OpenCode): the model can load the bundle skill through its `skill` tool, `--agent <name>` finds the bundle agent, and an instruction that only the harness's rule carries is followed (rules are composed into `.opencode/AGENTS.md`) |
 | Blocking `before_tool` hook | Declare a `before_tool` hook with matcher `Bash` and a command that prints a reason to stderr and exits 2. Ask the model to run a shell command: the tool does not run and the model sees the reason as the tool error. A matcher of `Edit` must not fire on a shell call |
 | MCP server visible | Declare a stdio MCP server in the harness. Ask the model to call one of its tools: it connects and the tool is callable. With no `tools:` list it is reached through Code Mode, so the model calls it from inside `execute`; for an agent whose `tools:` list names it (`mcp__<server>__<tool>`), Code Mode is off and it is an ordinary tool. Add a `before_tool` hook with the matcher `mcp__<server>__<tool>` that exits 2: in both cases the call is blocked with the hook's message and the server never receives it |
-| Resume | Run a turn, then `ynh run <harness> -v opencode --resume`: OpenCode continues the last session with `-c`, with no picker. ynh cannot look a session id up itself because OpenCode keeps sessions in SQLite, as with Codex, so `--resume` always means continue-last; `--resume=<id>` resumes that id with `-s` |
+| Resume | Run a turn, then `ynh run <harness> -v opencode --resume`: OpenCode continues the last session with `-c`, with no picker. ynh cannot look a session id up itself because OpenCode keeps sessions in SQLite, so `--resume` always means continue-last; `--resume=<id>` resumes that id with `-s` |
 | Preview matches | `ynd preview <harness> -v opencode` lists `.opencode/opencode.json`, `.opencode/plugins/ynh-hooks.ts`, `.opencode/agents/`, `.opencode/rules/`, `.opencode/skills/` and the root `AGENTS.md`; the composed `.opencode/AGENTS.md` appears only in the run directory after launch |
 | Agent backend | `ynh agent run --backend opencode` runs a loop turn. An effort level is refused (select a variant with `--model provider/model#variant`), and auto-approve accepts `all` only |
 
@@ -635,8 +635,8 @@ rm -rf /tmp/ynh-edge/e16
 
 ```bash
 ynh info nonexistent
-# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>'. Run 'ynh ls' to see installed ids
-# (no './<path>': `ynh info` takes only an installed id, unlike `ynh run` in E6)
+# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+# (`ynh info` takes an installed id or a './<path>', as `ynh run` does in E6)
 
 ynh info local/nonexistent
 # Expected: Error: harness "local/nonexistent": harness not found
@@ -646,7 +646,7 @@ ynh info local/nonexistent
 
 ```bash
 ynh info
-# Expected: Error: usage: ynh info <harness-name>
+# Expected: Error: usage: ynh info <harness-id|path>
 ```
 
 ### E19: Focus and profile mutual exclusivity
@@ -1028,13 +1028,14 @@ EOF
 
 ### L1: Copilot, session layout, untrusted folder
 
-In a scratch git repository that is not in Copilot's `trustedFolders`, launch with a prompt that makes the agent run `ls`, then read the log. `--allow-tool 'shell(ls)'` lets the one-shot session run that command and nothing else:
+In a scratch git repository that is not in Copilot's `trustedFolders`, install and accept the probe harness, then launch it with a prompt that makes the agent run `ls`, and read the log. Copilot's one-shot mode approves every tool, so ynh refuses a one-shot run of a harness that is not installed and accepted (`ynh run /tmp/ynh-live/probe-harness -v copilot -- "..."` exits 1 as untrusted); accepting it first keeps this step testing what it is for, the hooks in an untrusted Copilot folder. `--allow-tool 'shell(ls)'` lets the one-shot session run that command and nothing else:
 
 *Your output will differ: it shows what the model did.*
 
 ```bash
 cd /tmp/ynh-live/project && git init -q
-ynh run /tmp/ynh-live/probe-harness -v copilot --allow-tool 'shell(ls)' -- "Run the shell command: ls . Then reply with the single word done."
+ynh install /tmp/ynh-live/probe-harness && ynh trust accept local/probe
+ynh run local/probe -v copilot --allow-tool 'shell(ls)' -- "Run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 
@@ -1042,7 +1043,7 @@ Confirm a line for each of the six events, the `pwd` being the project root (ynh
 
 ### L2: Copilot, matcher and timeout
 
-Change the matchers to `Edit` and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured).
+Change the matchers to `Edit`, reinstall (`ynh install /tmp/ynh-live/probe-harness`), accept again (`ynh trust accept local/probe`) and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured). This second change alters the hook commands too, so reinstall and accept again (`ynh install /tmp/ynh-live/probe-harness`, `ynh trust accept local/probe`) before the rerun; otherwise ynh refuses it as changed since accepted.
 
 ### L3: Copilot, export layouts
 
@@ -1070,14 +1071,15 @@ Confirm `SessionEnd` fires after `Stop`. `ynh run` sets `CLAUDE_CODE_SESSIONEND_
 
 ### L5: Cursor, print mode
 
-Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. `--trust` trusts this workspace for the one run:
+Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. Cursor's own workspace trust has to be granted, and `ynh run --trust` is not it: that flag is ynh's, and accepts a folder run's remote includes. Cursor's `--trust` is passed only for an installed harness that passed the gate, so install and accept the probe harness first (`ynh install /tmp/ynh-live/probe-harness --trust`, then run it by id):
 
 *Your output will differ: it shows what the model did.*
 
 ```bash
 cd /tmp/ynh-live/project
 mkdir -p .cursor && echo '{"permissions":{"allow":["Shell(ls)"],"deny":[]}}' > .cursor/cli.json
-ynh run /tmp/ynh-live/probe-harness -v cursor --trust -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
+ynh install /tmp/ynh-live/probe-harness --trust
+ynh run local/probe -v cursor -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 

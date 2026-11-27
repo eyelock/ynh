@@ -46,6 +46,10 @@ ynh image david --tag ghcr.io/org/harness-david:latest
 # Build from a Git source
 ynh image david --from github.com/org/harnesses --tag harness-david:latest
 
+# Build from a Git source whose harness has hooks, MCP servers or sensors:
+# --trust accepts them and bakes the record, and the source must be pinned
+ynh image david --from github.com/org/harnesses --ref <40-character-sha> --trust
+
 # Build from a monorepo subdirectory
 ynh image david --from github.com/org/monorepo --path harnesses/david
 
@@ -63,6 +67,8 @@ older than the one building, including in a dry run. A developer build counts as
 newer than every release. The warning never stops the build or changes the
 Dockerfile; pass `--base <image>` to build on a newer ynh image. A base that is not
 pulled is not checked, so the check never pulls or runs anything.
+
+**Trust.** `ynh image` refuses a harness you have not accepted, and an accepted harness's image carries its trust record, so its run passes the gate inside the image. The machine that runs the image is never asked. See [Build an image that passes the trust gate](how-to/build-an-image-that-passes-the-trust-gate.md).
 
 ### What goes into the image
 
@@ -329,6 +335,7 @@ anything:
 | `dev.ynh.harness.version` | Author-declared version from the manifest |
 | `dev.ynh.harness.sha` | **Commit the harness came from.** Empty when there is none to name |
 | `dev.ynh.harness.default-vendor` | Vendor baked as the default |
+| `dev.ynh.harness.trust-digest` | Trust digest of the harness the image carries. Present when the image bakes the accepted trust record, and absent otherwise (a harness with nothing to accept has none) |
 | `dev.ynh.entrypoint` | `run` or `agent` — see below |
 | `dev.ynh.assembled-by` | Version of ynh that built the image |
 

@@ -140,9 +140,21 @@ Install the harness first:
 ynh install /tmp/ynh-tutorial/profile-harness
 ```
 
+`profile-demo` runs hooks and MCP servers, in its base and in its profiles, so ynh refuses to start it
+until you have reviewed and accepted what it runs, as in
+[Your First Trusted Harness](first-trusted-harness.md). The review covers every profile at once, so one
+acceptance is enough for `--profile ci` and `--profile local`:
+
+```bash
+ynh trust show local/profile-demo
+ynh trust accept local/profile-demo
+```
+
+Expected output of the accept: `Accepted local/profile-demo (accept): 4 command(s), sha256:...`.
+
 Launch interactively with the `ci` profile:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--profile-demo/.claude --add-dir ~/.ynh/run/local--profile-demo --append-system-prompt You are a deployment assistant. ... procedures for all environments.`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--profile-demo/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--profile-demo/.../**) --append-system-prompt You are a deployment assistant. ... procedures for all environments.`
 ```bash
 profile-demo --profile ci
 ```
@@ -209,7 +221,8 @@ ynd diff /tmp/ynh-tutorial/profile-harness claude cursor --profile ci
 Expected output starts with a warning on stderr, because the `ci` profile's `Bash` matcher is written to Cursor as-is and Cursor matches its own tool types instead (see [Hooks: Matchers](../hooks.md#matchers)), then the comparison:
 
 ```
-  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+  Fix: use Cursor's tool types in the matcher on before_tool, such as Shell for Bash and Write for Edit
 === claude vs cursor ===
 Only in claude:
   .claude/.mcp.json

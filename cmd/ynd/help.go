@@ -63,6 +63,14 @@ Checks required files, frontmatter fields, directory layout, and JSON Schema
 conformance: plugin.json against plugin.schema.json, and any
 .agents/harness/marketplace.json against marketplace.schema.json.
 
+Given a marketplace.json file directly, validate tells the three files of that
+name apart before it lints one: a registry index (in .agents/harness/, checked
+against marketplace.schema.json), a vendor index (in .claude-plugin/,
+.cursor-plugin/, .github/plugin/ or .agents/plugins/, checked for a name and
+plugins that each have a name and a source; under .github/plugin/ a git-subdir,
+npm, archive or command source is refused) and a build config (anywhere else,
+listing "harnesses"). A file that is none of the three is refused.
+
 A directory whose root plugin.json declares the Agent Plugins schema
 (https://agent-plugins.org) is checked against that specification instead:
 manifest, skills/ discovery and mcp.json, with the spec's own failure

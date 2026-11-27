@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // VendorExporter describes the vendor capabilities that the exporter needs.
@@ -123,7 +125,7 @@ type ExportResult struct {
 	OutputDir string
 	Skills    int
 	Agents    int
-	Warnings  []string
+	Warnings  []warn.Warning
 }
 
 // Export produces vendor-native plugin directories from a harness source.
@@ -202,9 +204,14 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Each delegate is resolved as a harness, so that a delegate that cannot
 	// be exported is an error before anything is written. A vendor that
 	// carries no delegates in an export leaves them out, with a warning.
+	//
+	// Only native delegates are carried: an a2a delegate (the default) is its
+	// own ynh session and needs ynh at runtime, so it is left out of every
+	// vendor's export, with one warning.
+	var a2aLeftOut []harness.Delegate
 	for _, v := range vendors {
 		if a, aerr := vendor.Get(v); aerr == nil && a.SupportsExportDelegates() {
-			if opts.delegates, err = ResolveExportDelegates(p.DelegatesTo, p.Dir, p.Name, opts.Config); err != nil {
+			if opts.delegates, a2aLeftOut, err = ResolveExportDelegatesBy(p.DelegatesTo, p.Dir, p.Name, p.Transport, true, opts.Config); err != nil {
 				return nil, err
 			}
 			break
@@ -232,8 +239,29 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Said once, whatever the number of vendors exported.
 	if len(results) > 0 {
 		results[0].Warnings = append(slices.Clone(hs.Inactive), results[0].Warnings...)
+		if w, ok := a2aLeftOutWarning(a2aLeftOut); ok {
+			results[0].Warnings = append(results[0].Warnings, w)
+		}
 	}
 	return results, nil
+}
+
+// a2aLeftOutWarning is the one warning for the delegates an export leaves out
+// because their transport is a2a, which runs the delegate as its own ynh
+// session and so needs ynh at runtime.
+func a2aLeftOutWarning(left []harness.Delegate) (warn.Warning, bool) {
+	if len(left) == 0 {
+		return warn.Warning{}, false
+	}
+	labels := make([]string, 0, len(left))
+	for _, d := range left {
+		labels = append(labels, d.Label())
+	}
+	return warn.Warning{
+		Message: fmt.Sprintf("%d delegate(s) left out of the export (%s): transport a2a runs a delegate as its own ynh session, which needs ynh at runtime",
+			len(left), strings.Join(labels, ", ")),
+		Fix: "set transport: native on an entry to carry it as a subagent",
+	}, true
 }
 
 func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
@@ -484,17 +512,21 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 // A plugin cannot grant its host a folder: only the operator running the
 // harness can (docs/workspace.md), so there is nothing to carry. Said aloud
 // rather than dropped silently.
-func workspaceWarnings(p *harness.Harness) []string {
+// No fix: a plugin cannot grant a folder, so no edit carries the workspace.
+func workspaceWarnings(p *harness.Harness) []warn.Warning {
 	if len(p.Workspace) == 0 {
 		return nil
 	}
-	return []string{fmt.Sprintf("workspace is not carried into exports: %d requested folder(s) dropped, because a plugin cannot grant a folder", len(p.Workspace))}
+	return []warn.Warning{{Message: fmt.Sprintf("workspace is not carried into exports: %d requested folder(s) dropped, because a plugin cannot grant a folder", len(p.Workspace))}}
 }
 
 // noInstructionsWarning is the note for a vendor whose plugin cannot carry
 // the harness's instructions, whatever the export mode.
-func noInstructionsWarning(vendorName string) string {
-	return vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it (use `ynh run`, or put them in the project's own instructions file)"
+func noInstructionsWarning(vendorName string) warn.Warning {
+	return warn.Warning{
+		Message: vendorName + ": plugins cannot carry instructions, so the harness's are not delivered to it",
+		Fix:     "use `ynh run`, or put the instructions in the project's own instructions file",
+	}
 }
 
 // skippedArtifactWarnings notes the artifact types the harness carries that
@@ -504,23 +536,24 @@ func noInstructionsWarning(vendorName string) string {
 // them out of the vendor's directory; a merged package keeps them in the
 // shared tree for the other vendors, but the vendor still does not read
 // them, so both say the same thing.
-func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
+func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []warn.Warning {
 	exportDirs := adapter.ExportArtifactDirs()
-	var warnings []string
+	var warnings []warn.Warning
 	if exportDirs != nil {
 		warnings = skippedArtifactTypeWarnings(vendorName, adapter, exportDirs, content)
 	}
 	// A vendor with no export restriction (OpenCode) can still carry no
 	// delegates, so the delegate warning does not depend on exportDirs.
 	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
-		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
+		// No fix: the vendor has no delegate support in exports.
+		warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo))})
 	}
 	return warnings
 }
 
 // skippedArtifactTypeWarnings notes the artifact types the vendor's export
 // restricts itself to leave out.
-func skippedArtifactTypeWarnings(vendorName string, adapter VendorExporter, exportDirs map[string]string, content []resolver.ResolvedContent) []string {
+func skippedArtifactTypeWarnings(vendorName string, adapter VendorExporter, exportDirs map[string]string, content []resolver.ResolvedContent) []warn.Warning {
 	skippedCounts := map[string]int{}
 	for artifactType := range adapter.ArtifactDirs() {
 		if _, ok := exportDirs[artifactType]; ok {
@@ -530,7 +563,7 @@ func skippedArtifactTypeWarnings(vendorName string, adapter VendorExporter, expo
 			skippedCounts[artifactType] += countDir(filepath.Join(rc.BasePath, artifactType))
 		}
 	}
-	var warnings []string
+	var warnings []warn.Warning
 	var parts []string
 	for _, artifactType := range []string{"agents", "rules", "commands"} {
 		if n := skippedCounts[artifactType]; n > 0 {
@@ -538,7 +571,8 @@ func skippedArtifactTypeWarnings(vendorName string, adapter VendorExporter, expo
 		}
 	}
 	if len(parts) > 0 {
-		warnings = append(warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
+		// No fix: the vendor's export carries only the types it restricts itself to.
+		warnings = append(warnings, warn.Warning{Message: fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts))})
 	}
 	return warnings
 }

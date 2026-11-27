@@ -189,6 +189,20 @@ EOF
 ynh install /tmp/shadow/pinned
 ```
 
+The `claims` sensor runs a script on your machine, so `ynh check` and
+`ynh agent run` refuse the pinned harness until you accept it: the
+[trust gate](../trust.md#the-gate) refuses an installed
+harness whose commands you have not reviewed. Review, then accept. The script
+sits in the harness (`$YNH_HARNESS_DIR`), so the digest covers its body too, and
+changing it later means accepting again:
+
+```bash
+ynh trust show local/shadow-pin
+ynh trust accept local/shadow-pin
+```
+
+Expected output of the accept: `Accepted local/shadow-pin (accept): 1 command(s), sha256:...`. It is the same review and acceptance you did in [Your First Trusted Harness](first-trusted-harness.md).
+
 *Replace `<pinned-harness>` with the harness you pin (here: `shadow-pin`).*
 
 Run the rest of the page from `/tmp/shadow/repo`.
@@ -261,7 +275,9 @@ ynh install ./
 ynh check local/ynh-guide --only harness-valid --format json
 ```
 
-Expected: the install succeeds, and the check finds no such sensor (exit 2):
+Expected: the install succeeds, and the check finds no such sensor (exit 2).
+At that commit the harness runs no commands, so there is nothing to accept and
+the trust gate lets the check through:
 
 ```
 Installed harness "ynh-guide"
@@ -319,7 +335,7 @@ nothing" is the wrong conclusion, and it is the one the numbers invite.
 
 ## Run the loop against the base state
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --session-id ...`
 ```bash
 ynh agent run \
   --harness local/<pinned-harness> \
@@ -329,6 +345,14 @@ ynh agent run \
   --emit-jsonl /tmp/shadow/173.jsonl
 echo "exit=$?"
 ```
+
+The worker can change the worktree only if your vendor CLI lets it edit. ynh
+passes no permission flag, and a one-shot Claude Code session declines an edit
+it was not allowed to make, so with neither your own settings nor
+`--auto-approve edits` allowing it, the run makes no change and stops `stuck`
+(exit `13`) or at its turn cap (`10`). That is a measurement of nothing, not a
+failed attempt. See [The controls a run does not have](agent-loop.md#the-controls-a-run-does-not-have)
+before choosing which to use.
 
 **Nothing merges.** `--auto-commit` is opt-in, so never-merging is already the
 default — there is no flag to remember and no mistake to make. The loop leaves
@@ -418,7 +442,7 @@ cp /tmp/shadow/task-173.txt /tmp/shadow/task-8382382.txt
 Each historical tree gets its own worktree, and `--cwd` points the "before"
 check at it:
 
-*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --allowedTools=Read(/.../ynh-agent-.../**) --session-id ...`
 ```bash
 for FIX in $(cat /tmp/shadow/candidates.txt); do
   W=/tmp/shadow/$FIX
@@ -483,4 +507,4 @@ than as a project.
 
 ## Next
 
-[Delegation](delegation.md) — chain harnesses together as subagents.
+[A First Delegate Session](first-delegate-session.md) — have one harness hand work to another.

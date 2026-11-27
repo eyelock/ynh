@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.10.0"
+const CapabilitiesVersion = "0.11.0"
 
 // features names the capabilities a consumer can gate on without parsing a
 // version, reported by `ynh version --format json` and `ynd version --format
@@ -123,13 +123,28 @@ type Config struct {
 	Sources        []Source              `json:"sources,omitempty"`
 	Backends       map[string]BackendDef `json:"backends,omitempty"`
 	// TelemetryRelay turns on the telemetry relay for every `ynh agent run`
-	// (docs/telemetry.md). --telemetry-relay and YNH_TELEMETRY_RELAY come
+	// and every `ynh run` (docs/telemetry.md); a Claude Code, Copilot or Codex `ynh run` starts one,
+	// interactive sessions included. --telemetry-relay and YNH_TELEMETRY_RELAY come
 	// first.
 	TelemetryRelay bool `json:"telemetry_relay,omitempty"`
+	// TelemetryRelayEndpoint is a standing relay's loopback endpoint, such as
+	// "http://127.0.0.1:4318". When set, `ynh run` points the vendor's own
+	// telemetry at it and starts no relay of its own. Off by default.
+	// --telemetry-relay-endpoint and YNH_TELEMETRY_RELAY_ENDPOINT come first
+	// (docs/telemetry.md).
+	TelemetryRelayEndpoint string `json:"telemetry_relay_endpoint,omitempty"`
 	// Labels are run labels (key to value) every `ynh run` and `ynh agent
 	// run` carries, the lowest-precedence source: the harness manifest,
 	// YNH_LABELS and --label override them per key (docs/telemetry.md).
 	Labels map[string]string `json:"labels,omitempty"`
+	// SrtDenyRead adds paths to the ones `ynh agent run --sandbox srt` denies
+	// the worker reading, beside ynh's default credential paths
+	// (docs/agent.md). "~/" expands to the worker's home.
+	SrtDenyRead []string `json:"srt_deny_read,omitempty"`
+	// SrtAllowRead removes paths from ynh's default read-deny list, so a
+	// worker that must read one (a deploy key, say) can. A path is removed
+	// when it equals a default after "~/" expands.
+	SrtAllowRead []string `json:"srt_allow_read,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

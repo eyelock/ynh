@@ -28,6 +28,9 @@ type IncludedHarness struct {
 type MCPProvenance struct {
 	Server string
 	Source string
+	// Dir is the directory of the harness that declared the server, which a
+	// relative path in it resolves against. Empty when that harness has none.
+	Dir string
 }
 
 // copyMCPServer returns s with its slices and maps copied, so a caller that
@@ -59,13 +62,13 @@ func copyMCPServer(s plugin.MCPServer) plugin.MCPServer {
 //
 // The provenance lists each surviving server's source, sorted by name.
 func ComposeMCPServers(root *Harness, includes []IncludedHarness, dataDir string, lookup func(string) (string, bool)) (map[string]plugin.MCPServer, []MCPProvenance, error) {
-	servers, sources, err := composeMCP(root, includes, func(h *Harness) (map[string]plugin.MCPServer, error) {
+	servers, sources, dirs, err := composeMCP(root, includes, func(h *Harness) (map[string]plugin.MCPServer, error) {
 		return AssembleMCPServers(h, dataDir, lookup)
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	return servers, provenanceList(sources), nil
+	return servers, provenanceList(sources, dirs), nil
 }
 
 // ComposeMCPServersForExport is ComposeMCPServers for `ynd export`: nothing
@@ -113,13 +116,13 @@ func ComposeDelegateMCPServersForExport(del *Harness, includes []IncludedHarness
 // it, so the digest does not move with the operator's environment, and a run
 // that expands ${VAR} still launches exactly the servers listed here.
 func ComposeMCPServersRaw(root *Harness, includes []IncludedHarness) (map[string]plugin.MCPServer, []MCPProvenance, error) {
-	servers, sources, err := composeMCP(root, includes, func(h *Harness) (map[string]plugin.MCPServer, error) {
+	servers, sources, dirs, err := composeMCP(root, includes, func(h *Harness) (map[string]plugin.MCPServer, error) {
 		return h.MCPServers, nil
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	return servers, provenanceList(sources), nil
+	return servers, provenanceList(sources, dirs), nil
 }
 
 // mcpUsesOwnDir reports whether a stdio server names a path inside its
@@ -144,9 +147,10 @@ func mcpUsesOwnDir(s plugin.MCPServer) bool {
 // composeMCP merges the servers of includes and root, each obtained through
 // assemble, and applies root's removals. sources maps each surviving name to
 // its provenance.
-func composeMCP(root *Harness, includes []IncludedHarness, assemble func(*Harness) (map[string]plugin.MCPServer, error)) (map[string]plugin.MCPServer, map[string]string, error) {
+func composeMCP(root *Harness, includes []IncludedHarness, assemble func(*Harness) (map[string]plugin.MCPServer, error)) (map[string]plugin.MCPServer, map[string]string, map[string]string, error) {
 	merged := make(map[string]plugin.MCPServer)
 	sources := make(map[string]string)
+	dirs := make(map[string]string)
 
 	// Names the root declares or removes never reach an include's servers:
 	// they are neither expanded (an unset variable in a server the root
@@ -174,41 +178,44 @@ func composeMCP(root *Harness, includes []IncludedHarness, assemble func(*Harnes
 		}
 		servers, err := assemble(&view)
 		if err != nil {
-			return nil, nil, fmt.Errorf("MCP servers of included harness %s: %w", inc.Source, err)
+			return nil, nil, nil, fmt.Errorf("MCP servers of included harness %s: %w", inc.Source, err)
 		}
 		for _, name := range slices.Sorted(maps.Keys(servers)) {
 			s := servers[name]
 			if prev, ok := merged[name]; ok {
 				if !reflect.DeepEqual(prev, s) {
-					return nil, nil, fmt.Errorf("MCP server %q is defined differently by %s and %s; declare it in the root harness to choose one", name, sources[name], inc.Source)
+					return nil, nil, nil, fmt.Errorf("MCP server %q is defined differently by %s and %s; declare it in the root harness to choose one", name, sources[name], inc.Source)
 				}
 				continue
 			}
 			merged[name] = s
 			sources[name] = inc.Source
+			dirs[name] = inc.Harness.Dir
 		}
 	}
 
 	rootServers, err := assemble(root)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for name, s := range rootServers {
 		merged[name] = s
 		sources[name] = MCPSourceRoot
+		dirs[name] = root.Dir
 	}
 
 	for _, name := range root.MCPRemovals {
 		delete(merged, name)
 		delete(sources, name)
+		delete(dirs, name)
 	}
-	return merged, sources, nil
+	return merged, sources, dirs, nil
 }
 
-func provenanceList(sources map[string]string) []MCPProvenance {
+func provenanceList(sources, dirs map[string]string) []MCPProvenance {
 	out := make([]MCPProvenance, 0, len(sources))
 	for _, name := range slices.Sorted(maps.Keys(sources)) {
-		out = append(out, MCPProvenance{Server: name, Source: sources[name]})
+		out = append(out, MCPProvenance{Server: name, Source: sources[name], Dir: dirs[name]})
 	}
 	return out
 }

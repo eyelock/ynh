@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "untrusted",
+    "message": "refusing to run acme/reviewer: you have not accepted what it executes.\nIt executes:\n  hook on_stop: ./hooks/guard.sh\nReview them: ynh trust show acme/reviewer\nThen accept:  ynh trust accept acme/reviewer"
+  }
+}

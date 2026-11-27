@@ -18,6 +18,7 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // pluginInfo holds resolved metadata for a plugin in the marketplace.
@@ -178,7 +179,7 @@ type BuildOptions struct {
 // config. It returns the export warnings of every harness entry, each
 // prefixed with the entry's name ("reviewer: codex: ..."). Warnings never
 // fail a build; the caller decides how to show them.
-func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
+func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]warn.Warning, error) {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
 		vendors = vendor.Available()
@@ -249,7 +250,7 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 	}
 
 	var pluginInfos []pluginInfo
-	var warnings []string
+	var warnings []warn.Warning
 	for i, p := range prepared {
 		entry := cfg.Harnesses[i]
 		info := p.info
@@ -262,7 +263,8 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 				return nil, fmt.Errorf("harness %q: %w", info.Name, err)
 			}
 			for _, w := range entryWarnings {
-				warnings = append(warnings, info.Name+": "+w)
+				w.Message = info.Name + ": " + w.Message
+				warnings = append(warnings, w)
 			}
 		case "plugin":
 			if err := buildPluginEntry(p.srcDir, pluginOutputDir, vendors); err != nil {
@@ -317,7 +319,7 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 // buildHarnessEntry exports a harness into the plugin output dir, a merged
 // vendor tree or, when agentPlugin is set, one Agent Plugins package, and
 // returns the export's warnings.
-func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config, agentPlugin bool) ([]string, error) {
+func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config, agentPlugin bool) ([]warn.Warning, error) {
 	mode := exporter.ModeMerged
 	if agentPlugin {
 		mode = exporter.ModeAgentPlugin
@@ -332,7 +334,7 @@ func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.C
 	if err != nil {
 		return nil, err
 	}
-	var warnings []string
+	var warnings []warn.Warning
 	for _, r := range results {
 		warnings = append(warnings, r.Warnings...)
 	}

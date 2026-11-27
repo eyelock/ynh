@@ -40,6 +40,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	structured := detectJSONFormat(args)
 	resultFormat := "text"
 	relayFlag := false
+	trustFlag := false
 	var profileValues []string // --profile repeats, one per harness
 	var labelFlags []string    // --label repeats; key: removes a label
 	opts := agent.RunOptions{
@@ -169,6 +170,9 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 				return cliError(stderr, structured, errCodeInvalidInput, "--convergence-sensor requires a value")
 			}
 			opts.ConvergenceSensor = args[i]
+
+		case "--trust":
+			trustFlag = true
 
 		case "--auto-commit":
 			opts.AutoCommit = true
@@ -301,6 +305,27 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 
 	opts.WorkspaceGrant = func(h *harness.Harness, id, backend, worktree string) []string {
 		return workspaceGrant(h, id, backend, worktree, false, stderr)
+	}
+
+	// --trust accepts a folder harness's full-SHA-pinned remote includes
+	// before the gate runs; an installed harness never takes it (ynh #951).
+	if trustFlag {
+		if opts.HarnessName == "" {
+			return cliError(stderr, structured, errCodeInvalidInput, "--trust needs --harness <folder>")
+		}
+		if err := acceptFolderRunFor(opts.HarnessName, stderr); err != nil {
+			return cliError(stderr, structured, errCodeUntrusted, err.Error())
+		}
+	}
+
+	opts.TrustGate = func(h *harness.Harness, id string) error {
+		return trustGate(id, h, stderr)
+	}
+
+	opts.Trusted = func(h *harness.Harness, id string) bool { return gateTrusted(id, h) }
+
+	opts.HookTrust = func(h *harness.Harness, id, backend, configDir string) bool {
+		return codexHooksTrusted(h, id, backend, configDir, stderr)
 	}
 
 	result, err := agent.RunLoop(opts)

@@ -20,6 +20,9 @@
 # literals, so this is a text check: no build, no vendor CLI.
 
 set -euo pipefail
+# Never test membership with `printf | grep -q`: grep -q exits at its first match,
+# the writer dies of SIGPIPE, and pipefail then reports a false miss under load.
+# Feed grep a here-string instead.
 
 ROOT="${1:?usage: hook-event-parity.sh <repo-root> <vendor>...}"
 shift
@@ -84,8 +87,8 @@ for v in "$@"; do
 	bad=0
 	for e in $events; do
 		in_map=0; in_decl=0
-		printf '%s\n' "$mapped" | grep -qx "$e" && in_map=1
-		printf '%s\n' "$declared" | grep -qx "$e" && in_decl=1
+		grep -qx "$e" <<<"$mapped" && in_map=1
+		grep -qx "$e" <<<"$declared" && in_decl=1
 		if [ "$in_map" -eq 0 ] && [ "$in_decl" -eq 0 ]; then
 			echo "  MISSING  $v: $e is neither mapped nor declared unsupported"
 			bad=1
@@ -121,7 +124,7 @@ for v in "$@"; do
 	if [ "$sdecl" -ne 1 ]; then
 		echo "  MISSING  $v: must declare <x>SessionStartContext exactly once (plain, json-field:<name> or unsupported:<reason>)"
 		bad=1
-	elif ! printf '%s\n' "$sval" | grep -qE '^(plain|json-field:[A-Za-z_]+|unsupported:.+)$'; then
+	elif ! grep -qE '^(plain|json-field:[A-Za-z_]+|unsupported:.+)$' <<<"$sval"; then
 		echo "  MISSING  $v: <x>SessionStartContext is \"$sval\", want plain, json-field:<name> or unsupported:<reason>"
 		bad=1
 	fi

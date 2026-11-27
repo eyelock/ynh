@@ -446,7 +446,7 @@ func TestCmdIncludeAdd_Hooks(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	incs := loadTestIncludes(t, dir)
-	if len(incs) != 1 || !incs[0].Hooks {
+	if len(incs) != 1 || incs[0].Hooks == nil || !*incs[0].Hooks {
 		t.Fatalf("includes = %+v, want one with hooks true", incs)
 	}
 	if !strings.Contains(buf.String(), "hooks active") {
@@ -461,8 +461,8 @@ func TestCmdIncludeAdd_HooksDefaultsOff(t *testing.T) {
 	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].Hooks {
-		t.Fatalf("includes = %+v, want hooks false", incs)
+	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].Hooks != nil {
+		t.Fatalf("includes = %+v, want hooks unset", incs)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile))
 	if err != nil {

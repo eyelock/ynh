@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdMarketplace(args []string) error {
@@ -153,9 +154,7 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 		return err
 	}
 
-	for _, w := range warnings {
-		_, _ = fmt.Fprintf(stderr, "warning: %s\n", w)
-	}
+	warn.Print(stderr, warnings...)
 	fmt.Printf("Marketplace built → %s (%d plugins)\n", outputDir, len(cfg.Harnesses))
 	return nil
 }

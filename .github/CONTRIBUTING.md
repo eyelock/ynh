@@ -13,7 +13,7 @@ See [Harness Engineering §"Design Stance"](../docs/harness-engineering.md#desig
 
 ## Architecture
 
-ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor, Copilot, OpenCode) handles all interaction. ynh's job is to resolve, assemble, and launch.
+ynh is a packaging and distribution tool. It does not own the agent: the AI vendor CLI (Claude, Codex, Cursor, Copilot, OpenCode) handles all interaction. ynh's job is to resolve, assemble, and launch, and it stays alive as the vendor CLI's parent for the whole session (supervising it, keeping telemetry and the run directory's lock).
 
 ### Core Flow
 
@@ -46,11 +46,11 @@ internal/
   telemetry/              OpenTelemetry for `ynh agent run`: destination, run span and events (docs/telemetry.md)
   vendor/                 Vendor adapter interface and implementations
     adapter.go            Interface definition + registry
-    claude.go             Claude Code adapter (exec with --plugin-dir)
+    claude.go             Claude Code adapter (child process with --plugin-dir)
     codex.go              OpenAI Codex adapter (child process + symlinks)
-    copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
+    copilot.go            GitHub Copilot CLI adapter (child process with --plugin-dir)
     cursor.go             Cursor adapter (child process + symlinks)
-    opencode.go           OpenCode 2.x adapter (exec of `opencode --standalone` with OPENCODE_CONFIG_DIR)
+    opencode.go           OpenCode 2.x adapter (child process of `opencode --standalone` with OPENCODE_CONFIG_DIR)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
     toml.go               Minimal TOML emitter for Codex MCP config
@@ -68,7 +68,7 @@ docs/                     User guide (GitHub Pages)
 
 **Harnesses compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
 
-**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, and OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
+**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, and OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, so ynh needs no symlinks for them. Codex and Cursor lack native plugin loading, so ynh installs symlinks. Every vendor CLI runs as a supervised child process of ynh, with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
 **Single manifest.** Harnesses use a single `plugin.json` inside `.agents/harness/` as their manifest: all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The directory was `.ynh-plugin/` before it moved under `.agents/`; ynh no longer reads it (#404), and nothing creates it. `internal/plugin` knows only `PluginDir`; `LegacyPluginDir` exists for the migrator. `migration.ManifestDirMigrator` is the one place the old layout is understood, and it is in `FormatChain`, which every load runs first: in a tree ynh owns (an install under `~/.ynh/harnesses/` or a git clone under `~/.ynh/cache/`) it renames `.ynh-plugin/` to `.agents/harness/`, so a remote source that has not moved keeps working; in any other tree it returns an error naming `ynd migrate`, and a tree with both layouts (or a symlink) is an error in every tree. Only `ynd migrate` (`MigrateChain`) renames a tree the user owns, never as a side effect of reading (#406). `ynd validate` and `ynd preview` ask `migration.LegacyManifestDir` for the same answer. `resolver.EnsureRepo` resets a clone and runs `git clean` after every fetch because ynh may have renamed its manifest directory, which git would otherwise refuse to check out over. `ynh update` overlays upstream onto an install, so `migration.AdoptRefreshedManifest` keeps a still-legacy upstream's fresh `plugin.json` from being shadowed by the moved one. Every reader and writer goes through the path helpers (`PluginPath`, `InstalledPath`, `MarketplacePath`, `HarnessRoot`) rather than joining the directory name by hand. Do not confuse `LegacyPluginDir` with `IsClaudePluginDir`, which detects the unsupported `.claude-plugin/plugin.json` layout.
 
@@ -314,7 +314,7 @@ The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and 
 
 The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `.agents/harness/marketplace.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
 
-The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
+The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand (host-qualified only; a host-less `a/b` not on disk is a missing-local-path error) → plain name registry search. See `cmd/ynh/install_resolve.go`.
 
 ### Migration Chain
 
@@ -365,6 +365,7 @@ type Adapter interface {
 	SupportsResume() bool
 	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
 	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
+	IsolateMCP(configPath string) (args []string, warning string)
 	GenerateSystemPrompt(content []byte) map[string][]byte
 	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
@@ -373,18 +374,20 @@ type Adapter interface {
 	PluginManifestDir() string
 	ExportArtifactDirs() map[string]string
 	SupportsExportDelegates() bool
+	SupportsNativeSubagents() bool
 	MarketplaceManifestDir() string
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
 	AgentPluginLayout() AgentPluginLayout
 }
 ```
 
-**26 methods.** Regenerated from `internal/vendor/adapter.go`; that
+**28 methods.** Regenerated from `internal/vendor/adapter.go`; that
 declaration is the only authority. This copy has drifted before: it read 10,
 11 and 18 methods in three different places while the interface had 24, which
 hid the entire resume subsystem from anyone writing a new adapter, and later
 read 25, without `AgentPluginLayout` and with an old `LaunchResume`
-signature, while the interface had 26.
+signature, while the interface had 26, and then 26 without `IsolateMCP` while
+it had 27.
 
 **Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
 
@@ -394,9 +397,9 @@ signature, while the interface had 26.
 
 This follows the "accept interfaces, return structs" principle and keeps coupling minimal.
 
-**Two launch patterns exist:**
+**One launch pattern exists:** every vendor CLI runs as a child process of ynh, which stays alive as its parent for the whole session. Use `execVendor` (or `runChildProcess` when you build the `exec.Cmd` yourself); it forwards SIGTERM and SIGHUP, lets the terminal deliver SIGINT and SIGQUIT to the child, and returns an `*ExitError` carrying the child's exit code. Never call `syscall.Exec` for a vendor: it would replace ynh and lose cleanup, telemetry and the run directory's lock handling.
 
-Vendors with native plugin support (like Claude's `--plugin-dir`) use `syscall.Exec` for a clean process replacement:
+Vendors with native plugin support (like Claude's `--plugin-dir`) need no symlinks:
 
 ```go
 func launchMyVendor(configPath string, extraArgs []string) error {
@@ -406,11 +409,11 @@ func launchMyVendor(configPath string, extraArgs []string) error {
     }
     args := []string{"myvendor", "--plugin-dir", filepath.Join(configPath, ".myvendor")}
     args = append(args, extraArgs...)
-    return syscall.Exec(bin, args, os.Environ())
+    return execVendor(bin, args, os.Environ())
 }
 ```
 
-Vendors that need symlinks use a managed child process with signal forwarding, so ynh stays alive for cleanup:
+Vendors that need symlinks run in the symlinked directory, through the same child-process path:
 
 ```go
 func launchMyVendor(configPath string, extraArgs []string) error {
@@ -420,7 +423,7 @@ func launchMyVendor(configPath string, extraArgs []string) error {
     }
     cmd := exec.Command(bin, extraArgs...)
     cmd.Dir = configPath
-    return runChildProcess(cmd) // handles SIGINT/SIGTERM forwarding
+    return runChildProcess(cmd) // forwards SIGTERM/SIGHUP; the terminal delivers SIGINT/SIGQUIT
 }
 ```
 
@@ -432,7 +435,7 @@ The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directo
 
 ### Assembler
 
-The assembler builds a deterministic run directory (`~/.ynh/run/<idfsname>/`, e.g. `run/local--foo/`) with the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. The run directory is cleaned and repopulated on each run. Two modes:
+The assembler builds the vendor's layout in a staging folder, which `ynh run` seals as a content-addressed snapshot (`~/.ynh/run/.snapshots/<idfsname>/<hash>/`); `~/.ynh/run/<idfsname>` (e.g. `run/local--foo`) is a symlink to the newest one. The layout has the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. A snapshot is reused when its inputs hash the same and is never rewritten once sealed (a session running on it is not disturbed); a run deletes every snapshot that is neither current nor held by a live session (the session holds a shared lock for the vendor's life). Two modes:
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied
@@ -668,12 +671,7 @@ The `<idfsname>` directory naming uses the canonical id with `/` → `--` (one-d
 
 ## Using ynh's Own Harness
 
-The ynh project ships its own harness (skills, agents, rules) for both contributors and new users:
-
-```bash
-ynh install github.com/eyelock/ynh
-ynh-guide
-```
+Contributors can work with ynh's own harness, using its `ynh-dev` profile through the `contribute` focus (`--focus contribute`). The steps to install and accept it are in [Getting started](../docs/getting-started.md).
 
 Inside the session, `/ynh-create-harness` walks you through creating your own harness. The development-focused skills (`ynh-dev`, `vendor-adapters`, etc.) live in `.claude/` and are loaded natively by Claude — they're not part of the installable harness.
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/cli/doctor.schema.json",
   "title": "ynh doctor --format json",
-  "description": "Output of `ynh doctor --format json`. A read-only diagnosis of an ynh setup: vendor CLIs, installed harnesses, project symlinks, the launcher directory, quarantine and Claude hook wiring. doctor never repairs, so every finding carries the command that does. Exit status is 0 even when findings exist; a caller wanting a gate reads summary.errors.",
+  "description": "Output of `ynh doctor --format json`. A read-only diagnosis of an ynh setup: vendor CLIs, installed harnesses, project symlinks, the launcher directory, delegates that no longer resolve, quarantine and Claude hook wiring. doctor never repairs, so every finding carries the command that does. Exit status is 0 even when findings exist; a caller wanting a gate reads summary.errors.",
   "x-capabilities": "0.8",
   "type": "object",
   "additionalProperties": false,

@@ -13,6 +13,7 @@ import (
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 func cmdExport(args []string) error {
@@ -206,9 +207,7 @@ func cmdExport(args []string) error {
 		} else {
 			fmt.Printf("Exported for %s → %s (%d skills, %d agents)\n", r.Vendor, r.OutputDir, r.Skills, r.Agents)
 		}
-		for _, w := range r.Warnings {
-			fmt.Printf("  warning: %s\n", w)
-		}
+		warn.Print(os.Stderr, r.Warnings...)
 	}
 
 	return nil

@@ -13,17 +13,21 @@ import (
 
 // HarnessJSON represents the plugin.json manifest: the single source of truth.
 type HarnessJSON struct {
-	Schema        string                 `json:"$schema,omitempty"`
-	Name          string                 `json:"name"`
-	Version       string                 `json:"version"`
-	Description   string                 `json:"description,omitempty"`
-	Author        *AuthorInfo            `json:"author,omitempty"`
-	Keywords      []string               `json:"keywords,omitempty"`
-	DefaultVendor string                 `json:"default_vendor,omitempty"`
-	Includes      []IncludeMeta          `json:"includes,omitempty"`
-	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
-	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
-	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	Schema        string         `json:"$schema,omitempty"`
+	Name          string         `json:"name"`
+	Version       string         `json:"version"`
+	Description   string         `json:"description,omitempty"`
+	Author        *AuthorInfo    `json:"author,omitempty"`
+	Keywords      []string       `json:"keywords,omitempty"`
+	DefaultVendor string         `json:"default_vendor,omitempty"`
+	Includes      []IncludeMeta  `json:"includes,omitempty"`
+	DelegatesTo   []DelegateMeta `json:"delegates_to,omitempty"`
+	// Transport is the default transport of the harness's delegates_to
+	// entries: "a2a" or "native". An entry's own transport wins; neither
+	// set means a2a.
+	Transport  string                 `json:"transport,omitempty"`
+	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
+	MCPServers map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	// MCPRemovals names the servers the manifest sets to null in
 	// mcp_servers: a server inherited from an included harness that this
 	// harness does not want. It is not a field of its own on the wire (see
@@ -40,6 +44,19 @@ type HarnessJSON struct {
 	// (Codex); true leaves approval to the vendor and the caller. A launch
 	// concern, like MCPIsolation.
 	MCPManualApproval bool `json:"mcp_manual_approval,omitempty"`
+	// OnLive says what `ynh run` does when a session of this harness is
+	// already live: "refuse" stops the second run, "allow" starts it quietly,
+	// empty (the default) warns and starts it. `ynh run --on-live` overrides
+	// it for one run. A launch concern, like MCPManualApproval.
+	OnLive string `json:"on_live,omitempty"`
+	// DelegateQuestions says where a delegate's question to this harness
+	// goes: "model" returns it in the tool result for the harness's
+	// model to put to the person, naming the asker; "client" puts it to the
+	// client's own prompts first (elicitation, Claude Code Tasks), where the
+	// client has them. Absent, it is auto by session: client for an
+	// interactive parent, model for a headless one. A launch concern, like
+	// OnLive.
+	DelegateQuestions string `json:"delegate_questions,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`
@@ -785,8 +802,10 @@ type ProvenanceMeta struct {
 // `ref` is Git-only. `as` names the namespace an included harness's focuses
 // and profiles are selected under ("alias:name"); it defaults to the included
 // harness's own name. `hooks` consents to the included harness's hooks
-// running in the session; it is false unless set, because a hook is command
-// execution the root author has not written.
+// running in the session. It is tri-state: absent, true or false. Hooks run
+// only when it is true, because a hook is command execution the root author
+// has not written; an explicit false is the author's choice to keep them off
+// and silences the inactive-hooks warning, which fires only when it is absent.
 type IncludeMeta struct {
 	Git   string   `json:"git,omitempty"`
 	Local string   `json:"local,omitempty"`
@@ -797,7 +816,7 @@ type IncludeMeta struct {
 	// means true: sensors travel with the include.
 	Sensors *bool  `json:"sensors,omitempty"`
 	As      string `json:"as,omitempty"`
-	Hooks   bool   `json:"hooks,omitempty"`
+	Hooks   *bool  `json:"hooks,omitempty"`
 	// Instructions, when false, leaves out the include's instructions file
 	// (instructions.md / AGENTS.md) when instructions are composed. Absent
 	// means true: the include contributes a section.
@@ -815,6 +834,10 @@ type DelegateMeta struct {
 	// one of the two; neither runs the delegate on its base config.
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// Transport is how the parent reaches this delegate: "a2a" (its own
+	// detached ynh session) or "native" (the vendor's subagents). Empty
+	// takes the harness's transport, then a2a.
+	Transport string `json:"transport,omitempty"`
 }
 
 // HarnessFile is the legacy single-file harness manifest. ynh reads it only to

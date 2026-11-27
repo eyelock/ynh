@@ -7,6 +7,8 @@ tools: Bash, Read, Glob
 
 Evaluate ALL tutorials. This is a release gate: the verdict must be PASS before any release.
 
+`make evals` runs this agent headless (`scripts/evals.sh`) and exits 0 only on `EVALS: PASS`. The Evals workflow (`.github/workflows/evals.yml`, `workflow_dispatch`) runs it on a branch and records the verdict as its check run.
+
 ## Process
 
 1. Build the latest binaries: `make build`. They land in the repo's `bin/`.
@@ -99,6 +101,7 @@ A stub runs nothing: it appends its name and arguments to
 | `srt` | the sandbox wrapper `ynh agent run --sandbox srt` puts around `claude` |
 | `gh` | GitHub sensors (network) |
 | `docker` | `ynh image` (Docker) |
+| `a2a` | `ynh doctor`, which runs `a2a version` for the a2a CLI route |
 
 `make check-vendor-parity` fails if a vendor's CLI, as `ynh vendors` reports it,
 is missing from the `STUBS` line below, or if ynh or ynd source launches a program
@@ -112,7 +115,7 @@ Stubs also make `ynh vendors` deterministic: every vendor reports
 ### Launch blocks
 
 Because every vendor CLI is a stub, a block that launches a harness is safe to
-run: ynh assembles `~/.ynh/run/<id>/` and then executes the stub, which records
+run: ynh assembles a snapshot under `~/.ynh/run/.snapshots/<id>/` and then executes the stub, which records
 its arguments and exits 1. The launch block's success criterion is everything
 ynh does before the vendor starts: the assembly, which the blocks after it read
 (`ls ~/.ynh/run/...`), and the arguments the vendor receives. What the
@@ -126,7 +129,7 @@ own above the block, one line per launch, in order. The line reads
 as the block's expected call. In `first-harness.md` it reads:
 
 ```markdown
-*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what are you?`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/local--my-harness/.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/local--my-harness/.../**) --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```
 
 The command is the program name, then its arguments joined by single spaces,
@@ -184,7 +187,7 @@ Once at tutorial start, in a single Bash invocation from the checkout. Fill in `
 YNH_REPO=$(git rev-parse --show-toplevel)
 SLUG=<slug>                                  # e.g. sensors for tutorial/sensors.md
 SANDBOX=/tmp/ynh-eval-$SLUG
-STUBS="claude codex copilot opencode agent cursor cursor-agent srt gh docker ynr"
+STUBS="claude codex copilot opencode agent cursor cursor-agent srt gh docker ynr a2a"
 case $SANDBOX in /tmp/ynh-eval-?*) rm -rf "$SANDBOX" ;; *) echo "bad sandbox: $SANDBOX"; exit 1 ;; esac
 mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state" "$SANDBOX/stubs"
 cp "$YNH_REPO/bin/ynh" "$YNH_REPO/bin/ynd" "$SANDBOX/home/.ynh/bin/"   # what make install would put there
@@ -386,7 +389,7 @@ which is why this is done below the commands and not in them.
 
 | Repository | What the tutorials take from it |
 |------------|---------------------------------|
-| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tags `v1.0.0`, `@eyelock-assistants/dev-skills@0.2.0`, `@eyelock-assistants/tech-skills@0.2.1`, `@eyelock-assistants/infra-skills@0.2.0` and `@eyelock-assistants/pause-skills@0.1.1` (the pins the real includes carry; a pin moved upstream must move in `scripts/eval-remotes.sh` too) |
 | `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
 | `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
 | `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |

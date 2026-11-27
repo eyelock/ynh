@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/eyelock/ynh/internal/warn"
 )
 
 // baseVersionLabels are the labels the published ynh image carries its version
@@ -54,19 +56,21 @@ func baseYnhVersion(image string) string {
 // "dev-feat-x-abc1234-dirty") counts as newer than every release, so building
 // from a branch on a released base warns. A base version that is not a
 // release is unknown and stays silent.
-func baseVersionWarning(base, builder string) string {
+func baseVersionWarning(base, builder string) (warn.Warning, bool) {
 	baseVer := baseYnhVersion(base)
 	b, ok := parseRelease(baseVer)
 	if !ok {
-		return ""
+		return warn.Warning{}, false
 	}
 	if y, ok := parseRelease(builder); ok && compareRelease(b, y) >= 0 {
-		return ""
+		return warn.Warning{}, false
 	}
-	return fmt.Sprintf("warning: base image %s carries ynh %s, older than this ynh (%s).\n"+
-		"  The image will run ynh %s, which may not read this harness: older releases do not read\n"+
-		"  manifests in .agents/harness/. Use --base <image> to build on a newer ynh image.\n",
-		base, baseVer, builder, baseVer)
+	return warn.Warning{
+		Message: fmt.Sprintf("base image %s carries ynh %s, older than this ynh (%s). "+
+			"The image will run ynh %s, which may not read this harness: older releases do not read "+
+			"manifests in .agents/harness/.", base, baseVer, builder, baseVer),
+		Fix: "pass --base <image> to build on a newer ynh image",
+	}, true
 }
 
 // release is a parsed semantic version.

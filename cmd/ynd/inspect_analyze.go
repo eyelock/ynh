@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -505,7 +506,9 @@ func ensureFrontmatter(raw string, p proposal) string {
 	// Strip leading blank lines from body
 	body = strings.TrimLeft(body, "\n")
 
-	// Build correct frontmatter from the proposal
+	// Build correct frontmatter from the proposal. The values come from LLM
+	// output, so each is written as a double-quoted scalar (strconv.Quote)
+	// to stay valid YAML whatever it contains.
 	var fm string
 	if p.Type == "agent" {
 		// Try to salvage a tools line from the LLM output
@@ -515,9 +518,11 @@ func ensureFrontmatter(raw string, p proposal) string {
 				tools = t
 			}
 		}
-		fm = fmt.Sprintf("---\nname: %s\ndescription: %s\ntools: %s\n---\n", p.Name, extractDescription(p.Line), tools)
+		fm = fmt.Sprintf("---\nname: %s\ndescription: %s\ntools: %s\n---\n",
+			strconv.Quote(p.Name), strconv.Quote(extractDescription(p.Line)), strconv.Quote(tools))
 	} else {
-		fm = fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n", p.Name, extractDescription(p.Line))
+		fm = fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n",
+			strconv.Quote(p.Name), strconv.Quote(extractDescription(p.Line)))
 	}
 
 	if body != "" {
