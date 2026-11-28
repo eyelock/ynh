@@ -100,7 +100,10 @@ func RouteMeta(rec *delegation.Record) map[string]any {
 		m[MetaSession], m[MetaCwd] = rec.Session, rec.SessionCwd
 	}
 	if rec.AutoApprove != "" {
-		m[MetaAutoApprove], m[MetaAutoApproveFrom] = rec.AutoApprove, rec.AutoApproveFrom
+		m[MetaAutoApprove] = rec.AutoApprove
+	}
+	if rec.AutoApproveFrom != "" {
+		m[MetaAutoApproveFrom] = rec.AutoApproveFrom
 	}
 	return m
 }

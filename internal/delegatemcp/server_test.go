@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/presence"
 )
 
@@ -735,5 +737,23 @@ func TestResultCarriesTheLevelAndItsSource(t *testing.T) {
 	b, _ := json.Marshal(r)
 	if !strings.Contains(string(b), `"auto_approve":"edits"`) || !strings.Contains(string(b), `"auto_approve_from":"entry"`) {
 		t.Errorf("json = %s", b)
+	}
+}
+
+// The result's auto_approve_from enum is built from permission.Sources, so it
+// accepts every word a record can carry, and a test keeps it in step.
+func TestResultSchemaSourcesMatchPermissionSources(t *testing.T) {
+	props := resultSchema["properties"].(map[string]any)["auto_approve_from"].(map[string]any)["enum"].([]string)
+	var want []string
+	for _, s := range permission.Sources {
+		want = append(want, string(s))
+	}
+	if !slices.Equal(props, want) {
+		t.Errorf("schema enum %v, want %v", props, want)
+	}
+	for _, w := range []string{"harness", "flag", "interactive"} {
+		if !slices.Contains(props, w) {
+			t.Errorf("%s missing from the schema", w)
+		}
 	}
 }

@@ -270,7 +270,7 @@
       "additionalProperties": false
     },
     "auto_approve": { "type": "string", "enum": ["none", "edits", "all"], "description": "The permission level the harness opens at when run unattended (a delegate session, a one-shot `ynh run`, `ynh agent run`): its declared auto_approve, else all, the default for an accepted harness. Covered by digest only when declared. Filled by `trust show` only." },
-    "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default"], "description": "Where auto_approve comes from: the harness's own declaration, or the default. Filled by `trust show` only." },
+    "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default", "interactive"], "description": "Where auto_approve comes from: the harness's own declaration, or the default. Filled by `trust show` only." },
     "delegate_levels": { "type": "array", "items": { "type": "string" }, "description": "The auto_approve levels delegates_to entries declare, as `<delegate>: <level>`, in entry order. Present only when an entry declares one. Covered by digest. Filled by `trust show` only." },
     "a2a_delegates": {
       "type": "array",
@@ -285,7 +285,7 @@
           "state": { "type": "string", "enum": ["unreviewed", "accepted", "changed", "no-commands", "unavailable", "not-installed"], "description": "The delegate's own trust state." },
           "digest": { "type": "string", "description": "The fingerprint of what the delegate runs." },
           "auto_approve": { "type": "string", "enum": ["none", "edits", "all"], "description": "The level the delegate opens at when run unattended: its own, narrowed by the declaring entry." },
-          "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default"], "description": "Where auto_approve comes from." },
+          "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default", "interactive"], "description": "Where auto_approve comes from." },
           "executables": { "type": "array", "items": { "$ref": "#/$defs/Executable" }, "description": "The delegate's sensor commands." },
           "hooks": { "type": "array", "items": { "$ref": "#/$defs/Hook" }, "description": "The delegate's hooks." },
           "mcp_servers": { "type": "array", "items": { "$ref": "#/$defs/MCPServer" }, "description": "The delegate's MCP servers." },

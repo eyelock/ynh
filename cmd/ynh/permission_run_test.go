@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -237,7 +239,7 @@ func TestOpenedModeSettings(t *testing.T) {
 		t.Errorf("only Claude reports a mode: %q %v", got, err)
 	}
 	got, err := openedModeSettings("claude", "acceptEdits", []string{"--model", "m"})
-	if err != nil || len(got) != 4 || got[0] != "--settings" || !strings.Contains(got[1], "permission-check --expect") || !strings.Contains(got[1], "acceptEdits") || !strings.Contains(got[1], "SessionStart") || got[2] != "--model" {
+	if err != nil || len(got) != 4 || got[0] != "--settings" || !strings.Contains(got[1], "permission-check --expect") || !strings.Contains(got[1], "acceptEdits") || !strings.Contains(got[1], "UserPromptSubmit") || !strings.Contains(got[1], "PreToolUse") || strings.Contains(got[1], "SessionStart") || got[2] != "--model" {
 		t.Fatalf("%q %v", got, err)
 	}
 }
@@ -245,7 +247,7 @@ func TestOpenedModeSettings(t *testing.T) {
 // A run's own --settings is merged into, never skipped: its keys and its own
 // SessionStart hooks stay, as a JSON value, a --settings= value and a file.
 func TestOpenedModeSettings_MergesTheCallersSettings(t *testing.T) {
-	own := `{"model":"opus","hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo own"}]}],"Stop":[]}}`
+	own := `{"model":"opus","hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo own"}]}],"UserPromptSubmit":[{"hooks":[{"type":"command","command":"echo prompt"}]}],"Stop":[]}}`
 	file := filepath.Join(t.TempDir(), "s.json")
 	if err := os.WriteFile(file, []byte(own), 0o644); err != nil {
 		t.Fatal(err)
@@ -260,7 +262,7 @@ func TestOpenedModeSettings_MergesTheCallersSettings(t *testing.T) {
 			t.Fatalf("%s: %v", name, err)
 		}
 		joined := strings.Join(got, " ")
-		for _, want := range []string{`"model":"opus"`, "echo own", "permission-check --expect", `"Stop"`} {
+		for _, want := range []string{`"model":"opus"`, "echo own", "permission-check --expect", `"Stop"`, "echo prompt", `"UserPromptSubmit"`, `"PreToolUse"`} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("%s: %q lost from %s", name, want, joined)
 			}
@@ -271,11 +273,12 @@ func TestOpenedModeSettings_MergesTheCallersSettings(t *testing.T) {
 	}
 	// What cannot be merged exactly is refused, never run unchecked.
 	for name, args := range map[string][]string{
-		"two":         {"--settings", "{}", "--settings", "{}"},
-		"no value":    {"--settings"},
-		"bad json":    {"--settings", "{nope"},
-		"missing":     {"--settings", filepath.Join(t.TempDir(), "absent.json")},
-		"hooks array": {"--settings", `{"hooks":[]}`},
+		"two":              {"--settings", "{}", "--settings", "{}"},
+		"no value":         {"--settings"},
+		"bad json":         {"--settings", "{nope"},
+		"missing":          {"--settings", filepath.Join(t.TempDir(), "absent.json")},
+		"hooks array":      {"--settings", `{"hooks":[]}`},
+		"event not a list": {"--settings", `{"hooks":{"PreToolUse":{}}}`},
 	} {
 		if got, err := openedModeSettings("claude", "plan", args); err == nil || !strings.Contains(err.Error(), "refusing to run") {
 			t.Errorf("%s: want a refusal, got %q %v", name, got, err)
@@ -306,22 +309,33 @@ func TestRun_OneShotClaudeCarriesTheOpenedModeCheck(t *testing.T) {
 }
 
 func TestCmdPermissionCheck(t *testing.T) {
-	run := func(expect, input string) (string, string) {
+	run := func(expect, event, input string) (stdout, stderr string, err error) {
 		var out, errb strings.Builder
-		if err := cmdPermissionCheck([]string{"--expect", expect}, strings.NewReader(input), &out, &errb); err != nil {
-			t.Fatal(err)
+		err = cmdPermissionCheck([]string{"--expect", expect, "--event", event}, strings.NewReader(input), &out, &errb)
+		return out.String(), errb.String(), err
+	}
+	for _, event := range []string{"user_prompt", "pre_tool"} {
+		if out, msg, err := run("acceptEdits", event, `{"permission_mode":"acceptEdits"}`); out != "" || msg != "" || err != nil {
+			t.Errorf("%s: a matching mode must not stop the session: %q %q %v", event, out, msg, err)
 		}
-		return out.String(), errb.String()
+		if out, msg, err := run("acceptEdits", event, `{"nothing":1}`); out != "" || msg != "" || err != nil {
+			t.Errorf("%s: a hook input without a mode passes: %q %q %v", event, out, msg, err)
+		}
 	}
-	if out, _ := run("acceptEdits", `{"permission_mode":"acceptEdits"}`); out != "" {
-		t.Errorf("a matching mode must not stop the session: %q", out)
+	// On the prompt, a mismatch exits 2 with the message on stderr: that blocks
+	// the prompt before any tool runs.
+	out, msg, err := run("acceptEdits", "user_prompt", `{"permission_mode":"bypassPermissions"}`)
+	var coded *exitCodeError
+	if !errors.As(err, &coded) || coded.code != 2 || !strings.Contains(msg, `started in "bypassPermissions"`) || out != "" {
+		t.Errorf("prompt mismatch: out %q msg %q err %v", out, msg, err)
 	}
-	out, msg := run("acceptEdits", `{"permission_mode":"bypassPermissions"}`)
-	if !strings.Contains(out, `"continue":false`) || !strings.Contains(msg, `started in "bypassPermissions"`) {
-		t.Errorf("out %q msg %q", out, msg)
+	// On a tool use, the backstop denies the tool.
+	out, _, err = run("acceptEdits", "pre_tool", `{"permission_mode":"bypassPermissions"}`)
+	if err != nil || !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, `"hookEventName":"PreToolUse"`) || !strings.Contains(out, "bypassPermissions") {
+		t.Errorf("pre_tool mismatch: %q %v", out, err)
 	}
-	if out, _ := run("acceptEdits", `{"nothing":1}`); out != "" {
-		t.Errorf("a hook input without a mode passes: %q", out)
+	if err := cmdPermissionCheck([]string{"--expect", "plan"}, strings.NewReader("{}"), io.Discard, io.Discard); err == nil {
+		t.Error("an event is required")
 	}
 }
 

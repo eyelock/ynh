@@ -10,6 +10,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/presence"
 )
 
@@ -329,5 +330,44 @@ func TestTwoParentsOneSeat(t *testing.T) {
 	}
 	if rb, _ := delegation.Load(pathb); rb.Session != other.SessionID || rb.Parent != "local/beta" {
 		t.Fatalf("beta's task = %+v", rb)
+	}
+}
+
+// A task queued to a live interactive session records and shows "interactive":
+// a person approves there, so no level is claimed (ynh #1058). If the session
+// ends and the task falls back to headless, the record shows the level the
+// task resolved to.
+func TestQueuedTaskShowsInteractiveNotALevelAndFallbackRestoresIt(t *testing.T) {
+	folder := setup(t)
+	end, _ := liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", func(o *Options) {
+		o.AutoApprove, o.AutoApproveFrom = permission.Edits, permission.SourceEntry
+	})
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo picked-up-headless", true)
+	rec, path := recordOf(t, task)
+	if rec.AutoApprove != "" || rec.AutoApproveFrom != delegation.AutoApproveInteractive {
+		t.Fatalf("queued record shows %q (%s), want no level and interactive", rec.AutoApprove, rec.AutoApproveFrom)
+	}
+	if task.Metadata[MetaAutoApproveFrom] != "interactive" || task.Metadata[MetaAutoApprove] != nil {
+		t.Errorf("task metadata = %v", task.Metadata)
+	}
+	end()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		rec, err := delegation.Reconcile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec.Route == delegation.RouteHeadless {
+			if rec.AutoApprove != "edits" || rec.AutoApproveFrom != "entry" {
+				t.Fatalf("after the fallback the record shows %q (%s), want edits (entry)", rec.AutoApprove, rec.AutoApproveFrom)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("route stayed %s", rec.Route)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

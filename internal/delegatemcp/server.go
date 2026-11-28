@@ -33,6 +33,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/presence"
 )
 
@@ -291,8 +292,9 @@ type Result struct {
 	// LogTail is the end of the run's log, when it failed.
 	LogTail string `json:"log_tail,omitempty"`
 	// AutoApprove is the permission level the delegate opens at and
-	// AutoApproveFrom where it came from (call, entry, delegate_default,
-	// default or caller_cap).
+	// AutoApproveFrom where it came from: one of permission.Sources.
+	// A task queued to a live interactive session has no level and
+	// auto_approve_from "interactive": a person approves each action there.
 	AutoApprove     string `json:"auto_approve,omitempty"`
 	AutoApproveFrom string `json:"auto_approve_from,omitempty"`
 }
@@ -316,7 +318,7 @@ var resultSchema = map[string]any{
 		"result":            map[string]any{"type": "string", "description": "the delegate's output, when completed"},
 		"log_tail":          map[string]any{"type": "string", "description": "the end of the run's log, when failed"},
 		"auto_approve":      map[string]any{"type": "string", "enum": []string{"none", "edits", "all"}, "description": "the permission level the delegate opens at when it runs unattended"},
-		"auto_approve_from": map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "default", "caller_cap", "project"}, "description": "where auto_approve came from"},
+		"auto_approve_from": map[string]any{"type": "string", "enum": sourceWords(), "description": "where auto_approve came from; interactive is a task queued to a live interactive session, where a person approves each action and no level is recorded"},
 		"asked_at":          map[string]any{"type": "string", "description": "when the open question was asked (RFC 3339), when input-required"},
 		"waiting_seconds":   map[string]any{"type": "integer", "description": "how long the open question has waited, when input-required"},
 	},
@@ -876,4 +878,13 @@ func elicitedAnswer(raw json.RawMessage) string {
 		}
 	}
 	return string(raw)
+}
+
+// sourceWords is every auto_approve_from word, from the one definition.
+func sourceWords() []string {
+	out := make([]string, 0, len(permission.Sources))
+	for _, s := range permission.Sources {
+		out = append(out, string(s))
+	}
+	return out
 }
