@@ -1482,13 +1482,13 @@ func printAutoApproveSection(w io.Writer, s trustStatus) {
 func fillAutoApprove(st *trustStatus, p *harness.Harness) {
 	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
 	st.DelegateLevels = harnessExecutables(p).DelegateLevels
-	st.AutoApproveAsRoot = permission.RootNote(p.AutoApproveOf())
+	st.AutoApproveAsRoot = permission.RootNote(p.DefaultVendor, p.AutoApproveOf())
 }
 
 // printAcceptedLevel says what level an acceptance of p covers.
 func printAcceptedLevel(w io.Writer, p *harness.Harness, set trustSet) {
 	_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
-	if note := permission.RootNote(p.AutoApproveOf()); note != "" {
+	if note := permission.RootNote(p.DefaultVendor, p.AutoApproveOf()); note != "" {
 		_, _ = fmt.Fprintf(w, "  %s\n", note)
 	}
 	for _, l := range set.DelegateLevels {

@@ -5,12 +5,14 @@ import "fmt"
 // RootAllNote is what `trust show` and `trust accept` say about a harness that
 // opens at all (N4, ynw-44fxh): as root, Claude Code opens all only when one of
 // the two sandbox variables is set (the same two CheckRoot honours), and
-// otherwise ynh refuses it.
-const RootAllNote = "As root, Claude Code opens 'all' only when IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set; otherwise 'all' is refused as root."
+// otherwise ynh refuses a Claude Code run. No other vendor is refused.
+const RootAllNote = "As root, Claude Code opens 'all' only when IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set; otherwise ynh refuses a Claude Code run at 'all' as root. Other vendors are unaffected."
 
-// RootNote is RootAllNote for a harness opening at level, and "" for any other.
-func RootNote(level Level) string {
-	if level == All {
+// RootNote is RootAllNote for a harness opening at level that runs on Claude
+// Code (vendor "claude", or "" for the default, which is Claude Code), and ""
+// for any other level or vendor: only Claude Code refuses all as root.
+func RootNote(vendor string, level Level) string {
+	if level == All && (vendor == "" || vendor == Claude) {
 		return RootAllNote
 	}
 	return ""

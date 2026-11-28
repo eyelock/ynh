@@ -185,7 +185,7 @@ func TestTrustAcceptListsEntryLevels(t *testing.T) {
 // trust show and trust accept, in text and JSON; any other level says nothing.
 func TestTrustSaysAllAsRootNeedsASandboxVariable(t *testing.T) {
 	note := permission.RootAllNote
-	for _, want := range []string{"IS_SANDBOX=1", "CLAUDE_CODE_BUBBLEWRAP", "refused as root"} {
+	for _, want := range []string{"IS_SANDBOX=1", "CLAUDE_CODE_BUBBLEWRAP", "Claude Code run", "Other vendors are unaffected"} {
 		if !strings.Contains(note, want) {
 			t.Fatalf("the note must name %q: %s", want, note)
 		}
@@ -219,5 +219,32 @@ func TestTrustSaysAllAsRootNeedsASandboxVariable(t *testing.T) {
 	printAcceptedLevel(&b, edits, trustSet{})
 	if e.AutoApproveAsRoot != "" || strings.Contains(b.String(), "IS_SANDBOX") || strings.Contains(showText(t, e), "IS_SANDBOX") {
 		t.Errorf("a level other than all must not carry the note: %+v", e)
+	}
+}
+
+// ynw-906th: only Claude Code refuses all as root, so a harness whose default
+// vendor is another one is told nothing about a refusal it never gets.
+func TestRootNoteIsForClaudeCodeOnly(t *testing.T) {
+	for _, v := range []string{"", "claude"} {
+		if permission.RootNote(v, permission.All) == "" {
+			t.Errorf("vendor %q at all must carry the note", v)
+		}
+	}
+	for _, v := range []string{"codex", "cursor", "opencode", "copilot"} {
+		if got := permission.RootNote(v, permission.All); got != "" {
+			t.Errorf("vendor %q must carry no root note, got %q", v, got)
+		}
+	}
+	if permission.RootNote("claude", permission.Edits) != "" {
+		t.Error("a level other than all carries no note")
+	}
+	codex := harnessWithSensors(t, nil)
+	codex.DefaultVendor = "codex"
+	var st trustStatus
+	fillAutoApprove(&st, codex)
+	var b bytes.Buffer
+	printAcceptedLevel(&b, codex, trustSet{})
+	if st.AutoApproveAsRoot != "" || strings.Contains(b.String(), "IS_SANDBOX") || strings.Contains(showText(t, st), "IS_SANDBOX") {
+		t.Errorf("a codex harness gets no root note in JSON or text: %+v / %s", st, b.String())
 	}
 }
