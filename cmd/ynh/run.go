@@ -17,12 +17,14 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/inboxmcp"
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/runsnap"
@@ -275,8 +277,72 @@ func cmdRun(args []string) (runErr error) {
 			return err
 		}
 	}
-	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
-		return copilotOneShotRefusal(harnessID, loaded)
+	// A one-shot run opens at its level with nobody to approve, so a folder
+	// run needs --trust (S8) and is otherwise refused, on every vendor.
+	if action == "" && oneShot && !trusted && (harnessID != "" || !ra.Trust) {
+		return oneShotFolderRefusal(harnessID, loaded)
+	}
+	// The level this run opens at (D1-D6): a one-shot run is passed the
+	// vendor's arguments for it; an interactive one is unchanged, and with
+	// --auto-approve only caps its delegates (S4).
+	stopFile := "" // set when the opened-mode check is on (see below)
+	streamMode := ""
+	if action == "" && oneShot {
+		wd, wdErr := os.Getwd()
+		if wdErr != nil {
+			return wdErr
+		}
+		rp, perr := resolveRunPermission(loaded, adapter.Name(), ra.AutoApprove, wd, os.Getenv(delegationHandleEnv) != "", os.Getenv, os.Geteuid())
+		if perr != nil {
+			return perr
+		}
+		for _, l := range rp.Lines {
+			fmt.Fprintln(os.Stderr, l)
+		}
+		if err := rp.applyEnv(); err != nil {
+			return err
+		}
+		vendorArgs = append(append([]string{}, rp.Args...), vendorArgs...)
+		// A delegate's record shows the level the session actually opens at,
+		// after its own project narrowing (D5).
+		if path := os.Getenv(delegationRecordEnv); path != "" {
+			if _, err := delegation.Update(path, func(r *delegation.Record) {
+				r.AutoApprove, r.AutoApproveFrom = string(rp.Level), string(rp.From)
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "ynh: could not record the level on the delegation: %v\n", err)
+			}
+		}
+		// Claude Code reports the mode it opened in; a mismatch with the
+		// resolved level stops the session (ynw-c5hme). Other vendors report
+		// none to check.
+		checked, herr := openedModeSettings(adapter.Name(), rp.OpenedMode, vendorArgs)
+		if herr != nil {
+			return herr
+		}
+		vendorArgs = checked
+		// A session the check stops still ends the vendor with exit 0, so the
+		// hook leaves a note here and this run then exits nonzero.
+		if adapter.Name() == permission.Claude && rp.OpenedMode != "" {
+			id, _ := sessions.NewID()
+			stopFile = filepath.Join(os.TempDir(), "ynh-permission-stop-"+id)
+			_ = os.Remove(stopFile)
+			if err := os.Setenv(permission.StopEnv, stopFile); err != nil {
+				return err
+			}
+			defer func() { _ = os.Remove(stopFile) }()
+			// ynh reads the session's stream, so a session whose hooks never
+			// ran is refused, and renders the answer itself.
+			streamed, serr := withClaudeStream(vendorArgs)
+			if serr != nil {
+				return serr
+			}
+			vendorArgs = streamed
+			streamMode = rp.OpenedMode
+		}
+	} else if action == "" && ra.AutoApprove != "" {
+		if err := capInteractive(ra.AutoApprove); err != nil {
+			return err
+		}
 	}
 
 	// Print per-source status
@@ -834,7 +900,12 @@ func cmdRun(args []string) (runErr error) {
 		defer removeHook()
 		endPresence := startPresence(sessionID, adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession, inboxWired)
 		defer endPresence()
-		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		if streamMode != "" {
+			removeStream := vendor.OnChildStdout(claudeStreamFilter(streamMode, os.Stdout))
+			defer removeStream()
+		}
+		launchErr := launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		return stoppedByOpenedModeCheck(stopFile, launchErr)
 	}
 }
 
@@ -1288,6 +1359,7 @@ type runArgs struct {
 	OnLive        string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
 	NoWorkspace   bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 	Labels        []string // --label key:value, repeatable; key: removes a label; not forwarded
+	AutoApprove   string   // --auto-approve none|edits|all: narrows a one-shot run, caps an interactive one's delegates; not forwarded
 	Trust         bool     // --trust: accept the folder run's full-SHA-pinned remote includes; not forwarded
 	Relay         bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
 	RelayEndpoint string   // --telemetry-relay-endpoint: a standing relay's loopback endpoint; not forwarded
@@ -1299,6 +1371,7 @@ var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
 	"--label": true, "--on-live": true, "--telemetry-relay-endpoint": true,
+	"--auto-approve": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1384,6 +1457,11 @@ func parseRunArgs(args []string) runArgs {
 			ra.Relay = true
 		case flagArgs[i] == "--trust":
 			ra.Trust = true
+		case flagArgs[i] == "--auto-approve" && i+1 < len(flagArgs):
+			ra.AutoApprove = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--auto-approve="):
+			ra.AutoApprove = strings.TrimPrefix(flagArgs[i], "--auto-approve=")
 		case flagArgs[i] == "--telemetry-relay-endpoint" && i+1 < len(flagArgs):
 			ra.RelayEndpoint = flagArgs[i+1]
 			i++

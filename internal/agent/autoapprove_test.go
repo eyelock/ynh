@@ -14,6 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/permission"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -494,5 +497,62 @@ func TestOpenCodeEnv_PermissionKeepsMCPIsolation(t *testing.T) {
 	}
 	if len(copies) != 1 || !strings.Contains(copies[0], `"web":{"enabled":false}`) || !strings.Contains(copies[0], `"edit":"deny"`) {
 		t.Errorf("config content = %q", copies)
+	}
+}
+
+// An accepted harness's worker opens at the harness's level (D7): its
+// declared one, else all, and --auto-approve may only narrow it.
+func TestRunLoop_AcceptedHarnessOpensAtItsLevel(t *testing.T) {
+	install := func(t *testing.T, level string) string {
+		t.Helper()
+		t.Setenv("YNH_HOME", t.TempDir())
+		t.Setenv(permission.CapEnv, "")
+		const id = "local/level-test"
+		dir := harness.InstalledDirByID(id)
+		if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		m := `{"name":"level-test","version":"0.1.0","default_vendor":"claude"`
+		if level != "" {
+			m += `,"auto_approve":"` + level + `"`
+		}
+		writeFile(t, filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), m+"}")
+		return id
+	}
+	tests := []struct {
+		name, declared, flag, want, wantErr string
+	}{
+		{name: "undeclared opens at all", want: "all"},
+		{name: "declared level", declared: "edits", want: "edits"},
+		{name: "flag narrows", declared: "edits", flag: "none", want: "none"},
+		{name: "flag cannot widen", declared: "edits", flag: "all", wantErr: "wider than the ceiling"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := install(t, tt.declared)
+			mb := &mockBackend{name: "claude", turns: []Turn{{Content: "done"}}}
+			var stderr bytes.Buffer
+			opts := baseOpts(mb, io.Discard, &stderr, strings.NewReader(""))
+			opts.Backend = "claude"
+			opts.HarnessName = id
+			opts.AutoApprove = tt.flag
+			opts.WorktreeDir = t.TempDir()
+			opts.YNHBinary = filepath.Join(t.TempDir(), "no-such-ynh")
+			opts.TrustGate = func(*harness.Harness, string) error { return nil }
+			opts.Trusted = func(*harness.Harness, string) bool { return true }
+			_, err := RunLoop(opts)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) || len(mb.startOpts) != 0 {
+					t.Fatalf("err = %v, starts = %d", err, len(mb.startOpts))
+				}
+				return
+			}
+			if len(mb.startOpts) != 1 {
+				t.Fatalf("worker started %d times; err: %v", len(mb.startOpts), err)
+			}
+			if got := mb.startOpts[0].AutoApprove; got != tt.want {
+				t.Errorf("opened at %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

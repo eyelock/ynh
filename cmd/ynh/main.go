@@ -108,6 +108,8 @@ func main() {
 		err = cmdMCP(os.Args[2:])
 	case "mcp-exec":
 		err = cmdMCPExec(os.Args[2:])
+	case "permission-check":
+		err = cmdPermissionCheck(os.Args[2:], os.Stdin, os.Stdout, os.Stderr)
 	case "delegate-run":
 		err = cmdDelegateRun(os.Args[2:])
 	case "delegate-mcp":

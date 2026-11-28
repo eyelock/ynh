@@ -35,7 +35,8 @@ func CheckRoot(vendor string, level Level, euid int, getenv func(string) string)
 	return fmt.Errorf("claude code refuses auto-approve all as root (--permission-mode bypassPermissions). Fix one of:\n" +
 		"  - run as a non-root user\n" +
 		"  - use ynh's agent image, which runs as uid 1001\n" +
-		"  - narrow the run with --auto-approve edits")
+		"  - narrow the run with --auto-approve edits\n" +
+		"  - in a container that is the sandbox, set IS_SANDBOX=1 (or CLAUDE_CODE_BUBBLEWRAP), which Claude Code honours")
 }
 
 // CheckOpened compares the mode a session reports it opened in with the one

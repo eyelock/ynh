@@ -240,13 +240,11 @@ harnesses that each name `./inc` get their own repos. The same applies to
 An include or delegate whose source is the harness's own repo (`"git": "."`)
 is refreshed from that repo on every run, so one committed after the first run
 is found without `ynh update`. Uncommitted work is not picked up: a `path` that
-is on disk but not committed fails the run, and `ynh doctor` says so. This works
-only when the harness sits at the root of its repository. A run clones the
-source, and git clones only a repository's root, so a harness in a subfolder of
-its repo, with `"git": "."` (or `"./sub"`), fails every run; the same holds for
-includes and delegates alike. Give such a source a Git URL, or keep the harness
-at the repo's root. `ynh doctor` reports the delegate case; it does not check
-includes yet. Every other source, including another repo on disk, is served from
+is on disk but not committed fails the run, and `ynh doctor` says so. A harness in a
+subfolder of its repository works too: a `"."` source means the repository the
+harness came from, fetched at its root, and the entry's `path` is taken
+relative to the harness's own folder. `ynh doctor` reports the delegate case
+(a `path` that is not committed); it does not check includes yet. Every other source, including another repo on disk, is served from
 the cache until `ynh update`; if a delegate or include `path` is missing from
 it, the error says the cached copy may be out of date and suggests `ynh update`.
 
@@ -597,15 +595,17 @@ When targeting an installed harness by name, the new include is pre-fetched imme
 
 `--replace` overwrites an existing URL+path combination instead of erroring.
 
-`--trust` accepts the installed harness again in the same step, when the change moved what it executes. It works only at full 40-character commit SHAs (the harness's own ref, every remote include that brings commands and every native delegate entry from another repository) and is recorded as `include --trust`. Without it, the command says the harness is no longer trusted and `ynh run` refuses it until `ynh trust accept`. `--trust` needs an installed harness id, not a path.
+`--trust` accepts the installed harness again in the same step, when the change moved what it executes. The change is checked before anything is written, so a refused call leaves the harness and its trust record as they were. It works only at full 40-character commit SHAs (the harness's own ref and every remote include that brings commands and every native delegate entry from another repository) and is recorded as `include --trust`. Without it, the command says the harness is no longer trusted and `ynh run` refuses it until `ynh trust accept`. `--trust` needs an installed harness id, not a path.
 
 ### Remove an include
 
 ```bash
-ynh include remove <harness> <url> [--path <subdir>]
+ynh include remove <harness> <url> [--path <subdir>] [--trust]
 ```
 
 If the same URL appears at multiple paths (monorepo), `--path` selects which entry to remove.
+
+Removing an include changes what an installed harness executes, so an accepted harness reads `changed` afterwards: without `--trust` the command says the harness is no longer trusted and names `ynh trust accept`. With `--trust` it records the new digest as accepted in the same step, under the same full-SHA rule as `include add`: everything that remains and brings commands must be pinned to a full 40-character commit SHA, or the removal is refused and nothing is changed.
 
 ### Update an include
 

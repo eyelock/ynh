@@ -239,6 +239,7 @@
       "type": "string",
       "description": "RFC3339 timestamp of acceptance."
     },
+    "accepted_with": { "type": "string", "description": "The harness whose acceptance covered this one, for an a2a delegate accepted through its parent. `trust ls` shows it in VIA as `with <parent>`." },
     "accepted_via": {
       "type": "string",
       "description": "How the acceptance was recorded: accept (ynh trust accept), install --trust, run --trust, update --trust, include --trust or image. Open set: tolerate unknown members. Absent when no record exists or the record predates the field."
@@ -269,9 +270,43 @@
       "additionalProperties": false
     },
     "auto_approve": { "type": "string", "enum": ["none", "edits", "all"], "description": "The permission level the harness opens at when run unattended (a delegate session, a one-shot `ynh run`, `ynh agent run`): its declared auto_approve, else all, the default for an accepted harness. Covered by digest only when declared. Filled by `trust show` only." },
-    "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default"], "description": "Where auto_approve comes from: the harness's own declaration, or the default. Filled by `trust show` only." },
+    "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default", "interactive"], "description": "Where auto_approve comes from: the harness's own declaration, or the default. Filled by `trust show` only." },
     "auto_approve_as_root": { "type": "string", "description": "Present only when auto_approve is all, whatever the harness's default vendor (the vendor is chosen per run): as root, Claude Code opens all only when IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set, otherwise ynh refuses a Claude Code run at all as root. Other vendors are unaffected. Filled by `trust show` and `trust accept`." },
     "delegate_levels": { "type": "array", "items": { "type": "string" }, "description": "The auto_approve levels delegates_to entries declare, as `<delegate>: <level>`, in entry order. Present only when an entry declares one. Covered by digest. Filled by `trust show` only." },
+    "a2a_delegates": {
+      "type": "array",
+      "description": "The whole tree of a2a delegates below the harness, nested ones included, in declaration order, each its own harness with its own record. `ynh trust accept` accepts them all or none, each with its own record, after showing what each runs here. Present only when the harness has a2a delegates. Filled by `trust show` and `trust accept` only.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "delegate": { "type": "string", "description": "Where the delegate points: its source, with the path when it has one." },
+          "parent": { "type": "string", "description": "The harness that declares it: the harness itself, or the delegate above it in the tree." },
+          "depth": { "type": "integer", "minimum": 0, "description": "0 for a delegate the harness declares, 1 for one of that delegate's own, and so on." },
+          "id": { "type": "string", "description": "The id it is installed under. Absent when it is not installed yet: accepting the parent installs it." },
+          "state": { "type": "string", "enum": ["unreviewed", "accepted", "changed", "no-commands", "unavailable", "not-installed"], "description": "The delegate's own trust state." },
+          "digest": { "type": "string", "description": "The fingerprint of what the delegate runs." },
+          "auto_approve": { "type": "string", "enum": ["none", "edits", "all"], "description": "The level the delegate opens at when run unattended: its own, narrowed by the declaring entry." },
+          "auto_approve_from": { "type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default", "interactive"], "description": "Where auto_approve comes from." },
+          "executables": { "type": "array", "items": { "$ref": "#/$defs/Executable" }, "description": "The delegate's sensor commands." },
+          "hooks": { "type": "array", "items": { "$ref": "#/$defs/Hook" }, "description": "The delegate's hooks." },
+          "mcp_servers": { "type": "array", "items": { "$ref": "#/$defs/MCPServer" }, "description": "The delegate's MCP servers." },
+          "workspace": { "type": "array", "items": { "type": "string" }, "description": "The workspace folders the delegate requests." },
+          "problem": { "type": "string", "description": "Why what the delegate runs could not be read in full. Accepting the parent is refused while any delegate has one." }
+        },
+        "required": ["delegate", "parent", "depth", "state"],
+        "additionalProperties": false
+      }
+    },
+    "accepted_delegates": {
+      "type": "array",
+      "description": "The delegates `trust accept` recorded in the same step as the harness, each with its id and digest. Filled by `trust accept` only.",
+      "items": {
+        "type": "object",
+        "properties": { "id": { "type": "string" }, "digest": { "type": "string" } },
+        "required": ["id", "digest"],
+        "additionalProperties": false
+      }
+    },
     "delegate_focuses": {
       "type": "array",
       "description": "The focuses that native delegates_to entries select, in entry order (an a2a delegate's focus is reviewed under its own trust grant). Each prompt becomes the delegate's standing instructions for every task it is given, so it steers that subagent as launch_focus steers a session. Present only when a native entry selects a focus. Covered by digest. Filled by `trust show` only.",

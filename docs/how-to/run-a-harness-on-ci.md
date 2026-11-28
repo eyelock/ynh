@@ -73,13 +73,26 @@ The job then starts with no trust records, and accepts only what it pins itself.
    ynh agent run --harness <id> --task "<task>" --format json   # the agent loop
    ```
 
+### A parent and its a2a delegates
+
+`--trust` accepts the parent and every a2a delegate below it, nested ones included, each with its own
+record, in the same step, all or nothing. The parent's entry and each a2a `delegates_to` entry from a
+remote source must be pinned to a full commit SHA; one that floats is refused, naming it:
+
+```
+Error: --trust refuses to accept this install: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
+  a2a delegate <source>: "main" is a tag or branch, which can move
+```
+
+A delegate that is not installed yet is installed from its pinned entry and must match what was shown.
+
 ## A harness in the repository the job builds
 
 The harness folder is part of the change the job tests, so its own hooks, MCP servers and sensors are
 reviewed with the rest of the pull request. ynh checks only the commands its remote includes bring.
 
 **To start a session or the agent loop**, run the folder with `--trust`. It fetches each remote
-include, accepts it, and runs:
+include and accepts it, with the folder's a2a delegates (each pinned at a full SHA, as above), and runs:
 
 ```bash
 ynh run "$PWD/harness" --trust -- "<prompt>"
