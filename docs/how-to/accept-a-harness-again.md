@@ -5,8 +5,10 @@
 A harness you accepted now reads `changed`, and `ynh run`, `ynh agent run` and `ynh check` refuse it:
 
 ```
-Error: refusing to run <harness>: its commands differ from what you accepted on <date>.
+Error: refusing to run <harness>: what it executes or its settings differ from what you accepted on <date>.
 It executes:
+  ...
+Its settings that widen what runs, or what runs without asking:
   ...
 Review them: ynh trust show <harness>
 Then accept:  ynh trust accept <harness>
@@ -52,7 +54,7 @@ after an update, an include change and an edit to a folder you installed.
      accepted: sha256:<64 hex> on 2026-11-27T16:49:32Z
      via:      accept
    ...
-   These commands have changed since you accepted them.
+   What it executes, or the settings above, have changed since you accepted it.
    'ynh trust accept <harness>' records the new set.
    ```
 

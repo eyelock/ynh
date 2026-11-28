@@ -150,7 +150,7 @@ The image flags themselves are in [Docker: Harness Images](../docker.md#harness-
   every start, so a `RUN` step that edits a hook makes the run refuse, exit 1:
 
   ```
-  Error: refusing to run local/reviewer: its commands differ from what you accepted on 2026-11-27T16:52:07Z.
+  Error: refusing to run local/reviewer: what it executes or its settings differ from what you accepted on 2026-11-27T16:52:07Z.
   ```
 
   Change the harness before the build, accept it, and build again.

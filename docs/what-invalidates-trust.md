@@ -13,7 +13,7 @@ JSON error code `untrusted`. The steps are in
 |---|---|---|---|
 | Installed, never accepted | `unreviewed` | `refusing to run <id>: you have not accepted what it executes.`, then the list, `Review them:` and `Then accept:` | `ynh trust show <id>`, then `ynh trust accept <id>` |
 | Installed, only asks for workspace folders, never accepted | `unreviewed` | `refusing to run <id>: you have not accepted what it asks for.`, then `It requests workspace folders:` | the same |
-| A hook, MCP server or sensor is added, removed or changed | `changed` | `refusing to run <id>: its commands differ from what you accepted on <date>.` | the same |
+| A hook, MCP server or sensor is added, removed or changed | `changed` | `refusing to run <id>: what it executes or its settings differ from what you accepted on <date>.` | the same |
 | A script that a hook, MCP server or sensor runs changes, with the command text the same | `changed` | the same | the same |
 | A workspace folder it asks for, its launch focus prompt, or a delegate's focus prompt changes | `changed` | the same | the same |
 | A folder you installed with `ynh install ./<folder>` is edited in any of the ways above | `changed` | the same | the same |
@@ -64,7 +64,7 @@ own commands. It checks the commands its remote includes bring:
 |---|---|---|
 | `ynh image <id>` of a harness that is `unreviewed` or `changed` | `refusing to build an image of <id>: ...`, before Docker starts | accept it, then build |
 | `ynh image <name> --from <source>` of a harness with commands, without `--trust` | `refusing to build an image of <name> from <source>: ...` and a `Fix:` line | build with `--trust`, and `--ref <40-character-sha>` for a Git source |
-| A layer built on top of the image changes the harness | the image's run: `refusing to run local/<name>: its commands differ from what you accepted on <date>.` | change the harness before the build, accept it, and build again |
+| A layer built on top of the image changes the harness | the image's run: `refusing to run local/<name>: what it executes or its settings differ from what you accepted on <date>.` | change the harness before the build, accept it, and build again |
 
 ## Related
 
