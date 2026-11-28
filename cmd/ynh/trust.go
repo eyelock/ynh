@@ -1199,13 +1199,27 @@ func cmdTrustLs(args []string, stdout, stderr io.Writer) error {
 }
 
 func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
+	rest, image, full, splitErr := splitTrustImageArgs(args)
+	if splitErr != nil {
+		return cliError(stderr, detectJSONFormat(args), errCodeInvalidInput, splitErr.Error())
+	}
+	if image != "" {
+		name, format, structured, err := parseTrustArgs(rest, stderr)
+		if err != nil {
+			return err
+		}
+		if name != "" {
+			return cliError(stderr, structured, errCodeInvalidInput, "ynh trust show --image takes an image, not a harness name as well")
+		}
+		return cmdTrustShowImage(image, full, format, structured, stdout, stderr)
+	}
 	name, format, structured, err := parseTrustArgs(args, stderr)
 	if err != nil {
 		return err
 	}
 	if name == "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh trust show <harness|folder> [--format text|json]")
+			"usage: ynh trust show <harness|folder> [--format text|json]\n       ynh trust show --image <ref> [--full] [--format text|json]")
 	}
 	// A folder (./dir) has no install id and no record of its own: show the
 	// remote includes whose commands the gate checks, as accept would record.

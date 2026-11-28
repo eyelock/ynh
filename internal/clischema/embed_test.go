@@ -204,6 +204,11 @@ func TestTrustShowFolderGolden(t *testing.T) {
 	validateGolden(t, "trust-show-folder", "trust-show-folder.json")
 }
 
+// TestTrustShowImageGolden validates `ynh trust show --image <ref> --format json`.
+func TestTrustShowImageGolden(t *testing.T) {
+	validateGolden(t, "trust-show-image", "trust-show-image.json")
+}
+
 // `ynh telemetry registry` prints a bare object in the shape every tool of
 // the family prints, which ynr reads.
 func TestTelemetryRegistryGolden(t *testing.T) {

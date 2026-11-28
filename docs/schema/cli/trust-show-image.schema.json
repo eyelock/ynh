@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/trust-show-image.schema.json",
+  "title": "ynh trust show --image --format json",
+  "description": "Output of `ynh trust show --image <ref> --format json`: the trust labels of a harness image already on this host, read with `docker image inspect`. Nothing is pulled and no container starts. The labels are the build host's acceptance, which the image's own gate never reads; the running host can verify them, never must. With --full, `trust` is the image's own `ynh trust show local/<name> --format json` (see trust-show.schema.json), run in a container with no network and no mounts, listing what the image executes: the parent's record and level, and each baked a2a delegate's too when the image was built by a ynh that bakes the delegate tree (ynh #1058). A label the image does not carry (an image built before it existed) is null. Not enveloped. It changes nothing.",
+  "x-capabilities": "0.11",
+  "$defs": {
+    "Label": { "type": ["string", "null"], "description": "The label's value, or null when the image does not carry it." }
+  },
+  "type": "object",
+  "properties": {
+    "image": { "type": "string", "description": "The image reference, as given." },
+    "labels": {
+      "type": "object",
+      "properties": {
+        "harness": { "$ref": "#/$defs/Label", "description": "dev.ynh.harness: the harness the image carries." },
+        "trust_digest": { "$ref": "#/$defs/Label", "description": "dev.ynh.harness.trust-digest: the digest of what the image executes, as the build host accepted it." },
+        "trust_via": { "$ref": "#/$defs/Label", "description": "dev.ynh.harness.trust-via: how the build host accepted it." },
+        "source": { "$ref": "#/$defs/Label", "description": "dev.ynh.harness.source: where the harness came from." },
+        "sha": { "$ref": "#/$defs/Label", "description": "dev.ynh.harness.sha: the harness's commit." }
+      },
+      "required": ["harness", "trust_digest", "trust_via", "source", "sha"],
+      "additionalProperties": false
+    },
+    "trust": { "$ref": "trust-show.schema.json", "description": "Present with --full: the image's own trust show block." }
+  },
+  "required": ["image", "labels"],
+  "additionalProperties": false
+}

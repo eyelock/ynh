@@ -1,0 +1,10 @@
+{
+  "image": "acme/reviewer:1.0",
+  "labels": {
+    "harness": "reviewer",
+    "trust_digest": "sha256:b6a68a3387879e68",
+    "trust_via": null,
+    "source": null,
+    "sha": "3f4b2c1a9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a"
+  }
+}

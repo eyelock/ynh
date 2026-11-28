@@ -20,7 +20,11 @@ var baseVersionLabels = []string{"dev.ynh.version", "org.opencontainers.image.ve
 // the JSON object `docker image inspect` prints. It never pulls and never runs
 // a container: an image that is not local is an error, and so is a missing
 // docker. Replaceable so tests do not need docker.
-var dockerImageLabels = func(image string) ([]byte, error) {
+var dockerImageLabels = execDockerImageLabels
+
+// execDockerImageLabels is dockerImageLabels' real implementation, which a
+// test that stands docker in on PATH restores.
+func execDockerImageLabels(image string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{json .Config.Labels}}", image).Output()

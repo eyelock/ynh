@@ -9,6 +9,7 @@
     "run-labels",
     "trust-counts-composed-mcp-servers",
     "trust-folder-includes",
+    "trust-show-image",
     "workspace-folders"
   ]
 }
