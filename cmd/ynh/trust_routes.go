@@ -363,11 +363,12 @@ func takeTrustFlag(args []string) ([]string, bool) {
 	out := make([]string, 0, len(args))
 	found := false
 	for _, a := range args {
-		if a == "--trust" {
+		switch a {
+		case "--trust":
 			found = true
-			continue
+		default:
+			out = append(out, a)
 		}
-		out = append(out, a)
 	}
 	return out, found
 }
@@ -376,17 +377,71 @@ func takeTrustFlag(args []string) ([]string, bool) {
 // a full SHA: its own ref when it floats from a git or registry source, and
 // each remote include that brings commands (decisions 4b and 14).
 func pinProblems(p *harness.Harness) ([]string, error) {
+	return pinProblemsFix(p, updateFetchFix)
+}
+
+// pinProblemsFix is pinProblems with the Fix line of an include that cannot be
+// read named by the caller.
+func pinProblemsFix(p *harness.Harness, fix string) ([]string, error) {
 	var bad []string
 	if harnessHasRemoteSource(p) {
 		if why := notPinned(p.InstalledFrom.Ref); why != "" {
 			bad = append(bad, "the harness's own ref: "+why)
 		}
 	}
-	remote, err := remoteIncludes(p, "accept")
+	remote, err := remoteIncludesFor(p, "accept", fix)
 	if err != nil {
 		return nil, err
 	}
 	return append(bad, unpinnedForAcceptance(p, remote)...), nil
+}
+
+// checkIncludeChange is the check before the write of --trust on ynh include
+// add, update and remove: it builds the harness id as the change would leave
+// it, in memory, and refuses the change when something that runs would not be
+// pinned to a full SHA, or when the includes cannot be read in full. Nothing
+// has been written when it returns, so a refusal leaves the manifest and the
+// trust record as they were (ynh #1041).
+func checkIncludeChange(id string, edit harness.ManifestEdit) error {
+	p, err := harness.LoadByID(id)
+	if err != nil {
+		return err
+	}
+	candidate, err := p.WithManifestEdit(edit)
+	if err != nil {
+		return err
+	}
+	bad, err := pinProblemsFix(candidate, changeNotMadeFetchFix(id))
+	if err != nil {
+		return err
+	}
+	if len(bad) > 0 {
+		return refuseUnpinnedWith(id+" after this change", "--trust", bad,
+			"The include change was not made. Pin each of them to a 40-character commit SHA and run it again with --trust, "+
+				"or make the change without --trust: "+id+" then reads 'changed' and is refused until you run 'ynh trust accept "+id+"', which accepts what floats at the commit installed now (review it first with 'ynh trust show "+id+"')")
+	}
+	return nil
+}
+
+// changeNotMadeFetchFix is the Fix line of an include that cannot be read when
+// --trust refused an include change before writing it. The harness was left
+// unchanged, so 'ynh update' cannot fetch the include yet: the change is made
+// without --trust first, and 'ynh trust accept' then takes it, recording a
+// floating include at the commit installed.
+func changeNotMadeFetchFix(id string) string {
+	return "The include change was not made, so 'ynh update' has nothing to fetch yet. " +
+		"Make the change without --trust, run 'ynh update " + id + "' to fetch them, " +
+		"then 'ynh trust accept " + id + "', which accepts a floating include at the commit installed now (or pin each remote include to a full 40-character commit SHA and use --trust)."
+}
+
+// acceptIncludeChange records the acceptance of id once the include change
+// that checkIncludeChange passed has been written.
+func acceptIncludeChange(id string, stdout io.Writer) error {
+	p, err := harness.LoadByID(id)
+	if err != nil {
+		return err
+	}
+	return recordAcceptance(id, p, viaIncludeTrus, stdout)
 }
 
 // acceptAfterChange is the --trust of `ynh update` and `ynh include`
