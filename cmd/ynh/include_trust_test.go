@@ -47,8 +47,8 @@ func TestIncludeAddTrust_RefusalChangesNothing(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	// Both ways out work on a harness left unchanged: pin and run it again, or
-	// make the change without --trust. Accepting by hand is not offered, since
-	// ynh trust accept refuses an unpinned remote include too.
+	// make the change without --trust and then run ynh trust accept, which
+	// accepts a floating include at the commit installed (ynh #1016).
 	for _, want := range []string{"Pin each of them", "run it again with --trust", "make the change without --trust"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say %q:\n%v", want, err)

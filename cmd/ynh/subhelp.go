@@ -98,7 +98,7 @@ var subcommandHelp = map[string]subHelp{
 			{"--path <subdir>", "Remove only the include with this path (needed when a url is included more than once)"},
 			includeTrustFlag,
 		},
-		Notes:   "Removing an include changes what an accepted harness executes, so it reads 'changed' afterwards. Without --trust the output says so and names 'ynh trust accept'. With --trust the new digest is accepted in the same step, still only if what remains is pinned to a full SHA.",
+		Notes:   "Removing an include changes what an accepted harness executes, so it reads 'changed' afterwards. Without --trust the output says so and names 'ynh trust accept'. With --trust the new digest is accepted in the same step, still only if what remains is pinned to a full SHA; otherwise remove without --trust and run 'ynh trust accept', which accepts what floats at the commit installed.",
 		Parsers: []string{"cmdIncludeRemove", "takeTrustFlag"},
 	},
 	"include update": {

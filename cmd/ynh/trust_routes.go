@@ -418,7 +418,7 @@ func checkIncludeChange(id string, edit harness.ManifestEdit) error {
 	if len(bad) > 0 {
 		return refuseUnpinnedWith(id+" after this change", "--trust", bad,
 			"The include change was not made. Pin each of them to a 40-character commit SHA and run it again with --trust, "+
-				"or make the change without --trust: "+id+" then reads 'changed' and is refused until each remote include is pinned and it is accepted")
+				"or make the change without --trust: "+id+" then reads 'changed' and is refused until you run 'ynh trust accept "+id+"', which accepts what floats at the commit installed now (review it first with 'ynh trust show "+id+"')")
 	}
 	return nil
 }
@@ -426,12 +426,12 @@ func checkIncludeChange(id string, edit harness.ManifestEdit) error {
 // changeNotMadeFetchFix is the Fix line of an include that cannot be read when
 // --trust refused an include change before writing it. The harness was left
 // unchanged, so 'ynh update' cannot fetch the include yet: the change is made
-// without --trust first, and 'ynh trust accept' then takes it only once each
-// remote include is pinned to a full SHA.
+// without --trust first, and 'ynh trust accept' then takes it, recording a
+// floating include at the commit installed.
 func changeNotMadeFetchFix(id string) string {
 	return "The include change was not made, so 'ynh update' has nothing to fetch yet. " +
 		"Make the change without --trust, run 'ynh update " + id + "' to fetch them, " +
-		"then 'ynh trust accept " + id + "' once each remote include is pinned to a full 40-character commit SHA."
+		"then 'ynh trust accept " + id + "', which accepts a floating include at the commit installed now (or pin each remote include to a full 40-character commit SHA and use --trust)."
 }
 
 // acceptIncludeChange records the acceptance of id once the include change
