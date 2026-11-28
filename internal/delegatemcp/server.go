@@ -330,9 +330,9 @@ var resultSchema = map[string]any{
 		"asked_at":          map[string]any{"type": "string", "description": "when the open question was asked (RFC 3339), when input-required"},
 		"waiting_seconds":   map[string]any{"type": "integer", "description": "how long the open question has waited, when input-required"},
 		"model":             map[string]any{"type": "string", "description": "the model the delegate was started with; absent when none was named and the vendor's default applies"},
-		"model_from":        map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "vendor_default"}, "description": "where the model came from: this call, the parent's delegates_to entry, the delegate harness's default_model, or the vendor's own default"},
+		"model_from":        map[string]any{"type": "string", "enum": delegation.Froms, "description": "where the model came from: this call, the parent's delegates_to entry, the delegate harness's default_model, the vendor's own default, or live_session (a task queued at a live session runs with that session's own model, which is not known, so no model is given)"},
 		"effort":            map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate was started with; absent when none was named"},
-		"effort_from":       map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "vendor_default"}, "description": "where the effort came from: this call, the parent's delegates_to entry, the delegate harness's default_effort, or the vendor's own default"},
+		"effort_from":       map[string]any{"type": "string", "enum": delegation.Froms, "description": "where the effort came from: this call, the parent's delegates_to entry, the delegate harness's default_effort, the vendor's own default, or live_session (a task queued at a live session runs with that session's own effort, which is not known, so no effort is given)"},
 	},
 	"required": []string{"task_id", "state", "message"},
 }

@@ -99,8 +99,14 @@ func Queue(o QueueOptions) (*Record, string, error) {
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
 		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
+<<<<<<< HEAD
 		AutoApproveFrom:     AutoApproveInteractive,
 		FallbackAutoApprove: o.AutoApprove, FallbackAutoApproveFrom: o.AutoApproveFrom,
+=======
+		// A live session runs with its own model and effort: the record says so
+		// and names no value (ynh #1074).
+		ModelFrom: FromLiveSession, EffortFrom: FromLiveSession,
+>>>>>>> 4558eb70 (fix(delegation): a task queued at a live session reports live_session as the source of model and effort (#1074))
 		Log:   strings.TrimSuffix(path, ".json") + ".log",
 		Route: RouteLive, Session: o.Session.SessionID, SessionCwd: o.Session.Cwd,
 		QueuedAt: &now, TakeBy: &by, Supervisor: o.Supervisor,

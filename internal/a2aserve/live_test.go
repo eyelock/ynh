@@ -428,3 +428,26 @@ func TestAModelWithOnLiveHeadlessIsHonouredBesideALiveSession(t *testing.T) {
 		t.Errorf("record = %+v", rec)
 	}
 }
+
+// ynh #1074: a task queued at a live session, with an entry-level or default
+// model and effort configured, still queues; its record says both came from the
+// live session and claims no value, since the session's own are not known.
+func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.T) {
+	folder := setup(t)
+	liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", func(o *Options) {
+		o.Model, o.Effort = "entry-m", "medium"
+		o.DefaultModel, o.DefaultEffort = "def-m", "low"
+	})
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hi", true)
+	if task.Metadata[MetaRoute] != "live" {
+		t.Fatalf("metadata = %v, want route live", task.Metadata)
+	}
+	rec, _ := recordOf(t, task)
+	if rec.Status != delegation.StatusQueued || rec.Model != "" || rec.Effort != "" ||
+		rec.ModelFrom != delegation.FromLiveSession || rec.EffortFrom != delegation.FromLiveSession {
+		t.Errorf("record = status %s model %q from %q, effort %q from %q; want queued, no value, from live_session",
+			rec.Status, rec.Model, rec.ModelFrom, rec.Effort, rec.EffortFrom)
+	}
+}

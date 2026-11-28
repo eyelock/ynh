@@ -22,7 +22,15 @@ const (
 	FromEntry           = "entry"
 	FromDelegateDefault = "delegate_default"
 	FromVendorDefault   = "vendor_default"
+	// FromLiveSession is for a task queued at a live interactive session: it
+	// runs with that session's own model and effort, which ynh does not know,
+	// so the record names the source and claims no value.
+	FromLiveSession = "live_session"
 )
+
+// Froms is every word a model_from or effort_from can carry, in the order of
+// the layers, so the schemas built from it cannot drift from the code.
+var Froms = []string{FromCall, FromEntry, FromDelegateDefault, FromVendorDefault, FromLiveSession}
 
 // The neutral effort levels, the same as `ynh agent run --effort`.
 const (
