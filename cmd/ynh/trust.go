@@ -693,7 +693,8 @@ func harnessExecutables(p *harness.Harness) trustSet {
 	set.LaunchFocus = launchFocusFor(p)
 	set.AutoApprove = p.AutoApprove
 	for _, d := range p.DelegatesTo {
-		if d.AutoApprove != "" {
+		// Only an a2a entry's level applies; a native entry is refused at load.
+		if d.AutoApprove != "" && p.TransportOf(d) == harness.TransportA2A {
 			set.DelegateLevels = append(set.DelegateLevels, d.Label()+": "+d.AutoApprove)
 		}
 	}

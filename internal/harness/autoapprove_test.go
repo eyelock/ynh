@@ -41,3 +41,30 @@ func TestInvalidAutoApproveIsRefused(t *testing.T) {
 		})
 	}
 }
+
+func TestAutoApproveOnANativeEntryIsRefused(t *testing.T) {
+	for name, body := range map[string]string{
+		"entry transport native":   `{"name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","transport":"native","auto_approve":"none"}]}`,
+		"harness transport native": `{"name":"h","version":"0.1.0","transport":"native","delegates_to":[{"git":"github.com/o/a","auto_approve":"edits"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := loadTransportHarness(t, body)
+			err := h.CheckDelegateTransports("claude")
+			if err == nil || !strings.Contains(err.Error(), "not accepted on a native delegate") || !strings.Contains(err.Error(), "transport: a2a") {
+				t.Errorf("want a refusal naming the parent's level and a2a as the fix, got %v", err)
+			}
+		})
+	}
+	// An a2a entry's level, and a native entry with none, are still accepted.
+	for name, body := range map[string]string{
+		"a2a entry":     `{"name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","auto_approve":"none"}]}`,
+		"native, none":  `{"name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","transport":"native"}]}`,
+		"entry a2a/nat": `{"name":"h","version":"0.1.0","transport":"native","delegates_to":[{"git":"github.com/o/a","transport":"a2a","auto_approve":"none"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := loadTransportHarness(t, body).CheckDelegateTransports("claude"); err != nil {
+				t.Errorf("must still load: %v", err)
+			}
+		})
+	}
+}

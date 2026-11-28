@@ -108,7 +108,7 @@ accepts the whole tree of its a2a delegates, nested ones included, each with its
 all or nothing, after showing what each runs; a refusal above also names the parent's command. A delegate
 that executes nothing (no sensors, hooks or MCP servers) is matched without a `ynh trust accept`,
 but its session is a one-shot run, which is refused until the delegate is accepted: acceptance covers the
-level (`auto_approve`) it opens at. When several installs match one entry, the trusted match with the smallest id wins.
+level (`auto_approve`) it opens at. `auto_approve` is for an `a2a` entry only: a `native` delegate is a subagent in the parent's own session and runs at the parent's level, so a native entry that declares one is refused at load, with the fix (narrow the parent, or make the entry `a2a`). When several installs match one entry, the trusted match with the smallest id wins.
 
 > **Intended, not run.** A delegate installed from a remote git URL or from a registry entry, with trust accepted,
 > then started by its parent. It is the designed path; the record does not yet show it run
