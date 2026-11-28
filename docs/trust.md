@@ -195,9 +195,9 @@ Pin it to a 40-character commit SHA and try again. Acceptance is a step for a pe
 ```
 
 ```
-Error: ynh trust accept refuses to accept acme/acme: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
+Error: ynh trust accept refuses to accept github.com/acme/acme/acme: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
   the commit installed: its install record holds no full commit SHA
-Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install github.com/acme/acme --ref <40-character SHA>', then run 'ynh trust accept acme/acme' again
+Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install github.com/acme/acme --ref <40-character SHA>', then run 'ynh trust accept github.com/acme/acme/acme' again
 ```
 
 | Route | What it accepts | When the pin is checked |

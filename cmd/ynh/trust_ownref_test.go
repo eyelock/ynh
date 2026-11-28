@@ -71,7 +71,7 @@ func TestTrustAccept_RecordsTheInstalledCommit(t *testing.T) {
 			if err != nil {
 				msg += err.Error()
 			}
-			for _, want := range []string{tc.wantErr, "ynh install github.com/acme/hooked --ref <40-character SHA>"} {
+			for _, want := range []string{tc.wantErr, "ynh install github.com/acme/hooked --ref <40-character SHA>", "run 'ynh trust accept " + id + "' again"} {
 				if !strings.Contains(msg, want) {
 					t.Errorf("refusal lacks %q:\n%s", want, msg)
 				}

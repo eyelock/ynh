@@ -1218,7 +1218,7 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	// floats: a branch or tag that later moves reads as changed (ynh #1023).
 	// An install that recorded no full commit cannot be pinned this way.
 	if bad := unrecordedCommit(p); len(bad) > 0 {
-		return cliError(stderr, structured, errCodeConfigError, refuseUnpinnedWith(name, "ynh trust accept", bad, ownRefClosing(p)).Error())
+		return cliError(stderr, structured, errCodeConfigError, refuseUnpinnedWith(name, "ynh trust accept", bad, ownRefClosing(p, name)).Error())
 	}
 	// Acceptance is the operator's review of what is installed, so a remote
 	// include or native delegate entry that floats (a branch, a tag or no ref)

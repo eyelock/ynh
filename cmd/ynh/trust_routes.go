@@ -127,13 +127,15 @@ func refuseUnpinnedWith(what, flag string, reasons []string, closing string) err
 // ownRefClosing ends the refusal of `ynh trust accept` for a harness whose
 // install recorded no full commit SHA. The shared line sends the operator back
 // to 'ynh trust accept', which is the command that just refused; it needs a
-// commit to record, so the way out is to reinstall at one.
-func ownRefClosing(p *harness.Harness) string {
+// commit to record, so the way out is to reinstall at one. id is the harness id the operator
+// gave (the one the refusal header names), which is what `ynh trust accept`
+// takes, not the bare name.
+func ownRefClosing(p *harness.Harness, id string) string {
 	src := "<source>"
 	if p.InstalledFrom != nil && p.InstalledFrom.Source != "" {
 		src = p.InstalledFrom.Source
 	}
-	return fmt.Sprintf("Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install %s --ref <40-character SHA>', then run 'ynh trust accept %s' again", src, p.Name)
+	return fmt.Sprintf("Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install %s --ref <40-character SHA>', then run 'ynh trust accept %s' again", src, id)
 }
 
 // uncachedUnpinnedClosing ends the refusal of an uncached include that is not
