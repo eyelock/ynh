@@ -114,3 +114,21 @@ func withSessionID(raw, id string) string {
 	kept = append(kept, url.PathEscape(string(AttrSessionID))+"="+url.PathEscape(id))
 	return strings.Join(kept, ",")
 }
+
+// WithLabels is an OTEL_RESOURCE_ATTRIBUTES value with the run's labels as
+// ynh.label.<key>=<value>, sorted by key, percent-encoded so a value with a
+// slash or a hash cannot break the list. Every pair already there is kept but
+// an earlier ynh.label.*: only a label ynh validated goes out (ynr ADR-006
+// rule 10), as in stripOperatorLabels. With no labels it still drops an
+// operator's ynh.label.* from the value.
+func WithLabels(raw string, labels map[string]string) string {
+	kept, _ := stripLabelAttrs(raw)
+	var parts []string
+	if strings.TrimSpace(kept) != "" {
+		parts = append(parts, kept)
+	}
+	for _, kv := range LabelAttributes(labels) {
+		parts = append(parts, url.PathEscape(string(kv.Key))+"="+url.PathEscape(kv.Value.AsString()))
+	}
+	return strings.Join(parts, ",")
+}

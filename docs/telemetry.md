@@ -338,8 +338,14 @@ these is yours.
   environment of every process it starts: the vendor CLI (including past
   `env_passthrough`, which does not apply to it) and each `ynh check`. With no
   labels it sets nothing, and removes an inherited `YNH_LABELS`.
-- **Not yet:** the vendor's own telemetry does not carry them. Appending them to
-  the vendor's `OTEL_RESOURCE_ATTRIBUTES` is a separate change.
+- **The vendor's own telemetry:** when `ynh run` points a vendor's telemetry at
+  a relay (`--telemetry-relay`, `--telemetry-relay-endpoint` or their
+  settings), ynh appends each label to the vendor's `OTEL_RESOURCE_ATTRIBUTES`
+  as `ynh.label.<key>=<value>`, sorted by key and percent-encoded (`/` is
+  `%2F`, `#` is `%23`), after what the operator and `ynh.session.id` already
+  put there. An operator's own `ynh.label.*` there is replaced, since only
+  validated labels go out. With no relay endpoint the variable is left exactly
+  as it was.
 - **`ynh ls` and `ynh info`** show a harness's own manifest labels, and
   `ynh ls --label key:value` (repeatable, every one must match) lists only
   harnesses that carry them.

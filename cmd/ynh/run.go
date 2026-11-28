@@ -806,7 +806,7 @@ func cmdRun(args []string) (runErr error) {
 		}
 		// The vendor's own telemetry, through a relay that lives as long as
 		// the session (the child ynh supervises).
-		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, ra.RelayEndpoint, os.Stderr)
+		stopRelay, relayArgs := startRunRelay(adapter.Name(), ra.Relay, ra.RelayEndpoint, runLabels, os.Stderr)
 		defer stopRelay()
 		vendorArgs = append(relayArgs, vendorArgs...)
 		vendorArgs = append(delegateQuietArgs(adapter.Name(), vendorArgs, os.Getenv(delegationHandleEnv)), vendorArgs...)

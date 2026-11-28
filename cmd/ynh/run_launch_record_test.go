@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/agent"
 	"github.com/eyelock/ynh/internal/telemetry"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -242,4 +243,43 @@ func TestLaunchOutcome(t *testing.T) {
 	if o, c, _ := launchOutcome(errors.New("x"), false); o != telemetry.SessionOutcomeRefused || c != 1 {
 		t.Errorf("an error before it started = %s %d", o, c)
 	}
+}
+
+// A relay endpoint wires Claude Code's own telemetry, and the run's labels
+// then ride on its OTEL_RESOURCE_ATTRIBUTES as ynh.label.<key>, percent-encoded,
+// beside what the operator had; with no endpoint the variable is untouched.
+func TestLaunchRecord_LabelsOnTheVendorsResource(t *testing.T) {
+	run := func(t *testing.T, extra ...string) string {
+		t.Helper()
+		launchTelemetryEnv(t, false)
+		t.Setenv(telemetryRelayEndpointEnv, "")
+		// The relay wiring sets these with os.Setenv; registering each has t
+		// restore it, so this does not leak into the next test.
+		for _, kv := range agent.RunRelayEnv("claude", "") {
+			t.Setenv(kv[0], "")
+		}
+		t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment.name=dev,ynh.label.site=lab")
+		var got string
+		if err := launchWith(t, "claude", func() error {
+			got = os.Getenv("OTEL_RESOURCE_ATTRIBUTES")
+			return nil
+		}, extra...); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	t.Run("endpoint set", func(t *testing.T) {
+		got := run(t, "--telemetry-relay-endpoint", "http://127.0.0.1:4318",
+			"--label", "wheelhouse:ynw", "--label", "batch:a/b#1")
+		const want = "deployment.environment.name=dev,ynh.label.batch=a%2Fb%231,ynh.label.wheelhouse=ynw"
+		if got != want {
+			t.Errorf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, want)
+		}
+	})
+	t.Run("no endpoint", func(t *testing.T) {
+		got := run(t, "--label", "wheelhouse:ynw")
+		if want := "deployment.environment.name=dev,ynh.label.site=lab"; got != want {
+			t.Errorf("OTEL_RESOURCE_ATTRIBUTES = %q, want it as it was, %q", got, want)
+		}
+	})
 }
