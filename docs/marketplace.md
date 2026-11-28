@@ -86,9 +86,13 @@ that is already the plugin — not because it gets the shapes wrong.
 ### Or with ynh
 
 ```bash
-ynh install github.com/eyelock/ynh          # ynh-guide
-ynh run ynh-guide --profile ynh-dev         # adds the developer set
+ynh install github.com/eyelock/ynh                          # ynh-guide
+ynh trust show github.com/eyelock/ynh/ynh-guide             # read the hooks and sensors it will run
+ynh trust accept github.com/eyelock/ynh/ynh-guide           # accept them
+ynh run github.com/eyelock/ynh/ynh-guide --profile ynh-dev  # adds the developer set
 ```
+
+The ynh harness runs hooks and sensors, so ynh refuses to start it until you accept it.
 
 Same artifacts, one install, plus profiles and focuses that the native plugin
 formats have no equivalent for.
