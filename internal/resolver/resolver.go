@@ -75,6 +75,10 @@ type ResolveResult struct {
 	// subpath, then "@" and the ref as written ("" when it floats). Empty
 	// unless Remote.
 	RemoteKey string
+	// Commit is the commit a git include resolved to, the one it was read at,
+	// "" when none is known (a local include). A trust record keeps it for a
+	// remote include whose ref floats (ynh #1002).
+	Commit string
 
 	// node is the include's identity in the include graph (see
 	// includeResolver.parents), empty for a plain artifact package.
@@ -778,6 +782,7 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 		version:   version,
 		Remote:    remote,
 		RemoteKey: remoteKey,
+		Commit:    repoResult.SHA,
 		Content: ResolvedContent{
 			BasePath:       basePath,
 			Paths:          inc.Pick,
@@ -924,7 +929,7 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			if err := cloneAtSHA(repoDir, fullURL, ref); err != nil {
 				return RepoResult{}, err
 			}
-			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
+			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: ref, Cloned: true, Changed: true}, nil
 		}
 		// Branch/tag: use clone --branch for the depth-1 shortcut.
 		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {

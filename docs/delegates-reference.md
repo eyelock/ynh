@@ -119,15 +119,17 @@ the run ends. A delegation already running is a detached session and goes on.
   v2 (v2.8.0); its own random bearer token.
 - Every request but the agent card needs `Authorization: Bearer <token>`. A wrong or missing token is HTTP
   401 and starts nothing. The card is served without a token.
-- The delegate's session starts on the first message, never on a card fetch or a refused call.
+- A first message starts a session of the delegate, or queues the task at a live one that accepts tasks ([Delegating to a live session](delegate-sessions.md#delegating-to-a-live-session)). A card fetch or a refused call starts nothing.
 
 | A2A task state | Delegation |
 |---|---|
-| `working` | running |
+| `submitted` | queued at a live session of the delegate (`route: live`); nothing is started and no session has taken it yet |
+| `working` | running: a session of its own (`route: headless`), or a live session that has taken the task |
 | `input-required` | the delegate has asked a question; answered by a message on the same task |
 | `completed` | finished; the result is an artifact |
 | `canceled` | cancelled; the run's process group is stopped |
 | `failed` | the error, the exit code and the last 40 lines of the run's log |
+| `rejected` | the live session declined the task, with a reason; the sender may resend it with `on_live: headless` |
 
 Every result carries the task and context ids. A non-blocking send returns at once and the task goes on.
 
@@ -172,14 +174,14 @@ there is the handle, not the A2A task id the CLI used. A task started with the C
 ### Tools
 
 Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. A
-delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`working`, `input-required`, `completed`,
-`failed` or `canceled`), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
+delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`submitted`, `working`, `input-required`, `completed`,
+`failed`, `canceled` or `rejected`), `route` (`live` or `headless`), `session` and `cwd` (the live session that got the task, or the one started for it), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
 `waiting_seconds` while `input-required`; `model`, `model_from`, `effort` and `effort_from` ([Model and effort](#model-and-effort), from v0.18.1). `delegate_list` returns them as a list under `delegations`, and
 `ynh_ps` returns `sessions`.
 
 | Tool | Does |
 |---|---|
-| `delegate_to_<name>` (`task`, optional `wait`, and from v0.18.1 `model`, `effort`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle with state `working`: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
+| `delegate_to_<name>` (`task`, optional `wait`, optional `on_live`, and from v0.18.1 `model`, `effort`) | Sends the task through the delegate's A2A endpoint, with its token. When a live interactive session of the delegate accepts tasks it is queued there (state `submitted`, `route: live`) and nothing starts; otherwise a headless session starts, opened with the model and effort the call, the parent's entry or the delegate's default chose (state `working`, `route: headless`). `on_live` is `queue` (the default) or `headless`, and `headless` always starts a session of its own. It returns the handle: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
 | `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is `<delegate> asks: <question>`. |

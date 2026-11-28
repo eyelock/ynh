@@ -317,6 +317,41 @@ func TestToolsDeclareOutputSchemas(t *testing.T) {
 	}
 }
 
+// delegate_to_<name>'s description is all the model reads when it picks the
+// tool, so it says a live session may get the task and what on_live does.
+func TestDelegateToDescriptionNamesTheLiveRoute(t *testing.T) {
+	s := newSession(t, setup(t), "", nil)
+	r := s.rpc("tools/list", map[string]any{})
+	var l struct {
+		Tools []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(r.Result, &l); err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range l.Tools {
+		switch tl.Name {
+		case "delegate_to_reviewer":
+			for _, want := range []string{"live interactive session", "submitted", "route live", "on_live", "route headless"} {
+				if !strings.Contains(tl.Description, want) {
+					t.Errorf("delegate_to_reviewer description lacks %q: %s", want, tl.Description)
+				}
+			}
+			if strings.Contains(tl.Description, "as its own session") {
+				t.Errorf("description still says every call starts its own session: %s", tl.Description)
+			}
+		case "delegate_status":
+			for _, want := range []string{"submitted", "rejected"} {
+				if !strings.Contains(tl.Description, want) {
+					t.Errorf("delegate_status description lacks %q: %s", want, tl.Description)
+				}
+			}
+		}
+	}
+}
+
 func sorted(s []string) []string {
 	out := append([]string(nil), s...)
 	for i := range out {

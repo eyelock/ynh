@@ -88,13 +88,20 @@ func Start(o StartOptions) (*Record, string, error) {
 	path := RecordPath(o.Parent, folder, handle)
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
-		Task: o.Task, Model: o.Model, ModelFrom: o.ModelFrom, Effort: o.Effort, EffortFrom: o.EffortFrom, Vendor: o.Vendor, Profile: o.Profile, Focus: o.Focus, Chain: anc,
+		Task: o.Task, Model: o.Model, ModelFrom: o.ModelFrom, Effort: o.Effort, EffortFrom: o.EffortFrom, Vendor: o.Vendor, Profile: o.Profile, Focus: o.Focus, Chain: anc, Route: RouteHeadless,
 		Log: strings.TrimSuffix(path, ".json") + ".log",
 	}
 	if err := create(path, rec); err != nil {
 		return nil, "", err
 	}
-	argv := append(append([]string{}, o.Supervisor...), path)
+	return launchSession(path, folder, o.Supervisor, anc)
+}
+
+// launchSession starts the detached session process for the record at path
+// and records its pid. Start calls it for a new record; a queued task that
+// falls back to headless calls it for the record it already has.
+func launchSession(path, folder string, supervisor, anc []string) (*Record, string, error) {
+	argv := append(append([]string{}, supervisor...), path)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = folder
 	// The session never inherits its parent's A2A endpoints or their tokens:

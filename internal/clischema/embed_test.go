@@ -199,6 +199,11 @@ func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "install
 
 func TestCheckGolden(t *testing.T) { validateGolden(t, "check", "check.json") }
 
+// TestTrustShowFolderGolden validates `ynh trust show <folder> --format json`.
+func TestTrustShowFolderGolden(t *testing.T) {
+	validateGolden(t, "trust-show-folder", "trust-show-folder.json")
+}
+
 // `ynh telemetry registry` prints a bare object in the shape every tool of
 // the family prints, which ynr reads.
 func TestTelemetryRegistryGolden(t *testing.T) {

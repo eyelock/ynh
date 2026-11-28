@@ -95,6 +95,12 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 	// Without this a cold include cache reads as unavailable and --trust can
 	// never get past the gate (ynw-twt3a).
 	if ia.trust {
+		// A floating native delegate entry is judged from the manifest alone,
+		// before anything is fetched: an unpinned one is never fetched, so it
+		// would otherwise read as unreadable rather than as unpinned.
+		if err := refuseUnpinnedDelegates("this image", "--trust", p); err != nil {
+			return nil, err
+		}
 		if err := fetchIncludesForTrust(p, cfg); err != nil {
 			return nil, err
 		}
@@ -145,7 +151,7 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 	if err != nil {
 		return nil, err
 	}
-	if bad := unpinnedIncludes(remote); len(bad) > 0 {
+	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
 		return nil, refuseUnpinned("this image", "--trust", bad)
 	}
 	rec := trustRecord{
@@ -155,11 +161,11 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		Via:        viaImage,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	// The image's harness/ folder is a clone with no installed.json, so inside
-	// the image the harness has no recorded source or commit. The record is
-	// keyed by what the image will see, so it carries none either: a record
-	// with a source would read "moved" against that clone and the gate would
-	// refuse the image's own harness. The pin was enforced above, at build.
+	// Source, ref and commit are filled in by the caller for a remote source
+	// (bakeFromProvenance), which also bakes the installed.json they match: a
+	// record naming a source the image's harness does not carry would read
+	// "moved" and the gate would refuse the image's own harness. The pin was
+	// enforced above, at build.
 	return &rec, nil
 }
 

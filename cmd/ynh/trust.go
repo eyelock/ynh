@@ -76,6 +76,11 @@ type trustRecord struct {
 	Ref        string `json:"ref,omitempty"`
 	SHA        string `json:"sha,omitempty"`
 	AcceptedAt string `json:"accepted_at"`
+	// Floating lists what `ynh trust accept` accepted although it had no full
+	// SHA ref (a remote include or native delegate entry), each with the
+	// commit it was at then (ynh #1002). Informational: the digest decides
+	// whether what runs changed.
+	Floating []floatingPin `json:"floating,omitempty"`
 }
 
 type trustStore struct {
@@ -1153,7 +1158,12 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	}
 	if name == "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh trust show <harness> [--format text|json]")
+			"usage: ynh trust show <harness|folder> [--format text|json]")
+	}
+	// A folder (./dir) has no install id and no record of its own: show the
+	// remote includes whose commands the gate checks, as accept would record.
+	if namespace.Classify(name) == namespace.RefPath {
+		return showFolderIncludes(name, format, structured, stdout, stderr)
 	}
 	p, err := harness.LoadQualified(name)
 	if err != nil {
@@ -1203,12 +1213,23 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		// the operator was never shown.
 		return cliError(stderr, structured, errCodeConfigError, unavailableMessage(name, set.Problems))
 	}
+	// Acceptance is the operator's review of what is installed, so a remote
+	// include or native delegate entry that floats (a branch, a tag or no ref)
+	// is accepted at the commit it is at now and that commit is recorded, not
+	// refused; only --trust, which accepts unreviewed, needs a full SHA
+	// (ynh #1002, as for a floating own ref, ynh #1023).
+	remote, rerr := remoteIncludes(p, "accept")
+	if rerr != nil {
+		return cliError(stderr, structured, errCodeConfigError, rerr.Error())
+	}
+	floating := floatingPins(p, remote)
 	rec := trustRecord{
 		Digest:     executablesDigest(set),
 		Commands:   set.count(),
 		Scheme:     trustScheme,
 		Via:        viaAccept,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
+		Floating:   floating,
 	}
 	if pr := p.InstalledFrom; pr != nil {
 		rec.Source, rec.Ref, rec.SHA = pr.Source, pr.Ref, pr.SHA
@@ -1226,6 +1247,9 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		workspaceNote = fmt.Sprintf(", %d workspace folder(s)", n)
 	}
 	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest)
+	if err == nil {
+		err = printFloating(stdout, floating)
+	}
 	return err
 }
 

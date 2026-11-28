@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/trust-show-folder.schema.json",
+  "title": "ynh trust show <folder> --format json",
+  "description": "Output of `ynh trust show <folder> --format json`, for a harness run from a folder rather than an installed id (see trust-show.schema.json for that). A folder's own commands are not trust-checked; this lists the remote includes that bring commands, each with its state, so they can be reviewed before `ynh trust accept <folder>`. Not enveloped. It changes nothing.",
+  "x-capabilities": "0.11",
+  "$defs": {
+    "Include": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "description": "The include's trust key: its repository, subpath and ref." },
+        "ref": { "type": "string", "description": "The ref the include is pinned to; empty when it names none." },
+        "sha": { "type": "string", "description": "The commit, present only when ref is a full 40-character SHA." },
+        "state": { "type": "string", "enum": ["unreviewed", "accepted", "changed"], "description": "unreviewed: never accepted; accepted: its commands match what was accepted; changed: they differ." },
+        "commands": { "type": "integer", "minimum": 0, "description": "How many commands the include executes." }
+      },
+      "required": ["key", "ref", "state", "commands"],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "harness": { "type": "string", "description": "The folder, as given." },
+    "includes": { "type": "array", "items": { "$ref": "#/$defs/Include" }, "description": "Each remote include of the folder that brings commands; empty when there are none." }
+  },
+  "required": ["harness", "includes"],
+  "additionalProperties": false
+}

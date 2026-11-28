@@ -72,6 +72,44 @@ type Options struct {
 	Folder string
 	// Supervisor starts the session process (see delegation.StartOptions).
 	Supervisor []string
+	// OnLive is what a task does when a live interactive session of the
+	// delegate accepts tasks: "queue" (the default) puts it in that harness's
+	// mailbox and starts nothing; "headless" starts a session of its own. A
+	// message can choose for itself with the MetaOnLive metadata key.
+	OnLive string
+	// TakeBy is how long a queued task may wait to be taken before the sender
+	// is told it is still waiting (delegation.DefaultTakeBy when 0).
+	TakeBy time.Duration
+}
+
+// MetaOnLive is the message metadata key that chooses, for one task, between
+// "queue" and "headless" (Options.OnLive).
+const MetaOnLive = "ynh.on_live"
+
+// Metadata keys of a task that say where it went: "live" or "headless", the
+// session it is queued at or was taken by, and that session's folder.
+const (
+	MetaRoute   = "ynh.route"
+	MetaSession = "ynh.live_session"
+	MetaCwd     = "ynh.live_cwd"
+)
+
+// RouteMeta is the task metadata for rec's route, session and folder.
+func RouteMeta(rec *delegation.Record) map[string]any {
+	m := map[string]any{MetaHandle: rec.Handle, MetaRoute: rec.Route}
+	if rec.Session != "" {
+		m[MetaSession], m[MetaCwd] = rec.Session, rec.SessionCwd
+	}
+	return m
+}
+
+// QueuedText says where a queued task waits, in a sentence for the sender.
+func QueuedText(rec *delegation.Record) string {
+	since := ""
+	if rec.QueuedAt != nil {
+		since = ", queued " + rec.QueuedAt.Local().Format("15:04:05")
+	}
+	return fmt.Sprintf("queued at live session %s (in %s)%s, not taken yet. Nothing switches to headless by itself while that session is alive: wait, or cancel and resend with on_live headless", rec.Session, rec.SessionCwd, since)
 }
 
 // Endpoint is one open A2A endpoint.
@@ -195,18 +233,12 @@ func agentMessage(ec a2a.TaskInfoProvider, text string) *a2a.Message {
 func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		var path string
+		var queued bool // the task waits in a live session's inbox
 		if ec.StoredTask == nil {
 			// The session starts first, so the task the client first sees
 			// already carries the delegation's handle (MetaHandle). A start
 			// that fails still ends in a task, failed, with the reason.
-			callModel, callEffort := callChoice(ec.Message)
-			model := delegation.Resolve(callModel, x.o.Model, x.o.DefaultModel)
-			effort := delegation.Resolve(callEffort, x.o.Effort, x.o.DefaultEffort)
-			rec, p, err := delegation.Start(delegation.StartOptions{
-				Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
-				Model: model.Value, ModelFrom: model.From, Effort: effort.Value, EffortFrom: effort.From, Vendor: x.o.Vendor,
-				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
-			})
+			rec, p, err := x.begin(ec)
 			sub := a2a.NewSubmittedTask(ec, ec.Message)
 			if err != nil {
 				// A refusal decided before start is the task itself, already
@@ -217,7 +249,8 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				yield(sub, nil)
 				return
 			}
-			sub.Metadata = map[string]any{MetaHandle: rec.Handle}
+			sub.Metadata = RouteMeta(rec)
+			queued = rec.Status == delegation.StatusQueued
 			if !yield(sub, nil) {
 				return
 			}
@@ -235,14 +268,19 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 			// question is no longer open (the delegate gave up waiting and went on, or finished) shows
 			// input-required until it is next asked: the message is then not
 			// an answer, and the task follows the record to where it is.
-			if cur, lerr := delegation.Load(path); lerr == nil && OpenQuestion(cur) == nil && (cur.Status.Final() || hasLapsed(cur)) {
+			if cur, lerr := delegation.Load(path); lerr == nil && OpenQuestion(cur) == nil && (cur.Status.Final() || cur.Status == delegation.StatusQueued || hasLapsed(cur)) {
 				// fall through to follow the record
 			} else if err := Answer(path, messageText(ec.Message)); err != nil {
 				yield(nil, err)
 				return
 			}
 		}
-		if !yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateWorking, nil), nil) {
+		if !queued {
+			if cur, lerr := delegation.Load(path); lerr == nil && cur.Status == delegation.StatusQueued {
+				queued = true
+			}
+		}
+		if !queued && !yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateWorking, nil), nil) {
 			return
 		}
 		for {
@@ -257,6 +295,25 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 				return
 			}
 			switch rec.Status {
+			case delegation.StatusQueued:
+				// Waiting for a live session to take it. Past take-by the sender is
+				// told and the stream ends with the task still submitted: the
+				// record goes on, and a later status call or message follows it.
+				if rec.TakeBy != nil && time.Now().After(*rec.TakeBy) {
+					yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateSubmitted, agentMessage(ec, QueuedText(rec))), nil)
+					return
+				}
+				continue
+			case delegation.StatusRunning, delegation.StatusStarted:
+				if queued { // taken, or fell back to headless: say so once, then follow it as any running task
+					queued = false
+					if !yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateWorking, nil), nil) {
+						return
+					}
+				}
+			case delegation.StatusRejected:
+				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateRejected, agentMessage(ec, "the live session declined the task: "+rec.Error+". Resend it with on_live headless to run it in a session of its own")), nil)
+				return
 			case delegation.StatusSucceeded:
 				if !yield(a2a.NewArtifactEvent(ec, a2a.NewTextPart(rec.Result)), nil) {
 					return
@@ -266,6 +323,7 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 			case delegation.StatusFailed:
 				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateFailed, agentMessage(ec, FailureText(rec))), nil)
 				return
+
 			case delegation.StatusCancelled:
 				yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateCanceled, nil), nil)
 				return
@@ -284,6 +342,37 @@ func callChoice(m *a2a.Message) (model, effort string) {
 	model, _ = m.Metadata[MetaModel].(string)
 	effort, _ = m.Metadata[MetaEffort].(string)
 	return model, effort
+}
+
+// begin starts the task: queued at a live interactive session of the delegate
+// when there is one that accepts tasks and the task does not ask for headless,
+// otherwise a session of its own, opened with the model and effort the call,
+// the parent's entry or the delegate's default chose.
+func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string, error) {
+	onLive := x.o.OnLive
+	if v, ok := ec.Message.Metadata[MetaOnLive].(string); ok && v != "" {
+		onLive = v
+	}
+	if onLive != "" && onLive != "queue" && onLive != "headless" {
+		return nil, "", fmt.Errorf("on_live takes queue or headless, not %q", onLive)
+	}
+	if onLive != "headless" {
+		if live := delegation.LiveSessionsOf(x.o.Delegate); len(live) > 0 {
+			return delegation.Queue(delegation.QueueOptions{
+				Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
+				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
+				Session: live[0], TakeBy: x.o.TakeBy,
+			})
+		}
+	}
+	callModel, callEffort := callChoice(ec.Message)
+	model := delegation.Resolve(callModel, x.o.Model, x.o.DefaultModel)
+	effort := delegation.Resolve(callEffort, x.o.Effort, x.o.DefaultEffort)
+	return delegation.Start(delegation.StartOptions{
+		Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
+		Model: model.Value, ModelFrom: model.From, Effort: effort.Value, EffortFrom: effort.From, Vendor: x.o.Vendor,
+		Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
+	})
 }
 
 // Cancel stops the delegation's process group and ends the task.

@@ -270,9 +270,15 @@ type Result struct {
 	TaskID    string `json:"task_id"`
 	ContextID string `json:"context_id,omitempty"`
 	Delegate  string `json:"delegate,omitempty"`
-	// State is the A2A task state: working, input-required, completed,
-	// failed or canceled.
+	// State is the A2A task state: submitted (queued at a live session, not
+	// taken yet), working, input-required, completed, failed, canceled or
+	// rejected (the live session declined it).
 	State string `json:"state"`
+	// Route is where the task went, live or headless; Session and Cwd name the
+	// live session it is queued at or was taken by, and its folder.
+	Route   string `json:"route,omitempty"`
+	Session string `json:"session,omitempty"`
+	Cwd     string `json:"cwd,omitempty"`
 	// Message says in a sentence what the state means and what to do next; for
 	// input-required it is the delegate's question.
 	Message string `json:"message"`
@@ -305,7 +311,10 @@ var resultSchema = map[string]any{
 		"task_id":         map[string]any{"type": "string", "description": "the delegation's handle; pass it to delegate_status, delegate_result, delegate_cancel and delegate_reply"},
 		"context_id":      map[string]any{"type": "string"},
 		"delegate":        map[string]any{"type": "string"},
-		"state":           map[string]any{"type": "string", "enum": []string{"working", "input-required", "completed", "failed", "canceled"}},
+		"state":           map[string]any{"type": "string", "enum": []string{"submitted", "working", "input-required", "completed", "failed", "canceled", "rejected"}},
+		"route":           map[string]any{"type": "string", "enum": []string{"live", "headless"}, "description": "where the task went: a live interactive session of the delegate, or a headless session of its own"},
+		"session":         map[string]any{"type": "string", "description": "the live session the task is queued at or was taken by"},
+		"cwd":             map[string]any{"type": "string", "description": "that live session's working folder"},
 		"message":         map[string]any{"type": "string", "description": "what the state means and what to do next; the delegate's question when input-required"},
 		"result":          map[string]any{"type": "string", "description": "the delegate's output, when completed"},
 		"log_tail":        map[string]any{"type": "string", "description": "the end of the run's log, when failed"},
@@ -335,6 +344,10 @@ func stateOf(rec *delegation.Record) string {
 		return "failed"
 	case delegation.StatusCancelled:
 		return "canceled"
+	case delegation.StatusRejected:
+		return "rejected"
+	case delegation.StatusQueued:
+		return "submitted"
 	}
 	if a2aserve.OpenQuestion(rec) != nil {
 		return "input-required"
@@ -358,7 +371,7 @@ func (s *Server) delegateName(rec *delegation.Record) string {
 }
 
 func (s *Server) resultOf(rec *delegation.Record) Result {
-	r := Result{TaskID: rec.Handle, State: stateOf(rec), Delegate: s.delegateName(rec),
+	r := Result{TaskID: rec.Handle, State: stateOf(rec), Delegate: s.delegateName(rec), Route: rec.Route, Session: rec.Session, Cwd: rec.SessionCwd,
 		Model: rec.Model, ModelFrom: rec.ModelFrom, Effort: rec.Effort, EffortFrom: rec.EffortFrom}
 	s.mu.Lock()
 	if t, ok := s.a2a[rec.Handle]; ok {
@@ -372,6 +385,10 @@ func (s *Server) resultOf(rec *delegation.Record) Result {
 	case "failed":
 		r.Message = a2aserve.FailureText(rec)
 		r.LogTail = a2aserve.LogTail(rec.Log, a2aserve.LogTailLines)
+	case "submitted":
+		r.Message = a2aserve.QueuedText(rec)
+	case "rejected":
+		r.Message = "the live session declined the task: " + rec.Error + ". Resend it with on_live headless to run it in a session of its own"
 	case "canceled":
 		r.Message = "the delegation was cancelled"
 		if rec.Error != "" {
@@ -389,7 +406,7 @@ func (s *Server) resultOf(rec *delegation.Record) Result {
 }
 
 func (r Result) final() bool {
-	return r.State == "completed" || r.State == "failed" || r.State == "canceled"
+	return r.State == "completed" || r.State == "failed" || r.State == "canceled" || r.State == "rejected"
 }
 
 // toolResult wraps a structured value as a tool result: structuredContent and
@@ -426,10 +443,11 @@ func (s *Server) tools() []any {
 	}
 	for _, d := range names {
 		out = append(out, tool(ToolName(d.Name),
-			fmt.Sprintf("Start the delegate %q as its own session on a task. With no wait it returns at once with a task_id (state working); with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
+			fmt.Sprintf("Give the delegate %q a task. If a live interactive session of it is open and accepts tasks, the task is queued in front of that session (state submitted, route live) and nothing starts; otherwise a session of its own starts (state working, route headless); on_live chooses. With no wait it returns at once with a task_id; with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
 			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp,
-				"model":  map[string]any{"type": "string", "description": "the model the delegate opens with, for this call only: it wins over the parent's delegates_to entry, the delegate's own default and the vendor's default. Choose it from the task's size, cost or urgency. Omit it to take the next layer down."},
-				"effort": map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate opens with, for this call only, chosen the same way as model. Refused where the delegate's vendor has no effort setting."}},
+				"on_live": map[string]any{"type": "string", "enum": []string{"queue", "headless"}, "description": "when a live interactive session of the delegate is open and accepts tasks: queue (the default) puts the task in front of that session and starts nothing, headless starts a session of its own. The result's route, session and cwd say which one got it"},
+				"model":   map[string]any{"type": "string", "description": "the model the delegate opens with, for this call only: it wins over the parent's delegates_to entry, the delegate's own default and the vendor's default. Choose it from the task's size, cost or urgency. Omit it to take the next layer down. Used when a session of its own starts."},
+				"effort":  map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate opens with, for this call only, chosen the same way as model. Refused where the delegate's vendor has no effort setting."}},
 			[]string{"task"}))
 	}
 	list := tool("delegate_list", "List this session's delegations with their state.", map[string]any{}, nil)
@@ -438,7 +456,7 @@ func (s *Server) tools() []any {
 		map[string]any{"all": map[string]any{"type": "boolean", "description": "include ended and dead sessions"}}, nil)
 	ps["outputSchema"] = map[string]any{"type": "object", "properties": map[string]any{"sessions": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}}, "required": []string{"sessions"}}
 	out = append(out, list, ps,
-		tool("delegate_status", "The state of a delegation: working, input-required (message holds its question), completed, failed or canceled.",
+		tool("delegate_status", "The state of a delegation: submitted (queued at a live session, not yet taken), working, input-required (message holds its question), completed, failed, canceled or rejected (the live session declined it).",
 			map[string]any{"task_id": handleProp, "wait": waitProp}, []string{"task_id"}),
 		tool("delegate_result", "A delegation's result once it has completed; for one still going, its state.",
 			map[string]any{"task_id": handleProp, "wait": waitProp}, []string{"task_id"}),
@@ -462,6 +480,7 @@ type toolArgs struct {
 	Message string `json:"message"`
 	Wait    *int   `json:"wait"`
 	All     bool   `json:"all"`
+	OnLive  string `json:"on_live"`
 }
 
 func (s *Server) callTool(ctx context.Context, req rpc) {
@@ -636,18 +655,25 @@ func sendError(d Delegate, err error) error {
 
 // start sends the task through the delegate's A2A endpoint and returns the
 // delegation's record path and the result as it stands.
-func (s *Server) start(ctx context.Context, d Delegate, task, model, effort string) (string, Result, error) {
+func (s *Server) start(ctx context.Context, d Delegate, task, model, effort, onLive string) (string, Result, error) {
 	c, err := s.client(ctx, d)
 	if err != nil {
 		return "", Result{}, err
 	}
 	ctx = authCtx(ctx)
 	m := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(task))
+	meta := map[string]any{}
+	if onLive != "" {
+		meta[a2aserve.MetaOnLive] = onLive
+	}
 	if model != "" {
-		m.SetMeta(a2aserve.MetaModel, model)
+		meta[a2aserve.MetaModel] = model
 	}
 	if effort != "" {
-		m.SetMeta(a2aserve.MetaEffort, effort)
+		meta[a2aserve.MetaEffort] = effort
+	}
+	if len(meta) > 0 {
+		m.Metadata = meta
 	}
 	resp, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: m, Config: &a2a.SendMessageConfig{ReturnImmediately: true}})
 	if err != nil {
@@ -697,7 +723,7 @@ func (s *Server) startTool(ctx context.Context, req rpc, d Delegate, a toolArgs,
 		s.reply(req.ID, toolError("effort: "+err.Error()))
 		return
 	}
-	path, failed, err := s.start(ctx, d, a.Task, a.Model, a.Effort)
+	path, failed, err := s.start(ctx, d, a.Task, a.Model, a.Effort, a.OnLive)
 	if err != nil {
 		s.reply(req.ID, toolError(err.Error()))
 		return
@@ -779,7 +805,7 @@ func (s *Server) replyTo(ctx context.Context, handle, message string, wait time.
 
 func taskView(rec *delegation.Record, statusMessage string) map[string]any {
 	r := Result{State: stateOf(rec)}
-	status := map[string]string{"working": "working", "input-required": "input_required", "completed": "completed", "failed": "failed", "canceled": "cancelled"}[r.State]
+	status := map[string]string{"submitted": "working", "working": "working", "input-required": "input_required", "completed": "completed", "failed": "failed", "canceled": "cancelled", "rejected": "failed"}[r.State]
 	m := map[string]any{
 		"taskId":         rec.Handle,
 		"status":         status,
