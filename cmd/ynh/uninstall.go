@@ -242,14 +242,7 @@ func forgetTrust(ref string, pointer bool, bareName string) {
 	if pointer {
 		ids = append(ids, "local/"+bareName)
 	}
-	changed := false
-	for _, id := range ids {
-		if _, ok := store.Harnesses[id]; ok {
-			delete(store.Harnesses, id)
-			changed = true
-		}
-	}
-	if !changed {
+	if !dropTrustRecords(store, ids) {
 		return
 	}
 	if err := saveTrustStore(store); err != nil {

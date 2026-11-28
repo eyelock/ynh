@@ -218,7 +218,7 @@ func TestWorkspaceGrant(t *testing.T) {
 				vendorName = "claude"
 			}
 			var stderr bytes.Buffer
-			got := workspaceGrant(p, hid, vendorName, w.project, tc.noWorkspace, &stderr)
+			got := workspaceGrant(p, admit(hid, p), vendorName, w.project, tc.noWorkspace, &stderr)
 			if want := tc.want(w); !reflect.DeepEqual(got, want) {
 				t.Errorf("granted = %v, want %v\n%s", got, want, stderr.String())
 			}
@@ -240,11 +240,11 @@ func TestWorkspaceGrant(t *testing.T) {
 func TestWorkspaceGrantSilentWithoutRequest(t *testing.T) {
 	w := newWSWorld(t)
 	var stderr bytes.Buffer
-	if got := workspaceGrant(w.harness(), "x", "claude", w.project, false, &stderr); got != nil || stderr.Len() != 0 {
+	if got := workspaceGrant(w.harness(), admit("x", w.harness()), "claude", w.project, false, &stderr); got != nil || stderr.Len() != 0 {
 		t.Fatalf("got %v, stderr %q", got, stderr.String())
 	}
 	// Not even --no-workspace says anything when nothing was requested.
-	if got := workspaceGrant(w.harness(), "x", "claude", w.project, true, &stderr); got != nil || stderr.Len() != 0 {
+	if got := workspaceGrant(w.harness(), admit("x", w.harness()), "claude", w.project, true, &stderr); got != nil || stderr.Len() != 0 {
 		t.Fatalf("got %v, stderr %q", got, stderr.String())
 	}
 }
@@ -255,7 +255,7 @@ func TestWorkspaceGrantForPerVendor(t *testing.T) {
 	t.Chdir(w.project)
 	for _, v := range []string{"claude", "codex", "copilot", "cursor"} {
 		var stderr bytes.Buffer
-		granted, err := workspaceGrantFor(w.harness("../ynh"), "local/seat", v, false, false, &stderr)
+		granted, err := workspaceGrantFor(w.harness("../ynh"), admit("local/seat", w.harness("../ynh")), v, false, false, &stderr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -270,7 +270,7 @@ func TestWorkspaceGrantForPerVendor(t *testing.T) {
 	// OpenCode has no flag: the folder is decided here and written into the
 	// agent files by GrantOpenCodeWorkspace before the snapshot is sealed.
 	var stderr bytes.Buffer
-	granted, err := workspaceGrantFor(w.harness("../ynh"), "local/seat", "opencode", false, false, &stderr)
+	granted, err := workspaceGrantFor(w.harness("../ynh"), admit("local/seat", w.harness("../ynh")), "opencode", false, false, &stderr)
 	args, _, argsErr := vendor.WorkspaceArgs("opencode", granted)
 	if err != nil || argsErr != nil || len(args) != 0 || !reflect.DeepEqual(granted, []string{w.sibling}) ||
 		!strings.Contains(stderr.String(), "workspace: granted") || strings.Contains(stderr.String(), "not granted") {
@@ -285,7 +285,7 @@ func TestWorkspaceGrantForPreassembledOpenCodeNotGranted(t *testing.T) {
 	w.writeConfig(t, w.home)
 	t.Chdir(w.project)
 	var stderr bytes.Buffer
-	granted, err := workspaceGrantFor(w.harness("../ynh"), "local/seat", "opencode", true, false, &stderr)
+	granted, err := workspaceGrantFor(w.harness("../ynh"), admit("local/seat", w.harness("../ynh")), "opencode", true, false, &stderr)
 	if err != nil {
 		t.Fatal(err)
 	}

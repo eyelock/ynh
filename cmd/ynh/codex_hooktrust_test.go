@@ -60,7 +60,7 @@ func TestCodexHookTrustLaunchArgs(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWSWorld(t)
-			p := w.harness()
+			p := w.harness("../ynh")
 			if tc.setup != nil {
 				tc.setup(t, p)
 			}
@@ -69,7 +69,7 @@ func TestCodexHookTrustLaunchArgs(t *testing.T) {
 				v = "codex"
 			}
 			var stderr bytes.Buffer
-			got := codexHookTrustLaunchArgs(p, tc.id, v, codexRunDir(t), &stderr)
+			got := codexHookTrustLaunchArgs(p, admit(tc.id, p), v, codexRunDir(t), &stderr)
 			if tc.grant != (got != nil) {
 				t.Fatalf("args = %q, want grant %v\n%s", got, tc.grant, stderr.String())
 			}
@@ -94,7 +94,7 @@ func TestCodexHookTrustLaunchArgs(t *testing.T) {
 func TestCodexHookTrustLaunchArgsNoHooksIsSilent(t *testing.T) {
 	w := newWSWorld(t)
 	var stderr bytes.Buffer
-	if got := codexHookTrustLaunchArgs(w.harness(), "local/seat", "codex", t.TempDir(), &stderr); got != nil || stderr.Len() != 0 {
+	if got := codexHookTrustLaunchArgs(w.harness(), admit("local/seat", w.harness()), "codex", t.TempDir(), &stderr); got != nil || stderr.Len() != 0 {
 		t.Errorf("got %q, stderr %q; want nothing", got, stderr.String())
 	}
 }

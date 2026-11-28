@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/parentmcp"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // delegationRecordEnv names the delegation record of a delegate session: the
@@ -97,32 +97,14 @@ func parentAllowRule(name string) string {
 	return "--allowedTools=mcp__plugin_" + name + "_" + parentmcp.ServerName
 }
 
-// claudeOwnMCPAllowRule is the Claude Code flag that allows every tool of the
-// MCP servers the harness called name declares itself (its own and those of
-// its included harnesses, which are under the same trust), and nothing else:
-// not the user's servers, not ynh-delegates. It is "" when there are none.
-// Claude Code names the tools mcp__plugin_<harness>_<server>__<tool>, with
-// any character of a name outside letters, digits, _ and - written as _; a rule
-// naming the server allows all of its tools.
-func claudeOwnMCPAllowRule(name string, servers []string) string {
-	var rules []string
-	for _, s := range servers {
-		rules = append(rules, "mcp__plugin_"+claudeMCPName(name)+"_"+claudeMCPName(s))
-	}
-	if len(rules) == 0 {
-		return ""
-	}
-	return "--allowedTools=" + strings.Join(rules, ",")
+// claudeOwnMCPAllowRule is vendor.ClaudeOwnMCPAllowRule, the one rule a
+// one-shot `ynh run` and an `ynh agent run` worker share.
+func claudeOwnMCPAllowRule(name string, servers []string, isolated bool) string {
+	return vendor.ClaudeOwnMCPAllowRule(name, servers, isolated)
 }
 
-func claudeMCPName(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
-			return r
-		}
-		return '_'
-	}, s)
-}
+// claudeMCPName is how Claude Code writes a server or harness name in a tool name.
+func claudeMCPName(s string) string { return vendor.ClaudeMCPName(s) }
 
 // mcpServerNames lists, sorted, the servers in runDir's .mcp.json: for a baked
 // image, the servers its harness declared when it was built.
@@ -143,21 +125,6 @@ func mcpServerNames(runDir string) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// claudeDelegateMCPAllowRule is the rule `ynh run` adds to a Claude Code
-// session, or "" when it adds none. It adds one only for a delegate's session
-// (delegate: a delegation record is set), where the trust gate holds: ynh
-// refuses an a2a delegate that declares commands until `ynh trust accept`. A
-// harness run directly is never given it by this rule: the gate refuses one
-// that is not accepted, and the pre-approval of an accepted one is not this
-// rule's to grant (ynh #952). It adds none on an
-// interactive run, or when the harness sets mcp_manual_approval.
-func claudeDelegateMCPAllowRule(vendorName string, delegate, oneShot, manualApproval bool, name string, servers []string) string {
-	if vendorName != "claude" || !delegate || !oneShot || manualApproval {
-		return ""
-	}
-	return claudeOwnMCPAllowRule(name, servers)
 }
 
 // delegationNamesHarness reports whether this process runs inside a delegate's

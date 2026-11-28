@@ -71,13 +71,20 @@ func TestParentMCPRefusesBadArguments(t *testing.T) {
 }
 
 func TestClaudeOwnMCPAllowRule(t *testing.T) {
-	if got := claudeOwnMCPAllowRule("h", nil); got != "" {
+	if got := claudeOwnMCPAllowRule("h", nil, false); got != "" {
 		t.Errorf("no servers: got %q, want none", got)
 	}
-	got := claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"})
+	got := claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"}, false)
 	want := "--allowedTools=mcp__plugin_my_h_probe,mcp__plugin_my_h_b_c"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+	// Under mcp_isolation the servers load as <server>, not through the plugin
+	// (ynw-bogq7).
+	got = claudeOwnMCPAllowRule("my.h", []string{"probe", "b c"}, true)
+	want = "--allowedTools=mcp__probe,mcp__b_c"
+	if got != want {
+		t.Errorf("isolated: got %q, want %q", got, want)
 	}
 }
 
@@ -91,24 +98,6 @@ func TestMCPServerNamesReadsTheRunDirsFile(t *testing.T) {
 	}
 	if got := mcpServerNames(dir); len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Errorf("got %v, want [a b]", got)
-	}
-}
-
-func TestClaudeDelegateMCPAllowRuleOnlyForADelegatesOneShotSession(t *testing.T) {
-	servers := []string{"probe"}
-	want := "--allowedTools=mcp__plugin_h_probe"
-	if got := claudeDelegateMCPAllowRule("claude", true, true, false, "h", servers); got != want {
-		t.Errorf("delegate one-shot: got %q, want %q", got, want)
-	}
-	for name, got := range map[string]string{
-		"a harness run directly (no delegation record)": claudeDelegateMCPAllowRule("claude", false, true, false, "h", servers),
-		"an interactive delegate run":                   claudeDelegateMCPAllowRule("claude", true, false, false, "h", servers),
-		"mcp_manual_approval":                           claudeDelegateMCPAllowRule("claude", true, true, true, "h", servers),
-		"another vendor":                                claudeDelegateMCPAllowRule("codex", true, true, false, "h", servers),
-	} {
-		if got != "" {
-			t.Errorf("%s: got %q, want no rule", name, got)
-		}
 	}
 }
 

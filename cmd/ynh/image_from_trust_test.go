@@ -218,7 +218,7 @@ func TestImageFromTrust_BakedRecordReadsAcceptedInTheImage(t *testing.T) {
 	if inImage.InstalledFrom != nil {
 		t.Fatalf("the image's clone has provenance %+v; the test assumes none", inImage.InstalledFrom)
 	}
-	if err := trustGate("local/hh", inImage, io.Discard); err != nil {
+	if err := gateErr("local/hh", inImage, io.Discard); err != nil {
 		t.Fatalf("the gate refused the image's own harness: %v", err)
 	}
 	store, err := loadTrustStore()
@@ -283,7 +283,7 @@ func TestImageFromTrust_ImageKeepsSourceAndSHA(t *testing.T) {
 	if st.Source != url || st.SHA != sha {
 		t.Errorf("trust show reports source %q at %q, want %q at %q", st.Source, st.SHA, url, sha)
 	}
-	if err := trustGate("local/hh", inImage, io.Discard); err != nil {
+	if err := decideTrust("local/hh", inImage, purposeRun, io.Discard).err(); err != nil {
 		t.Errorf("the gate refused the image's own harness: %v", err)
 	}
 }

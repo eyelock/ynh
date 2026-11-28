@@ -22,7 +22,7 @@ const mcpCodexHarness = `{"name":"mcp","version":"0.1.0","default_vendor":"codex
 const mcpCopilotHarness = `{"name":"cop","version":"0.1.0","default_vendor":"copilot",` +
 	`"mcp_servers":{"web":{"url":"https://x/mcp"}}}`
 
-func TestGateTrusted(t *testing.T) {
+func TestAdmissionTrusted(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	accepted := installTrustedTestHarness(t, home, "mcp", mcpCodexHarness)
@@ -45,15 +45,15 @@ func TestGateTrusted(t *testing.T) {
 			if tc.id != "" {
 				p = loadInstalled(t, tc.id)
 			}
-			if got := gateTrusted(tc.id, p); got != tc.want {
-				t.Errorf("gateTrusted = %v, want %v", got, tc.want)
+			if got := admit(tc.id, p).Trusted; got != tc.want {
+				t.Errorf("Admission.Trusted = %v, want %v", got, tc.want)
 			}
 		})
 	}
 
 	t.Run("accepted then changed", func(t *testing.T) {
 		installListTestHarness(t, home, "mcp", strings.Replace(mcpCodexHarness, "x/mcp", "evil/mcp", 1))
-		if gateTrusted(accepted, loadInstalled(t, accepted)) {
+		if admit(accepted, loadInstalled(t, accepted)).Trusted {
 			t.Error("a harness changed since acceptance is trusted")
 		}
 	})

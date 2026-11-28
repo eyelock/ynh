@@ -136,7 +136,8 @@ func cmdRun(args []string) (runErr error) {
 			return err
 		}
 	}
-	if err := trustGate(harnessID, loaded, os.Stderr); err != nil {
+	adm := decideTrust(harnessID, loaded, purposeRun, os.Stderr)
+	if err := adm.err(); err != nil {
 		return err
 	}
 
@@ -268,14 +269,14 @@ func cmdRun(args []string) (runErr error) {
 	// one-shot approval of every tool, are given only to a harness the gate
 	// vouched for. Copilot's one-shot has no narrower grant, so an untrusted
 	// harness is refused before anything launches.
-	trusted := gateTrusted(harnessID, loaded)
 	oneShot := prompt != "" && !ra.Interactive
+	grant := grantsFor(adm, adapter.Name(), oneShot, p.MCPManualApproval)
 	if action == "" && oneShot {
-		if err := oneShotAcceptanceGate(harnessID, loaded); err != nil {
+		if err := adm.withOneShot().Refusal; err != nil {
 			return err
 		}
 	}
-	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
+	if action == "" && oneShot && !grant.CopilotOneShot && adapter.Name() == "copilot" {
 		return copilotOneShotRefusal(harnessID, loaded)
 	}
 
@@ -359,7 +360,7 @@ func cmdRun(args []string) (runErr error) {
 			return nil
 		}
 		wsDecided = true
-		g, err := workspaceGrantFor(loaded, harnessID, adapter.Name(), preassembled, ra.NoWorkspace, os.Stderr)
+		g, err := workspaceGrantFor(loaded, adm, adapter.Name(), preassembled, ra.NoWorkspace, os.Stderr)
 		wsGranted = g
 		return err
 	}
@@ -732,7 +733,7 @@ func cmdRun(args []string) (runErr error) {
 		// trusted harness: a folder run, or one not accepted, gets none and
 		// the vendor asks as it always did.
 		if a, ok := adapter.(vendor.MCPToolApprover); ok && oneShot && !p.MCPManualApproval {
-			if !trusted {
+			if !grant.MCPApprove {
 				// Say so only when there is something to approve.
 				if len(vendor.CodexMCP(runDir).Servers) > 0 {
 					fmt.Fprintf(os.Stderr, "ynh: MCP tools are not pre-approved for %s: a harness is pre-approved only when installed and accepted (ynh trust accept)\n", p.Name)
@@ -743,18 +744,19 @@ func cmdRun(args []string) (runErr error) {
 		}
 
 		// Claude Code ignores a project allow rule while the workspace is
-		// untrusted, so a delegate's one-shot session allows the tools of the
-		// servers its harness declares (docs/mcp.md, "Claude Code Format"). Only
-		// a delegate's: its trust gate holds, and a harness run directly has none.
-		// The record is inherited by every process of the delegate's session, so
-		// it must name this harness: another harness the delegate runs gets none.
+		// untrusted, so a one-shot session allows the tools of the servers its
+		// harness declares (docs/mcp.md, "Claude Code Format"), on the same
+		// terms as every vendor (grantsFor): the harness is trusted, the run is
+		// one-shot, and it does not set mcp_manual_approval.
 		isDelegateSession := delegationNamesHarness(runDirName)
 		if preassembled {
 			// A baked image's servers were composed at build time.
 			declaredMCP = mcpServerNames(runDir)
 		}
-		if rule := claudeDelegateMCPAllowRule(adapter.Name(), isDelegateSession, prompt != "" && !ra.Interactive, p.MCPManualApproval, p.Name, declaredMCP); rule != "" {
-			vendorArgs = append([]string{rule}, vendorArgs...)
+		if adapter.Name() == "claude" && grant.MCPApprove {
+			if rule := claudeOwnMCPAllowRule(p.Name, declaredMCP, p.MCPIsolation || ra.IsolatedMCP); rule != "" {
+				vendorArgs = append([]string{rule}, vendorArgs...)
+			}
 		}
 
 		// A delegate's one-shot session has no one to approve ask_parent
@@ -785,11 +787,11 @@ func cmdRun(args []string) (runErr error) {
 		vendorArgs = append(wsArgs, vendorArgs...)
 
 		// Codex hook and project trust, granted only for an accepted harness.
-		vendorArgs = append(codexHookTrustLaunchArgs(loaded, harnessID, adapter.Name(), runDir, os.Stderr), vendorArgs...)
+		vendorArgs = append(codexHookTrustLaunchArgs(loaded, adm, adapter.Name(), runDir, os.Stderr), vendorArgs...)
 		// Cursor's Workspace Trust, on the same terms: a snapshot is a new
 		// folder whenever the harness changes, and cursor-agent asks once per
 		// folder.
-		vendorArgs = append(cursorTrustLaunchArgs(loaded, harnessID, adapter.Name()), vendorArgs...)
+		vendorArgs = append(cursorTrustLaunchArgs(adm, adapter.Name()), vendorArgs...)
 
 		// The A2A endpoints of the delegates whose transport is a2a, open for
 		// as long as the session runs (docs/delegate-sessions.md).

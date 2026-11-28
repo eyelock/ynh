@@ -84,11 +84,11 @@ func TestOneShotRunOfUnacceptedNoCommandsHarnessIsRefused(t *testing.T) {
 	const id = "github.com/someone/skills-only"
 
 	// Interactive: still needs nothing.
-	if err := trustGate(id, p, nil); err != nil {
+	if err := decideTrust(id, p, purposeRun, nil).err(); err != nil {
 		t.Fatalf("an interactive run of a no-commands harness needs no acceptance: %v", err)
 	}
 	// One-shot: refused until accepted.
-	err := oneShotAcceptanceGate(id, p)
+	err := decideTrust(id, p, purposeRun, nil).withOneShot().err()
 	if err == nil || !isUntrusted(err) {
 		t.Fatalf("a one-shot run must be refused, got %v", err)
 	}
@@ -101,19 +101,19 @@ func TestOneShotRunOfUnacceptedNoCommandsHarnessIsRefused(t *testing.T) {
 	if err := saveTrustStore(store); err != nil {
 		t.Fatal(err)
 	}
-	if err := oneShotAcceptanceGate(id, p); err != nil {
+	if err := decideTrust(id, p, purposeRun, nil).withOneShot().err(); err != nil {
 		t.Errorf("accepted, the one-shot run is allowed: %v", err)
 	}
 
 	// Declaring a level voids the acceptance.
 	p.AutoApprove = "none"
-	if err := trustGate(id, p, nil); err == nil {
+	if err := decideTrust(id, p, purposeRun, nil).err(); err == nil {
 		t.Error("declaring a level must void an earlier acceptance")
 	}
 }
 
 func TestOneShotGateLeavesAFolderRunAlone(t *testing.T) {
-	if err := oneShotAcceptanceGate("", harnessWithSensors(t, nil)); err != nil {
+	if err := decideTrust("", harnessWithSensors(t, nil), purposeRun, nil).withOneShot().err(); err != nil {
 		t.Errorf("folder runs are the folder route's: %v", err)
 	}
 }

@@ -306,7 +306,7 @@ func TestFloatingNativeDelegate_RefusalShowAndAcceptAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gerr := trustGate("local/team", p, io.Discard)
+	gerr := gateErr("local/team", p, io.Discard)
 	if !isUntrusted(gerr) || !strings.Contains(gerr.Error(), "ynh trust accept local/team") {
 		t.Fatalf("gate: %v, want a refusal naming 'ynh trust accept local/team'", gerr)
 	}
@@ -321,7 +321,7 @@ func TestFloatingNativeDelegate_RefusalShowAndAcceptAgree(t *testing.T) {
 	if rec := store.Harnesses["local/team"]; len(rec.Floating) != 1 || rec.Floating[0].Commit != gitRevParse(t, deleg) {
 		t.Errorf("record = %+v, want the delegate's commit", rec)
 	}
-	if gerr := trustGate("local/team", p, io.Discard); gerr != nil {
+	if gerr := gateErr("local/team", p, io.Discard); gerr != nil {
 		t.Errorf("after accept the gate still refuses: %v", gerr)
 	}
 }

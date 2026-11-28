@@ -80,7 +80,7 @@ func TestInstallTrust_AtAFullSHA(t *testing.T) {
 	if lerr != nil {
 		t.Fatal(lerr)
 	}
-	if gerr := trustGate("local/hh", p, io.Discard); gerr != nil {
+	if gerr := gateErr("local/hh", p, io.Discard); gerr != nil {
 		t.Fatalf("gate: %v", gerr)
 	}
 	store, _ := loadTrustStore()
@@ -167,7 +167,7 @@ func TestInstallTrust_RefusesWhatIsNotPinned(t *testing.T) {
 		t.Fatalf("plain install: %v\n%s", err, out)
 	}
 	p, _ := harness.LoadByID("local/hh")
-	if gerr := trustGate("local/hh", p, io.Discard); !isUntrusted(gerr) {
+	if gerr := gateErr("local/hh", p, io.Discard); !isUntrusted(gerr) {
 		t.Errorf("gate = %v, want an untrusted refusal until accepted", gerr)
 	}
 }
@@ -242,7 +242,7 @@ func TestInstallTrust_LocalFolder(t *testing.T) {
 		t.Fatalf("pinned: %v\n%s", err, out)
 	}
 	p, _ := harness.LoadByID("local/fld")
-	if gerr := trustGate("local/fld", p, io.Discard); gerr != nil {
+	if gerr := gateErr("local/fld", p, io.Discard); gerr != nil {
 		t.Fatalf("gate: %v", gerr)
 	}
 }
@@ -260,7 +260,7 @@ func TestRunTrust_FolderRemoteIncludes(t *testing.T) {
 	if err := acceptFolderRun(floating, p, &out); err == nil || !strings.Contains(err.Error(), "floats") {
 		t.Fatalf("floating include: %v", err)
 	}
-	if gerr := trustGate("", p, io.Discard); !isUntrusted(gerr) {
+	if gerr := gateErr("", p, io.Discard); !isUntrusted(gerr) {
 		t.Fatalf("a refused --trust must not accept: %v", gerr)
 	}
 
@@ -275,7 +275,7 @@ func TestRunTrust_FolderRemoteIncludes(t *testing.T) {
 	if !strings.Contains(out.String(), "(run --trust)") {
 		t.Errorf("output: %s", out.String())
 	}
-	if gerr := trustGate("", pp, io.Discard); gerr != nil {
+	if gerr := gateErr("", pp, io.Discard); gerr != nil {
 		t.Fatalf("gate after run --trust: %v", gerr)
 	}
 	store, _ := loadTrustStore()
@@ -545,7 +545,7 @@ func TestRunTrust_FetchesUncachedFullSHAInclude(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	gerr := trustGate("", p, io.Discard)
+	gerr := gateErr("", p, io.Discard)
 	if !isUntrusted(gerr) {
 		t.Fatalf("an uncached include must refuse offline: %v", gerr)
 	}
@@ -574,7 +574,7 @@ func TestRunTrust_FetchesUncachedFullSHAInclude(t *testing.T) {
 	if !strings.Contains(out.String(), "(run --trust)") {
 		t.Errorf("output: %s", out.String())
 	}
-	if gerr := trustGate("", p, io.Discard); gerr != nil {
+	if gerr := gateErr("", p, io.Discard); gerr != nil {
 		t.Fatalf("gate after run --trust: %v", gerr)
 	}
 }
@@ -602,7 +602,7 @@ func TestRunTrust_RefusesUncachedUnpinnedIncludeWithoutFetching(t *testing.T) {
 			if _, ok := resolver.LookupCache(url, ref); ok {
 				t.Error("an unpinned include was fetched")
 			}
-			if gerr := trustGate("", p, io.Discard); !isUntrusted(gerr) {
+			if gerr := gateErr("", p, io.Discard); !isUntrusted(gerr) {
 				t.Errorf("a refused --trust must not accept: %v", gerr)
 			}
 		})

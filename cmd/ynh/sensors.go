@@ -432,7 +432,7 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 	// merge reshapes p, and the trust record covers the harness before them).
 	// A refusal exits 1 with code untrusted (ynh #1010).
 	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
-		if gerr := trustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
+		if gerr := decideTrust(gateRef(harnessName), loaded, purposeSensors, stderr).err(); gerr != nil {
 			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
 		}
 	}

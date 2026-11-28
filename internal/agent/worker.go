@@ -95,6 +95,9 @@ type StartOptions struct {
 	// trusted (ynh #952). A backend pre-approves the MCP tools of the
 	// harness's servers only then.
 	TrustedHarness bool
+	// HarnessName is the harness the run loaded, which names its MCP tools to
+	// Claude Code (mcp__plugin_<harness>_<server>). Empty when none was loaded.
+	HarnessName string
 	// ConfigPath is the assembled harness directory (contains .claude/, CLAUDE.md, etc.).
 	ConfigPath string
 	// Sandbox is "srt" or "none".

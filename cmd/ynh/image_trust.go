@@ -30,19 +30,11 @@ const viaImage = "image"
 // through without a record, and a record for it would claim an acceptance
 // nobody gave.
 func imageTrustRecord(id string, p *harness.Harness) (*trustRecord, error) {
-	store, err := loadTrustStore()
-	if err != nil {
-		return nil, untrustedf("refusing to build an image of %s: the trust record could not be read: %v", id, err)
-	}
-	if err := installedGate(id, p, store); err != nil {
-		// The gate's words, about a build: its text is "refusing to run <id>".
-		msg := strings.Replace(err.Error(), "refusing to run "+id, "refusing to build an image of "+id, 1)
-		if isUntrusted(err) {
-			return nil, &untrustedError{msg: msg}
-		}
+	adm := decideTrust(id, p, purposeImage, nil)
+	if err := adm.err(); err != nil {
 		return nil, err
 	}
-	st := trustStatusFor(id, p, store, nil)
+	st := adm.Status
 	if st.State == trustNoCommands {
 		// The image's entrypoint is a one-shot run, which needs the harness
 		// accepted even when it executes nothing (ynh #1058, N2): an image
@@ -51,12 +43,12 @@ func imageTrustRecord(id string, p *harness.Harness) (*trustRecord, error) {
 		return nil, untrustedf("refusing to build an image of %s: you have not accepted it. It executes no commands, but the image runs one-shot, and a one-shot run opens at %s with nobody to approve (%s).\n"+
 			"  Fix: review it with 'ynh trust show %s', accept it with 'ynh trust accept %s', then build the image again", id, p.AutoApproveOf(), p.AutoApproveOrigin(), id, id)
 	}
-	if st.State != trustAccepted {
+	if st.State != trustAccepted || adm.Record == nil {
 		return nil, nil
 	}
 	rec := trustRecord{
 		Digest:     st.Digest,
-		Commands:   store.Harnesses[id].Commands,
+		Commands:   adm.Record.Commands,
 		Scheme:     trustScheme,
 		Via:        viaImage,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
@@ -113,7 +105,8 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 			return nil, err
 		}
 	}
-	st := trustStatusFor(id, p, empty, nil)
+	adm := decideTrustIn(empty, id, p, purposeImageFrom, nil)
+	st := adm.Status
 	if st.State == trustNoCommands {
 		if ia.trust {
 			return nil, nil
@@ -130,11 +123,11 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		}
 		return nil, &untrustedError{msg: b.String()}
 	}
-	if err := installedGate(id, p, empty); err != nil {
+	if err := adm.err(); err != nil {
 		// Unreadable commands or scripts refuse a build whatever --trust says;
 		// only an unreviewed harness is the operator's to accept.
 		if st.State != trustUnreviewed || len(scriptBlockers(st.Executables, st.Hooks, st.MCPServers)) > 0 {
-			msg := strings.Replace(err.Error(), "refusing to run "+id, "refusing to build an image of "+id, 1)
+			msg := err.Error()
 			if st.State == trustUnavailable && !ia.trust {
 				// The gate's own hint, 'ynh update local/<name>', names an id
 				// that is not installed: no route exists for a --from source

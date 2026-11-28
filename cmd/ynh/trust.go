@@ -1451,6 +1451,20 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	return nil
 }
 
+// dropTrustRecords deletes the records for ids from store and reports whether
+// any existed. It only removes; it never compares a record, so it sits here
+// with the other trust-store code rather than in decideTrust's callers.
+func dropTrustRecords(store trustStore, ids []string) bool {
+	changed := false
+	for _, id := range ids {
+		if _, ok := store.Harnesses[id]; ok {
+			delete(store.Harnesses, id)
+			changed = true
+		}
+	}
+	return changed
+}
+
 // printAutoApproveSection lists the permission level a one-shot run of the
 // harness opens at, which acceptance covers (ynh #1058, D3, N2): an undeclared
 // level is "all", said plainly, and each delegates_to entry's declared level

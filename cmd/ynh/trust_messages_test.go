@@ -104,7 +104,7 @@ func TestTrustMessages_LegacyNoteNamesTheExecutablesKind(t *testing.T) {
 	if err := saveTrustStore(store); err != nil {
 		t.Fatal(err)
 	}
-	gerr := trustGate(id, loadInstalled(t, id), io.Discard)
+	gerr := gateErr(id, loadInstalled(t, id), io.Discard)
 	if !isUntrusted(gerr) {
 		t.Fatalf("err = %v", gerr)
 	}

@@ -181,6 +181,16 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 
 	args = append(args, workspaceArgs(vendorClaude, opts.Workspace)...)
 
+	// A worker has no one to approve an MCP tool call, so allow the tools of
+	// the harness's own servers, as a one-shot `ynh run` does (one rule on
+	// every vendor, ynh #1006): only for a harness the trust gate vouched
+	// for, and not when it sets mcp_manual_approval.
+	if opts.TrustedHarness && !opts.MCPManualApproval && opts.ConfigPath != "" {
+		if rule := vendor.ClaudeOwnMCPAllowRule(opts.HarnessName, vendor.ClaudeOwnMCPServers(opts.ConfigPath), opts.IsolatedMCP); rule != "" {
+			args = append(args, rule)
+		}
+	}
+
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}

@@ -35,28 +35,6 @@ func isRemoteInstall(p *harness.Harness) bool {
 	return true
 }
 
-// workspaceTrusted reports whether id is trust-accepted with a digest that
-// covers p's current workspace entries. The digest covers the whole reviewed
-// set, so any change to it, workspace or not, reads as not accepted.
-func workspaceTrusted(id string, p *harness.Harness) bool {
-	if id == "" || p == nil {
-		return false
-	}
-	store, err := loadTrustStore()
-	if err != nil {
-		return false
-	}
-	rec, ok := store.Harnesses[id]
-	if !ok {
-		return false
-	}
-	set := harnessExecutables(p)
-	if len(set.Problems) > 0 {
-		return false
-	}
-	return rec.Digest == executablesDigest(set)
-}
-
 // workspaceAllowlist loads the operator's allow-list from the config file and
 // YNH_WORKSPACE_ROOTS, which replaces the configured list when set.
 func workspaceAllowlist(home string) workspace.Allowlist {
@@ -77,15 +55,15 @@ func workspaceAllowlist(home string) workspace.Allowlist {
 //
 // A vendor with no way to grant a folder gets every granted folder reported
 // as not granted, naming the vendor. Nothing is dropped silently.
-func workspaceGrant(loaded *harness.Harness, id, vendorName, projectDir string, noWorkspace bool, stderr io.Writer) []string {
-	return workspaceGrantUnless(loaded, id, vendorName, projectDir, noWorkspace, "", stderr)
+func workspaceGrant(loaded *harness.Harness, adm Admission, vendorName, projectDir string, noWorkspace bool, stderr io.Writer) []string {
+	return workspaceGrantUnless(loaded, adm, vendorName, projectDir, noWorkspace, "", stderr)
 }
 
 // workspaceGrantUnless is workspaceGrant for a launch that cannot grant at all
 // for a reason known beyond the vendor: when blocked is not empty, every folder
 // that would have been granted is reported once as not granted for that reason,
 // and none is reported as granted.
-func workspaceGrantUnless(loaded *harness.Harness, id, vendorName, projectDir string, noWorkspace bool, blocked string, stderr io.Writer) []string {
+func workspaceGrantUnless(loaded *harness.Harness, adm Admission, vendorName, projectDir string, noWorkspace bool, blocked string, stderr io.Writer) []string {
 	if loaded == nil || len(loaded.Workspace) == 0 {
 		return nil
 	}
@@ -99,6 +77,7 @@ func workspaceGrantUnless(loaded *harness.Harness, id, vendorName, projectDir st
 		// No Fix: a note from reading the allow-list already says what is wrong with it.
 		warn.Print(stderr, warn.Warning{Message: "workspace: " + n})
 	}
+	id := adm.ID
 	hint := fmt.Sprintf("no workspace allow-list is set and the harness is not trusted: run 'ynh trust accept %s', or set %s", id, workspace.EnvRoots)
 	if id == "" {
 		hint = fmt.Sprintf("no workspace allow-list is set, and a harness run from a path has no trust record: install it and run 'ynh trust accept', or set %s", workspace.EnvRoots)
@@ -110,7 +89,7 @@ func workspaceGrantUnless(loaded *harness.Harness, id, vendorName, projectDir st
 		Home:       home,
 		Remote:     isRemoteInstall(loaded),
 		Allow:      allow,
-		Trusted:    !allow.Set && workspaceTrusted(id, loaded),
+		Trusted:    !allow.Set && grantsFor(adm, vendorName, false, false).Workspace,
 		TrustHint:  hint,
 	})
 	var granted []string
@@ -152,7 +131,7 @@ func workspaceGrantUnless(loaded *harness.Harness, id, vendorName, projectDir st
 // written, and it only decides. The vendor's flags are vendor.WorkspaceArgs of
 // the result; OpenCode has none and is granted by GrantOpenCodeWorkspace, which
 // the caller runs on the tree before it is sealed as a snapshot.
-func workspaceGrantFor(loaded *harness.Harness, id, vendorName string, preassembled, noWorkspace bool, stderr io.Writer) ([]string, error) {
+func workspaceGrantFor(loaded *harness.Harness, adm Admission, vendorName string, preassembled, noWorkspace bool, stderr io.Writer) ([]string, error) {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -164,7 +143,7 @@ func workspaceGrantFor(loaded *harness.Harness, id, vendorName string, preassemb
 		// be read-only. Leave it alone and say so, once per folder.
 		blocked = "opencode: a pre-assembled run directory is not edited; bake the folder into the image"
 	}
-	return workspaceGrantUnless(loaded, id, vendorName, projectDir, noWorkspace, blocked, stderr), nil
+	return workspaceGrantUnless(loaded, adm, vendorName, projectDir, noWorkspace, blocked, stderr), nil
 }
 
 // workspaceReport is the `trust show` view of a harness's workspace request.

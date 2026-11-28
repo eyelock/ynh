@@ -1,6 +1,7 @@
 # Build output
 bin/
 /ynh
+/cmd/ynh/ynh
 /ynd
 
 # goreleaser output. `goreleaser release --snapshot` writes ~200MB of archives
