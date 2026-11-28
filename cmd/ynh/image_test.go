@@ -218,7 +218,7 @@ func TestCmdImage_DryRun(t *testing.T) {
 	t.Setenv("HOME", dir)
 
 	// Create a minimal installed harness
-	installTestHarness(t, "drytest")
+	acceptForTest(t, installTestHarness(t, "drytest"))
 
 	var stdout bytes.Buffer
 	err := cmdImageTo([]string{"local/drytest", "--dry-run"}, &stdout, io.Discard)
@@ -263,7 +263,7 @@ func TestCmdImage_NoDocker(t *testing.T) {
 	t.Setenv("HOME", dir)
 
 	// Create a minimal installed harness
-	installTestHarness(t, "nodockertest")
+	acceptForTest(t, installTestHarness(t, "nodockertest"))
 
 	// Set PATH to empty to ensure docker isn't found
 	t.Setenv("PATH", t.TempDir())
@@ -282,7 +282,7 @@ func TestImageAssembly_AllVendors(t *testing.T) {
 	t.Setenv("HOME", dir)
 
 	// Create a minimal installed harness
-	installTestHarness(t, "assemblytest")
+	acceptForTest(t, installTestHarness(t, "assemblytest"))
 
 	err := cmdImageTo([]string{"local/assemblytest", "--dry-run"}, io.Discard, io.Discard)
 	if err != nil {

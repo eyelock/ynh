@@ -31,9 +31,14 @@ type HarnessJSON struct {
 	// Transport is the default transport of the harness's delegates_to
 	// entries: "a2a" or "native". An entry's own transport wins; neither
 	// set means a2a.
-	Transport  string                 `json:"transport,omitempty"`
-	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
-	MCPServers map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	Transport string `json:"transport,omitempty"`
+	// AutoApprove is the permission level this harness opens at when it is
+	// run unattended (a delegate session, a one-shot `ynh run`, `ynh agent
+	// run`): "none", "edits" or "all". Empty means undeclared, which opens at
+	// all once the harness is accepted. A profile cannot change it.
+	AutoApprove string                 `json:"auto_approve,omitempty"`
+	Hooks       map[string][]HookEntry `json:"hooks,omitempty"`
+	MCPServers  map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	// MCPRemovals names the servers the manifest sets to null in
 	// mcp_servers: a server inherited from an included harness that this
 	// harness does not want. It is not a field of its own on the wire (see
@@ -849,6 +854,10 @@ type DelegateMeta struct {
 	// win over the delegate harness's default_model and default_effort.
 	Model  string `json:"model,omitempty"`
 	Effort string `json:"effort,omitempty"`
+	// AutoApprove is the most this entry lets the delegate open at when it
+	// runs unattended: "none", "edits" or "all". It may only narrow the
+	// delegate harness's own level. Empty takes the delegate's.
+	AutoApprove string `json:"auto_approve,omitempty"`
 }
 
 // HarnessFile is the legacy single-file harness manifest. ynh reads it only to

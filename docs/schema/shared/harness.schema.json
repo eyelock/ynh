@@ -26,6 +26,8 @@
         "version_available": {"type": "string"},
         "description": {"type": "string"},
         "default_vendor": {"type": "string"},
+        "auto_approve": {"type": "string", "enum": ["none", "edits", "all"], "description": "The permission level the harness opens at when run unattended (a delegate session, a one-shot `ynh run`, `ynh agent run`): its declared auto_approve, else all."},
+        "auto_approve_from": {"type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default"], "description": "Where auto_approve came from: the harness's own declaration, or the default."},
         "path": {"type": "string"},
         "ref_installed": {"type": "string"},
         "ref_available": {"type": "string"},
@@ -72,6 +74,8 @@
         "version_available": {"type": "string"},
         "description": {"type": "string"},
         "default_vendor": {"type": "string"},
+        "auto_approve": {"type": "string", "enum": ["none", "edits", "all"], "description": "The permission level the harness opens at when run unattended (a delegate session, a one-shot `ynh run`, `ynh agent run`): its declared auto_approve, else all."},
+        "auto_approve_from": {"type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default"], "description": "Where auto_approve came from: the harness's own declaration, or the default."},
         "path": {"type": "string"},
         "ref_installed": {"type": "string"},
         "ref_available": {"type": "string"},
@@ -262,7 +266,9 @@
         "model": {"type": "string", "description": "The model the delegate opens with when a call names none: the entry's own model, else the delegate harness's default_model. Absent when neither names one, or when ynh could not read the delegate harness. A call's own model is chosen per call and is never here."},
         "model_from": {"type": "string", "enum": ["entry", "delegate_default", "vendor_default"], "description": "Where model came from: the entry's model, the delegate harness's default_model, or nothing named one so the vendor's own default applies. Absent when ynh could not read the delegate harness and the entry names none."},
         "effort": {"type": "string", "enum": ["low", "medium", "high"], "description": "The reasoning effort the delegate opens with when a call names none: the entry's own effort, else the delegate harness's default_effort. Absent when neither names one, or when ynh could not read the delegate harness."},
-        "effort_from": {"type": "string", "enum": ["entry", "delegate_default", "vendor_default"], "description": "Where effort came from: the entry's effort, the delegate harness's default_effort, or nothing named one so the vendor's own default applies."}
+        "effort_from": {"type": "string", "enum": ["entry", "delegate_default", "vendor_default"], "description": "Where effort came from: the entry's effort, the delegate harness's default_effort, or nothing named one so the vendor's own default applies."},
+        "auto_approve": {"type": "string", "enum": ["none", "edits", "all"], "description": "The level the entry declares for the delegate's unattended runs. Present only when the entry declares one; undeclared, the delegate harness's own level applies."},
+        "auto_approve_from": {"type": "string", "enum": ["call", "entry", "flag", "harness", "delegate_default", "caller_cap", "project", "default"], "description": "Where auto_approve came from. Present with auto_approve."}
       },
       "required": ["git", "is_pinned"],
       "additionalProperties": false

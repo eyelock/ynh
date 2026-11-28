@@ -78,6 +78,9 @@ func (h *Harness) CheckDelegateTransports(vendorName string) error {
 	if err := h.CheckDelegateSettings(); err != nil {
 		return fmt.Errorf("%s: %w", h.Name, err)
 	}
+	if err := h.CheckAutoApprove(); err != nil {
+		return fmt.Errorf("%s: %w", h.Name, err)
+	}
 	if vendorName == "" {
 		return nil
 	}

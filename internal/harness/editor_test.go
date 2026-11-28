@@ -697,3 +697,40 @@ func TestArtifactTypes_SchemaAgreement(t *testing.T) {
 		}
 	}
 }
+
+// WithManifestEdit is the harness as an edit would leave it, built without
+// writing: the manifest on disk and the original harness are untouched.
+func TestWithManifestEdit_WritesNothing(t *testing.T) {
+	dir := t.TempDir()
+	writeTestHarness(t, dir, "h")
+	p, err := LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(plugin.PluginPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	edit, err := AddIncludeEdit("github.com/example-org/tools", AddOptions{Ref: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := p.WithManifestEdit(edit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Includes) != 1 || c.Includes[0].Git != "github.com/example-org/tools" || c.Includes[0].Ref != "main" {
+		t.Errorf("candidate includes = %+v", c.Includes)
+	}
+	if len(p.Includes) != 0 || len(p.Manifest.Includes) != 0 {
+		t.Errorf("the original harness changed: %+v", p.Includes)
+	}
+	after, _ := os.ReadFile(plugin.PluginPath(dir))
+	if string(after) != string(before) {
+		t.Error("the manifest on disk changed")
+	}
+	// An edit that cannot apply is an error, with nothing written.
+	if _, err := p.WithManifestEdit(RemoveIncludeEdit("github.com/nope", RemoveOptions{})); err == nil {
+		t.Error("removing an include that is not there should fail")
+	}
+}

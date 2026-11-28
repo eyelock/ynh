@@ -61,7 +61,7 @@ object. The full shape is in [Structured CLI output](cli-structured.md) and `ynh
 | `accepted` | what it runs matches what you accepted | yes |
 | `changed` | what it runs differs from what you accepted, or the acceptance was made by an older ynh | refused |
 | `unavailable` | an include is missing from the cache, so what it runs cannot be read in full | refused |
-| `no-commands` | it runs nothing and asks for no folders: there is nothing to accept | yes |
+| `no-commands` | it runs nothing and asks for no folders: there is nothing to accept | interactive runs yes; one-shot runs, delegate sessions and `ynh agent run` refuse it until accepted, since acceptance covers the level they open at |
 
 ### `VIA`: how an acceptance was made
 
@@ -71,7 +71,7 @@ object. The full shape is in [Structured CLI output](cli-structured.md) and `ynh
 | `install --trust` | `ynh install ... --trust` |
 | `run --trust` | `ynh run <folder> --trust`, `ynh agent run --harness <folder> --trust` |
 | `update --trust` | `ynh update <id> --trust` |
-| `include --trust` | `ynh include add ... --trust`, `ynh include update ... --trust` |
+| `include --trust` | `ynh include add ... --trust`, `ynh include update ... --trust`, `ynh include remove ... --trust` |
 | `image` | the record `ynh image` bakes into an image |
 
 `--format json` carries it as `accepted_via`.
@@ -90,7 +90,7 @@ naming what can move. A local folder needs no pin for its own files; its remote 
 | `ynh agent run --harness ./<folder> --trust` | the same | the same |
 | `ynh image <name> --from <source> --trust` | the harness built into the image, baked as `via: image` | `--ref` for a Git source, and every remote include that brings commands, and every native delegate entry from another repository |
 | `ynh update local/<name> --trust`, for a harness installed from a folder | the harness again, after the update | every remote include that brings commands, and every native delegate entry from another repository |
-| `ynh include add local/<name> <url> --ref <sha> --trust`, `ynh include update ... --trust`, for a harness installed from a folder | the harness again, after the change | every remote include that brings commands, and every native delegate entry from another repository |
+| `ynh include add local/<name> <url> --ref <sha> --trust`, `ynh include update ... --trust`, `ynh include remove ... --trust`, for a harness installed from a folder | the harness again, after the change | every remote include that brings commands, and every native delegate entry from another repository |
 
 Refusals:
 
@@ -99,7 +99,7 @@ Refusals:
 | `ynh trust accept <id>` or `<folder>` with a remote include or native delegate entry not at a full SHA | not a refusal: `Accepted ...`, then `Floating, accepted at what is installed now (what it executes reads as changed if it moves):` and one line each, for example `native delegate ...: no ref, so it floats with the default branch; accepted at commit <sha>, the one installed` (or `no commit could be told, so none is recorded`) |
 | a ref that can move | `Error: --trust refuses to accept this install: it is not pinned to a full commit SHA, so what runs could change under the acceptance:` then each ref, such as `the harness's own ref: "main" is a tag or branch, which can move` |
 | `ynh run <id> --trust` on an installed id | `Error: --trust is for a run from a folder; an installed harness is accepted with 'ynh trust accept <id>', or at install with 'ynh install --trust'` |
-| `ynh include remove ... --trust` | `Error: --trust goes with ynh include add or update: removing an include needs no acceptance` |
+| `ynh include add`, `update` or `remove ... --trust`, when a remote include that stays in the harness is not pinned | `Error: --trust refuses to accept <id> after this change: it is not pinned to a full commit SHA, so what runs could change under the acceptance:` then each include that can move, then `The include change was not made.` and the way out; nothing is written |
 
 `ynh check` has no `--trust`. `ynh run --trust` is ynh's own flag and is not passed on to the vendor.
 

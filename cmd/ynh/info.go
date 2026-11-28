@@ -47,6 +47,8 @@ type infoEntry struct {
 	VersionAvailable string             `json:"version_available,omitempty"`
 	Description      string             `json:"description,omitempty"`
 	DefaultVendor    string             `json:"default_vendor"`
+	AutoApprove      string             `json:"auto_approve"`
+	AutoApproveFrom  string             `json:"auto_approve_from"`
 	Path             string             `json:"path"`
 	RefInstalled     string             `json:"ref_installed,omitempty"`
 	RefAvailable     string             `json:"ref_available,omitempty"`
@@ -352,6 +354,7 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 	_, _ = fmt.Fprintf(w, "ID:           %s\n", id)
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", p.Name)
 	_, _ = fmt.Fprintf(w, "Vendor:       %s\n", vendorName)
+	_, _ = fmt.Fprintf(w, "Auto-approve: %s (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
 	if len(loaded.Labels) > 0 {
 		_, _ = fmt.Fprintf(w, "Labels:       %s\n", labels.Encode(loaded.Labels))
 	}
@@ -453,6 +456,9 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 			}
 			line += "  transport=" + p.TransportOf(del) + " (" + p.TransportOrigin(del) + ")"
 			line += settingText("model", delegates[i].Model, delegates[i].ModelFrom) + settingText("effort", delegates[i].Effort, delegates[i].EffortFrom)
+			if del.AutoApprove != "" {
+				line += "  auto_approve=" + del.AutoApprove + " (entry)"
+			}
 			_, _ = fmt.Fprintln(w, line)
 		}
 	}
@@ -635,6 +641,8 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 		VersionAvailable: base.VersionAvailable,
 		Description:      base.Description,
 		DefaultVendor:    base.DefaultVendor,
+		AutoApprove:      base.AutoApprove,
+		AutoApproveFrom:  base.AutoApproveFrom,
 		Path:             base.Path,
 		RefInstalled:     base.RefInstalled,
 		RefAvailable:     base.RefAvailable,

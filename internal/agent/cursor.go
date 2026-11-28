@@ -149,9 +149,7 @@ func buildCursorArgs(opts StartOptions, chatID string, firstTurn bool, msg strin
 	// cursor has no edits-only mode, so validateAutoApprove admits only "all"
 	// here. --force allows commands "unless explicitly denied", so a deny list
 	// in the project's .cursor/cli.json still applies.
-	if opts.AutoApprove == AutoApproveAll {
-		args = append(args, "--force")
-	}
+	args = append(args, permissionArgs(vendorCursor, opts, args)...)
 	if !firstTurn {
 		args = append(args, "--resume", chatID)
 	}

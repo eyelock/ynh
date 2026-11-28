@@ -74,10 +74,14 @@ type RunOptions struct {
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
 	Sandbox string
-	// AutoApprove is "", "edits" or "all". Empty passes no permission flag to
+	// AutoApprove is "", "none", "edits" or "all". Empty passes no permission flag to
 	// the worker. Set per run only: it is not read from the harness manifest
 	// and not restored on resume, so the operator re-grants it every time.
 	AutoApprove string
+	// ProjectArgs and ProjectMode are set by RunLoop when the project's own
+	// mode narrowed AutoApprove (see StartOptions).
+	ProjectArgs []string
+	ProjectMode string
 	// Model overrides the worker's default model. Empty means backend default.
 	Model string
 	// Effort is the reasoning effort to ask the worker for: "low", "medium"
@@ -331,9 +335,19 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, fmt.Errorf("resolving working directory: %w", err)
 		}
 	}
-	// The project's own permission choice wins over a run-time grant.
-	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
+	// A narrower project permission mode wins over the run's level (D5),
+	// with a line saying so; a wider one never refuses the run.
+	res, err := resolveProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir, opts.Stderr)
+	if err != nil {
 		return result, err
+	}
+	opts.AutoApprove = string(res.Level)
+	opts.ProjectArgs, opts.ProjectMode = nil, ""
+	if res.FromProject() {
+		opts.ProjectArgs, opts.ProjectMode = res.Project.Args, res.Project.Opened
+	}
+	if err := checkRoot(opts.AutoApprove, opts.Backend); err != nil {
+		return result, &ExitError{Code: ExitRefused, Message: err.Error()}
 	}
 
 	result.Worktree = opts.WorktreeDir
@@ -810,6 +824,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		SrtDenyRead:    srtDenyRead,
 		SessionDir:     sessionDir,
 		AutoApprove:    opts.AutoApprove,
+		ProjectArgs:    opts.ProjectArgs,
+		ProjectMode:    opts.ProjectMode,
 		Model:          opts.Model,
 		Effort:         opts.Effort,
 		IsolatedMCP:    isolatedMCP,

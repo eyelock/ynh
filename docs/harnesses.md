@@ -606,15 +606,17 @@ When targeting an installed harness by name, the new include is pre-fetched imme
 
 `--replace` overwrites an existing URL+path combination instead of erroring.
 
-`--trust` accepts the installed harness again in the same step, when the change moved what it executes. It works only at full 40-character commit SHAs (the harness's own ref, every remote include that brings commands and every native delegate entry from another repository) and is recorded as `include --trust`. Without it, the command says the harness is no longer trusted and `ynh run` refuses it until `ynh trust accept`. `--trust` needs an installed harness id, not a path.
+`--trust` accepts the installed harness again in the same step, when the change moved what it executes. The change is checked before anything is written, so a refused call leaves the harness and its trust record as they were. It works only at full 40-character commit SHAs (the harness's own ref and every remote include that brings commands and every native delegate entry from another repository) and is recorded as `include --trust`. Without it, the command says the harness is no longer trusted and `ynh run` refuses it until `ynh trust accept`. `--trust` needs an installed harness id, not a path.
 
 ### Remove an include
 
 ```bash
-ynh include remove <harness> <url> [--path <subdir>]
+ynh include remove <harness> <url> [--path <subdir>] [--trust]
 ```
 
 If the same URL appears at multiple paths (monorepo), `--path` selects which entry to remove.
+
+Removing an include changes what an installed harness executes, so an accepted harness reads `changed` afterwards: without `--trust` the command says the harness is no longer trusted and names `ynh trust accept`. With `--trust` it records the new digest as accepted in the same step, under the same full-SHA rule as `include add`: everything that remains and brings commands must be pinned to a full 40-character commit SHA, or the removal is refused and nothing is changed.
 
 ### Update an include
 
