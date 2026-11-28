@@ -43,6 +43,7 @@
   * [Make a delegate native](/how-to/make-a-delegate-native.md)
   * [Find a delegation after a restart](/how-to/find-a-delegation-after-a-restart.md)
   * [Delegates Reference](/delegates-reference.md)
+  * [Permission Levels](/permission-levels.md)
 
 * **Tools**
   * [CLI Reference](/reference.md)
@@ -80,17 +81,19 @@
   * [19. Shadow Mode](/tutorial/shadow-mode.md)
 
 * **Tutorials: Delegates**
-  * [20. A First Delegate Session](/tutorial/first-delegate-session.md)
-  * [21. Native Delegation](/tutorial/delegation.md)
+  * [20. Your First Delegation](/tutorial/first-delegation.md)
+  * [21. A First Delegate Session](/tutorial/first-delegate-session.md)
+  * [22. Native Delegation](/tutorial/delegation.md)
 
 * **Tutorials: Share & Scale**
-  * [22. Export](/tutorial/export.md)
-  * [23. Marketplace](/tutorial/marketplace.md)
-  * [24. Registry & Discovery](/tutorial/registry-and-discovery.md)
-  * [25. Docker Images](/tutorial/docker-image.md)
-  * [26. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
+  * [23. Export](/tutorial/export.md)
+  * [24. Marketplace](/tutorial/marketplace.md)
+  * [25. Registry & Discovery](/tutorial/registry-and-discovery.md)
+  * [26. Docker Images](/tutorial/docker-image.md)
+  * [27. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
 
 * **Project**
+  * [Release notes: v0.18.2](/release-notes/v0.18.2.md)
   * [Migrating to 0.2](/migration.md)
   * [Manual Test Plan](/tutorial/manual-test-plan.md)
   * [Contributing](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md)

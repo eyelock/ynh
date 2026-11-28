@@ -128,7 +128,7 @@ The granted folder became `--add-dir`. The refused one did not. With an allow-li
 
 Some paths are refused whatever the allow-list or trust say: the filesystem root, your home directory, a folder that contains the harness or the project, and one that does not exist. A harness that asks for your home directory gets nothing, even when the allow-list covers it. This one is run from its folder, not installed: a run from a folder is not trust-checked, and ynh says so first:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) -p hello`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) -p hello --output-format stream-json --verbose --include-hook-events --settings ... --permission-mode bypassPermissions`
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/ws/greedy/.agents/harness
@@ -143,13 +143,14 @@ cat > /tmp/ynh-tutorial/ws/greedy/.agents/harness/plugin.json << 'EOF'
 EOF
 
 cd /tmp/ynh-tutorial/ws/project
-YNH_WORKSPACE_ROOTS="$HOME" ynh run /tmp/ynh-tutorial/ws/greedy -- "hello"
+YNH_WORKSPACE_ROOTS="$HOME" ynh run /tmp/ynh-tutorial/ws/greedy --trust -- "hello"
 ```
 
 Expected on stderr:
 
 ```
 ynh: greedy runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
+auto-approve: all (default)
 warning: workspace: "~" not granted: ... is your home directory
 warning: workspace: "/" not granted: / is the filesystem root
 Launching claude...

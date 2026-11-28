@@ -1,6 +1,6 @@
 # Delegates reference
 
-Facts about how a delegate runs under `ynh run`, as of v0.18.1. The model and effort choices ([Model and effort](#model-and-effort)) arrive in v0.18.1; everything else here is as of v0.18.0. For why it is built this way, see
+Facts about how a delegate runs under `ynh run`, as of v0.18.1. The model and effort choices ([Model and effort](#model-and-effort)) arrive in v0.18.1; the permission level ([Permission level](#permission-level)) in v0.18.2; everything else here is as of v0.18.0. For why it is built this way, see
 [Delegate sessions](delegate-sessions.md). The manifest fields are in
 [delegates_to](harnesses.md#delegates-to-optional) and [Transport](harnesses.md#transport). What was shown
 live, and what was not, is under limit
@@ -84,6 +84,41 @@ delegate_to_reviewer {"task": "...", "model": "opus", "effort": "high"}
 ```
 
 The trust gate does not cover model or effort: changing them moves no digest.
+
+## Permission level
+
+<!-- Section added 2026-11-28 for ynh #1058, checked against a build of develop at 960ecb6f (P0 to P4 merged) with a stand-in vendor CLI. Lines marked TODO(live) need a vendor session; they are checked in the release's live check. -->
+
+An `a2a` delegate runs as a one-shot session, with nobody to approve, so it opens at a
+[permission level](permission-levels.md): `none`, `edits` or `all`.
+
+| | Level |
+|---|---|
+| The delegate declares none | `all`, once accepted (`auto_approve_from: default`) |
+| The delegate's manifest sets `auto_approve` | that level, its ceiling |
+| The parent's `delegates_to` entry sets `auto_approve` | the narrower of it and the ceiling (`entry`) |
+| The `delegate_to_<name>` call passes `auto_approve` | the narrower again (`call`) |
+| The parent runs one-shot, or interactive with `--auto-approve` | never wider than the parent's level (`caller_cap`) |
+| The working folder's project settings set a narrower mode | the project's mode, with a line naming the file (`project`) |
+
+A request wider than the ceiling, from the entry, the call or a flag, is refused before the delegate's
+session starts. A level the delegate's vendor cannot hold exactly is refused at start; see
+[what each vendor is passed](permission-levels.md#what-each-vendor-is-passed).
+
+A `native` delegate runs inside the parent's session, so it works under that session's permissions. An
+`auto_approve` on a native entry is accepted and listed by `ynh trust show`, but does not narrow
+anything: a one-shot run of the parent still opens at the parent's level (shown on develop 960ecb6f
+with a stand-in Claude Code: a native entry at `none`, the run at `bypassPermissions`).
+
+`ynh info <parent>` prints an entry's level beside the delegate:
+`transport=a2a (default)  auto_approve=edits (entry)`. `ynh trust show <parent>` lists each a2a delegate
+with the level it opens at and its source.
+
+<!-- TODO(live): the argument and the two fields are internal/delegatemcp/server.go's at develop 960ecb6f; check them in a live session, and add them to the Tools table below. -->
+
+`delegate_to_<name>` takes an optional `auto_approve` (`none`, `edits` or `all`), carried to the
+delegate as the A2A metadata `ynh.auto_approve`. `delegate_status` and the delegation's result carry
+`auto_approve` (the level the session opened at) and `auto_approve_from` (where it came from).
 
 ## Refusals when a delegate cannot be matched
 

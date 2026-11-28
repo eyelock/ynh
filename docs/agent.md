@@ -37,7 +37,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
 | `--format <text\|json>` | `json` prints the run result as one object when the run ends |
 | `--sandbox <mode>` | Sandbox mode passed to the backend |
-| `--auto-approve <edits\|all>` | Approve the worker's file edits, or everything, without prompting. Off by default. See [Permissions](#permissions-and-auto-approve) |
+| `--auto-approve <none\|edits\|all>` | Narrow the worker's permission level for this run. With `--harness`, the default is the harness's level (`all` unless it declares less); without it, no level. See [Permissions](#permissions-and-auto-approve) |
 | `--auto-commit` | Commit after each converged turn |
 | `--interactive` | Pause for approval at turn boundaries |
 | `--no-plan` | Skip the plan phase and act immediately |
@@ -330,54 +330,67 @@ is version 2.x. It reads no task input and sends no request.
 
 ## Permissions and `--auto-approve`
 
-By default ynh passes **no permission flag** to the worker. It gets whatever
-the vendor CLI and the project grant it, and nothing more. On a machine where
-the CLI denies edits, the loop runs to its cap with the agent reporting blocked
-writes.
+**Changed in v0.18.2.** With `--harness`, the worker opens at the harness's
+[permission level](permission-levels.md): the level its manifest declares in
+`auto_approve`, or `all` when it declares none. Before v0.18.2 it got no
+permission flag unless `--auto-approve` was given. A worker always runs
+unattended, so the harness must be accepted (`ynh trust accept <id>`), even one
+that runs no commands. The run prints the level and its source first, on stderr:
 
-`--auto-approve` grants more, for one run:
+```
+$ ynh agent run --harness local/writer --task "<task>" --format json
+auto-approve: edits (harness)
+```
 
-| Level | Approves | claude | codex | cursor | opencode |
-|---|---|---|---|---|---|
-| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error | error |
-| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` | `--auto` |
+`--auto-approve none|edits|all` narrows that level for one run. A level wider
+than the harness's is refused before the worker starts. With no `--harness`,
+there is no harness level: `--auto-approve` is the caller's own grant, and
+without it the worker gets no permission flag.
 
-`--auto-approve` is refused, exit 1 with error code `untrusted`, for a harness
-that did not pass the trust gate as trusted: a harness run from a folder, or an
-installed one you have not accepted. Install it and run `ynh trust accept <id>`
-first. A run with no `--harness` runs no harness commands, so there is nothing
-to vouch for and `--auto-approve` is the caller's own grant for it.
+What each level passes each backend is in
+[Permission levels: what each vendor is passed](permission-levels.md#what-each-vendor-is-passed).
+Copilot CLI is not a backend ([L14](vendor-parity.md#l14-copilot-is-not-a-backend)).
 
-It exists for runs inside containment you own: a container, an egress policy,
-a diff gate, human review of what lands. Outside that, it hands an unattended
-agent your credentials.
+The level exists for runs inside containment you own: a container, an egress
+policy, a diff gate, human review of what lands. Outside that, `all` hands an
+unattended agent your credentials. Narrow it, in the manifest or per run.
 
-- **Levels are exact or refused.** codex, cursor and opencode have no mode that approves
+- **Levels are exact or refused.** codex and cursor have no mode that approves
   edits while still withholding commands, so `edits` is an error on them rather
   than something wider. Any other backend, or an unknown level, fails before
   the run starts.
 - **An `edits` worker cannot run commands**, so it cannot run `go build` or
   `go test` itself. The sensors run them between turns and feed the results
   back, so `edits` suits simple lanes and `all` harder ones.
-- **The project's choice wins.** If the working directory sets its own
-  permission mode, the run is refused and the reason names the file and the
-  setting: `permissions.defaultMode` in `.claude/settings.json` or
-  `.claude/settings.local.json` for claude, a top-level `approval_policy` or
-  `sandbox_mode` in `.codex/config.toml` for codex. cursor has no project-level
-  mode: its `.cursor/cli.json` holds only allow and deny lists, which `--force`
-  still respects. User-level settings are not consulted.
-- **A vendor refusal is a worker error.** Claude Code refuses
-  `bypassPermissions` as root, and a managed setting can disable a mode. Either
-  way the run ends with exit 20 and the vendor's message. Claude does not fail
-  when a setting disables the mode, it starts in another one; the loop reads
-  the mode the session actually started in and stops if it is not the one
-  asked for. ynh's agent image runs as uid 1001, not root.
-- **Run-time only.** The harness manifest cannot set it, there is no
-  environment variable for it, and a resume does not restore it: pass it again
-  each time.
+- **A narrower project mode wins.** If the working directory sets its own
+  permission mode narrower than the run's level, the worker opens at the
+  project's mode, ynh passes no permission flag, and the run prints a line
+  naming the file and setting:
+
+  ```
+  auto-approve: opening at the project's mode (none) rather than all: <worktree>/.claude/settings.json sets permissions.defaultMode "default"
+  ```
+
+  The settings read are `permissions.defaultMode` in `.claude/settings.json` or
+  `.claude/settings.local.json` for claude, and a top-level `approval_policy` or
+  `sandbox_mode` in `.codex/config.toml` for codex. A wider project mode loses
+  to the run's level. A project mode never refuses the run. User-level settings
+  are not consulted.
+- **Claude Code as root.** A claude worker at `all` as root is refused before
+  Claude starts, exit 1, naming the fixes (a non-root user, ynh's agent image,
+  or `--auto-approve edits`); see
+  [Permission levels: Claude Code as root](permission-levels.md#claude-code-as-root).
+- **A vendor refusal is a worker error.** A managed setting can disable a mode.
+  Claude does not fail when a setting disables the mode, it starts in another
+  one; the loop reads the mode the session actually started in and stops if it
+  is not the one asked for.
+- **Not restored on resume.** There is no environment variable for the flag,
+  and a resume does not restore it: pass it again each time. The harness's
+  declared level applies to a resumed run as to a new one.
 
 The level is recorded as `auto_approve` on the trajectory's `session_start`
-(and `session_resumed`) event and in the run result. Absent means none.
+(and `session_resumed`) event and in the run result. Absent means no level was
+passed.
 
 ## Convergence
 
@@ -548,8 +561,8 @@ interruption.
 Code 1 is the code every ynh command exits with on a user or configuration
 error. Here it means `ynh agent run` refused before starting a worker: an
 unknown backend, a `--sandbox`, `--auto-approve` or `--effort` setting the
-backend cannot honour (including the harness's `agent.effort`), a project that
-[chooses its own permission mode](#permissions-and-auto-approve), a harness,
+backend cannot honour (including the harness's `agent.effort`, and a level
+wider than the harness's), a claude worker at `all` as root, a harness,
 focus or profile that cannot be loaded, or a [convergence verifier that can
 never pass](#convergence). ynh failing to write the trajectory also exits 1. A
 refused resume is code 21 instead. Nothing ran, so fix the invocation or the

@@ -164,6 +164,7 @@ david "explain this function"
 - [Harness Reference](harnesses.md) - full manifest syntax
 - [Artifacts Guide](artifacts.md) - skills, agents, rules, commands
 - [Vendor Support](vendors.md) - supported vendors and switching between them
+- [Your First Delegation](tutorial/first-delegation.md) - install a harness with a delegate, accept both, and see the delegate work
 - [Tutorials](tutorial/README.md) - progressive walkthroughs from first harness to Docker images
 - [ynd Developer Tools](ynd.md) - authoring, exporting, and marketplace building
 

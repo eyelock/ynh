@@ -77,8 +77,9 @@ The same idea explains the other routes to acceptance:
   which has nobody to read `ynh trust show`, accepts a harness.
 - **An image** carries the acceptance made on the machine that built it. That host reviewed the
   harness; the image holds its record, and the gate inside the image still checks it at every start.
-- **A delegate** that runs as its own session has its own record: you accept the delegate itself, not
-  the parent that hands it work.
+- **A delegate** that runs as its own session has its own record, at its own commit. Accepting the
+  parent accepts it too, with every a2a delegate below it, so one review covers the whole team; a later
+  change to one delegate asks again for that one only.
 
 ## Runs from a folder
 
@@ -86,6 +87,12 @@ There is one case where ynh does not check a harness's own commands: a run named
 `ynh run ./my-harness`. A folder you name on the command line is yours, and you are looking at it, so
 ynh says once that its own commands are not trust-checked and runs it. The commands its remote
 includes bring are checked, because they come from somewhere else.
+
+That holds for an interactive run, where you approve what the session does. A one-shot run of a folder
+(`ynh run ./my-harness -- "<task>"`) has nobody to approve and opens at a
+[permission level](permission-levels.md), `all` unless the harness declares less, so ynh asks you to
+say so: it runs only with `--trust`, which also accepts the folder's remote includes and its a2a
+delegates, each pinned to a full commit SHA.
 
 Because nothing vouches for a folder run, ynh never gives it the extras an accepted harness earns, such
 as pre-approved MCP tools: see [What an accepted harness gets, by vendor](trust-by-vendor.md). To get

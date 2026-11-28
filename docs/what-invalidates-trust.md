@@ -51,6 +51,7 @@ own commands. It checks the commands its remote includes bring:
 |---|---|---|
 | A remote include is not in the cache | `refusing to run <name>: what its includes execute could not be read in full.`, and `Fetch them by running it with --trust ...` | `ynh run ./<folder> --trust`, with each remote include pinned to a full commit SHA |
 | A remote include is in the cache, never accepted for this folder | `refusing to run <name>: its remote includes bring commands you have not accepted:`, and `Accept them for this folder: ynh trust accept <folder>` | `ynh trust accept <folder>`, or `ynh run ./<folder> --trust` |
+| A one-shot run of the folder (`ynh run ./<folder> -- "<task>"`, or a prompt or focus) without `--trust` | `refusing to run <name> one-shot from a folder: it opens at all with nobody to approve, and a folder is not trust-checked.` | `ynh run ./<folder> --trust`, with each remote include and a2a delegate pinned to a full commit SHA; or install the folder and `ynh trust accept local/<name>` |
 | `ynh check ./<folder>` with a remote include not in the cache | the same refusal; `ynh check` has no `--trust` | `ynh run ./<folder> --trust` once, then check again |
 
 ## Images

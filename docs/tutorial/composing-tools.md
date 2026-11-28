@@ -528,37 +528,49 @@ mv notes-plugin.json.bak notes/.agents/harness/plugin.json
 
 By default a harness's servers load alongside everything you have already configured: your user MCP servers and, on Claude Code, your claude.ai connectors. `--isolated-mcp` runs with only the servers the harness composes: its own and those of the harnesses it includes, here `notes`, `team` and `tracker`. The harness can also ask for it with `"mcp_isolation": true`.
 
-We run `my-team` by its folder, not as an installed harness, so ynh does not ask you to accept it first:
-a folder you run by its path is yours, and you are looking at it. Each run says so once on stderr:
+We run `my-team` by its folder, not as an installed harness. Its own files are yours, and you are
+looking at them, so ynh does not review them. Each run says so once on stderr:
 
 ```
 ynh: my-team runs from a folder, so its own commands are not trust-checked; the commands its remote includes bring are.
 ```
+
+A run with a prompt is one-shot: nobody is there to approve, so it opens at a
+[permission level](../permission-levels.md), `all` unless the harness declares less. ynh runs a
+folder that way only when you pass `--trust`, which accepts what comes from elsewhere (here nothing:
+every include is a local folder). Without it the run is refused:
+
+```
+Error: refusing to run my-team one-shot from a folder: it opens at all with nobody to approve, and a folder is not trust-checked.
+Run it with --trust (its remote includes and a2a delegates must be pinned at a full SHA), or install it and accept it (ynh install <folder>, then ynh trust accept local/my-team).
+```
+
+So every run below passes `--trust`, and prints `auto-approve: all (default)` before it starts.
 
 Installed with `ynh install`, the same harness would need accepting before its first run, as in
 [Your First Trusted Harness](first-trusted-harness.md).
 
 Without the flag, this is what ynh hands Claude Code:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers --output-format stream-json --verbose --include-hook-events --settings ... --permission-mode bypassPermissions`
 ```bash
-ynh run ./my-team "list your MCP servers"
+ynh run ./my-team --trust "list your MCP servers"
 ```
 
 With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` pointing at the file ynh generated with the harness's composed servers:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p list your MCP servers --output-format stream-json --verbose --include-hook-events --settings ... --permission-mode bypassPermissions --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
-ynh run ./my-team --isolated-mcp "list your MCP servers"
+ynh run ./my-team --trust --isolated-mcp "list your MCP servers"
 ```
 
 `--plugin-dir` stays in both, so the harness's hooks and skills still load. Isolation is a launch setting: `ynd preview` and `ynd export` are unchanged by it. Other vendors differ (Cursor cannot do it); see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
 
-With a real model, ask every server to identify itself. `-p` is added for you when you pass a prompt, so it does not belong on the command line. A `-p` session cannot stop to ask you before it calls a tool, so name the tools it may call with `--allowedTools`, which `ynh run` passes through to Claude Code. Without it, every call is refused for want of permission:
+With a real model, ask every server to identify itself. `-p` is added for you when you pass a prompt, so it does not belong on the command line. A `-p` session cannot stop to ask you before it calls a tool. At `all`, the default, it calls them without asking; the `--allowedTools` below, which `ynh run` passes through to Claude Code, names them so the same command works at a narrower level:
 
 *Your output will differ: it shows what the model did.*
 ```bash
-ynh run ./my-team --isolated-mcp "Call the whoami tool on every MCP server you have and list your MCP servers" \
+ynh run ./my-team --trust --isolated-mcp "Call the whoami tool on every MCP server you have and list your MCP servers" \
   --allowedTools "mcp__notes__whoami mcp__team__whoami mcp__tracker__whoami"
 ```
 
@@ -627,9 +639,9 @@ tracker -> tracker-readonly
 
 A focus brings its prompt and its profile. `triage` binds the `readonly` profile to a prompt, so `--focus github-lite:triage` is a non-interactive run with both. The run's prompt comes from the focus; the profile is applied to `github-lite`:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything.`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... -p Triage the open issues using the tracker server. Do not change anything. --output-format stream-json --verbose --include-hook-events --settings ... --permission-mode bypassPermissions`
 ```bash
-ynh run ./my-team --focus github-lite:triage
+ynh run ./my-team --trust --focus github-lite:triage
 ```
 
 Selecting something that is not there is an error that lists what is:
@@ -869,7 +881,7 @@ Start a session, then look again:
 
 *Your output will differ: it shows what the model did.*
 ```bash
-ynh run ./my-team "say hello"
+ynh run ./my-team --trust "say hello"
 test -e /tmp/ynh-tutorial/composing-tools/markers/github-lite.started && echo present || echo absent
 ```
 
@@ -914,10 +926,13 @@ git -C ops add .
 git -C ops commit -q -m "init"
 ```
 
-Add it to `my-team` as a delegate, keeping the hook consent from the last section:
+Add it to `my-team` as a delegate, keeping the hook consent from the last section. `--trust` takes a
+delegate from a Git repository only at a full commit SHA, so the entry pins `ops` to the commit you just
+made (`\${PLUGIN_ROOT}` keeps the variable for ynh, not your shell):
 
 ```bash
-cat > my-team/.agents/harness/plugin.json << 'EOF'
+OPS_SHA=$(git -C ops rev-parse HEAD)
+cat > my-team/.agents/harness/plugin.json << EOF
 {
   "name": "my-team",
   "version": "0.1.0",
@@ -926,12 +941,12 @@ cat > my-team/.agents/harness/plugin.json << 'EOF'
     { "local": "/tmp/ynh-tutorial/composing-tools/github-lite", "hooks": true }
   ],
   "delegates_to": [
-    { "git": "/tmp/ynh-tutorial/composing-tools/ops", "transport": "native" }
+    { "git": "/tmp/ynh-tutorial/composing-tools/ops", "ref": "$OPS_SHA", "transport": "native" }
   ],
   "mcp_servers": {
     "team": {
       "command": "python3",
-      "args": ["${PLUGIN_ROOT}/server.py"],
+      "args": ["\${PLUGIN_ROOT}/server.py"],
       "env": { "SERVER_NAME": "team" }
     },
     "noisy": null
@@ -1017,9 +1032,9 @@ warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot 
 
 Now launch it. Claude Code ignores `mcpServers` in a plugin's agents, so `ynh run` hands the delegate to Claude with `--agents`. A command line is visible to every process on the machine, and Claude does not expand `${VAR}` inside `--agents`, so the token cannot go there. The server is wrapped in `ynh mcp-exec`, which reads the variables from a file in the run directory and starts the real server. The `...` below stands for text that varies between runs or is too long to show:
 
-*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/.snapshots/_inline-.../.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
+*This launches:* `claude --plugin-dir ~/.ynh/run/.snapshots/_inline-.../.../.claude --allowedTools=Read(/~/.ynh/run/.snapshots/_inline-.../.../**) --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/.snapshots/_inline-.../.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --output-format stream-json --verbose --include-hook-events --settings ... --permission-mode bypassPermissions --strict-mcp-config --mcp-config=~/.ynh/run/.snapshots/_inline-.../.../.claude/.mcp.json`
 ```bash
-ynh run ./my-team --isolated-mcp "Ask the ops agent to call its whoami tool"
+ynh run ./my-team --trust --isolated-mcp "Ask the ops agent to call its whoami tool"
 ```
 
 The arguments name `mcp-exec` and the file, and no token. `--isolated-mcp` keeps the delegate's server: it limits the session's servers, not the ones passed with `--agents`. The token lives only in `.env.ynh`, which ynh writes for this run, mode 0600 in a private directory:
@@ -1035,11 +1050,11 @@ rw------- .env.ynh
 PAGER_TOKEN="demo-pager-token"
 ```
 
-With a real model, ask the delegate for its tool. The tool is `mcp__pager__whoami`; name it in `--allowedTools`:
+With a real model, ask the delegate for its tool. The tool is `mcp__pager__whoami`, named in `--allowedTools` as above:
 
 *Your output will differ: it shows what the model did.*
 ```bash
-ynh run ./my-team "Use the ops agent to call its whoami tool and report exactly what it returned" --allowedTools mcp__pager__whoami
+ynh run ./my-team --trust "Use the ops agent to call its whoami tool and report exactly what it returned" --allowedTools mcp__pager__whoami
 ```
 
 An illustrative answer:

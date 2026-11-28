@@ -1,90 +1,91 @@
-<!-- How-to. Checked against a build of ynh v0.18.0 (develop) in a scratch YNH_HOME, 2026-11-27, with the delegate served over file:// and a stand-in vendor CLI on PATH. -->
+<!-- How-to. Rewritten 2026-11-28 for ynh #1058 (a parent's acceptance covers its a2a delegates), against a build of ynh develop at 960ecb6f (P0 to P4 of ynh #1058 merged) plus this pull request, in a scratch YNH_HOME with the parent and delegate served over file:// and a stand-in vendor CLI on PATH. Lines marked TODO(live) need a vendor session, which the stand-in cannot give; they are checked in the release's live check on all five vendors. -->
 
 # Trust a Delegate
 
-Your parent harness hands work to a delegate, and `ynh run` of the parent stops with:
-
-```
-Error: delegate <source> of <parent> is installed as <id> but not trusted
-  Review with 'ynh trust show <id>', then run: ynh trust accept <id>
-```
-
-These steps let the parent start with its delegate. How to add a delegate in the first place is in
+Your parent harness hands work to a delegate, and `ynh run` of the parent is refused because the
+delegate is not installed or not accepted. These steps accept the parent and its delegates together,
+so the parent starts. How to add a delegate in the first place is in
 [Add a delegate](add-a-delegate.md).
 
-## Which harness to accept
+## Accept the parent
 
-It depends on the delegate's transport, which `ynh info <parent>` prints beside each delegate:
+Whatever the delegate's transport, accept the **parent**. Its acceptance covers its delegates:
 
-- **`a2a`** (the default): the delegate runs as its own ynh session, so it has its own trust record.
-  Accepting the **parent** accepts it, and every a2a delegate below it, each with its own record: one
-  command, `ynh trust accept <parent>`.
-- **`native`**: the delegate runs inside the parent's session, as the vendor's subagent. Its MCP
-  servers are part of the parent's review: accept the **parent**, as
-  [Accept a harness again after it changes](accept-a-harness-again.md) says.
+- an **`a2a`** delegate (the default) runs as its own ynh session and keeps its own trust record.
+  Accepting the parent installs the delegate if it is not installed, and accepts it under its own id
+  at its pinned commit;
+- a **`native`** delegate runs inside the parent's session; its MCP servers are part of the parent's
+  own review.
 
-## Trust the parent and its `a2a` delegates
+`ynh info <parent>` prints each delegate's transport.
 
-1. Read what the parent and the whole tree of its delegates run:
+1. Read what the parent and its delegates run:
 
    ```bash
    ynh trust show <parent>
    ```
 
-   After the parent's own commands it lists every a2a delegate below it, nested ones included, each
-   with its own trust state, the level it opens at when run unattended, and its hooks, MCP servers and
-   sensors, and those its includes bring. A delegate that is not installed yet is listed too, read from
-   where it points.
+   After the parent's own hooks, MCP servers and sensors, it lists the level the parent opens at when
+   run unattended, and every a2a delegate below it, nested ones included, with its own state, the
+   level it opens at and what it runs:
 
-2. Accept them together:
+   ```
+   Permission level when run unattended (a delegate session, a one-shot 'ynh run' or 'ynh agent run'):
+
+     opens at all when run unattended (not declared; the default for an accepted harness)
+
+   A2A delegates, the whole tree, each its own harness with its own record. 'ynh trust accept local/team' accepts them all, or none:
+
+     <source>: (not installed; accepting installs it) [not-installed], declared by team
+       opens at all when run unattended (default)
+       hook on_session_start: echo Reviewer session started.
+   ```
+
+2. Accept the parent:
 
    ```bash
    ynh trust accept <parent>
    ```
 
    ```
-   A2A delegate <source> of lead, opens at all when run unattended (default):
+   A2A delegate <source> of team, opens at all when run unattended (default):
    It executes:
-     MCP server search: npx
-   Accepted local/reviewer (accept, with local/lead): 2 command(s), sha256:b6a68a3387879e68, opens at all when run unattended
-   Accepted local/lead (accept): 0 command(s), sha256:..., opens at all when run unattended
+     hook on_session_start: echo Reviewer session started.
+   Installed harness "reviewer"
+     Location: <YNH_HOME>/harnesses/local--reviewer
+     Launcher: <YNH_HOME>/bin/reviewer
+     Vendor:   claude
+   Accepted local/reviewer (accept, with local/team): 1 command(s), sha256:abab6f64cd7a3573, opens at all when run unattended
+   Accepted local/team (accept): 0 command(s), sha256:9ec767637d0d49d6, opens at all when run unattended
+     opens at all when run unattended (default)
    ```
 
-   What each delegate runs is shown before anything is recorded. A delegate that is not installed is
-   installed, and must match what was shown. It is all or nothing: if any delegate cannot be accepted
-   (it cannot be read in full, or fails to install), nothing is recorded, the parent included, and the
-   error names the delegate and why. `ynh trust ls` shows a delegate accepted this way as
-   `with <parent>`.
+   What each delegate runs is shown before anything is recorded. The `Installed harness` lines appear
+   only for a delegate that was not installed. It is all or nothing: if any delegate cannot be accepted,
+   nothing is recorded, the parent included, and the error names the delegate. `ynh trust` lists a
+   delegate accepted this way as `with <parent>`.
 
-3. Run the parent. A refusal about a delegate names the parent and this command.
-
-4. Run the parent again. ynh opens the delegate's endpoint and starts the vendor:
+3. Run the parent again. ynh opens the delegate's endpoint and starts the vendor:
 
    ```
    Opened 1 A2A delegate endpoint(s): reviewer
    Launching claude...
    ```
 
-To install and accept a parent and its delegates in one step, as on CI, pin the parent and every a2a
-delegate entry to a full commit SHA and use `--trust`:
+On CI, accept the parent and its delegates in one step with `--trust`, every `delegates_to` entry
+pinned to a full commit SHA; see [Run a harness on CI](run-a-harness-on-ci.md).
 
-```bash
-ynh install <source> --ref <40-character-sha> --trust
-```
+## When a delegate changes
 
-## When the delegate changes
-
-When the delegate's commands change after you accepted it, the parent's run is refused, naming the
-delegate:
+When an a2a delegate's commands change after you accepted it, only the delegate is re-gated; the
+parent's record is untouched. The parent's run is refused, naming the delegate:
 
 ```
 Error: delegate <source> of lead is installed as local/reviewer but its commands changed since you accepted them
   Review with 'ynh trust show local/reviewer', then run: ynh trust accept local/reviewer
 ```
 
-Review and accept again with `ynh trust show <parent>` and `ynh trust accept <parent>`. Only the
-delegate that changed is re-gated: each keeps its own record, and the others stay accepted. (Accepting
-the delegate on its own, `ynh trust accept <id>`, works too.)
+Review and accept the delegate, as the refusal says, or accept the parent again, which accepts it too.
 
 ## Choosing the delegate's model and effort
 
@@ -94,10 +95,15 @@ and `default_effort`; changing any of them moves no digest and needs no `ynh tru
 shows what each delegate opens with and where it came from. See
 [Model and effort](../delegates-reference.md#model-and-effort).
 
-## Trust a `native` delegate
+## When the parent changes a delegate's level
 
-A parent whose `native` delegate brings an MCP server is refused until you accept the parent, and the
-list names the delegate:
+An `auto_approve` on a `delegates_to` entry is part of the parent's review. Adding or changing it
+re-gates the parent, not the delegate: accept the parent again. `ynh trust show <parent>` then lists the
+delegate as `opens at <level> when run unattended (entry)`.
+
+## A `native` delegate that brings an MCP server
+
+The parent is refused until you accept it, and the list names the delegate:
 
 ```
 Error: refusing to run local/lead3: you have not accepted what it executes.
@@ -105,11 +111,6 @@ It executes:
   MCP server search: npx of delegate searcher
 Review them: ynh trust show local/lead3
 Then accept:  ynh trust accept local/lead3
-```
-
-```bash
-ynh trust show <parent>
-ynh trust accept <parent>
 ```
 
 A native delegate needs no install and no record of its own. If its entry in the parent's manifest has
