@@ -70,9 +70,11 @@ manifest gives it. `ynh doctor` does not check this one.
    ```
 
    For several servers, separate them with commas: `--allowedTools=mcp__probe,mcp__tickets`. Or add
-   `mcp__probe` to `permissions.allow` in `~/.claude/settings.json`, `.claude/settings.json` or
-   `.claude/settings.local.json`. It is not the `mcp__plugin_<harness>_<server>` form, and it is not the
-   `ynh-delegates` rule from step 2 above.
+   `mcp__probe` to `permissions.allow` in your user settings, `~/.claude/settings.json` (not run for
+   this page). Do not rely on a project `.claude/settings.json` or `.claude/settings.local.json`: Claude
+   Code ignores a project allow rule while the workspace is untrusted, the usual case for a headless
+   parent in a fresh folder ([ynh #858](https://github.com/eyelock/ynh/issues/858)). It is not the
+   `mcp__plugin_<harness>_<server>` form, and it is not the `ynh-delegates` rule from step 2 above.
 
 Without the rule, the delegate's server starts and none of its tools is called. Codex, Copilot CLI and
 OpenCode carry no MCP servers into a native delegate, so on them there is nothing to allow
@@ -86,4 +88,6 @@ OpenCode carry no MCP servers into a native delegate, so on them there is nothin
 delegate section, against
 [Allow rules for a native delegate's MCP servers](../delegates-reference.md#allow-rules-for-a-native-delegate-s-mcp-servers)
 and limit L12 on develop `31909df7`, 2026-11-27; the `--allowedTools mcp__<server>` rule was shown live
-on Claude Code in the v0.18.0 acceptance, 2026-11-26, and the `permissions.allow` form was not run.
+on Claude Code in the v0.18.0 acceptance, 2026-11-26; the `permissions.allow` form was not run, and the
+rule that Claude Code ignores a project allow rule in an untrusted workspace is from
+[Approval on a delegate's one-shot run](../mcp.md#claude-code-format) ([ynh #858](https://github.com/eyelock/ynh/issues/858)).
