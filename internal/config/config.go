@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.12.0"
+const CapabilitiesVersion = "0.11.0"
 
 // features names the capabilities a consumer can gate on without parsing a
 // version, reported by `ynh version --format json` and `ynd version --format
@@ -40,6 +40,7 @@ var features = []string{
 	"run-labels",                        // `ynh run` and `ynh agent run` take run labels: config.json, the manifest, YNH_LABELS, --label; `ynh ls --label` (ynw-17g.16)
 	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate) (#573, ynw-9cc.9)
 	"trust-folder-includes",             // `ynh check <folder> --trust` and `ynh trust show <folder>`: a folder's remote includes, reviewed and accepted (ynh #1039)
+	"trust-show-image",                  // `ynh trust show --image <ref> [--full]`: an image's trust labels, and what it executes (ynh #1025)
 	"workspace-folders",                 // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
 

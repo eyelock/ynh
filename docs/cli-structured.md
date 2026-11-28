@@ -124,7 +124,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 {
   "version": "0.x.y",
   "capabilities": "0.x.y",
-  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "delegate-graph-flattens", "include-cycles-resolve", "run-labels", "trust-counts-composed-mcp-servers", "trust-folder-includes", "workspace-folders"]
+  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "delegate-graph-flattens", "include-cycles-resolve", "run-labels", "trust-counts-composed-mcp-servers", "trust-folder-includes", "trust-show-image", "workspace-folders"]
 }
 ```
 
@@ -139,7 +139,7 @@ Downstream tooling (for example) reads `capabilities` and refuses to run against
 
 Capabilities `0.11.0` adds the error code `untrusted`, the refusal of the trust gate ([#950](https://github.com/eyelock/ynh/issues/950)): `ynh check --format json` writes it in the error envelope, and `ynh agent run --format json` carries it as `error_code` in its result, with exit code 1. `ynh run` and an `ynh agent run` of an installed harness refuse until `ynh trust accept <harness>`, so a consumer that branches on error codes must handle it. The error-code enum is closed, so adding a member bumps the version.
 
-Capabilities `0.12.0` adds a command shape: `ynh trust show --image <ref> --format json` prints the trust labels of an image on the host that would run it, with the image's own trust show block under `--full` ([trust-show-image.schema.json](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust-show-image.schema.json); [#1025](https://github.com/eyelock/ynh/issues/1025)). It is not enveloped, like `ynh trust show <folder>`.
+The feature `trust-show-image` announces a new command shape, with no capabilities bump (a new schema is additive, as `trust-folder-includes` was): `ynh trust show --image <ref> --format json` prints the trust labels of an image on the host that would run it, with the image's own trust show block under `--full` ([trust-show-image.schema.json](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust-show-image.schema.json); [#1025](https://github.com/eyelock/ynh/issues/1025)). It is not enveloped, like `ynh trust show <folder>`.
 
 Capabilities `0.10.0` is a breaking bump. `ynh info`'s harness carries `mcp_servers`, the servers a run would get with its includes composed, as a required field (with an optional `mcp_servers_error` when an include could not be read, and an optional `selection` when `--profile` or `--focus` chose what a run carries) and `hooks`, the hooks a run carries with their source, also as a required field (with an optional `hooks_not_active` for included hooks without consent and an optional `hooks_error` when an include could not be read), and the trajectory's `session_start` no longer writes the deprecated `model` (read `model_requested`, and `worker_model` for what ran). `ynh trust` and `ynh trust show` are not enveloped, so the change in what their `mcp_servers` counts is reported by the `trust-counts-composed-mcp-servers` feature instead.
 
