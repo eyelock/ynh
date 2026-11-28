@@ -363,7 +363,7 @@ MCP servers of delegates:
 
 | Vendor | Delegate servers |
 |--------|------------------|
-| Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. |
+| Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. A headless (one-shot) parent calls their tools only with an allow rule for each server, `mcp__<server>`, which ynh does not add: see [Allow rules for a native delegate's MCP servers](delegates-reference.md#allow-rules-for-a-native-delegate-s-mcp-servers). |
 | Cursor, Copilot, OpenCode | Not carried. ynh warns once per delegate on stderr and writes the agent without them. |
 | Codex | Not carried. ynh warns once per delegate on stderr and writes the delegate as a TOML custom agent without them; see below. |
 

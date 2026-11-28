@@ -1,14 +1,16 @@
 # Allow a headless parent to reach its delegates
 
 Your parent runs headless (`claude -p`, `codex exec`, `copilot -p`, `opencode run`), and its model cannot
-call a delegate: the vendor denies the tool until it is allowed. After these steps it can.
+call a delegate, or a delegate's MCP tools are never called: the vendor denies a tool until it is allowed.
+After these steps it can.
 
 Which route the parent uses is its choice; this page covers both. For the tools and the route, see
 [Delegates reference](../delegates-reference.md#the-ynh-delegates-mcp-server).
 
 ## Before you start
 
-The parent has an `a2a` delegate that is installed and trusted ([Add a delegate](add-a-delegate.md)).
+The parent has an `a2a` delegate that is installed and trusted ([Add a delegate](add-a-delegate.md)). For a
+`native` delegate, go to [A native delegate on Claude Code](#a-native-delegate-on-claude-code).
 
 ## Steps
 
@@ -52,8 +54,40 @@ The parent has an `a2a` delegate that is installed and trusted ([Add a delegate]
 > ([known limit](../vendor-parity.md#l39-a-headless-parent-s-model-answers-a-delegate-s-question-not-a-person)).
 > If the delegate's questions need a person, run the parent interactively.
 
+## A native delegate on Claude Code
+
+A `native` delegate runs as a subagent inside a Claude Code parent and brings its own MCP servers. A
+headless parent calls their tools only with an allow rule for each server, by the name the delegate's
+manifest gives it. `ynh doctor` does not check this one.
+
+1. Find the delegate's server names: the keys of `mcp_servers` in its `.agents/harness/plugin.json`.
+
+2. Allow each server as `mcp__<server>`. For a delegate with a server named `probe`, with the flag (ynh
+   passes it to Claude Code; write it with `=` so the prompt is not read as its value):
+
+   ```
+   ynh run <parent> --allowedTools=mcp__probe "<prompt>"
+   ```
+
+   For several servers, separate them with commas: `--allowedTools=mcp__probe,mcp__tickets`. Or add
+   `mcp__probe` to `permissions.allow` in your user settings, `~/.claude/settings.json` (not run for
+   this page). Do not rely on a project `.claude/settings.json` or `.claude/settings.local.json`: Claude
+   Code ignores a project allow rule while the workspace is untrusted, the usual case for a headless
+   parent in a fresh folder ([ynh #858](https://github.com/eyelock/ynh/issues/858)). It is not the
+   `mcp__plugin_<harness>_<server>` form, and it is not the `ynh-delegates` rule from step 2 above.
+
+Without the rule, the delegate's server starts and none of its tools is called. Codex, Copilot CLI and
+OpenCode carry no MCP servers into a native delegate, so on them there is nothing to allow
+([delegates carry only part of a harness](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
+
 ## Checked against
 
 [Allow rules for the tools](../delegates-reference.md#allow-rules-for-the-tools) and
 [The a2a CLI route](../delegates-reference.md#the-a2a-cli-route) at v0.18.0 (develop `4c05c4b5`),
-2026-11-15, and `ynh run --help` for how a flag reaches the vendor. Not run on any vendor.
+2026-11-15, and `ynh run --help` for how a flag reaches the vendor. Not run on any vendor. The native
+delegate section, against
+[Allow rules for a native delegate's MCP servers](../delegates-reference.md#allow-rules-for-a-native-delegate-s-mcp-servers)
+and limit L12 on develop `31909df7`, 2026-11-27; the `--allowedTools mcp__<server>` rule was shown live
+on Claude Code in the v0.18.0 acceptance, 2026-11-26; the `permissions.allow` form was not run, and the
+rule that Claude Code ignores a project allow rule in an untrusted workspace is from
+[Approval on a delegate's one-shot run](../mcp.md#claude-code-format) ([ynh #858](https://github.com/eyelock/ynh/issues/858)).

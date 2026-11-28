@@ -6,7 +6,10 @@ After these steps `ynh run` assembles it into the parent's run dir.
 > **Watch out.** A native delegate carries its instructions on every vendor, its MCP servers only on Claude
 > Code and its hooks and workspace folders nowhere
 > ([known limit: delegates carry only part of a harness](../vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)),
-> and it ends with the parent's session. The comparison is the table under
+> and it ends with the parent's session. On Claude Code, a headless parent calls the delegate's MCP
+> tools only with an allow rule for each server (`--allowedTools=mcp__<server>`), which ynh does not add:
+> see [A native delegate on Claude Code](allow-a-headless-parent.md#a-native-delegate-on-claude-code).
+> The comparison is the table under
 > [Transport](../delegates-reference.md#transport).
 
 ## Steps

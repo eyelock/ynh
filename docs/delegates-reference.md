@@ -38,6 +38,34 @@ Only Cursor declares none today (its subagents are unverified,
 [Cursor under `ynh run`, not shown live](vendor-parity.md#l35-cursor-under-ynh-run-not-shown-live)). Claude Code, Codex, Copilot CLI and
 OpenCode declare native subagents.
 
+### Allow rules for a native delegate's MCP servers
+
+A `native` delegate on Claude Code carries its MCP servers into the parent's session as the subagent's
+own servers. A headless (one-shot) Claude Code parent calls their tools only with an allow rule for each
+of them, named after the server as the delegate's manifest declares it: `mcp__<server>`. Without one the
+server starts and no tool is called. ynh adds no such rule.
+
+| Delegate's server | Allow rule |
+|---|---|
+| `probe` | `--allowedTools=mcp__probe` |
+| `probe` and `tickets` | `--allowedTools=mcp__probe,mcp__tickets` |
+
+The rule is not the `mcp__plugin_<harness>_<server>` form of a harness's own servers, and not the
+`ynh-delegates` rule in [Allow rules for the tools](#allow-rules-for-the-tools). A `native` delegate on
+Codex, Copilot CLI or OpenCode carries no MCP servers, so there is no rule to add. `ynh doctor` does not
+check this rule.
+
+The same rule may go in `permissions.allow` in your user settings, `~/.claude/settings.json`. A project
+`.claude/settings.json` or `.claude/settings.local.json` is not a dependable place for it: Claude Code
+ignores a project allow rule while the workspace is untrusted, which is the usual case for a headless
+parent in a fresh folder ([Approval on a delegate's one-shot run](mcp.md#claude-code-format),
+[ynh #858](https://github.com/eyelock/ynh/issues/858)).
+
+Shown live with `--allowedTools` on Claude Code, in the v0.18.0 acceptance, 2026-11-26
+([delegates carry only part of a harness](vendor-parity.md#l12-delegates-carry-only-part-of-a-harness)).
+Not run for this: the `permissions.allow` form in `~/.claude/settings.json`, and a project settings file in a
+workspace Claude Code trusts.
+
 ## Refusals when a delegate cannot be matched
 
 For an `a2a` entry, `ynh run` of the parent matches the entry to the installed harness whose source
@@ -190,7 +218,9 @@ so ynh writes this server's JSON-RPC itself.
 
 ### Allow rules for the tools
 
-A headless vendor denies MCP tools until they are allowed.
+A headless vendor denies MCP tools until they are allowed. These rules are for an `a2a` delegate's
+`ynh-delegates` server; a `native` delegate's own servers need the rules in
+[Allow rules for a native delegate's MCP servers](#allow-rules-for-a-native-delegate-s-mcp-servers).
 
 | Parent | Allow rule |
 |---|---|
