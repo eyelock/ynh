@@ -68,3 +68,13 @@ func TestWithClaudeStream(t *testing.T) {
 		}
 	}
 }
+
+// A plain question-and-answer run that had a successful UserPromptSubmit hook
+// response but used no tool is not refused: only a run with no successful hook
+// response is.
+func TestClaudeStream_AnswerWithoutAToolIsRenderedWhenTheHookRan(t *testing.T) {
+	out, killed, err := runStream(t, "acceptEdits", evHookOK, evInit, evText, evResult)
+	if err != nil || killed || out != "the answer\n" {
+		t.Errorf("out %q killed %v err %v", out, killed, err)
+	}
+}
