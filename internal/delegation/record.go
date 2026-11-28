@@ -114,6 +114,18 @@ type Record struct {
 	Vendor     string `json:"vendor,omitempty"`
 	Profile    string `json:"profile,omitempty"`
 	Focus      string `json:"focus,omitempty"`
+	// AutoApprove is the permission level the delegate opens at, and
+	// AutoApproveFrom where it came from, one of permission.Sources (call,
+	// entry, harness, flag, delegate_default, caller_cap, project, default; or
+	// interactive for a task queued to a live session) (ynh #1058).
+	AutoApprove string `json:"auto_approve,omitempty"`
+	// FallbackAutoApprove and FallbackAutoApproveFrom hold the level a task
+	// queued to a live interactive session would open at if it fell back to a
+	// headless session; until then the record shows AutoApproveFrom
+	// "interactive" and no level, because a person approves there.
+	FallbackAutoApprove     string `json:"fallback_auto_approve,omitempty"`
+	FallbackAutoApproveFrom string `json:"fallback_auto_approve_from,omitempty"`
+	AutoApproveFrom         string `json:"auto_approve_from,omitempty"`
 	// Chain is the ancestry of the delegate: the canonical ids of the
 	// harnesses above it, root first, ending with Parent (Guard).
 	Chain []string `json:"chain,omitempty"`

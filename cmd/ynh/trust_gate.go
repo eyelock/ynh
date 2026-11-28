@@ -113,15 +113,15 @@ func oneShotAcceptanceGate(id string, p *harness.Harness) error {
 		"Review it: ynh trust show %s\nThen accept:  ynh trust accept %s", id, p.AutoApproveOf(), p.AutoApproveOrigin(), id, id)
 }
 
-// copilotOneShotRefusal refuses a one-shot Copilot run of a harness that
-// is not trusted: Copilot's one-shot mode approves every tool, so there is no
-// narrower grant to give (decision 5b).
-func copilotOneShotRefusal(id string, p *harness.Harness) error {
+// oneShotFolderRefusal refuses a one-shot run of a harness from a folder
+// that was not accepted with --trust: a one-shot run opens at its level with
+// nobody to approve, and a folder has no record to vouch for it (S8, N2).
+func oneShotFolderRefusal(id string, p *harness.Harness) error {
 	if id == "" {
-		return untrustedf("refusing to run %s one-shot on copilot: a run from a folder is not trust-checked, and copilot's one-shot mode approves every tool.\n"+
-			"Install it and accept what it executes (ynh install <folder>, then ynh trust accept local/%s), run it interactively, or use another vendor.", p.Name, p.Name)
+		return untrustedf("refusing to run %s one-shot from a folder: it opens at %s with nobody to approve, and a folder is not trust-checked.\n"+
+			"Run it with --trust (its remote includes and a2a delegates must be pinned at a full SHA), or install it and accept it (ynh install <folder>, then ynh trust accept local/%s).", p.Name, p.AutoApproveOf(), p.Name)
 	}
-	return untrustedf("refusing to run %s one-shot on copilot: copilot's one-shot mode approves every tool, and you have not accepted what %s executes.\n"+
+	return untrustedf("refusing to run %s one-shot: you have not accepted what %s executes.\n"+
 		"Accept it: ynh trust accept %s", id, id, id)
 }
 

@@ -44,6 +44,9 @@ type StartOptions struct {
 	ModelFrom  string
 	EffortFrom string
 	Vendor     string
+	// AutoApprove and AutoApproveFrom are the resolved level the delegate
+	// opens at and its source.
+	AutoApprove, AutoApproveFrom string
 	// Folder is the working folder: the parent's, and the delegate's.
 	Folder string
 	// Supervisor is the command that starts the session process. The record's
@@ -89,6 +92,7 @@ func Start(o StartOptions) (*Record, string, error) {
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
 		Task: o.Task, Model: o.Model, ModelFrom: o.ModelFrom, Effort: o.Effort, EffortFrom: o.EffortFrom, Vendor: o.Vendor, Profile: o.Profile, Focus: o.Focus, Chain: anc, Route: RouteHeadless,
+		AutoApprove: o.AutoApprove, AutoApproveFrom: o.AutoApproveFrom,
 		Log: strings.TrimSuffix(path, ".json") + ".log",
 	}
 	if err := create(path, rec); err != nil {

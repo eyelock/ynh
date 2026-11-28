@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/permission"
 )
 
@@ -135,4 +136,49 @@ func checkRoot(level, backend string) error {
 
 func asRefused(err error, target **permission.RefusedError) bool {
 	return errors.As(err, target)
+}
+
+// settleAutoApprove weighs opts.AutoApprove against the project's own
+// permission mode (D5) and checks the root refusal (N4), once the level is
+// known.
+func settleAutoApprove(opts *RunOptions) error {
+	res, err := resolveProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir, opts.Stderr)
+	if err != nil {
+		return err
+	}
+	opts.AutoApprove = string(res.Level)
+	opts.ProjectArgs, opts.ProjectMode = nil, ""
+	if res.FromProject() {
+		opts.ProjectArgs, opts.ProjectMode = res.Project.Args, res.Project.Opened
+	}
+	// Every delegate the worker starts opens no wider than this run does (D6).
+	if opts.AutoApprove != "" && opts.HarnessName != "" {
+		if err := os.Setenv(permission.CapEnv, opts.AutoApprove); err != nil {
+			return err
+		}
+	}
+	if err := checkRoot(opts.AutoApprove, opts.Backend); err != nil {
+		return &ExitError{Code: ExitRefused, Message: err.Error()}
+	}
+	return nil
+}
+
+// agentHarnessStep is the level a worker of an accepted harness opens at: the
+// harness's own, narrowed by --auto-approve (which may only narrow) and by the
+// calling session's cap.
+func agentHarnessStep(h *harness.Harness, flag string) (permission.Step, error) {
+	from := permission.SourceHarness
+	if h.AutoApprove == "" {
+		from = permission.SourceDefault
+	}
+	step := permission.Step{Level: h.AutoApproveOf(), From: from}
+	step, err := step.Ask(permission.Level(flag), permission.SourceFlag)
+	if err != nil {
+		return step, fmt.Errorf("--auto-approve: %w", err)
+	}
+	limit, err := permission.CapFrom(os.Getenv)
+	if err != nil {
+		return step, err
+	}
+	return step.Narrowed(permission.Step{Level: limit, From: permission.SourceCallerCap}), nil
 }

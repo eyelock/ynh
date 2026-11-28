@@ -17,42 +17,46 @@ These steps let the parent start with its delegate. How to add a delegate in the
 It depends on the delegate's transport, which `ynh info <parent>` prints beside each delegate:
 
 - **`a2a`** (the default): the delegate runs as its own ynh session, so it has its own trust record.
-  Accept the **delegate**. The parent needs accepting only if it runs commands of its own.
+  Accepting the **parent** accepts it, and every a2a delegate below it, each with its own record: one
+  command, `ynh trust accept <parent>`.
 - **`native`**: the delegate runs inside the parent's session, as the vendor's subagent. Its MCP
   servers are part of the parent's review: accept the **parent**, as
   [Accept a harness again after it changes](accept-a-harness-again.md) says.
 
-## Trust an `a2a` delegate
+## Trust the parent and its `a2a` delegates
 
-1. Install the delegate, if the parent's refusal says it is not installed. The refusal gives the exact
-   command:
-
-   ```
-   Error: delegate <source> of lead is not installed
-     Run: ynh install <source> --ref 1c97ab94af922789d5cada7defd2f1bd2e1409de, then ynh trust accept <the installed id>
-   ```
+1. Read what the parent and the whole tree of its delegates run:
 
    ```bash
-   ynh install <source> --ref <ref>
+   ynh trust show <parent>
    ```
 
-2. Read what it runs:
+   After the parent's own commands it lists every a2a delegate below it, nested ones included, each
+   with its own trust state, the level it opens at when run unattended, and its hooks, MCP servers and
+   sensors, and those its includes bring. A delegate that is not installed yet is listed too, read from
+   where it points.
+
+2. Accept them together:
 
    ```bash
-   ynh trust show <id>
-   ```
-
-   It lists the delegate's hooks, MCP servers and sensors, and those its includes bring.
-
-3. Accept it:
-
-   ```bash
-   ynh trust accept <id>
+   ynh trust accept <parent>
    ```
 
    ```
-   Accepted local/reviewer (accept): 2 command(s), sha256:b6a68a3387879e68
+   A2A delegate <source> of lead, opens at all when run unattended (default):
+   It executes:
+     MCP server search: npx
+   Accepted local/reviewer (accept, with local/lead): 2 command(s), sha256:b6a68a3387879e68, opens at all when run unattended
+   Accepted local/lead (accept): 0 command(s), sha256:..., opens at all when run unattended
    ```
+
+   What each delegate runs is shown before anything is recorded. A delegate that is not installed is
+   installed, and must match what was shown. It is all or nothing: if any delegate cannot be accepted
+   (it cannot be read in full, or fails to install), nothing is recorded, the parent included, and the
+   error names the delegate and why. `ynh trust ls` shows a delegate accepted this way as
+   `with <parent>`.
+
+3. Run the parent. A refusal about a delegate names the parent and this command.
 
 4. Run the parent again. ynh opens the delegate's endpoint and starts the vendor:
 
@@ -61,7 +65,8 @@ It depends on the delegate's transport, which `ynh info <parent>` prints beside 
    Launching claude...
    ```
 
-To install and accept a delegate in one step, as on CI, pin it to a full commit SHA and use `--trust`:
+To install and accept a parent and its delegates in one step, as on CI, pin the parent and every a2a
+delegate entry to a full commit SHA and use `--trust`:
 
 ```bash
 ynh install <source> --ref <40-character-sha> --trust
@@ -77,7 +82,9 @@ Error: delegate <source> of lead is installed as local/reviewer but its commands
   Review with 'ynh trust show local/reviewer', then run: ynh trust accept local/reviewer
 ```
 
-Review and accept the delegate again, as in steps 2 and 3. The parent's own record is untouched.
+Review and accept again with `ynh trust show <parent>` and `ynh trust accept <parent>`. Only the
+delegate that changed is re-gated: each keeps its own record, and the others stay accepted. (Accepting
+the delegate on its own, `ynh trust accept <id>`, works too.)
 
 ## Choosing the delegate's model and effort
 

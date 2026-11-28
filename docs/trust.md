@@ -220,6 +220,16 @@ Notes on the routes:
 
 A trust record carries `via`: `accept` (`ynh trust accept`), `install --trust`, `run --trust`, `update --trust` or `include --trust`. A further value, `image`, is written by [`ynh image`](#ynh-image) into the record it bakes. `ynh trust show` and `ynh trust` print it, and `--format json` carries it as `accepted_via`. It records how you accepted, not what was safe: an acceptance by `--trust` is as strong as the pins it required.
 
+## A parent and its a2a delegates
+
+An a2a delegate is its own harness with its own record. Accepting a parent, with `ynh trust accept`,
+`ynh install --trust` or `ynh run <folder> --trust`, accepts the whole tree of its a2a delegates, nested
+ones included, each with its own record at the commit it is installed at: a change to one re-gates only
+it. `ynh trust show <parent>` first lists each one, with the level it opens at and what it runs, and the
+acceptance is all or nothing: if any delegate cannot be accepted, nothing is recorded, the parent
+included. `ynh trust ls` shows a delegate accepted this way as `with <parent>`. Native delegates are part
+of the parent's own review.
+
 ## What follows trust
 
 Some approvals let a run act without asking you. ynh gives them only to a harness that passed the gate as **trusted**: installed, and accepted or, for an interactive run, with nothing to accept. A harness run from a folder is never trusted, because the gate does not check its own commands.

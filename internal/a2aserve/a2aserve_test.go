@@ -19,6 +19,7 @@ import (
 	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/delegation/delegationtest"
 	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/permission"
 )
 
 // The delegate's session is this test binary in a helper mode, and its "ynh
@@ -627,5 +628,74 @@ func TestADelegateDefaultEffortOnAVendorWithNoSettingIsRefused(t *testing.T) {
 	task := sendWith(t, e, "", "")
 	if task.Status.State != a2a.TaskStateFailed {
 		t.Fatalf("got %s", task.Status.State)
+	}
+}
+
+// A task opens at the endpoint's level, may narrow it with ynh.auto_approve
+// (the record and the task metadata say where it came from), and a wider
+// request is refused before any session starts (ynh #1058, D2).
+func TestTaskAutoApproveNarrowsAndNeverWidens(t *testing.T) {
+	folder := setup(t)
+	e, err := Open(Options{
+		Name: "reviewer", Label: "github.com/x/reviewer", Parent: "local/parent", Delegate: "local/reviewer",
+		Folder: folder, Supervisor: []string{os.Args[0]},
+		AutoApprove: permission.Edits, AutoApproveFrom: permission.SourceEntry,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = e.Close() })
+	c, ctx := client(t, e, e.Token)
+
+	sendMeta := func(level string) (*a2a.Task, error) {
+		m := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("echo hi"))
+		if level != "" {
+			m.Metadata = map[string]any{MetaAutoApprove: level}
+		}
+		r, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: m})
+		if err != nil {
+			return nil, err
+		}
+		task, _ := r.(*a2a.Task)
+		return task, nil
+	}
+	seen := map[string]bool{}
+	// level is the level of the record that appeared since the last call.
+	level := func() (string, string) {
+		for _, p := range records(t) {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			rec, err := delegation.Load(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return rec.AutoApprove, rec.AutoApproveFrom
+		}
+		t.Fatal("no new record")
+		return "", ""
+	}
+
+	if _, err := sendMeta(""); err != nil {
+		t.Fatal(err)
+	}
+	if l, from := level(); l != "edits" || from != "entry" {
+		t.Errorf("no request: opened at %s (%s), want edits (entry)", l, from)
+	}
+	n := len(records(t))
+	if _, err := sendMeta("none"); err != nil {
+		t.Fatal(err)
+	}
+	if l, from := level(); len(records(t)) != n+1 || l != "none" || from != "call" {
+		t.Errorf("narrowed: opened at %s (%s), want none (call)", l, from)
+	}
+	n = len(records(t))
+	task, err := sendMeta("all")
+	if len(records(t)) != n {
+		t.Errorf("a wider request started a session")
+	}
+	if err == nil && (task == nil || task.Status.State != a2a.TaskStateFailed) {
+		t.Errorf("a wider request must be refused, got %+v", task)
 	}
 }
