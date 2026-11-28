@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -58,6 +59,9 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	// A test never rings the developer's terminal or posts a notification.
+	idleNoticeTTY = func() io.WriteCloser { return nil }
+	idleNoticeNotify = func(string, string) {}
 	dockerImageLabels = func(image string) ([]byte, error) {
 		return nil, fmt.Errorf("docker is not consulted in tests (%s)", image)
 	}
