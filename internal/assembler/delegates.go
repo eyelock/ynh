@@ -12,6 +12,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/mcpexec"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -56,6 +57,30 @@ type DelegateAgentEncoder interface {
 	// directory, and its content, for a delegate with the given name,
 	// description and prompt.
 	DelegateAgentFile(name, description, prompt string) (string, []byte, error)
+}
+
+// DelegateSettingsCarrier is implemented by a vendor adapter whose Markdown
+// subagent files take a model and a reasoning effort in their frontmatter
+// (Claude Code's "model" and "effort").
+type DelegateSettingsCarrier interface {
+	// DelegateSettingsFrontmatter returns the frontmatter lines (without a
+	// trailing newline) that give a subagent the model and effort; an empty
+	// value gives no line.
+	DelegateSettingsFrontmatter(model, effort string) []string
+}
+
+// DelegateSettingsEncoder is DelegateAgentEncoder for a vendor whose agent
+// file also carries a model and effort (Codex's custom agent TOML).
+type DelegateSettingsEncoder interface {
+	DelegateAgentFileWith(name, description, prompt, model, effort string) (string, []byte, error)
+}
+
+// DelegateSettingsWarning is the warning for a delegate whose model or effort
+// a vendor's subagents cannot carry: the subagent runs on the session's own.
+//
+// No fix: ynh has no way to give that vendor's subagents a model or effort.
+func DelegateSettingsWarning(delegate, vendorName string) warn.Warning {
+	return warn.Warning{Message: fmt.Sprintf("delegate %s names a model or effort that %s subagents cannot be given; it runs on the session's own", delegate, vendorName)}
 }
 
 // DelegateMCP records one MCP server a delegate declares: the delegate, the
@@ -299,6 +324,17 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 			_, _ = fmt.Fprintf(warnW, "  note: %s\n", n)
 		}
 		basePath, delHarness, focus := fd.BasePath, fd.Harness, fd.Focus
+		// The subagent's model and effort: the entry's own, else the delegate
+		// harness's default (a native call has no per-call layer: the parent's
+		// vendor spawns the subagent), else the vendor's.
+		model := delegation.Resolve("", fd.Entry.Model, delHarness.DefaultModel).Value
+		effort := delegation.Resolve("", fd.Entry.Effort, delHarness.DefaultEffort).Value
+		settings, _ := adapter.(DelegateSettingsCarrier)
+		settingsEncoder, _ := adapter.(DelegateSettingsEncoder)
+		if (model != "" || effort != "") && settings == nil && settingsEncoder == nil {
+			warn.Print(warnW, DelegateSettingsWarning(delHarness.Name, vendorName))
+			model, effort = "", ""
+		}
 		included, _, err := resolver.ResolveSelectedFromCache(delHarness, opts.Config, harness.Selection{})
 		if err != nil {
 			return nil, fmt.Errorf("resolving includes of delegate %s: %w", delHarness.Name, err)
@@ -327,6 +363,8 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 						Prompt:      delegateBody(delHarness, basePath, included, focus, fd.Declared),
 						Servers:     servers,
 						Wrapped:     composed.Wrapped,
+						Model:       model,
+						Effort:      effort,
 					}
 					if len(composed.Secrets) > 0 {
 						if agent.EnvFile, err = writeEnvFile(workDir, delHarness.Name, composed.Secrets); err != nil {
@@ -349,8 +387,15 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 			continue
 		}
 
+		if settings != nil {
+			mcpLine = strings.Join(append(settings.DelegateSettingsFrontmatter(model, effort), nonEmpty(mcpLine)...), "\n")
+		}
 		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, focus, fd.Declared, mcpLine))
-		if encoder != nil {
+		if settingsEncoder != nil {
+			if fileName, agentContent, err = settingsEncoder.DelegateAgentFileWith(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included, focus, fd.Declared), model, effort); err != nil {
+				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
+			}
+		} else if encoder != nil {
 			if fileName, agentContent, err = encoder.DelegateAgentFile(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included, focus, fd.Declared)); err != nil {
 				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
 			}
@@ -380,6 +425,14 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	}
 
 	return declared, nil
+}
+
+// nonEmpty is s as a list of one line, or none when s is empty.
+func nonEmpty(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
 }
 
 // anyNativeEntry reports whether one of the root's delegates_to entries runs

@@ -497,3 +497,135 @@ func TestTaskListWithTheTokenListsTheDelegatesTasksAndWithoutItIsRefused(t *test
 		t.Fatalf("task list with a wrong token: want a 401, got %v", err)
 	}
 }
+
+// openWith is open with the endpoint's model and effort layers set.
+func openWith(t *testing.T, folder string, mutate func(*Options)) *Endpoint {
+	t.Helper()
+	o := Options{
+		Name: "reviewer", Label: "github.com/x/reviewer", Parent: "local/parent", Delegate: "local/reviewer",
+		Folder: folder, Supervisor: []string{os.Args[0]}, Vendor: "claude",
+	}
+	mutate(&o)
+	e, err := Open(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = e.Close() })
+	return e
+}
+
+// sendWith sends a first message that carries the parent's per-call choice.
+func sendWith(t *testing.T, e *Endpoint, model, effort string) *a2a.Task {
+	t.Helper()
+	c, ctx := client(t, e, e.Token)
+	m := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("echo ok"))
+	if model != "" {
+		m.SetMeta(MetaModel, model)
+	}
+	if effort != "" {
+		m.SetMeta(MetaEffort, effort)
+	}
+	r, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: m})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, ok := r.(*a2a.Task)
+	if !ok {
+		t.Fatalf("want a task, got %T", r)
+	}
+	return task
+}
+
+func onlyRecord(t *testing.T) *delegation.Record {
+	t.Helper()
+	recs := records(t)
+	if len(recs) != 1 {
+		t.Fatalf("want one record, got %v", recs)
+	}
+	rec, err := delegation.Load(recs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rec
+}
+
+// The four levels, for both model and effort, on the a2a transport: the
+// parent's per-call choice, its entry's, the delegate harness's own default,
+// the vendor's. A higher level overrides a lower one, and model and effort
+// are chosen each on its own.
+func TestPrecedenceOfModelAndEffortOnA2A(t *testing.T) {
+	tests := []struct {
+		name                       string
+		call                       [2]string // model, effort in the call
+		entry                      [2]string
+		deflt                      [2]string
+		wantModel, wantModelFrom   string
+		wantEffort, wantEffortFrom string
+	}{
+		{"call wins over every other layer", [2]string{"call-m", "high"}, [2]string{"entry-m", "medium"}, [2]string{"def-m", "low"},
+			"call-m", "call", "high", "call"},
+		{"entry wins over the delegate default and the vendor", [2]string{}, [2]string{"entry-m", "medium"}, [2]string{"def-m", "low"},
+			"entry-m", "entry", "medium", "entry"},
+		{"delegate default wins over the vendor", [2]string{}, [2]string{}, [2]string{"def-m", "low"},
+			"def-m", "delegate_default", "low", "delegate_default"},
+		{"the vendor's default when nothing names one", [2]string{}, [2]string{}, [2]string{},
+			"", "vendor_default", "", "vendor_default"},
+		{"model and effort resolve on their own", [2]string{"call-m", ""}, [2]string{"entry-m", "medium"}, [2]string{"", "low"},
+			"call-m", "call", "medium", "entry"},
+		{"an effort in the call leaves the model to the entry", [2]string{"", "high"}, [2]string{"entry-m", ""}, [2]string{"def-m", "low"},
+			"entry-m", "entry", "high", "call"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			folder := setup(t)
+			e := openWith(t, folder, func(o *Options) {
+				o.Model, o.Effort = tt.entry[0], tt.entry[1]
+				o.DefaultModel, o.DefaultEffort = tt.deflt[0], tt.deflt[1]
+			})
+			task := sendWith(t, e, tt.call[0], tt.call[1])
+			if task.Status.State != a2a.TaskStateCompleted {
+				t.Fatalf("task %s: %v", task.Status.State, task.Status.Message)
+			}
+			rec := onlyRecord(t)
+			if rec.Model != tt.wantModel || rec.ModelFrom != tt.wantModelFrom {
+				t.Errorf("model = %q from %q, want %q from %q", rec.Model, rec.ModelFrom, tt.wantModel, tt.wantModelFrom)
+			}
+			if rec.Effort != tt.wantEffort || rec.EffortFrom != tt.wantEffortFrom {
+				t.Errorf("effort = %q from %q, want %q from %q", rec.Effort, rec.EffortFrom, tt.wantEffort, tt.wantEffortFrom)
+			}
+		})
+	}
+}
+
+func TestACallThatCannotBeHonouredFailsTheTaskWithItsReason(t *testing.T) {
+	for name, tt := range map[string]struct {
+		vendor, model, effort, want string
+	}{
+		"an effort that is not low, medium or high": {"claude", "", "max", "not one of low, medium or high"},
+		"a model that would be read as a flag":      {"claude", "--yolo", "", "starts with"},
+		"an effort on a vendor with no setting":     {"cursor", "", "high", "cannot be honoured"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			folder := setup(t)
+			e := openWith(t, folder, func(o *Options) { o.Vendor = tt.vendor })
+			task := sendWith(t, e, tt.model, tt.effort)
+			if task.Status.State != a2a.TaskStateFailed || task.Status.Message == nil || !strings.Contains(messageText(task.Status.Message), tt.want) {
+				t.Fatalf("got %s %v, want failed mentioning %q", task.Status.State, task.Status.Message, tt.want)
+			}
+			if len(records(t)) != 0 {
+				t.Errorf("a refused call started a session: %v", records(t))
+			}
+		})
+	}
+}
+
+// A delegate harness's own effort on a vendor with no setting is refused too:
+// it is never dropped quietly.
+func TestADelegateDefaultEffortOnAVendorWithNoSettingIsRefused(t *testing.T) {
+	folder := setup(t)
+	e := openWith(t, folder, func(o *Options) { o.Vendor, o.DefaultEffort = "opencode", "high" })
+	task := sendWith(t, e, "", "")
+	if task.Status.State != a2a.TaskStateFailed {
+		t.Fatalf("got %s", task.Status.State)
+	}
+}
