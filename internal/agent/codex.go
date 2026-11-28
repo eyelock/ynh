@@ -118,9 +118,7 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	// codex has no edits-only mode (its sandbox modes govern commands), so
 	// validateAutoApprove admits only "all" here. Without --auto-approve no
 	// approval or sandbox flag is passed.
-	if opts.AutoApprove == AutoApproveAll {
-		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	}
+	args = append(args, permissionArgs(vendorCodex, opts, args)...)
 	// The run's telemetry relay, when there is one. Every turn is its own
 	// codex exec, so every turn passes it, and each joins the run's trace
 	// through TRACEPARENT.
