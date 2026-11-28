@@ -1,19 +1,10 @@
 package harness
 
-import "fmt"
+import (
+	"fmt"
 
-// The words of a permission level, widest last. A harness's level is how
-// much it may do without a person approving, when it is run unattended: a
-// delegate session, a one-shot `ynh run` or `ynh agent run`.
-const (
-	AutoApproveNone  = "none"
-	AutoApproveEdits = "edits"
-	AutoApproveAll   = "all"
+	"github.com/eyelock/ynh/internal/permission"
 )
-
-// AutoApproveDefault is the level an accepted harness that declares none
-// opens at when run unattended (ynh #1058, D3).
-const AutoApproveDefault = AutoApproveAll
 
 // The places a harness's level can come from (AutoApproveOrigin).
 const (
@@ -22,11 +13,15 @@ const (
 	AutoApproveFromDefault = "default"
 )
 
+// AutoApproveDefault is the level an accepted harness that declares none
+// opens at when run unattended (ynh #1058, D3).
+const AutoApproveDefault = permission.All
+
 // AutoApproveOf is the harness's level as it opens when run unattended: its
 // declared one, else the default.
-func (h *Harness) AutoApproveOf() string {
+func (h *Harness) AutoApproveOf() permission.Level {
 	if h.AutoApprove != "" {
-		return h.AutoApprove
+		return permission.Level(h.AutoApprove)
 	}
 	return AutoApproveDefault
 }
@@ -55,9 +50,9 @@ func (h *Harness) CheckAutoApprove() error {
 }
 
 func checkAutoApproveValue(v string) error {
-	switch v {
-	case "", AutoApproveNone, AutoApproveEdits, AutoApproveAll:
+	if v == "" {
 		return nil
 	}
-	return fmt.Errorf("%q is not a level; use %q, %q or %q", v, AutoApproveNone, AutoApproveEdits, AutoApproveAll)
+	_, err := permission.Parse(v)
+	return err
 }

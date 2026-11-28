@@ -1209,7 +1209,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	st.Workspace = workspaceReportFor(p)
 	st.LaunchFocus = launchFocusFor(p)
 	st.DelegateFocuses = st.delegateFocuses
-	st.AutoApprove, st.AutoApproveFrom = p.AutoApproveOf(), p.AutoApproveOrigin()
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
 	st.DelegateLevels = harnessExecutables(p).DelegateLevels
 
 	if format == "json" {

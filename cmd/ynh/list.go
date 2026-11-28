@@ -526,7 +526,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 		VersionInstalled: p.Version,
 		Description:      p.Description,
 		DefaultVendor:    p.DefaultVendor,
-		AutoApprove:      p.AutoApproveOf(),
+		AutoApprove:      string(p.AutoApproveOf()),
 		AutoApproveFrom:  p.AutoApproveOrigin(),
 		Path:             p.Dir,
 		Artifacts:        scanArtifactCounts(p.Dir),

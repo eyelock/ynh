@@ -24,7 +24,7 @@ func TestDigestIgnoresUndeclaredAutoApprove(t *testing.T) {
 func TestDigestMovesWithDeclaredAutoApprove(t *testing.T) {
 	base := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("golangci-lint run", "")})
 	seen := map[string]string{"(none)": trustDigest(base)}
-	for _, level := range []string{harness.AutoApproveNone, harness.AutoApproveEdits, harness.AutoApproveAll} {
+	for _, level := range []string{"none", "edits", "all"} {
 		p := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("golangci-lint run", "")})
 		p.AutoApprove = level
 		d := trustDigest(p)
@@ -59,14 +59,14 @@ func entryKeyOf(h *harness.Harness) string { return entryKey(h.DelegatesTo[0]) }
 func TestTrustShowListsTheLevel(t *testing.T) {
 	p := harnessWithSensors(t, nil)
 	st := trustStatusFor("id", p, trustStore{Harnesses: map[string]trustRecord{}}, nil)
-	st.AutoApprove, st.AutoApproveFrom = p.AutoApproveOf(), p.AutoApproveOrigin()
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
 	out := showText(t, st)
 	if !strings.Contains(out, "opens at all when run unattended") {
 		t.Errorf("a no-commands harness must list its level:\n%s", out)
 	}
 
-	p.AutoApprove = harness.AutoApproveEdits
-	st.AutoApprove, st.AutoApproveFrom = p.AutoApproveOf(), p.AutoApproveOrigin()
+	p.AutoApprove = "edits"
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
 	st.DelegateLevels = []string{"github.com/o/reviewer: none"}
 	out = showText(t, st)
 	for _, want := range []string{"opens at edits when run unattended", "declared by the harness", "delegate github.com/o/reviewer: none"} {
@@ -104,7 +104,7 @@ func TestOneShotRunOfUnacceptedNoCommandsHarnessIsRefused(t *testing.T) {
 	}
 
 	// Declaring a level voids the acceptance.
-	p.AutoApprove = harness.AutoApproveNone
+	p.AutoApprove = "none"
 	if err := trustGate(id, p, nil); err == nil {
 		t.Error("declaring a level must void an earlier acceptance")
 	}
