@@ -151,9 +151,9 @@ Every way of accepting prints the same verb, `Accepted`, then what was accepted 
 ```
 # the digests below are examples: yours is the full 64 hexadecimal characters of your harness
 $ ynh trust accept local/acme
-Accepted local/acme (accept): 2 command(s), sha256:00e2a865a25c8e92bcf4c6bffe26da42544373138cf2f6dc8450a2c39675476f
+Accepted local/acme (accept): 2 command(s), sha256:<64 hex>
 $ ynh install ./acme --trust
-Accepted local/acme (install --trust): 2 command(s), sha256:00e2a865a25c8e92bcf4c6bffe26da42544373138cf2f6dc8450a2c39675476f
+Accepted local/acme (install --trust): 2 command(s), sha256:<64 hex>
 It executes:
   hook before_tool: ./hooks/guard.sh
   sensor lint (command): gofmt -l .
