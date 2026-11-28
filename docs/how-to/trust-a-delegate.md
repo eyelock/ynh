@@ -61,7 +61,7 @@ It depends on the delegate's transport, which `ynh info <parent>` prints beside 
 4. Run the parent again. ynh opens the delegate's endpoint and starts the vendor:
 
    ```
-   Opened 1 A2A delegate endpoint(s): reviewer
+   Opened 1 A2A delegate endpoint(s): reviewer (opens at all)
    Launching claude...
    ```
 

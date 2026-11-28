@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -174,5 +175,32 @@ func TestBadDelegateMaxWaitRefusesTheRunPath(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "want a whole number of seconds above 0") {
 			t.Errorf("%s=%q: err = %v", delegateMaxWaitEnv, bad, err)
 		}
+	}
+}
+
+// The launch line names each delegate with the level it opens at when run
+// unattended (ynh #1058, S2): all when it declares none.
+func TestLaunchLineShowsEachDelegatesLevel(t *testing.T) {
+	parent, store := endpointSetup(t, "a2a")
+	t.Setenv(delegateMaxWaitEnv, "")
+	t.Setenv("YNH_AUTO_APPROVE_CAP", "")
+	var out bytes.Buffer
+	o, err := openEndpointsWith(parent, "local/parent", t.TempDir(), &store, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer o.close()
+	if !strings.Contains(out.String(), "A2A delegate endpoint(s): ") || !strings.Contains(out.String(), " (opens at all)") {
+		t.Errorf("launch line = %q, want each delegate with the level it opens at", out.String())
+	}
+}
+
+func TestDelegateLaunchList(t *testing.T) {
+	levels := map[string]permission.Level{"reviewer": permission.All, "librarian": permission.Edits}
+	if got := delegateLaunchList("librarian,reviewer", levels); got != "librarian (opens at edits), reviewer (opens at all)" {
+		t.Errorf("got %q", got)
+	}
+	if got := delegateLaunchList("reviewer,other", levels); got != "reviewer (opens at all), other" {
+		t.Errorf("a delegate with no level is shown bare: %q", got)
 	}
 }
