@@ -6,6 +6,8 @@
 # Usage: scripts/permission-mapping-live.sh [claude] [codex] [cursor] [opencode] [copilot]
 #        (default: every vendor whose CLI is on PATH)
 # Env:   CELL_TIMEOUT  seconds per run (default 150); a run that hits it is NOT-RUN
+#        SPIKE_BASE    folder to make the cell folders under (default $HOME); a Claude Code cell
+#                      about project rules needs one Claude Code already trusts
 #        KEEP          set to 1 to keep each cell's folder and out.txt for inspection
 #        SELF_TEST     set to 1 to run only the offline checks (verdict logic)
 #
@@ -56,7 +58,7 @@ if [ ${#vendors[@]} -eq 0 ]; then
   done
 fi
 
-base=$(mktemp -d "$HOME/ynh-permission-spike.XXXXXX")
+base=$(mktemp -d "${SPIKE_BASE:-$HOME}/ynh-permission-spike.XXXXXX")
 [ "${KEEP:-0}" = 1 ] && echo "keeping $base" || trap 'rm -rf "$base"' EXIT
 
 summary=()
@@ -109,6 +111,10 @@ cell_args() {
       echo '{"defaultPermissionMode":"allow-all"}' > "$dir/.github/copilot/settings.json"
       CMD=(copilot -p "$prompt" --no-ask-user --deny-tool shell --deny-tool write) ;;
     # allow-list widening (ynw-sg5jw): a project allow rule against none and edits
+    claude:ctl-deny-bypass)
+      # positive control: proves a project rule is read at all (a deny removes Bash under bypass)
+      mkdir -p "$dir/.claude"; echo '{"permissions":{"deny":["Bash"]}}' > "$dir/.claude/settings.json"
+      CMD=(claude -p "$prompt" --permission-mode bypassPermissions) ;;
     claude:allow-*)
       mkdir -p "$dir/.claude"; echo '{"permissions":{"allow":["Bash","Write","Edit"]}}' > "$dir/.claude/settings.json"
       case $2 in
@@ -227,6 +233,7 @@ for v in "${vendors[@]}"; do
       run_cell claude d5-proj-all-flag-none denied denied
       run_cell claude d5-proj-none-flag-all denied denied
       # allow-list widening and the two controls that might stop it (ynw-sg5jw)
+      run_cell claude ctl-deny-bypass denied ok
       run_cell claude allow-none denied denied
       run_cell claude allow-none-srcuser denied denied
       run_cell claude allow-none-disallowed denied denied
@@ -309,10 +316,15 @@ printf '%s\n' "${summary[@]}"
 # Allow-list widening on the other vendors (ynw-sg5jw):
 #  - Claude Code: a project .claude/settings.json permissions.allow of Bash,
 #    Write, Edit did NOT widen none or edits (default and acceptEdits), with or
-#    without --setting-sources user or --disallowedTools. Caveat: the folder was
-#    not one Claude Code trusts; that the allow rules were read at all was not
-#    shown (a project defaultMode in the same file WAS honoured). A trusted
-#    folder was not tried.
+#    without --setting-sources user or --disallowedTools (ynw-22war: also in a
+#    folder under /Users/david/Storage/Workspace/eyelock, an ancestor already
+#    marked trusted in the user's own ~/.claude.json, nothing changed there, via
+#    SPIKE_BASE). A project deny rule in the same place WAS read (ctl-deny-bypass:
+#    Bash removed under bypassPermissions), so project rules are read and an allow
+#    rule simply does not widen default or acceptEdits in a one-shot run. So
+#    Claude none is exact against a project allow list. That Claude Code applied
+#    the ancestor's trust was not itself shown, only that the project's deny rule
+#    took effect there and in the home folder alike.
 #  - OpenCode: a project opencode.json allowing edit and bash did not widen the
 #    permission block in OPENCODE_CONFIG_CONTENT (none and edits both held), so
 #    the env block wins. A project deny beat --auto.
