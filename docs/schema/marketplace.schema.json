@@ -33,7 +33,7 @@
         "version": { "type": "string" },
         "harnessRoot": {
           "type": "string",
-          "description": "Path prefix prepended to relative source paths. Example: \"./ynh\""
+          "description": "Path prefix prepended to a harness entry's relative source path. It does not apply to plugins: a plugin's relative path is relative to the repository root. Example: \"./ynh\""
         }
       }
     },
