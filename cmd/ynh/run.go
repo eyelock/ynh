@@ -277,7 +277,7 @@ func cmdRun(args []string) (runErr error) {
 	}
 	// A one-shot run opens at its level with nobody to approve, so a folder
 	// run needs --trust (S8) and is otherwise refused, on every vendor.
-	if action == "" && oneShot && !trusted && !(harnessID == "" && ra.Trust) {
+	if action == "" && oneShot && !trusted && (harnessID != "" || !ra.Trust) {
 		return oneShotFolderRefusal(harnessID, loaded)
 	}
 	// The level this run opens at (D1-D6): a one-shot run is passed the
