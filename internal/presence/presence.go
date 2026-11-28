@@ -85,6 +85,21 @@ func Dir() string { return filepath.Join(config.HomeDir(), "presence") }
 
 func path(id string) string { return filepath.Join(Dir(), id+".json") }
 
+// SideFileSuffixes are the small files other ynh processes keep beside a
+// session's record (the inbox hooks' announced tasks, its turn activity). They
+// go when the session ends or its record is removed, so none is kept for ever.
+var SideFileSuffixes = []string{".announced", ".activity"}
+
+// removeSideFiles deletes the files kept beside session id's record.
+func removeSideFiles(id string) {
+	if id == "" || strings.ContainsAny(id, `/\`) {
+		return
+	}
+	for _, suffix := range SideFileSuffixes {
+		_ = os.Remove(filepath.Join(Dir(), id+suffix))
+	}
+}
+
 // Address is the name a session answers to in `ynh ps`.
 func Address(sessionID string) string { return "ynh:" + sessionID }
 
@@ -196,6 +211,7 @@ func (s *Session) End() {
 	s.rec.Ended = true
 	s.rec.LastBeat = time.Now().UTC()
 	_ = Save(s.rec)
+	removeSideFiles(s.rec.SessionID)
 }
 
 // List reads every record and derives each one's status. Without all it

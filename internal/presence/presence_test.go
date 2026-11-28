@@ -139,3 +139,38 @@ func TestSetVendorPIDDuringHeartbeat(t *testing.T) {
 		t.Fatalf("vendor_pid lost or stale: %+v ok=%v", e, ok)
 	}
 }
+
+// The files kept beside a session's record go when the session ends, or when its
+// dead record is removed: none is kept for ever.
+func TestSideFilesGoWithTheSession(t *testing.T) {
+	home(t)
+	s, err := Start(Record{SessionID: "side", Harness: "h", Vendor: "claude", Mode: ModeInteractive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, suffix := range SideFileSuffixes {
+		if err := os.WriteFile(Dir()+"/side"+suffix, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.End()
+	for _, suffix := range SideFileSuffixes {
+		if _, err := os.Stat(Dir() + "/side" + suffix); err == nil {
+			t.Errorf("side%s outlived its session", suffix)
+		}
+	}
+	// A record removed from history takes any left-behind side file with it (a
+	// session that was killed before it could End).
+	if err := Save(Record{SessionID: "dead", Harness: "h", Vendor: "claude", Mode: ModeInteractive, Ended: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Dir()+"/dead.announced", []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Remove(Entry{Record: Record{SessionID: "dead", Ended: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(Dir() + "/dead.announced"); err == nil {
+		t.Error("dead.announced outlived its removed record")
+	}
+}

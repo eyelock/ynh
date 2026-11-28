@@ -12,6 +12,8 @@ Martin Fowler's harness engineering framework distinguishes feedforward controls
 
 OpenAI's harness engineering guidance emphasizes that hook blocking messages should contain **agent-legible remediation instructions** — when a hook blocks an action, the error output should tell the agent *what to do differently*, not just *what went wrong*.
 
+A session that takes delegated tasks gets two hooks of ynh's own, `before_prompt` and `on_stop`, each running `ynh inbox-hook`, added to its assembled hook config beside the harness's own. They tell the session a task is waiting in its inbox, so a reader of the generated config will find entries the harness never declared. See [Telling the session a task is waiting](delegate-sessions.md#telling-the-session-a-task-is-waiting).
+
 ## Canonical Events
 
 ynh defines six canonical hook events. Each vendor translates these to its native event names.

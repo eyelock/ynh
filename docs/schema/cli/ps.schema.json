@@ -19,6 +19,7 @@
         "cwd": {"type": "string"},
         "mode": {"type": "string", "description": "interactive, one-shot or delegate."},
         "accepts_tasks": {"type": "boolean", "description": "True for an interactive session that can take a task delegated to its harness (it has the ynh-inbox MCP server and its allow rule)."},
+        "no_tasks_reason": {"type": "string", "description": "Why an interactive session takes no task, when it does not (OpenCode, Cursor, mcp_manual_approval, a folder run, a Codex harness that is not accepted). A task for its harness then goes headless and says why. Absent when the session takes tasks or is not interactive. Additive: older consumers can ignore it, so it does not bump capabilities."},
         "owner_session": {"type": "string", "description": "For a delegate, the session that started it; omitted otherwise."},
         "address": {"type": "string", "description": "The name the session answers to, `ynh:<session_id>`."},
         "state": {"type": "string", "description": "alive, busy, idle or unknown."},

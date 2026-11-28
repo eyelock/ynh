@@ -167,7 +167,7 @@ The model finishes the person's request first, says a task is waiting and from w
 | Codex | plain stdout | the same block JSON |
 | Copilot CLI | `{"additionalContext":"..."}` | the same block JSON |
 
-An `on_stop` hook wakes the model for a task once per session, and not at all on the stop that a block itself caused (`stop_hook_active`), so a model that declines a task is not woken again in a loop. `before_prompt` repeats while the task waits: the person's next prompt is the cue. A session left idle at its prompt runs no hook, so a person presses Enter on any prompt; the terminal bell and the typed nudge are separate. Measured live on Claude Code 2.1.326, Codex 0.166.0 and Copilot CLI 1.0.113 ([ynh #907](https://github.com/eyelock/ynh/issues/907))
+An `on_stop` hook wakes the model for a task once per session, and not at all on the stop that a block itself caused (`stop_hook_active`), so a model that declines a task is not woken again in a loop. `before_prompt` repeats while the task waits: the person's next prompt is the cue. A session left idle at its prompt runs no hook, so a person presses Enter on any prompt; the terminal bell and the typed nudge are separate. Measured live on Claude Code 2.1.326, Codex 0.166.0 and Copilot CLI 1.0.113 ([ynh #907](https://github.com/eyelock/ynh/issues/907)).
 
 ### When it goes wrong
 

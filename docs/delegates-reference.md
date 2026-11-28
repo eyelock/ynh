@@ -129,7 +129,7 @@ there is the handle, not the A2A task id the CLI used. A task started with the C
 
 Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. A
 delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`submitted`, `working`, `input-required`, `completed`,
-`failed`, `canceled` or `rejected`), `route` (`live` or `headless`), `session` and `cwd` (the live session that got the task, or the one started for it), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
+`failed`, `canceled` or `rejected`), `route` (`live` or `headless`), `route_reason` (why the task went headless although a live session of the delegate was open: that session takes no tasks, and why), `session` and `cwd` (the live session that got the task, or the one started for it), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
 `waiting_seconds` while `input-required`. `delegate_list` returns them as a list under `delegations`, and
 `ynh_ps` returns `sessions`.
 
