@@ -335,12 +335,16 @@ func warmFolderIncludes(p *harness.Harness) error {
 		return fmt.Errorf("--trust could not read the configuration: %w", cerr)
 	}
 	err := resolver.WarmPinnedIncludes(p, cfg)
+	if err == nil {
+		// The native delegates too, and what they include: judged and accepted with the parent.
+		err = resolver.WarmPinnedDelegates(p, cfg)
+	}
 	var unpinned *resolver.UnpinnedUncachedError
 	if errors.As(err, &unpinned) {
 		return refuseUnpinnedWith(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))}, uncachedUnpinnedClosing)
 	}
 	if err != nil {
-		return fmt.Errorf("--trust could not fetch the includes of %s: %w", p.Name, err)
+		return fmt.Errorf("--trust could not fetch the includes and native delegates of %s: %w", p.Name, err)
 	}
 	return nil
 }

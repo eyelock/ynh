@@ -86,7 +86,7 @@ naming what can move. A local folder needs no pin for its own files; its remote 
 |---|---|---|
 | `ynh install <url> --ref <sha> --trust` | the installed harness | `--ref`, and every remote include that brings commands, and every native delegate entry from another repository |
 | `ynh install ./<folder> --trust` | the installed harness, as `local/<name>` | every remote include that brings commands, and every native delegate entry from another repository |
-| `ynh run ./<folder> --trust` | the folder's remote includes, fetching any not in the cache | every remote include that brings commands, and every native delegate entry from another repository |
+| `ynh run ./<folder> --trust` | the folder's remote includes and native delegates (with the includes they bring), fetching any not in the cache | every remote include that brings commands, and every native delegate entry from another repository |
 | `ynh agent run --harness ./<folder> --trust` | the same | the same |
 | `ynh image <name> --from <source> --trust` | the harness built into the image, baked as `via: image` | `--ref` for a Git source, and every remote include that brings commands, and every native delegate entry from another repository |
 | `ynh update local/<name> --trust`, for a harness installed from a folder | the harness again, after the update | every remote include that brings commands, and every native delegate entry from another repository |
