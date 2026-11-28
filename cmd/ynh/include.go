@@ -23,7 +23,7 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 	// An include change can move what an installed harness executes, which
 	// leaves an accepted harness refused until it is accepted again: say so
 	// (ynh #951, decision 14).
-	var run func([]string, io.Writer) error
+	var run func([]string, io.Writer, includeGate) error
 	switch args[0] {
 	case "add":
 		run = cmdIncludeAdd
@@ -35,9 +35,6 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 		return fmt.Errorf("unknown include subcommand: %s\nUsage: ynh include <add|remove|update>", args[0])
 	}
 	rest, trustFlag := takeTrustFlag(args[1:])
-	if trustFlag && args[0] == "remove" {
-		return fmt.Errorf("--trust goes with ynh include add or update: removing an include needs no acceptance")
-	}
 	args = append([]string{args[0]}, rest...)
 	id, before := "", ""
 	// The harness is the first positional, wherever the flags sit.
@@ -49,11 +46,18 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 		id = ref
 		before = trustStateOf(id)
 	}
-	if err := run(args[1:], stdout); err != nil {
+	// --trust accepts the harness as it is after the change. The change is
+	// built in memory and judged before it is written: a refused call writes
+	// nothing and prints nothing as done (ynh #1041).
+	var gate includeGate
+	if trustFlag {
+		gate = func(edit harness.ManifestEdit) error { return checkIncludeChange(id, edit) }
+	}
+	if err := run(args[1:], stdout, gate); err != nil {
 		return err
 	}
 	if trustFlag {
-		return acceptAfterChange(id, viaIncludeTrus, stdout)
+		return acceptIncludeChange(id, stdout)
 	}
 	if id != "" && !trustFlag {
 		noteUntrustedAfterChange(id, before, stdout)
@@ -61,7 +65,12 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdIncludeAdd(args []string, stdout io.Writer) error {
+// includeGate is called with the manifest change an include command is about
+// to write, after everything it fetches and before the write. An error stops
+// the command with the manifest untouched. It is nil without --trust.
+type includeGate func(edit harness.ManifestEdit) error
+
+func cmdIncludeAdd(args []string, stdout io.Writer, gate includeGate) error {
 	var opts harness.AddOptions
 	var positional []string
 	var forceGit bool
@@ -147,6 +156,15 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 		}
 	}
 
+	if gate != nil {
+		edit, err := harness.AddIncludeEdit(url, opts)
+		if err != nil {
+			return err
+		}
+		if err := gate(edit); err != nil {
+			return err
+		}
+	}
 	if err := harness.AddInclude(dir, url, opts); err != nil {
 		return err
 	}
@@ -169,7 +187,7 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdIncludeRemove(args []string, stdout io.Writer) error {
+func cmdIncludeRemove(args []string, stdout io.Writer, gate includeGate) error {
 	var opts harness.RemoveOptions
 	var positional []string
 
@@ -201,6 +219,11 @@ func cmdIncludeRemove(args []string, stdout io.Writer) error {
 	}
 	url = includeArgAsStored(dir, url)
 
+	if gate != nil {
+		if err := gate(harness.RemoveIncludeEdit(url, opts)); err != nil {
+			return err
+		}
+	}
 	if err := harness.RemoveInclude(dir, url, opts); err != nil {
 		return err
 	}
@@ -213,7 +236,7 @@ func cmdIncludeRemove(args []string, stdout io.Writer) error {
 	return nil
 }
 
-func cmdIncludeUpdate(args []string, stdout io.Writer) error {
+func cmdIncludeUpdate(args []string, stdout io.Writer, gate includeGate) error {
 	var opts harness.UpdateOptions
 	var positional []string
 
@@ -289,6 +312,11 @@ func cmdIncludeUpdate(args []string, stdout io.Writer) error {
 				return err
 			}
 		}
+		if gate != nil {
+			if err := gate(harness.UpdateIncludeEdit(url, opts)); err != nil {
+				return err
+			}
+		}
 		if err := harness.UpdateInclude(dir, url, opts); err != nil {
 			return err
 		}
@@ -310,6 +338,11 @@ func cmdIncludeUpdate(args []string, stdout io.Writer) error {
 		}
 	}
 
+	if gate != nil {
+		if err := gate(harness.UpdateIncludeEdit(url, opts)); err != nil {
+			return err
+		}
+	}
 	if err := harness.UpdateInclude(dir, url, opts); err != nil {
 		return err
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -224,6 +225,14 @@ type trustSet struct {
 	// between a2a and native, must still change the digest, so the entry itself
 	// is covered, not only what it resolves to.
 	DelegateSources []string
+	// AutoApprove is the level the harness declares for its unattended runs,
+	// "" when undeclared (ynh #1058, D8). Only a declared level is digested,
+	// so no existing acceptance changes; AutoApproveOf is what is shown.
+	AutoApprove string
+	// DelegateLevels are the levels delegates_to entries declare, one line
+	// each ("<label>: <level>"), in entry order, for the listing. The digest
+	// covers them through DelegateSources.
+	DelegateLevels []string
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -524,9 +533,14 @@ func entrySourceKey(e harness.Delegate) string {
 	return strings.Join([]string{e.Git, e.Local, e.Path, e.Ref, e.Profile, e.Focus}, "\x00")
 }
 
-// entryKey is entrySourceKey with the entry's settled transport.
+// entryKey is entrySourceKey with the entry's settled transport, and its
+// auto_approve only when declared so an entry without one keeps its digest.
 func entryKey(e harness.Delegate) string {
-	return entrySourceKey(e) + "\x00" + e.Transport
+	k := entrySourceKey(e) + "\x00" + e.Transport
+	if e.AutoApprove != "" {
+		k += "\x00auto_approve=" + e.AutoApprove
+	}
+	return k
 }
 
 func sensorKey(e executable) string {
@@ -673,6 +687,12 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		set.Workspace = slices.Sorted(slices.Values(p.Workspace))
 	}
 	set.LaunchFocus = launchFocusFor(p)
+	set.AutoApprove = p.AutoApprove
+	for _, d := range p.DelegatesTo {
+		if d.AutoApprove != "" {
+			set.DelegateLevels = append(set.DelegateLevels, d.Label()+": "+d.AutoApprove)
+		}
+	}
 	views, problems := runViews(p)
 	set.Problems = problems
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
@@ -795,6 +815,12 @@ func executablesDigest(set trustSet) string {
 	for _, ds := range set.DelegateSources {
 		field(h, "delegate_source")
 		field(h, ds)
+	}
+	// Likewise only when declared: an undeclared level is the default, which
+	// every earlier acceptance already lived with.
+	if set.AutoApprove != "" {
+		field(h, "auto_approve")
+		field(h, set.AutoApprove)
 	}
 	for _, df := range set.DelegateFocuses {
 		field(h, "delegate_focus")
@@ -970,6 +996,13 @@ type trustStatus struct {
 	DelegateFocuses []delegateFocusReport `json:"delegate_focuses,omitempty"`
 	// delegateFocuses is the set's, for `trust show` to fill the field.
 	delegateFocuses []delegateFocusReport
+	// AutoApprove is the level the harness opens at when run unattended, and
+	// AutoApproveFrom where it comes from ("harness" or "default").
+	// DelegateLevels are the levels its delegates_to entries declare. All are
+	// covered by Digest when declared. Filled by `trust show` only.
+	AutoApprove     string   `json:"auto_approve,omitempty"`
+	AutoApproveFrom string   `json:"auto_approve_from,omitempty"`
+	DelegateLevels  []string `json:"delegate_levels,omitempty"`
 	// Moved is why a record that matches the digest still does not count:
 	// the harness is installed from another source or at another commit than
 	// the one accepted. Set only when the state is "changed" for that reason.
@@ -1177,6 +1210,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	st.Workspace = workspaceReportFor(p)
 	st.LaunchFocus = launchFocusFor(p)
 	st.DelegateFocuses = st.delegateFocuses
+	fillAutoApprove(&st, p)
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -1240,7 +1274,9 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if format == "json" {
-		return writeJSON(stdout, trustStatusFor(name, p, store, os.Environ()))
+		st := trustStatusFor(name, p, store, os.Environ())
+		fillAutoApprove(&st, p)
+		return writeJSON(stdout, st)
 	}
 	workspaceNote := ""
 	if n := len(set.Workspace); n > 0 {
@@ -1249,6 +1285,11 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest)
 	if err == nil {
 		err = printFloating(stdout, floating)
+	}
+	if err == nil {
+		// The level acceptance covers (ynh #1058, D3): said at the moment it
+		// is accepted, with where it comes from and each entry's own.
+		printAcceptedLevel(stdout, p, set)
 	}
 	return err
 }
@@ -1324,6 +1365,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 
 	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
+		printAutoApproveSection(w, s)
 		return nil
 	}
 
@@ -1383,6 +1425,8 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		}
 	}
 
+	printAutoApproveSection(w, s)
+
 	if len(s.UndeclaredEnv) > 0 {
 		_, _ = fmt.Fprintf(w, "\nThese commands inherit your full environment. %d variable(s) reach them\n"+
 			"that this harness never declared in env_passthrough:\n\n", len(s.UndeclaredEnv))
@@ -1419,4 +1463,39 @@ func dropTrustRecords(store trustStore, ids []string) bool {
 		}
 	}
 	return changed
+}
+
+// printAutoApproveSection lists the permission level a one-shot run of the
+// harness opens at, which acceptance covers (ynh #1058, D3, N2): an undeclared
+// level is "all", said plainly, and each delegates_to entry's declared level
+// follows.
+func printAutoApproveSection(w io.Writer, s trustStatus) {
+	if s.AutoApprove == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nPermission level when run unattended (a delegate session, a one-shot 'ynh run' or 'ynh agent run'):\n\n")
+	if s.AutoApproveFrom == string(permission.SourceDefault) {
+		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (not declared; the default for an accepted harness)\n", s.AutoApprove)
+	} else {
+		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (declared by the harness)\n", s.AutoApprove)
+	}
+	for _, l := range s.DelegateLevels {
+		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
+	}
+}
+
+// fillAutoApprove sets the level fields of a status: the level the harness
+// opens at when run unattended, where it comes from, and the levels its
+// delegates_to entries declare. Used by `trust show` and `trust accept`.
+func fillAutoApprove(st *trustStatus, p *harness.Harness) {
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
+	st.DelegateLevels = harnessExecutables(p).DelegateLevels
+}
+
+// printAcceptedLevel says what level an acceptance of p covers.
+func printAcceptedLevel(w io.Writer, p *harness.Harness, set trustSet) {
+	_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
+	for _, l := range set.DelegateLevels {
+		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
+	}
 }

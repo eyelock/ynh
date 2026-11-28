@@ -56,8 +56,9 @@ delegate <source> of <parent> is installed as <id> but cannot be read in full: <
   Run: ynh update <id>
 ```
 
-A delegate that executes nothing (no sensors, hooks or MCP servers) needs no `ynh trust accept` to be
-matched. When several installs match one entry, the trusted match with the smallest id wins.
+A delegate that executes nothing (no sensors, hooks or MCP servers) is matched without a `ynh trust accept`,
+but its session is a one-shot run, which is refused until the delegate is accepted: acceptance covers the
+level (`auto_approve`) it opens at. When several installs match one entry, the trusted match with the smallest id wins.
 
 > **Intended, not run.** A delegate installed from a remote git URL or from a registry entry, with trust accepted,
 > then started by its parent. It is the designed path; the record does not yet show it run

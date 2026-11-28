@@ -405,9 +405,6 @@ func TestIncludeAddTrust_AcceptsInOneStep(t *testing.T) {
 	if err := cmdIncludeTo([]string{"add", "./folder", "x", "--trust"}, io.Discard); err == nil || !strings.Contains(err.Error(), "installed harness id") {
 		t.Errorf("path with --trust: %v", err)
 	}
-	if err := cmdIncludeTo([]string{"remove", id, "x", "--trust"}, io.Discard); err == nil {
-		t.Error("include remove --trust was accepted")
-	}
 }
 
 // ynh update --trust records 'update --trust'; a floating remote include

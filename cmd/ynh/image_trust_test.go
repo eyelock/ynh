@@ -93,22 +93,31 @@ func TestCmdImage_AcceptedHarnessLabelsTheDigest(t *testing.T) {
 	}
 }
 
-// A harness that executes nothing needs no record: the image's gate lets it
-// through, and no digest label claims an acceptance.
-func TestCmdImage_CommandlessHarnessBakesNoRecord(t *testing.T) {
+// The image runs one-shot, which needs a harness that executes nothing
+// accepted too (ynh #1058, N2): built unaccepted it is refused, naming the
+// fix, because nothing inside the image could accept it.
+func TestCmdImage_CommandlessHarnessUnacceptedIsRefused(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	id := installListTestHarness(t, home, "plain", plainHarness)
 	rec, err := imageTrustRecord(id, loadInstalled(t, id))
-	if err != nil || rec != nil {
-		t.Fatalf("rec = %v, err = %v, want neither", rec, err)
+	if rec != nil || err == nil || !isUntrusted(err) {
+		t.Fatalf("rec = %v, err = %v, want an untrusted refusal", rec, err)
 	}
+	if !strings.Contains(err.Error(), "ynh trust accept "+id) {
+		t.Errorf("the refusal must name the fix: %v", err)
+	}
+	if err := cmdImageTo([]string{id, "--dry-run"}, io.Discard, io.Discard); err == nil {
+		t.Error("the build must be refused")
+	}
+	// Accepted on the host, it builds and the acceptance travels.
+	acceptForTest(t, id)
 	var stdout bytes.Buffer
 	if err := cmdImageTo([]string{id, "--dry-run"}, &stdout, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(stdout.String(), "trust-digest") {
-		t.Errorf("a commandless image carries a digest label:\n%s", stdout.String())
+	if !strings.Contains(stdout.String(), "trust-digest") {
+		t.Errorf("an accepted commandless image carries its digest label:\n%s", stdout.String())
 	}
 }
 

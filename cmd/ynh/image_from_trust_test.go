@@ -154,21 +154,21 @@ func TestImageFromTrust_ColdIncludeWithoutTrustNamesTrust(t *testing.T) {
 	}
 }
 
-// A harness with nothing to accept builds as before, with or without --trust.
-func TestImageFromTrust_CommandlessBuildsAsBefore(t *testing.T) {
+// A harness with nothing to accept is refused without --trust, since the
+// image runs one-shot and needs an acceptance baked in (ynh #1058, N2), and
+// builds with it.
+func TestImageFromTrust_CommandlessNeedsTrust(t *testing.T) {
 	fakeHome(t)
 	dir := t.TempDir()
 	if err := writePluginJSONFile(dir, []byte(plainHarness)); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"plain", "--from", dir, "--dry-run"}, {"plain", "--from", dir, "--trust", "--dry-run"}} {
-		var out bytes.Buffer
-		if err := cmdImageTo(args, &out, io.Discard); err != nil {
-			t.Fatalf("%v: %v", args, err)
-		}
-		if strings.Contains(out.String(), "trust-digest") {
-			t.Errorf("%v: a commandless image carries a digest label", args)
-		}
+	err := cmdImageTo([]string{"plain", "--from", dir, "--dry-run"}, io.Discard, io.Discard)
+	if err == nil || !isUntrusted(err) || !strings.Contains(err.Error(), "--trust") {
+		t.Errorf("an unaccepted commandless image must be refused, naming --trust: %v", err)
+	}
+	if err := cmdImageTo([]string{"plain", "--from", dir, "--trust", "--dry-run"}, io.Discard, io.Discard); err != nil {
+		t.Errorf("--trust builds: %v", err)
 	}
 }
 

@@ -271,6 +271,11 @@ func cmdRun(args []string) (runErr error) {
 	// harness is refused before anything launches.
 	oneShot := prompt != "" && !ra.Interactive
 	grant := grantsFor(adm, adapter.Name(), oneShot, p.MCPManualApproval)
+	if action == "" && oneShot {
+		if err := adm.withOneShot().Refusal; err != nil {
+			return err
+		}
+	}
 	if action == "" && oneShot && !grant.CopilotOneShot && adapter.Name() == "copilot" {
 		return copilotOneShotRefusal(harnessID, loaded)
 	}

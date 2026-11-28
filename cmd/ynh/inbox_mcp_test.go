@@ -86,6 +86,9 @@ func TestRunInteractiveSessionAcceptsTasks(t *testing.T) {
 		t.Errorf("presence = %+v, YNH_SESSION_ID = %q: want one session that accepts tasks, under that id", live, env)
 	}
 
+	// A one-shot run needs the harness accepted, even one with no commands
+	// (ynh #1058, N2).
+	acceptForTest(t, id)
 	args, live = nil, nil
 	if err := cmdRun([]string{id, "--", "hi"}); err != nil {
 		t.Fatal(err)

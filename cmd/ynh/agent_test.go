@@ -93,9 +93,9 @@ func TestCmdAgentRun_AutoApproveValidatedBeforeTheRun(t *testing.T) {
 		args    []string
 		wantSub string
 	}{
-		{[]string{"--task", "t", "--auto-approve", "sometimes"}, "unknown --auto-approve level"},
-		{[]string{"--task", "t", "--backend", "codex", "--auto-approve", "edits"}, "codex cannot auto-approve edits only"},
-		{[]string{"--task", "t", "--backend", "cursor", "--auto-approve", "edits"}, "cursor cannot auto-approve edits only"},
+		{[]string{"--task", "t", "--auto-approve", "sometimes"}, "unknown auto-approve level"},
+		{[]string{"--task", "t", "--backend", "codex", "--auto-approve", "edits"}, "codex cannot hold auto-approve edits exactly"},
+		{[]string{"--task", "t", "--backend", "cursor", "--auto-approve", "edits"}, "cursor cannot hold auto-approve edits exactly"},
 		{[]string{"--task", "t", "--effort", "max"}, `unknown effort level "max"`},
 		{[]string{"--task", "t", "--backend", "cursor", "--effort", "high"}, "cursor has no reasoning effort setting"},
 	}

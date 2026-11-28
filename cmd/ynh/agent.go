@@ -101,7 +101,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		case "--auto-approve":
 			i++
 			if i >= len(args) {
-				return cliError(stderr, structured, errCodeInvalidInput, "--auto-approve requires a value (edits or all)")
+				return cliError(stderr, structured, errCodeInvalidInput, "--auto-approve requires a value (none, edits or all)")
 			}
 			opts.AutoApprove = args[i]
 
@@ -330,6 +330,8 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	// not the checkpoint's on --resume.
 	opts.Admit = func(h *harness.Harness, id, backend string) agent.Admission {
 		adm = decideTrust(id, h, purpose, stderr)
+		// An agent worker is always one-shot (ynh #1058, N2).
+		adm = adm.withOneShot()
 		return agentAdmission(adm, backend)
 	}
 

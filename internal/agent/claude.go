@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/vendor"
 	"github.com/eyelock/ynh/internal/warn"
 )
@@ -106,7 +107,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		scanner:   scanner,
 		sessionID: sessionID,
 		stderr:    tail,
-		wantMode:  claudePermissionMode(opts.AutoApprove),
+		wantMode:  claudePermissionMode(opts),
 		cleanup:   cleanup,
 		// A fresh session's running cost starts at zero. A resumed one may
 		// continue from the total its transcript saved, so it is asked.
@@ -200,9 +201,7 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 
 	// No --auto-approve, no permission flag: the worker gets what claude and
 	// the project grant it, and nothing more.
-	if mode := claudePermissionMode(opts.AutoApprove); mode != "" {
-		args = append(args, "--permission-mode", mode)
-	}
+	args = append(args, permissionArgs(vendorClaude, opts, args)...)
 
 	// The relay's settings again, at the highest precedence ynh can set
 	// for one session, so no settings file but the organisation's managed
@@ -647,16 +646,13 @@ func addUsage(a, b Usage) Usage {
 // bypassPermissions session to another mode and carries on, so the grant the
 // operator made would silently not apply.
 func claudeModeMismatch(ev claudeOutputEvent, want string) error {
-	if want == "" || ev.Subtype != "init" || ev.PermissionMode == "" || ev.PermissionMode == want {
+	if ev.Subtype != "init" {
 		return nil
 	}
-	return &WorkerError{
-		Backend: "claude",
-		Message: fmt.Sprintf(
-			"asked for --permission-mode %s but the session started in %q; a managed or user setting "+
-				"(such as permissions.disableBypassPermissionsMode) overrides it, so --auto-approve does not apply",
-			want, ev.PermissionMode),
+	if err := permission.OpenedMismatch(want, ev.PermissionMode); err != nil {
+		return &WorkerError{Backend: "claude", Message: err.Error()}
 	}
+	return nil
 }
 
 // Close ends the claude subprocess. With no turn open it closes stdin and

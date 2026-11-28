@@ -98,6 +98,22 @@ func decideTrustIn(store trustStore, id string, p *harness.Harness, purpose trus
 	return adm
 }
 
+// withOneShot is the Admission of a one-shot launch (`ynh run <id> -- "<task>"`,
+// a delegate session, `ynh agent run`): the level it opens at is part of what
+// acceptance covers, so an installed harness that executes nothing, which an
+// interactive run lets through unaccepted, is refused until accepted (ynh
+// #1058, N2). One that executes something is already decided. A folder run has
+// no record to check and is left to the folder route.
+func (a Admission) withOneShot() Admission {
+	if !a.minted || a.Refusal != nil || a.ID == "" || a.Harness == nil || a.Status.State != trustNoCommands {
+		return a
+	}
+	a.Trusted = false
+	a.Refusal = untrustedf("refusing to run %s one-shot: you have not accepted it. It executes no commands, but a one-shot run opens at %s with nobody to approve (%s).\n"+
+		"Review it: ynh trust show %s\nThen accept:  ynh trust accept %s", a.ID, a.Harness.AutoApproveOf(), a.Harness.AutoApproveOrigin(), a.ID, a.ID)
+	return a
+}
+
 // purposeVerb is what a refusal says the launch was: "run <name>" or "build an
 // image of <name>".
 func purposeVerb(purpose trustPurpose, name string) string {
