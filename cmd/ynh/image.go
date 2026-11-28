@@ -486,6 +486,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// An installed harness must be one the operator accepted, as at run time
 	// (design decision 9). The check comes before anything is copied or built.
 	var bakedTrust *trustRecord
+	var bakedTree map[string]trustRecord
 	if trustID != "" {
 		rec, err := imageTrustRecord(trustID, p)
 		if err != nil {
@@ -493,11 +494,11 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		}
 		bakedTrust = rec
 	} else {
-		rec, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
+		rec, tree, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
 		if err != nil {
 			return err
 		}
-		bakedTrust = rec
+		bakedTrust, bakedTree = rec, tree
 		if rec != nil {
 			// The same verb every other way of accepting prints. It goes to
 			// stderr: with --dry-run stdout is the Dockerfile.
@@ -591,7 +592,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// through finds what the operator accepted at build time.
 	trustDigest := ""
 	if bakedTrust != nil {
-		if err := writeImageTrust(homeDir, p.Name, *bakedTrust); err != nil {
+		if err := writeImageTrust(homeDir, p.Name, *bakedTrust, bakedTree); err != nil {
 			return err
 		}
 		trustDigest = bakedTrust.Digest

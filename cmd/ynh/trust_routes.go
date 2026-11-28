@@ -192,26 +192,6 @@ func newAcceptance(h *harness.Harness, set trustSet, via, now string) trustRecor
 	return rec
 }
 
-// recordAcceptance records that the operator accepted p, as `ynh trust
-// accept` does, with how it was accepted, and prints what was accepted.
-func recordAcceptance(id string, p *harness.Harness, via string, stdout io.Writer) error {
-	store, err := loadTrustStore()
-	if err != nil {
-		return err
-	}
-	set := harnessExecutables(p)
-	if len(set.Problems) > 0 {
-		return fmt.Errorf("%s", unavailableMessage(id, set.Problems))
-	}
-	rec := newAcceptance(p, set, via, time.Now().UTC().Format(time.RFC3339))
-	store.Harnesses[id] = rec
-	if err := saveTrustStore(store); err != nil {
-		return err
-	}
-	printAccepted(stdout, id, p, set, rec)
-	return nil
-}
-
 // printAccepted says what an acceptance recorded, level included.
 func printAccepted(w io.Writer, id string, p *harness.Harness, set trustSet, rec trustRecord) {
 	_, _ = fmt.Fprintf(w, "Accepted %s (%s): %d command(s), %s, opens at %s when run unattended\n", id, rec.Via, rec.Commands, rec.Digest, p.AutoApproveOf())
@@ -492,5 +472,16 @@ func acceptAfterChange(id, via string, stdout io.Writer) error {
 	if len(bad) > 0 {
 		return refuseUnpinned(id+" after this change", "--trust", bad)
 	}
-	return recordAcceptance(id, p, via, stdout)
+	// The parent's record and the whole a2a delegate tree's are written
+	// together, all or nothing, by the one acceptance function (ynh #1058, N1).
+	set := harnessExecutables(p)
+	if len(set.Problems) > 0 {
+		return fmt.Errorf("%s", unavailableMessage(id, set.Problems))
+	}
+	rec := newAcceptance(p, set, via, time.Now().UTC().Format(time.RFC3339))
+	if _, err := acceptA2ATree(p, id, via, map[string]trustRecord{id: rec}, stdout); err != nil {
+		return err
+	}
+	printAccepted(stdout, id, p, set, rec)
+	return nil
 }

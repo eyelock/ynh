@@ -71,8 +71,12 @@ func imageTrustRecord(id string, p *harness.Harness) (*trustRecord, error) {
 // local/<name>: the id the image's entrypoint runs the harness under, whatever
 // id it was installed under on the host (the image bakes every harness at
 // local--<name>).
-func writeImageTrust(homeDir, name string, rec trustRecord) error {
-	store := trustStore{Version: 1, Harnesses: map[string]trustRecord{"local/" + name: rec}}
+func writeImageTrust(homeDir, name string, rec trustRecord, tree map[string]trustRecord) error {
+	store := trustStore{Version: 1, Harnesses: map[string]trustRecord{}}
+	for id, r := range tree {
+		store.Harnesses[id] = r
+	}
+	store.Harnesses["local/"+name] = rec
 	data, err := json.MarshalIndent(store, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding the image's trust record: %w", err)
@@ -95,7 +99,7 @@ func writeImageTrust(homeDir, name string, rec trustRecord) error {
 //
 // It returns the record to bake (via: image), or nil when the harness has
 // nothing to accept, which builds as before.
-func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, isLocal bool, ref string) (*trustRecord, error) {
+func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, isLocal bool, ref string) (*trustRecord, map[string]trustRecord, error) {
 	id := "local/" + p.Name
 	empty := trustStore{Version: 1, Harnesses: map[string]trustRecord{}}
 	// --trust judges what the includes execute, so they are fetched before
@@ -107,16 +111,16 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		// before anything is fetched: an unpinned one is never fetched, so it
 		// would otherwise read as unreadable rather than as unpinned.
 		if err := refuseUnpinnedDelegates("this image", "--trust", p); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := fetchIncludesForTrust(p, cfg); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	st := trustStatusFor(id, p, empty, nil)
 	if st.State == trustNoCommands {
 		if ia.trust {
-			return nil, nil
+			return bakeNoCommandsRecord(p, st, ia)
 		}
 		// The image runs one-shot, which needs an acceptance baked in even
 		// for a harness that executes nothing (ynh #1058, N2); without
@@ -128,7 +132,7 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		} else {
 			fmt.Fprintf(&b, "  Fix: review it, then build with 'ynh image %s --from %s --ref <40-character commit SHA> --trust'", ia.name, ia.from)
 		}
-		return nil, &untrustedError{msg: b.String()}
+		return nil, nil, &untrustedError{msg: b.String()}
 	}
 	if err := installedGate(id, p, empty); err != nil {
 		// Unreadable commands or scripts refuse a build whatever --trust says;
@@ -151,9 +155,9 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 				msg = strings.Join(kept, "\n")
 			}
 			if isUntrusted(err) {
-				return nil, &untrustedError{msg: msg}
+				return nil, nil, &untrustedError{msg: msg}
 			}
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	if !ia.trust {
@@ -166,14 +170,14 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		} else {
 			fmt.Fprintf(&b, "  Fix: review it, then build with 'ynh image %s --from %s --ref <40-character commit SHA> --trust'", ia.name, ia.from)
 		}
-		return nil, &untrustedError{msg: b.String()}
+		return nil, nil, &untrustedError{msg: b.String()}
 	}
 	remote, err := remoteIncludes(p, "run")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
-		return nil, refuseUnpinned("this image", "--trust", bad)
+		return nil, nil, refuseUnpinned("this image", "--trust", bad)
 	}
 	rec := trustRecord{
 		Digest:     st.Digest,
@@ -182,12 +186,16 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 		Via:        viaImage,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
 	}
+	tree, err := imageA2ATree(p, ia)
+	if err != nil {
+		return nil, nil, err
+	}
 	// Source, ref and commit are filled in by the caller for a remote source
 	// (bakeFromProvenance), which also bakes the installed.json they match: a
 	// record naming a source the image's harness does not carry would read
 	// "moved" and the gate would refuse the image's own harness. The pin was
 	// enforced above, at build.
-	return &rec, nil
+	return &rec, tree, nil
 }
 
 // fetchIncludesForTrust fetches every include of p, those a profile adds
@@ -217,4 +225,50 @@ func fromUnavailableFix(ia imageArgs, isLocal bool) string {
 		return fmt.Sprintf("Fix: review it, then build with 'ynh image %s --from %s --trust', which fetches its includes (each remote include must be pinned to a 40-character commit SHA).", ia.name, ia.from)
 	}
 	return fmt.Sprintf("Fix: review it, then build with 'ynh image %s --from %s --ref <40-character commit SHA> --trust', which fetches its includes (each remote include must be pinned to a 40-character commit SHA).", ia.name, ia.from)
+}
+
+// bakeNoCommandsRecord is the record --trust bakes for a harness that executes
+// nothing: the level it opens at is part of what --trust accepted, and the
+// image's one-shot run is refused without one (N2).
+func bakeNoCommandsRecord(p *harness.Harness, st trustStatus, ia imageArgs) (*trustRecord, map[string]trustRecord, error) {
+	tree, err := imageA2ATree(p, ia)
+	if err != nil {
+		return nil, nil, err
+	}
+	rec := trustRecord{Digest: st.Digest, Scheme: trustScheme, Via: viaImage, AcceptedAt: time.Now().UTC().Format(time.RFC3339)}
+	return &rec, tree, nil
+}
+
+// imageA2ATree accepts the parent's whole a2a delegate tree for an image built
+// with --trust (ynh #1058, N1) and returns each delegate's record, keyed by
+// its install id, to bake beside the parent's, each at its pinned commit and
+// level. It is the one acceptance function, so it is all or nothing: if any
+// delegate cannot be accepted nothing is recorded or baked and the error names
+// the delegate. A dry run writes nothing to the host's trust store: it only
+// checks that every delegate could be accepted, and bakes no delegate records.
+func imageA2ATree(p *harness.Harness, ia imageArgs) (map[string]trustRecord, error) {
+	if len(a2aEntries(p)) == 0 {
+		return nil, nil
+	}
+	if ia.dryRun {
+		for _, n := range planA2ATree(p) {
+			if n.Problem != "" {
+				return nil, fmt.Errorf("nothing was accepted: delegate %s of %s cannot be accepted: %s", n.Label, n.Parent, n.Problem)
+			}
+		}
+		return nil, nil
+	}
+	done, err := acceptA2ATree(p, "local/"+p.Name, viaImage, nil, os.Stderr)
+	if err != nil {
+		return nil, err
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return nil, err
+	}
+	tree := map[string]trustRecord{}
+	for _, d := range done {
+		tree[d.ID] = store.Harnesses[d.ID]
+	}
+	return tree, nil
 }
