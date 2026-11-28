@@ -702,7 +702,54 @@ func projectCopilotInstructions(configPath, projectDir string) error {
 		return nil
 	}
 
-	return writeCopilotProjectFile(projectDir, copilotInstructionsRelPath, copilotInstructions(content))
+	if err := writeCopilotProjectFile(projectDir, copilotInstructionsRelPath, copilotInstructions(content)); err != nil {
+		return err
+	}
+	excludeFromGit(projectDir, copilotInstructionsRelPath)
+	return nil
+}
+
+// excludeFromGit adds relPath, a file ynh projected into projectDir, to the
+// repository's own .git/info/exclude, so it never shows in `git status` and a
+// `git add -A` does not pick it up (ynh #792). info/exclude is the repository's
+// private ignore list: it is not committed, so the project's .gitignore is
+// left alone. For a worktree git reports the one shared exclude file, so the
+// project and every worktree of it are covered. A folder that is not a git
+// repository, or a machine without git, has nothing to exclude from, and a
+// file the project already tracks is not hidden by an exclude, so none of
+// them is an error. It never fails the launch.
+func excludeFromGit(projectDir, relPath string) {
+	out, err := exec.Command("git", "-C", projectDir, "rev-parse", "--git-path", "info/exclude").Output()
+	if err != nil {
+		return
+	}
+	path := strings.TrimSpace(string(out))
+	if path == "" {
+		return
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(projectDir, path)
+	}
+	line := "/" + filepath.ToSlash(relPath)
+	if data, err := os.ReadFile(path); err == nil {
+		for _, l := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(l) == line {
+				return
+			}
+		}
+		if len(data) > 0 && !bytes.HasSuffix(data, []byte("\n")) {
+			line = "\n" + line
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = f.WriteString(line + "\n")
 }
 
 // copilotInstructions renders the harness instructions as an always-on
