@@ -17,6 +17,9 @@ func TestImage_DryRun(t *testing.T) {
 	s := newSandbox(t)
 	harness := newSyntheticSkillHarness(t, "imaged")
 	s.mustRunYnh(t, "install", harness)
+	// image refuses a harness nobody accepted, since the image runs one-shot
+	// (ynh #976, #1060), so accept it the way a person does.
+	s.mustRunYnh(t, "trust", "accept", "local/imaged")
 
 	out, _ := s.mustRunYnh(t, "image", "local/imaged", "--dry-run")
 
@@ -41,6 +44,8 @@ func TestImage_DryRun_CustomBase(t *testing.T) {
 	s := newSandbox(t)
 	harness := newSyntheticSkillHarness(t, "imaged-custom")
 	s.mustRunYnh(t, "install", harness)
+	// See TestImage_DryRun: image refuses a harness nobody accepted.
+	s.mustRunYnh(t, "trust", "accept", "local/imaged-custom")
 
 	out, _ := s.mustRunYnh(t, "image", "local/imaged-custom", "--base", "myorg/ynh:dev", "--dry-run")
 	if !strings.Contains(out, "FROM myorg/ynh:dev") {
