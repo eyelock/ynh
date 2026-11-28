@@ -101,7 +101,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		case "--auto-approve":
 			i++
 			if i >= len(args) {
-				return cliError(stderr, structured, errCodeInvalidInput, "--auto-approve requires a value (edits or all)")
+				return cliError(stderr, structured, errCodeInvalidInput, "--auto-approve requires a value (none, edits or all)")
 			}
 			opts.AutoApprove = args[i]
 

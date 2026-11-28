@@ -111,6 +111,9 @@ type StartOptions struct {
 	// AutoApprove is "", "edits" or "all": the --auto-approve level, already
 	// validated for this backend. Empty passes no permission flag at all.
 	AutoApprove string
+	// PermissionFromProject is true when the project's own permission mode
+	// narrowed AutoApprove (D5): the vendor is passed no permission argument.
+	PermissionFromProject bool
 	// Model overrides the default model. Empty means backend default.
 	Model string
 	// Effort is "", "low", "medium" or "high": the reasoning effort to ask

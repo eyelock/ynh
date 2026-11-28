@@ -1,175 +1,129 @@
 package agent
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/eyelock/ynh/internal/vendor"
+	"github.com/eyelock/ynh/internal/permission"
 )
 
-// Auto-approve levels for `ynh agent run --auto-approve`.
+// Auto-approve levels for `ynh agent run --auto-approve`. The words, their
+// order, the per-vendor arguments, the project-mode comparison and the root
+// check live in internal/permission, shared with ynh run and delegates
+// (ynh #1058, D7); this file is agent run's thin use of it.
 //
 // By default ynh passes no permission flag: the worker gets whatever the
-// vendor CLI and the project grant it. --auto-approve exists for runs inside
-// containment the operator owns (a container, an egress policy, a diff gate,
-// human review). It is a run-time grant only: the harness manifest cannot set
-// it, and a resume does not restore it.
+// vendor CLI and the project grant it. --auto-approve may be given to run
+// inside containment the operator owns, and may be none, edits or all. It is a
+// run-time grant only: a resume does not restore it.
 const (
-	// AutoApproveEdits approves file edits without prompting. Commands are
-	// not approved.
-	AutoApproveEdits = "edits"
-	// AutoApproveAll approves everything the worker asks to do.
-	AutoApproveAll = "all"
+	AutoApproveNone  = string(permission.None)
+	AutoApproveEdits = string(permission.Edits)
+	AutoApproveAll   = string(permission.All)
 )
 
-// validateAutoApprove rejects a level the chosen backend cannot honour
-// exactly. A backend with no honest equivalent for a level is an error, never
-// a silent widening (edits mapped to something that also approves commands)
-// or narrowing (a grant that quietly does not apply).
+// validateAutoApprove rejects a level the chosen backend cannot hold exactly.
+// A level with no honest equivalent is an error, never a silent widening.
 func validateAutoApprove(level, backend string) error {
-	switch level {
-	case "":
-		return nil
-	case AutoApproveEdits, AutoApproveAll:
-	default:
-		return fmt.Errorf("unknown --auto-approve level %q (supported: edits, all)", level)
-	}
-	switch backend {
-	case "claude":
-		return nil
-	case "codex", "cursor", "opencode":
-		if level == AutoApproveEdits {
-			return fmt.Errorf(
-				"%s cannot auto-approve edits only: it has no mode that approves file edits while still withholding commands; "+
-					"use --auto-approve all or a different backend", backend)
-		}
-		return nil
-	default:
-		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor, opencode)", backend)
-	}
-}
-
-// claudePermissionMode is the claude --permission-mode a level maps to.
-//
-//	edits: acceptEdits (file edits approved, commands still need approval)
-//	all:   bypassPermissions (every permission check skipped)
-func claudePermissionMode(level string) string {
-	switch level {
-	case AutoApproveEdits:
-		return "acceptEdits"
-	case AutoApproveAll:
-		return "bypassPermissions"
-	}
-	return ""
-}
-
-// projectPermissionSetting reports whether the project in dir chooses its own
-// permission mode for backend's vendor CLI. It returns a reason naming the
-// file and the setting, or "" when the project sets none. The project's choice
-// wins over --auto-approve, so a non-empty reason refuses the run.
-//
-// Only project and project-local files in dir are read. User-level settings
-// are not consulted: they are the operator's own defaults, which the flag is
-// the operator's way of overriding for one run.
-//
-// It is a pure function of the directory's contents and touches nothing.
-func projectPermissionSetting(dir, backend string) (string, error) {
-	switch backend {
-	case "claude":
-		for _, name := range []string{"settings.json", "settings.local.json"} {
-			reason, err := claudeDefaultMode(filepath.Join(dir, (&vendor.Claude{}).ConfigDir(), name))
-			if reason != "" || err != nil {
-				return reason, err
-			}
-		}
-		return "", nil
-	case "codex":
-		return codexProjectPolicy(filepath.Join(dir, (&vendor.Codex{}).ConfigDir(), "config.toml"))
-	default:
-		// opencode: --auto approves everything not explicitly denied, so a
-		// project's permission rules still apply under it, as with cursor.
-		// cursor's project file (.cursor/cli.json) carries only allow and
-		// deny lists, which cursor still applies under --force ("unless
-		// explicitly denied"). Its approval mode is a global setting only.
-		return "", nil
-	}
-}
-
-// claudeDefaultMode reads permissions.defaultMode from a claude settings file.
-func claudeDefaultMode(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("reading %s: %w", path, err)
-	}
-	var settings struct {
-		Permissions struct {
-			DefaultMode string `json:"defaultMode"`
-		} `json:"permissions"`
-	}
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return "", fmt.Errorf("parsing %s: %w", path, err)
-	}
-	if m := settings.Permissions.DefaultMode; m != "" {
-		return fmt.Sprintf("%s sets permissions.defaultMode %q", path, m), nil
-	}
-	return "", nil
-}
-
-// codexProjectPolicy reports a top-level approval_policy or sandbox_mode in a
-// project's .codex/config.toml. Only top-level keys are read: a key under a
-// table such as [profiles.x] applies only when that profile is selected.
-func codexProjectPolicy(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("reading %s: %w", path, err)
-	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if strings.HasPrefix(line, "[") {
-			break // the first table header ends the top level
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key = strings.Trim(strings.TrimSpace(key), `"`)
-		if key == "approval_policy" || key == "sandbox_mode" {
-			return fmt.Sprintf("%s sets %s = %s", path, key, strings.TrimSpace(value)), nil
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return "", fmt.Errorf("reading %s: %w", path, err)
-	}
-	return "", nil
-}
-
-// checkProjectPermissions refuses --auto-approve when the project in dir has
-// made its own permission choice for backend.
-func checkProjectPermissions(level, backend, dir string) error {
 	if level == "" {
 		return nil
 	}
-	reason, err := projectPermissionSetting(dir, backend)
+	l, err := permission.Parse(level)
 	if err != nil {
-		return fmt.Errorf("--auto-approve: checking project settings: %w", err)
+		return fmt.Errorf("--auto-approve: %w", err)
 	}
-	if reason != "" {
-		return fmt.Errorf("--auto-approve %s refused: the project chooses its own permission mode (%s); "+
-			"the project's choice wins, so remove the setting or run without --auto-approve", level, reason)
+	if backend == permission.Copilot {
+		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor, opencode)", backend)
+	}
+	if _, err := permission.For(backend, l); err != nil {
+		var refused *permission.RefusedError
+		if asRefused(err, &refused) {
+			return fmt.Errorf("--auto-approve %s: %w", level, err)
+		}
+		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor, opencode)", backend)
 	}
 	return nil
+}
+
+// permissionArgs returns the vendor arguments for level, or nil for no level
+// or a level the project's mode already governs (the vendor is passed nothing
+// and the project's own setting applies). Arguments already present in args
+// (OpenCode's --standalone) are not repeated.
+func permissionArgs(backend string, opts StartOptions, args []string) []string {
+	if opts.AutoApprove == "" || opts.PermissionFromProject {
+		return nil
+	}
+	m, err := permission.For(backend, permission.Level(opts.AutoApprove))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, a := range m.Args {
+		if a == "--standalone" && containsArg(args, a) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// permissionEnv returns the vendor environment for level, as permissionArgs.
+func permissionEnv(backend string, opts StartOptions) []string {
+	if opts.AutoApprove == "" || opts.PermissionFromProject {
+		return nil
+	}
+	m, err := permission.For(backend, permission.Level(opts.AutoApprove))
+	if err != nil {
+		return nil
+	}
+	return m.Env
+}
+
+func containsArg(args []string, a string) bool {
+	for _, x := range args {
+		if x == a {
+			return true
+		}
+	}
+	return false
+}
+
+// claudePermissionMode is the --permission-mode a level maps to, or "" for
+// none given or a level the project's mode governs.
+func claudePermissionMode(opts StartOptions) string {
+	if opts.AutoApprove == "" || opts.PermissionFromProject {
+		return ""
+	}
+	return permission.ClaudeMode(permission.Level(opts.AutoApprove))
+}
+
+// resolveProjectPermissions weighs the level against the project's own mode
+// (D5). A narrower project mode wins: the level becomes the project's, the
+// vendor is passed nothing, and the line is printed. It returns the level to
+// run at and whether the project governs it.
+func resolveProjectPermissions(level, backend, dir string, stderr interface{ Write([]byte) (int, error) }) (string, bool, error) {
+	if level == "" {
+		return "", false, nil
+	}
+	res, err := permission.Resolve(dir, backend, permission.Level(level))
+	if err != nil {
+		return "", false, fmt.Errorf("--auto-approve: %w", err)
+	}
+	if res.FromProject() && stderr != nil {
+		_, _ = fmt.Fprintln(stderr, res.Line)
+	}
+	return string(res.Level), res.FromProject(), nil
+}
+
+// checkRoot is the root refusal for Claude Code, before it starts.
+func checkRoot(level, backend string) error {
+	if level == "" {
+		return nil
+	}
+	return permission.CheckRoot(backend, permission.Level(level), os.Geteuid(), os.Getenv)
+}
+
+func asRefused(err error, target **permission.RefusedError) bool {
+	return errors.As(err, target)
 }

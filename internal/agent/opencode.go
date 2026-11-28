@@ -105,6 +105,7 @@ func (s *openCodeSession) Next() (Turn, error) {
 		cmd.Env = append(cmd.Env, "OPENCODE_CONFIG_DIR="+dir)
 	}
 	cmd.Env = append(cmd.Env, s.isolationEnv...)
+	cmd.Env = append(cmd.Env, permissionEnv(vendorOpenCode, s.opts)...)
 	tail := &stderrTail{}
 	cmd.Stderr = stderrSink(s.opts.Stderr, tail)
 
@@ -183,9 +184,7 @@ func buildOpenCodeArgs(opts StartOptions, sessionID, msg string) []string {
 	if opts.Model != "" {
 		args = append(args, "-m", opts.Model)
 	}
-	if opts.AutoApprove == AutoApproveAll {
-		args = append(args, "--auto")
-	}
+	args = append(args, permissionArgs(vendorOpenCode, opts, args)...)
 	if sessionID != "" {
 		args = append(args, "-s", sessionID)
 	}
