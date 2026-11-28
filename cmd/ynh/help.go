@@ -600,8 +600,13 @@ step (each include pinned to a full SHA). Review them first with
 'ynh trust show <dir>'. A harness with nothing to review
 (no-commands) needs no acceptance to run interactively; a one-shot run, a
 delegate session and 'ynh agent run' need it accepted, since acceptance covers
-the level they open at. 'ynh install --trust' accepts in the same step,
-at full commit SHAs. See docs/trust.md.
+the level they open at. 'ynh trust accept' of an installed harness
+whose ref floats (a branch or tag) records the exact commit that was installed,
+and the harness reads as changed if it later moves; floating includes and native
+delegate entries are accepted at the commit they are at now, and an install that
+recorded no full commit SHA is refused (reinstall with --ref). 'ynh install --trust'
+accepts in the same step, at full commit SHAs (the harness's own ref, its
+remote includes' and its native delegates'). See docs/trust.md.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
 directory: a harness carrying its own trust record would be authorising

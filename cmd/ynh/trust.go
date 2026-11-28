@@ -1257,6 +1257,13 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		// the operator was never shown.
 		return cliError(stderr, structured, errCodeConfigError, unavailableMessage(name, set.Problems))
 	}
+	// An installed remote harness is accepted at the exact commit that was
+	// installed (installed.json's sha), recorded below, even when its ref
+	// floats: a branch or tag that later moves reads as changed (ynh #1023).
+	// An install that recorded no full commit cannot be pinned this way.
+	if bad := unrecordedCommit(p); len(bad) > 0 {
+		return cliError(stderr, structured, errCodeConfigError, refuseUnpinnedWith(name, "ynh trust accept", bad, ownRefClosing(p, name)).Error())
+	}
 	// Acceptance is the operator's review of what is installed, so a remote
 	// include or native delegate entry that floats (a branch, a tag or no ref)
 	// is accepted at the commit it is at now and that commit is recorded, not
@@ -1298,6 +1305,10 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		workspaceNote = fmt.Sprintf(", %d workspace folder(s)", n)
 	}
 	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s, opens at %s when run unattended\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest, p.AutoApproveOf())
+	if err == nil && rec.SHA != "" && notPinned(rec.Ref) != "" {
+		// The ref floats, so say which commit the acceptance is of.
+		_, err = fmt.Fprintf(stdout, "It is accepted at commit %s, the one installed; if %q moves, the harness reads as changed.\n", rec.SHA, rec.Ref)
+	}
 	if err == nil {
 		err = printFloating(stdout, floating)
 	}

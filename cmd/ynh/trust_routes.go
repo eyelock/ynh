@@ -132,6 +132,20 @@ func refuseUnpinnedWith(what, flag string, reasons []string, closing string) err
 		flag, what, strings.Join(reasons, "\n  "), closing)
 }
 
+// ownRefClosing ends the refusal of `ynh trust accept` for a harness whose
+// install recorded no full commit SHA. The shared line sends the operator back
+// to 'ynh trust accept', which is the command that just refused; it needs a
+// commit to record, so the way out is to reinstall at one. id is the harness id the operator
+// gave (the one the refusal header names), which is what `ynh trust accept`
+// takes, not the bare name.
+func ownRefClosing(p *harness.Harness, id string) string {
+	src := "<source>"
+	if p.InstalledFrom != nil && p.InstalledFrom.Source != "" {
+		src = p.InstalledFrom.Source
+	}
+	return fmt.Sprintf("Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install %s --ref <40-character SHA>', then run 'ynh trust accept %s' again", src, id)
+}
+
 // uncachedUnpinnedClosing ends the refusal of an uncached include that is not
 // pinned. `ynh trust accept <folder>` reads includes from the cache and this
 // one is not in it, so it would only point back at --trust (ynh #993).
@@ -405,6 +419,29 @@ func takeTrustFlag(args []string) ([]string, bool) {
 	return out, found
 }
 
+// unpinnedOwnRef says why the installed harness p's own ref is not a full-SHA
+// pin, one line, or nil when it is pinned or p is a local folder install
+// (the operator's own files, decision 4c).
+func unpinnedOwnRef(p *harness.Harness) []string {
+	if !harnessHasRemoteSource(p) {
+		return nil
+	}
+	if why := notPinned(p.InstalledFrom.Ref); why != "" {
+		return []string{"the harness's own ref: " + why}
+	}
+	return nil
+}
+
+// unrecordedCommit says why trust accept cannot record the installed commit of
+// p: it is a git or registry install and installed.json holds no full SHA. Nil
+// when the commit is there, or p is a local folder install.
+func unrecordedCommit(p *harness.Harness) []string {
+	if !harnessHasRemoteSource(p) || isFullSHA(p.InstalledFrom.SHA) {
+		return nil
+	}
+	return []string{"the commit installed: its install record holds no full commit SHA"}
+}
+
 // pinProblems lists what keeps the installed harness p from being accepted at
 // a full SHA: its own ref when it floats from a git or registry source, and
 // each remote include that brings commands (decisions 4b and 14).
@@ -415,12 +452,7 @@ func pinProblems(p *harness.Harness) ([]string, error) {
 // pinProblemsFix is pinProblems with the Fix line of an include that cannot be
 // read named by the caller.
 func pinProblemsFix(p *harness.Harness, fix string) ([]string, error) {
-	var bad []string
-	if harnessHasRemoteSource(p) {
-		if why := notPinned(p.InstalledFrom.Ref); why != "" {
-			bad = append(bad, "the harness's own ref: "+why)
-		}
-	}
+	bad := unpinnedOwnRef(p)
 	remote, err := remoteIncludesFor(p, "accept", fix)
 	if err != nil {
 		return nil, err
