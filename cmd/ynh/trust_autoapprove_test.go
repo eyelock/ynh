@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -135,5 +137,45 @@ func acceptForTest(t *testing.T, id string) {
 	store.Harnesses[id] = rec
 	if err := saveTrustStore(store); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestTrustAcceptSaysTheLevel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "lvl", `{"name":"lvl","version":"0.1.0","auto_approve":"edits"}`)
+
+	var out, errb bytes.Buffer
+	if err := cmdTrustAccept([]string{"local/lvl"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "opens at edits when run unattended (harness)") {
+		t.Errorf("accept text must say the level and its source:\n%s", out.String())
+	}
+
+	var js bytes.Buffer
+	if err := cmdTrustAccept([]string{"local/lvl", "--format", "json"}, &js, &errb); err != nil {
+		t.Fatal(err)
+	}
+	var st struct {
+		AutoApprove     string `json:"auto_approve"`
+		AutoApproveFrom string `json:"auto_approve_from"`
+	}
+	if err := json.Unmarshal(js.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.AutoApprove != "edits" || st.AutoApproveFrom != "harness" {
+		t.Errorf("accept JSON level = %+v", st)
+	}
+}
+
+func TestTrustAcceptListsEntryLevels(t *testing.T) {
+	set := trustSet{DelegateLevels: []string{"github.com/o/reviewer: none"}}
+	var b bytes.Buffer
+	printAcceptedLevel(&b, &harness.Harness{}, set)
+	for _, want := range []string{"opens at all when run unattended (default)", "delegate github.com/o/reviewer: none"} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("want %q in:\n%s", want, b.String())
+		}
 	}
 }

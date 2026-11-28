@@ -1209,8 +1209,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	st.Workspace = workspaceReportFor(p)
 	st.LaunchFocus = launchFocusFor(p)
 	st.DelegateFocuses = st.delegateFocuses
-	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
-	st.DelegateLevels = harnessExecutables(p).DelegateLevels
+	fillAutoApprove(&st, p)
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -1274,7 +1273,9 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if format == "json" {
-		return writeJSON(stdout, trustStatusFor(name, p, store, os.Environ()))
+		st := trustStatusFor(name, p, store, os.Environ())
+		fillAutoApprove(&st, p)
+		return writeJSON(stdout, st)
 	}
 	workspaceNote := ""
 	if n := len(set.Workspace); n > 0 {
@@ -1283,6 +1284,11 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest)
 	if err == nil {
 		err = printFloating(stdout, floating)
+	}
+	if err == nil {
+		// The level acceptance covers (ynh #1058, D3): said at the moment it
+		// is accepted, with where it comes from and each entry's own.
+		printAcceptedLevel(stdout, p, set)
 	}
 	return err
 }
@@ -1459,6 +1465,22 @@ func printAutoApproveSection(w io.Writer, s trustStatus) {
 		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (declared by the harness)\n", s.AutoApprove)
 	}
 	for _, l := range s.DelegateLevels {
+		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
+	}
+}
+
+// fillAutoApprove sets the level fields of a status: the level the harness
+// opens at when run unattended, where it comes from, and the levels its
+// delegates_to entries declare. Used by `trust show` and `trust accept`.
+func fillAutoApprove(st *trustStatus, p *harness.Harness) {
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
+	st.DelegateLevels = harnessExecutables(p).DelegateLevels
+}
+
+// printAcceptedLevel says what level an acceptance of p covers.
+func printAcceptedLevel(w io.Writer, p *harness.Harness, set trustSet) {
+	_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
+	for _, l := range set.DelegateLevels {
 		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
 	}
 }
