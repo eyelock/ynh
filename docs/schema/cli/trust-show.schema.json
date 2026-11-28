@@ -268,6 +268,9 @@
       "required": ["name", "prompt"],
       "additionalProperties": false
     },
+    "auto_approve": { "type": "string", "enum": ["none", "edits", "all"], "description": "The permission level the harness opens at when run unattended (a delegate session, a one-shot `ynh run`, `ynh agent run`): its declared auto_approve, else all, the default for an accepted harness. Covered by digest only when declared. Filled by `trust show` only." },
+    "auto_approve_from": { "type": "string", "enum": ["harness", "default"], "description": "Where auto_approve comes from: the harness's own declaration, or the default. Filled by `trust show` only." },
+    "delegate_levels": { "type": "array", "items": { "type": "string" }, "description": "The auto_approve levels delegates_to entries declare, as `<delegate>: <level>`, in entry order. Present only when an entry declares one. Covered by digest. Filled by `trust show` only." },
     "delegate_focuses": {
       "type": "array",
       "description": "The focuses that native delegates_to entries select, in entry order (an a2a delegate's focus is reviewed under its own trust grant). Each prompt becomes the delegate's standing instructions for every task it is given, so it steers that subagent as launch_focus steers a session. Present only when a native entry selects a focus. Covered by digest. Filled by `trust show` only.",

@@ -270,6 +270,11 @@ func cmdRun(args []string) (runErr error) {
 	// harness is refused before anything launches.
 	trusted := gateTrusted(harnessID, loaded)
 	oneShot := prompt != "" && !ra.Interactive
+	if action == "" && oneShot {
+		if err := oneShotAcceptanceGate(harnessID, loaded); err != nil {
+			return err
+		}
+	}
 	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
 		return copilotOneShotRefusal(harnessID, loaded)
 	}
