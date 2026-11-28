@@ -187,6 +187,15 @@ level the worker ran with. Absent means none. An older ynh rejects
 `--auto-approve` as an unknown flag, so a consumer that passes it checks
 `capabilities` first.
 
+In v0.18.2 (ynh #1058) the level may also be `none`, and with `--harness` it
+is the harness's level unless narrowed. `ynh ls` and `ynh info` carry
+`auto_approve` and `auto_approve_from` on each harness, and on each
+`delegates_to` entry that declares a level; `ynh trust show` carries
+`auto_approve`, `auto_approve_from`, `delegate_levels` and `a2a_delegates`; `delegate_status` and a
+delegation's result carry `auto_approve` and `auto_approve_from`. Capabilities stay `0.11.0` at
+develop 960ecb6f. See
+[Permission levels](permission-levels.md).
+
 The `agent run` result also carries `effort` and, under `consumed`,
 `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`
 and `cost_usd`. They were

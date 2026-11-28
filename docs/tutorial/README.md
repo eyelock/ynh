@@ -42,6 +42,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 
 | Tutorial | What you'll learn |
 |---|---|
+| [Your First Delegation](first-delegation.md) | Install a parent and its delegate, accept both in one step, and narrow the delegate's permission level |
 | [A First Delegate Session](first-delegate-session.md) | Have one harness hand work to another, running as its own session |
 | [Native Delegation](delegation.md) | Run a delegate as the vendor's own subagent (`transport: native`) |
 | [Export](export.md) | Produce vendor-native distributable plugins |

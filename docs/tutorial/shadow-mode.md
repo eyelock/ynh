@@ -507,4 +507,4 @@ than as a project.
 
 ## Next
 
-[A First Delegate Session](first-delegate-session.md) — have one harness hand work to another.
+[Your First Delegation](first-delegation.md) — install a harness with a delegate, accept both in one step, and narrow what the delegate may do.

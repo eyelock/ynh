@@ -54,7 +54,11 @@ What a harness delivers when you launch it with `ynh run` (or its launcher), int
 | `delegates_to`: a model and effort per entry and delegate default, `transport: native` | P [L42](#l42-a-delegate-s-model-and-effort) | P [L42](#l42-a-delegate-s-model-and-effort) | N [L42](#l42-a-delegate-s-model-and-effort) | U [L35](#l35-cursor-under-ynh-run-not-shown-live) | N [L42](#l42-a-delegate-s-model-and-effort) |
 | Resume (`--resume`, with or without a prompt) | Y | P [L30](#l30-codex-resumes-a-prompt-one-shot-only) | Y | U [L38](#l38-cursor-resume-and-interactive-trust-across-snapshots-not-shown-live) | Y |
 | Own `ynh.session` record from `ynh run` | Y | Y | Y | Y | Y |
+<!-- TODO(live): the three permission-level rows stay U until each cell is shown live through ynh on what ships; then set each Y, or X with L17. Cursor none is X only if it ships refused. -->
 | Vendor telemetry through the relay (`--telemetry-relay`) | Y [L13](#l13-ynh-run-does-not-wire-every-vendor-s-own-telemetry) | Y [L19](#l19-vendor-telemetry-through-the-relay) | Y | X [L19](#l19-vendor-telemetry-through-the-relay) | X [L19](#l19-vendor-telemetry-through-the-relay) |
+| Permission level `none` (one-shot runs and delegates) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | X [L17](#l17-auto-approve-edits) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) |
+| Permission level `edits` (one-shot runs and delegates) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | X [L17](#l17-auto-approve-edits) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | X [L17](#l17-auto-approve-edits) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) |
+| Permission level `all` (one-shot runs and delegates; the default) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) |
 
 ## ynh agent run
 
@@ -67,7 +71,8 @@ Where the backends of `ynh agent run` differ. Its flags and behaviour are in [Th
 | Session context (`on_session_start` output) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | MCP isolation (`mcp_isolation`) | Y | Y | – | X [L6](#l6-mcp-isolation) | Y |
 | Effort (`--effort`, `agent.effort`) | Y | Y | – | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) | X [L16](#l16-cursor-and-opencode-have-no-effort-setting) |
-| `--auto-approve edits` | Y | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | X [L17](#l17-auto-approve-edits) |
+| `--auto-approve none` | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | – | X [L17](#l17-auto-approve-edits) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) |
+| `--auto-approve edits` | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) | X [L17](#l17-auto-approve-edits) | – | X [L17](#l17-auto-approve-edits) | U [L43](#l43-permission-levels-not-yet-shown-live-through-ynh) |
 | `--auto-approve all` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
 | `--sandbox srt` | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | P [L18](#l18-sandbox-srt) |
 | Telemetry (ynh's own spans and events) | Y | Y | – | U [L36](#l36-the-cursor-backend-not-shown-live) | Y |
@@ -245,12 +250,12 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 
 ### L17: auto-approve edits
 
-- **What:** `--auto-approve edits` is an error on `codex`, `cursor` and `opencode`.
-- **Owner:** the vendor: none of them has a mode that approves file edits while still asking before commands.
-- **Evidence:** [Permissions and `--auto-approve`](agent.md#permissions-and-auto-approve).
+- **What:** the permission level `edits` is refused at start on Codex and Cursor, for `ynh run` one-shot runs, delegates and `ynh agent run --auto-approve`; so is `none` on Cursor. Until v0.18.2 `edits` was also an error on OpenCode, which now holds it with a permission block ([Permission levels](permission-levels.md#what-each-vendor-is-passed)).
+- **Owner:** the vendor: Codex and Cursor have no mode that approves file edits while still withholding commands (Codex's `workspace-write` lets the shell write); Cursor's print mode without `--force` still writes files, and a project allow list widens it.
+- **Evidence:** live, the P0 spike for [ynh #1058](https://github.com/eyelock/ynh/issues/1058) ([ynh #1059](https://github.com/eyelock/ynh/pull/1059), `scripts/permission-mapping-live.sh`), on codex-cli 0.172.0 and cursor-agent 2026.11.13.
 - **Tracking:** none.
-- **Workaround:** `--auto-approve all`, inside containment you own.
-- **Detail:** [Permissions and `--auto-approve`](agent.md#permissions-and-auto-approve).
+- **Workaround:** `none` or `all` on Codex, `all` on Cursor, inside containment you own; or another vendor.
+- **Detail:** [Permission levels](permission-levels.md).
 
 ### L18: sandbox srt
 
@@ -485,3 +490,14 @@ What a package from `ynd export` carries, and whether the vendor loads it. The f
 - **Tracking:** [ynh #1054](https://github.com/eyelock/ynh/issues/1054), v0.18.1, for the cells above. A model and effort in Copilot CLI's and OpenCode's native agent files is not filed; it is a follow-up to ynh #1054.
 - **Workaround:** on Copilot CLI, Cursor and OpenCode, name no effort; set the delegate's model per call, per entry or in `default_model`. For a native delegate on Copilot CLI or OpenCode, use `transport: a2a`.
 - **Detail:** [Model and effort](delegates-reference.md#model-and-effort), [Delegates reference](delegates-reference.md).
+
+### L43: Permission levels not yet shown live through ynh
+
+<!-- TODO(live): fill Evidence with the live check of each level on each vendor through ynh after ynh trust accept, on exactly what ships, and retire this limit (keep its id) once every cell is Y or X. -->
+
+- **What:** the permission levels `none`, `edits` and `all` for one-shot runs and delegates ([ynh #1058](https://github.com/eyelock/ynh/issues/1058)) are mapped per vendor in `internal/permission/vendor.go`, and ynh passes them on every one-shot run, delegate session and agent worker (P4, [ynh #1064](https://github.com/eyelock/ynh/pull/1064)), but they are not yet shown live through ynh. The vendors' own CLIs were run at each level in the P0 spike.
+- **Owner:** ynh.
+- **Evidence:** the P0 spike ([ynh #1059](https://github.com/eyelock/ynh/pull/1059)), each vendor CLI run directly at each level on Claude Code 2.1.332, codex-cli 0.172.0, cursor-agent 2026.11.13, Copilot CLI 1.0.113 and OpenCode 2.2.3: shown for each cell not refused; Claude Code `edits` let `touch` and `mkdir` through under `acceptEdits` alone, so it maps to `acceptEdits` with `--disallowedTools Bash`, which then refused `sh -c`, `touch` and `mkdir` and let `Write` through. Claude Code as root: static only.
+- **Tracking:** [ynh #1058](https://github.com/eyelock/ynh/issues/1058), v0.18.2.
+- **Workaround:** none needed: a cell that cannot be held exactly is refused, never widened.
+- **Detail:** [Permission levels](permission-levels.md).

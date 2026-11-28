@@ -106,6 +106,23 @@ delegate, and neither the parent's call nor its `delegates_to` entry names one. 
 default. They apply to a delegate session only, not to a plain `ynh run`. See
 [Model and effort](delegates-reference.md#model-and-effort).
 
+### auto_approve (optional)
+
+The [permission level](permission-levels.md) a session of this harness opens at when it runs with
+nobody to approve: a delegate session, `ynh run <id> -- "<task>"` and `ynh agent run --harness`. One of
+`none`, `edits` or `all`; any other value is refused when the harness is installed or loaded.
+
+```json
+{
+  "auto_approve": "edits"
+}
+```
+
+It is a ceiling: a `delegates_to` entry, a `delegate_to` call or `--auto-approve` may only narrow it.
+Omitted, an accepted harness opens at `all`. Interactive runs are unchanged: a person approves. A
+profile cannot change it. Declaring or changing it changes what `ynh trust accept` reviewed, so the
+harness must be accepted again.
+
 ### includes (optional)
 
 Additional sources to pull artifacts from. Each include is either a remote
@@ -320,6 +337,7 @@ Other harnesses this one can invoke as subagents.
 | `model` | no | From v0.18.1. The model the delegate opens with unless the call names its own; wins over the delegate's `default_model`. See [Model and effort](delegates-reference.md#model-and-effort). |
 | `effort` | no | From v0.18.1. The reasoning effort (`low`, `medium` or `high`) the delegate opens with unless the call names its own; wins over the delegate's `default_effort`. |
 | `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
+| `auto_approve` | no | `none`, `edits` or `all`: the most this delegate's session may open at when this harness starts it. Narrows the delegate's own [`auto_approve`](#auto-approve-optional), never widens it. Part of this harness's trust review. It takes effect on `a2a` entries only: on a `native` entry it is accepted but does nothing, since a native delegate runs at its parent's level. See [Permission levels](permission-levels.md). |
 
 #### Transport
 

@@ -603,7 +603,9 @@ ynh install /tmp/ynh-edge/e15/allow 2>&1 | grep Error
 # Expected: Error: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
 
 ynh run /tmp/ynh-edge/e15/allow "hello" 2>&1 | grep Error
-# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
+# Expected: Error: refusing to run allow-edge: what its includes execute could not be read in full. (exit 1)
+# At develop 960ecb6f the run is refused by the trust gate, which reads the includes first, so the
+# allow-list message is no longer reached at run time; the install above still shows it.
 
 # Put the backup back, or, if there was none, remove the config written above.
 if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
@@ -1063,7 +1065,7 @@ In the merged package Copilot must read `hooks/claude.json` and ignore a root `h
 
 ```bash
 cd /tmp/ynh-live/project
-ynh run /tmp/ynh-live/probe-harness -v claude -- "Reply with the single word done." < /dev/null
+ynh run /tmp/ynh-live/probe-harness -v claude --trust -- "Reply with the single word done." < /dev/null
 cat /tmp/ynh-live/probe.log
 ```
 
