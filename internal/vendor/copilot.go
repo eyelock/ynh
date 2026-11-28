@@ -730,7 +730,14 @@ func excludeFromGit(projectDir, relPath string) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(projectDir, path)
 	}
-	line := "/" + filepath.ToSlash(relPath)
+	// A leading / anchors to the top of the working tree, so the line names the
+	// file's path from there: projectDir may be a subdirectory of the repository
+	// (a monorepo package), where the file is at <prefix>/<relPath>.
+	prefix := ""
+	if out, err := exec.Command("git", "-C", projectDir, "rev-parse", "--show-prefix").Output(); err == nil {
+		prefix = strings.TrimSpace(string(out))
+	}
+	line := "/" + filepath.ToSlash(filepath.Join(prefix, relPath))
 	if data, err := os.ReadFile(path); err == nil {
 		for _, l := range strings.Split(string(data), "\n") {
 			if strings.TrimSpace(l) == line {

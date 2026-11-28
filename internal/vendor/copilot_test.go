@@ -695,3 +695,60 @@ func TestProjectCopilotInstructions_NotARepositoryIsFine(t *testing.T) {
 		t.Error("a .git was created")
 	}
 }
+
+// Run from a subdirectory of the repository (a monorepo package) or of a
+// worktree, the projected file is still not a change: the exclude line names
+// its path from the top of the working tree.
+func TestProjectCopilotInstructions_FromASubdirectory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	cfg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("Be brief.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	gitIn(t, project, "init", "-q")
+	sub := filepath.Join(project, "sub", "pkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "x.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, project, "add", ".")
+	gitIn(t, project, "commit", "-q", "-m", "init")
+
+	if err := projectCopilotInstructions(cfg, sub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(sub, copilotInstructionsRelPath)); err != nil {
+		t.Fatalf("not projected: %v", err)
+	}
+	if got := gitIn(t, project, "status", "--porcelain"); got != "" {
+		t.Errorf("git status in the repository shows %q, want clean", got)
+	}
+	exclude, _ := os.ReadFile(filepath.Join(project, ".git", "info", "exclude"))
+	if !strings.Contains(string(exclude), "/sub/pkg/"+copilotInstructionsRelPath) {
+		t.Errorf("exclude does not name the path from the top level:\n%s", exclude)
+	}
+
+	// The same from a subdirectory of a worktree.
+	wt := filepath.Join(t.TempDir(), "wt")
+	gitIn(t, project, "worktree", "add", "-q", "-b", "task", wt)
+	wtSub := filepath.Join(wt, "sub", "pkg")
+	if err := projectCopilotInstructions(cfg, wtSub); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitIn(t, wt, "status", "--porcelain"); got != "" {
+		t.Errorf("git status in the worktree shows %q, want clean", got)
+	}
+	// And a second run adds no line.
+	if err := projectCopilotInstructions(cfg, sub); err != nil {
+		t.Fatal(err)
+	}
+	exclude, _ = os.ReadFile(filepath.Join(project, ".git", "info", "exclude"))
+	if n := strings.Count(string(exclude), "/sub/pkg/"+copilotInstructionsRelPath); n != 1 {
+		t.Errorf("the line appears %d times", n)
+	}
+}
