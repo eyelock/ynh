@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -144,6 +145,9 @@ func cmdIncludeAdd(args []string, stdout io.Writer, gate includeGate) error {
 		needFetch := installed || len(opts.Pick) > 0
 		if needFetch {
 			gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
+			if err := allowedSource(gs.Git, dir); err != nil {
+				return err
+			}
 			basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
 			if fetchErr != nil {
 				return fmt.Errorf("fetching include: %w", fetchErr)
@@ -327,6 +331,9 @@ func cmdIncludeUpdate(args []string, stdout io.Writer, gate includeGate) error {
 	needFetch := installed || (opts.SetPick && len(opts.Pick) > 0)
 	if needFetch {
 		gs := harness.GitSource{Git: url, Ref: finalInc.Ref, Path: finalInc.Path}
+		if err := allowedSource(gs.Git, dir); err != nil {
+			return err
+		}
 		basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
 		if fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
@@ -489,4 +496,15 @@ func prepareLocalInclude(arg, dir string, forceGit bool, opts harness.AddOptions
 		}
 	}
 	return stored, true, nil
+}
+
+// allowedSource holds the allow-list before a command fetches a git source into the cache and
+// writes the manifest that names it: a source the list does not name is refused, with nothing
+// fetched and nothing written (ynh #1058).
+func allowedSource(git, dir string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("reading the configuration: %w", err)
+	}
+	return cfg.CheckSource(git, dir)
 }

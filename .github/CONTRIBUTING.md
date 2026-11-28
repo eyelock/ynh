@@ -223,7 +223,7 @@ make lint
 # check-go-pin, check-spoolexporter-pin, test, build, check-artifacts, check-vendor-parity, check-marketplace)
 make check
 
-# E2E suite (release gate; not part of `make check`)
+# E2E suite (runs on every PR in CI; not part of `make check`)
 make e2e
 ```
 
@@ -240,14 +240,15 @@ make e2e
 - JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
 - Local file:// registry support (registry add → search → install with namespace collision handling)
 
-The suite is the release gate, not a per-PR gate:
+The suite runs on every pull request and gates releases. It takes under a minute on CI, so it needs no subset, and a PR that breaks it is red before merge:
 
 | Trigger | Behaviour |
 |---------|-----------|
+| PR opened/updated, any base (including `develop`) | The `E2E Suite` job in `.github/workflows/ci.yml` runs when code changes, and `All Clear`, the required check, needs it |
 | PR opened/updated targeting `main` | E2E must pass before merge (`.github/workflows/e2e.yml`) |
+| Push to `develop` | `e2e.yml` reports on every merge, so a break is attributed to one merge |
 | Tag push `v*` | E2E runs as part of `release.yml`, blocking `goreleaser` |
 | Manual `workflow_dispatch` | Ad-hoc "is develop healthy?" check before opening release PR |
-| PR targeting `develop` | Not triggered — feature work stays fast |
 
 The suite needs no network. Harness fixtures are written into a git repository in the test's temp dir (`test/e2e/fixtures.go`) and served from a bare copy over `file://`, so includes, delegates and git installs fetch from it and a flaky connection cannot fail the run. A test that needs another commit adds one to that repository.
 
@@ -257,7 +258,7 @@ The suite needs no network. Harness fixtures are written into a git repository i
 YNH_E2E_LIVE=1 make e2e
 ```
 
-See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
+The trigger table above is the full trigger model; the coverage is the list of areas at the top of this section.
 
 ### Testing Unreleased ynh Against Downstream Tooling
 

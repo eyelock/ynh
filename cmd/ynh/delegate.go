@@ -95,6 +95,9 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 
 	if installed {
 		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
+		if err := allowedSource(gs.Git, dir); err != nil {
+			return err
+		}
 		basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
 		if fetchErr != nil {
 			return fmt.Errorf("fetching delegate: %w", fetchErr)
@@ -241,6 +244,9 @@ func cmdDelegateUpdate(args []string, stdout io.Writer) error {
 			return findErr
 		}
 		gs := harness.GitSource{Git: url, Ref: finalDel.Ref}
+		if err := allowedSource(gs.Git, dir); err != nil {
+			return err
+		}
 		if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
 			return fmt.Errorf("fetching delegate: %w", fetchErr)
 		}

@@ -2,17 +2,18 @@ name: E2E
 
 # E2E gates release promotion, and reports on every merge to `develop`.
 #
-# Feature work targeting `develop` still stays fast: this does not run on
-# pull requests, so no PR waits on a 15-minute suite. See
-# .claude/plans/e2e-test-suite.md for the full trigger model.
+# Pull requests into `develop` run the same suite as the E2E Suite job in
+# ci.yml, which All Clear needs, so a PR that breaks E2E is red before merge
+# (ynh #1069). The suite takes about 40 seconds. The trigger table in
+# .github/CONTRIBUTING.md ("E2E test suite") is the full trigger model.
 #
 # The post-merge trigger closes a real gap. Running only at release
 # boundaries meant the suite could go weeks without executing — on
 # 2026-08-30 nine PRs merged to `develop`, including one that changed what
 # `ynh check` treats as a failure, and e2e ran on none of them. A regression
 # was then found at release time against a batch of changes rather than
-# against the commit that caused it. Running post-merge keeps PRs fast and
-# restores attribution to a single merge.
+# against the commit that caused it. Running post-merge restores attribution
+# to a single merge; running on the PR, as above, catches it before the merge.
 #
 # Tag-push (v*) triggers go through release.yml's `e2e` job, which
 # blocks `goreleaser`. This workflow handles push-to-develop, PR-to-main and

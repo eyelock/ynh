@@ -479,6 +479,9 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 		url, opts.Local = stored, true
 	} else if installed {
 		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
+		if err := allowedSource(gs.Git, dir); err != nil {
+			return err
+		}
 		if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
 		}
@@ -584,6 +587,9 @@ func cmdProfileIncludeUpdate(args []string, stdout io.Writer) error {
 		// A local include is read from disk: nothing to fetch.
 		if finalInc.Local == "" {
 			gs := harness.GitSource{Git: url, Ref: finalInc.Ref, Path: finalInc.Path}
+			if err := allowedSource(gs.Git, dir); err != nil {
+				return err
+			}
 			if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
 				return fmt.Errorf("fetching include: %w", fetchErr)
 			}
