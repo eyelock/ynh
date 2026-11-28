@@ -122,6 +122,10 @@ type Delegate struct {
 	// Transport is the entry's own transport ("a2a", "native" or empty for
 	// the harness's; see Harness.TransportOf).
 	Transport string
+	// Model and Effort are the entry's own model and reasoning effort for the
+	// delegate: the parent's per-entry default (see delegation.Resolve).
+	Model  string
+	Effort string
 	// AutoApprove is the entry's own permission level for the delegate's
 	// unattended runs, as written ("" when unset; see CheckAutoApprove).
 	AutoApprove string
@@ -192,6 +196,10 @@ type Harness struct {
 	Author        *plugin.AuthorInfo
 	Keywords      []string
 	DefaultVendor string
+	// DefaultModel and DefaultEffort are what the harness opens with as a
+	// delegate when neither the call nor the parent's entry names one.
+	DefaultModel  string
+	DefaultEffort string
 	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
 	Dir           string // absolute path to the harness directory, the base for relative local includes
 	Includes      []Include
@@ -748,6 +756,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		}
 	}
 	p.DefaultVendor = hj.DefaultVendor
+	p.DefaultModel, p.DefaultEffort = hj.DefaultModel, hj.DefaultEffort
 	p.Namespace = inferNamespace(dir)
 	if abs, err := filepath.Abs(dir); err == nil {
 		p.Dir = abs
@@ -766,6 +775,8 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 			Profile:     del.Profile,
 			Focus:       del.Focus,
 			Transport:   del.Transport,
+			Model:       del.Model,
+			Effort:      del.Effort,
 			AutoApprove: del.AutoApprove,
 		})
 	}
@@ -1081,6 +1092,7 @@ func LoadFile(path string) (*Harness, error) {
 	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
 		Author: hj.Author, Keywords: hj.Keywords, Manifest: hj}
 	p.DefaultVendor = hj.DefaultVendor
+	p.DefaultModel, p.DefaultEffort = hj.DefaultModel, hj.DefaultEffort
 
 	includes, err := includesOf(hj)
 	if err != nil {
@@ -1093,6 +1105,8 @@ func LoadFile(path string) (*Harness, error) {
 			Profile:     del.Profile,
 			Focus:       del.Focus,
 			Transport:   del.Transport,
+			Model:       del.Model,
+			Effort:      del.Effort,
 			AutoApprove: del.AutoApprove,
 		})
 	}

@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/delegation"
 )
 
 // DelegateFocus is a focus a delegates_to entry names: its prompt becomes
@@ -104,4 +106,25 @@ func declaredNames[V any](m map[string]V, what string) string {
 		return "it declares no " + what
 	}
 	return "it declares: " + strings.Join(slices.Sorted(maps.Keys(m)), ", ")
+}
+
+// CheckDelegateSettings reports a model or effort that cannot be one: the
+// harness's own default_model and default_effort, and those of each
+// delegates_to entry. An effort is low, medium or high.
+func (h *Harness) CheckDelegateSettings() error {
+	if err := delegation.CheckModel(h.DefaultModel); err != nil {
+		return fmt.Errorf("default_model: %w", err)
+	}
+	if err := delegation.CheckEffort(h.DefaultEffort); err != nil {
+		return fmt.Errorf("default_effort: %w", err)
+	}
+	for i, d := range h.DelegatesTo {
+		if err := delegation.CheckModel(d.Model); err != nil {
+			return fmt.Errorf("delegates_to[%d] (%s): model: %w", i, d.Label(), err)
+		}
+		if err := delegation.CheckEffort(d.Effort); err != nil {
+			return fmt.Errorf("delegates_to[%d] (%s): effort: %w", i, d.Label(), err)
+		}
+	}
+	return nil
 }

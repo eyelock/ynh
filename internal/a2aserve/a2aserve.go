@@ -29,12 +29,21 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/permission"
 )
 
 // MetaHandle is the key under which a task's metadata carries the delegation
 // handle (dlg- and 16 hex digits) of the session behind it. The handle is what
 // outlives this endpoint: a parent that comes back reads the record by it.
 const MetaHandle = "ynh.handle"
+
+// MetaModel and MetaEffort are the keys under which a message's metadata
+// carries the parent's per-call model and reasoning effort for the delegate:
+// the highest layer of delegation.Resolve.
+const (
+	MetaModel  = "ynh.model"
+	MetaEffort = "ynh.effort"
+)
 
 // LogTailLines is how much of a failed run's log goes into the task's status
 // message, so a delegate that wrote nothing to its output still says why.
@@ -53,6 +62,13 @@ type Options struct {
 	// Parent and Delegate are the canonical ids (see delegation.StartOptions).
 	Parent, Delegate string
 	Profile, Focus   string
+	// Model and Effort are the delegates_to entry's own model and effort,
+	// DefaultModel and DefaultEffort the delegate harness's, and Vendor the
+	// vendor the delegate runs on. A call's own choice (MetaModel, MetaEffort)
+	// is read from the first message and wins over all of them.
+	Model, Effort               string
+	DefaultModel, DefaultEffort string
+	Vendor                      string
 	// Folder is the working folder the delegate runs in: the parent's.
 	Folder string
 	// Supervisor starts the session process (see delegation.StartOptions).
@@ -62,6 +78,11 @@ type Options struct {
 	// mailbox and starts nothing; "headless" starts a session of its own. A
 	// message can choose for itself with the MetaOnLive metadata key.
 	OnLive string
+	// AutoApprove and AutoApproveFrom are the most the delegate may open at,
+	// after the delegate's own level, the delegates_to entry and the calling
+	// session's cap (ynh #1058); a task may narrow it with MetaAutoApprove.
+	AutoApprove     permission.Level
+	AutoApproveFrom permission.Source
 	// TakeBy is how long a queued task may wait to be taken before the sender
 	// is told it is still waiting (delegation.DefaultTakeBy when 0).
 	TakeBy time.Duration
@@ -70,6 +91,14 @@ type Options struct {
 // MetaOnLive is the message metadata key that chooses, for one task, between
 // "queue" and "headless" (Options.OnLive).
 const MetaOnLive = "ynh.on_live"
+
+// MetaAutoApprove is the message metadata key that narrows, for one task, the
+// level the delegate opens at (never wider than the endpoint's: such a task
+// is refused). MetaAutoApproveFrom reports where a task's level came from.
+const (
+	MetaAutoApprove     = "ynh.auto_approve"
+	MetaAutoApproveFrom = "ynh.auto_approve_from"
+)
 
 // Metadata keys of a task that say where it went: "live" or "headless", the
 // session it is queued at or was taken by, and that session's folder.
@@ -90,6 +119,12 @@ func RouteMeta(rec *delegation.Record) map[string]any {
 	}
 	if rec.RouteReason != "" {
 		m[MetaRouteReason] = rec.RouteReason
+	}
+	if rec.AutoApprove != "" {
+		m[MetaAutoApprove] = rec.AutoApprove
+	}
+	if rec.AutoApproveFrom != "" {
+		m[MetaAutoApproveFrom] = rec.AutoApproveFrom
 	}
 	return m
 }
@@ -327,9 +362,18 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 	}
 }
 
+// callChoice is the per-call model and effort a message carries in its
+// metadata, "" for each it does not.
+func callChoice(m *a2a.Message) (model, effort string) {
+	model, _ = m.Metadata[MetaModel].(string)
+	effort, _ = m.Metadata[MetaEffort].(string)
+	return model, effort
+}
+
 // begin starts the task: queued at a live interactive session of the delegate
 // when there is one that accepts tasks and the task does not ask for headless,
-// otherwise a session of its own.
+// otherwise a session of its own, opened with the model and effort the call,
+// the parent's entry or the delegate's default chose.
 func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string, error) {
 	onLive := x.o.OnLive
 	if v, ok := ec.Message.Metadata[MetaOnLive].(string); ok && v != "" {
@@ -338,11 +382,22 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 	if onLive != "" && onLive != "queue" && onLive != "headless" {
 		return nil, "", fmt.Errorf("on_live takes queue or headless, not %q", onLive)
 	}
+	// The level this task opens at: the endpoint's, narrowed by the call. A
+	// wider request is refused before any session starts (D2).
+	level, from := string(x.o.AutoApprove), string(x.o.AutoApproveFrom)
+	if want, _ := ec.Message.Metadata[MetaAutoApprove].(string); want != "" {
+		step, err := permission.Step{Level: x.o.AutoApprove, From: x.o.AutoApproveFrom}.Ask(permission.Level(want), permission.SourceCall)
+		if err != nil {
+			return nil, "", fmt.Errorf("auto_approve: %w", err)
+		}
+		level, from = string(step.Level), string(step.From)
+	}
 	if onLive != "headless" {
 		if live := delegation.LiveSessionsOf(x.o.Delegate); len(live) > 0 {
 			return delegation.Queue(delegation.QueueOptions{
 				Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
 				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
+				AutoApprove: level, AutoApproveFrom: from,
 				Session: live[0], TakeBy: x.o.TakeBy,
 			})
 		}
@@ -353,10 +408,15 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 	if onLive != "headless" {
 		reason = delegation.LiveRefusalOf(x.o.Delegate)
 	}
+	callModel, callEffort := callChoice(ec.Message)
+	model := delegation.Resolve(callModel, x.o.Model, x.o.DefaultModel)
+	effort := delegation.Resolve(callEffort, x.o.Effort, x.o.DefaultEffort)
 	return delegation.Start(delegation.StartOptions{
 		Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
+		Model: model.Value, ModelFrom: model.From, Effort: effort.Value, EffortFrom: effort.From, Vendor: x.o.Vendor,
 		Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
 		RouteReason: reason,
+		AutoApprove: level, AutoApproveFrom: from,
 	})
 }
 

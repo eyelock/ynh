@@ -391,7 +391,7 @@ func cmdInstall(args []string) error {
 		}
 		// A relative source resolves against the harness, as the check
 		// above did, not against wherever ynh install was run from.
-		gitURL := resolver.GitSourceURL(inc.Git, p.Dir)
+		gitURL, _ := resolver.GitSourceRoot(inc.GitSource, p.Dir)
 		res, err := resolver.EnsureRepo(gitURL, inc.Ref)
 		if err != nil {
 			return fmt.Errorf("fetching include %s: %w", inc.Git, err)
@@ -408,7 +408,7 @@ func cmdInstall(args []string) error {
 		if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
 			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
-		gitURL := resolver.GitSourceURL(del.Git, p.Dir)
+		gitURL, _ := resolver.GitSourceRoot(del.GitSource, p.Dir)
 		res, err := resolver.EnsureRepo(gitURL, del.Ref)
 		if err != nil {
 			return fmt.Errorf("fetching delegate %s: %w", del.Git, err)

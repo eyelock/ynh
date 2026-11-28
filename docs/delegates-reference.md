@@ -1,6 +1,6 @@
 # Delegates reference
 
-Facts about how a delegate runs under `ynh run`, as of v0.18.0. For why it is built this way, see
+Facts about how a delegate runs under `ynh run`, as of v0.18.1. The model and effort choices ([Model and effort](#model-and-effort)) arrive in v0.18.1; everything else here is as of v0.18.0. For why it is built this way, see
 [Delegate sessions](delegate-sessions.md). The manifest fields are in
 [delegates_to](harnesses.md#delegates-to-optional) and [Transport](harnesses.md#transport). What was shown
 live, and what was not, is under limit
@@ -38,6 +38,53 @@ Only Cursor declares none today (its subagents are unverified,
 [Cursor under `ynh run`, not shown live](vendor-parity.md#l35-cursor-under-ynh-run-not-shown-live)). Claude Code, Codex, Copilot CLI and
 OpenCode declare native subagents.
 
+## Model and effort
+
+New in v0.18.1: v0.18.0 has none of this. A parent chooses the model and the reasoning effort a delegate opens with, at call time, from the task's
+size, cost or urgency. Model and effort each resolve on their own, from the highest layer that names one:
+
+| Layer | Where it is set | Applies to |
+|---|---|---|
+| 1. The call | optional `model` and `effort` arguments of the `delegate_to_<name>` tool | that delegation only |
+| 2. The parent's entry | `model` and `effort` on the `delegates_to` entry in the parent's manifest | every call that names none |
+| 3. The delegate's own default | `default_model` and `default_effort` in the delegate harness's manifest | a delegate session, when layers 1 and 2 name none |
+| 4. The vendor's default | nothing is passed | the vendor's own model and effort |
+
+`effort` is `low`, `medium` or `high`, the same three levels as `ynh agent run --effort`. A `model` is a
+vendor's model name, passed as `--model=<name>`; one that is empty, starts with `-` or holds white space is
+refused, so a model is never read by the vendor as a flag.
+
+On `a2a`, the delegate's `ynh run` passes the resolved values to its vendor CLI: Claude Code gets `--model` and
+`--effort`; Codex gets `--model` and `-c model_reasoning_effort="<level>"`. A delegate on a vendor with no
+effort setting (Copilot CLI, Cursor, OpenCode) is refused an effort from any layer, with the delegation
+`failed` and the reason in its message; an effort is never dropped quietly. A model is passed to every vendor.
+`default_model` and `default_effort` apply to a delegate session, not to a plain `ynh run` of that harness.
+
+On `native` there is no call layer: the parent's own vendor starts the subagent. Layers 2 to 4 are written into
+the subagent's definition: on Claude Code its `model` and `effort` frontmatter (or the same keys in the
+`--agents` JSON, for a subagent that declares MCP servers), on Codex `model` and `model_reasoning_effort` in its
+custom agent file. On Copilot CLI and OpenCode ynh writes neither, and warns that the subagent runs on the
+session's own ([the parity record](vendor-parity.md#l42-a-delegate-s-model-and-effort)).
+
+What a delegation used is recorded, and shown:
+
+- `delegate_to_<name>`, `delegate_status`, `delegate_result` and `delegate_list` carry `model`, `model_from`,
+  `effort` and `effort_from`. A `_from` is `call`, `entry`, `delegate_default` or `vendor_default`; with
+  `vendor_default` the value is absent, as nothing was passed.
+- `ynh info` shows what each delegate opens with when a call names none: `model=haiku (entry)`,
+  `effort=low (delegate default)` or `model=(vendor default)` in text, and `model`, `model_from`, `effort` and
+  `effort_from` in JSON. It reads the delegate harness's own default; for a delegate it cannot read it shows
+  only what the entry says, never a guess. A call's own choice is made per call, so is never there.
+  `ynh ls --format json` carries the entry's own `model` and `effort`, with `_from` of `entry`.
+- The delegation record holds the same four fields and the delegate's `vendor`.
+
+```
+delegate_to_reviewer {"task": "...", "model": "opus", "effort": "high"}
+-> {"state": "completed", ..., "model": "opus", "model_from": "call", "effort": "high", "effort_from": "call"}
+```
+
+The trust gate does not cover model or effort: changing them moves no digest.
+
 ## Refusals when a delegate cannot be matched
 
 For an `a2a` entry, `ynh run` of the parent matches the entry to the installed harness whose source
@@ -56,7 +103,10 @@ delegate <source> of <parent> is installed as <id> but cannot be read in full: <
   Run: ynh update <id>
 ```
 
-A delegate that executes nothing (no sensors, hooks or MCP servers) is matched without a `ynh trust accept`,
+Accepting the parent (`ynh trust accept <parent>`, `ynh install --trust`, `ynh run <folder> --trust`)
+accepts the whole tree of its a2a delegates, nested ones included, each with its own record and level,
+all or nothing, after showing what each runs; a refusal above also names the parent's command. A delegate
+that executes nothing (no sensors, hooks or MCP servers) is matched without a `ynh trust accept`,
 but its session is a one-shot run, which is refused until the delegate is accepted: acceptance covers the
 level (`auto_approve`) it opens at. When several installs match one entry, the trusted match with the smallest id wins.
 
@@ -130,12 +180,12 @@ there is the handle, not the A2A task id the CLI used. A task started with the C
 Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. A
 delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`submitted`, `working`, `input-required`, `completed`,
 `failed`, `canceled` or `rejected`), `route` (`live` or `headless`), `route_reason` (why the task went headless although a live session of the delegate was open: that session takes no tasks, and why), `session` and `cwd` (the live session that got the task, or the one started for it), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
-`waiting_seconds` while `input-required`. `delegate_list` returns them as a list under `delegations`, and
+`waiting_seconds` while `input-required`; `model`, `model_from`, `effort` and `effort_from` ([Model and effort](#model-and-effort), from v0.18.1). `delegate_list` returns them as a list under `delegations`, and
 `ynh_ps` returns `sessions`.
 
 | Tool | Does |
 |---|---|
-| `delegate_to_<name>` (`task`, optional `wait`, optional `on_live`) | Sends the task through the delegate's A2A endpoint, with its token. When a live interactive session of the delegate accepts tasks it is queued there (state `submitted`, `route: live`) and nothing starts; otherwise a headless session starts (state `working`, `route: headless`). `on_live` is `queue` (the default) or `headless`, and `headless` always starts a session of its own. It returns the handle: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
+| `delegate_to_<name>` (`task`, optional `wait`, optional `on_live`, and from v0.18.1 `model`, `effort`) | Sends the task through the delegate's A2A endpoint, with its token. When a live interactive session of the delegate accepts tasks it is queued there (state `submitted`, `route: live`) and nothing starts; otherwise a headless session starts, opened with the model and effort the call, the parent's entry or the delegate's default chose (state `working`, `route: headless`). `on_live` is `queue` (the default) or `headless`, and `headless` always starts a session of its own. It returns the handle: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
 | `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is `<delegate> asks: <question>`. |

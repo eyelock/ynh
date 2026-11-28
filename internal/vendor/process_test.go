@@ -3,6 +3,7 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -316,5 +317,36 @@ func TestEveryVendorRunsAsChildOfYnh(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A registered stdout filter reads the child's output in place of ynh's own,
+// can kill the child, and its error replaces the child's exit status.
+func TestRunChildProcess_StdoutFilter(t *testing.T) {
+	var got strings.Builder
+	remove := OnChildStdout(func(r io.Reader, kill func()) error {
+		b, _ := io.ReadAll(r)
+		got.Write(b)
+		return nil
+	})
+	defer remove()
+	if err := runChildProcess(exec.Command("sh", "-c", "echo filtered; exit 0")); err != nil {
+		t.Fatal(err)
+	}
+	if got.String() != "filtered\n" {
+		t.Errorf("filter saw %q", got.String())
+	}
+
+	remove()
+	boom := errors.New("refused")
+	remove2 := OnChildStdout(func(r io.Reader, kill func()) error {
+		_, _ = io.Copy(io.Discard, io.LimitReader(r, 1))
+		kill()
+		return boom
+	})
+	defer remove2()
+	err := runChildProcess(exec.Command("sh", "-c", "echo x; sleep 30"))
+	if !errors.Is(err, boom) {
+		t.Errorf("err = %v, want the filter's", err)
 	}
 }
