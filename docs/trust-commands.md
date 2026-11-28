@@ -61,7 +61,7 @@ object. The full shape is in [Structured CLI output](cli-structured.md) and `ynh
 | `accepted` | what it runs matches what you accepted | yes |
 | `changed` | what it runs differs from what you accepted, or the acceptance was made by an older ynh | refused |
 | `unavailable` | an include is missing from the cache, so what it runs cannot be read in full | refused |
-| `no-commands` | it runs nothing and asks for no folders: there is nothing to accept | yes |
+| `no-commands` | it runs nothing and asks for no folders: there is nothing to accept | interactive runs yes; one-shot runs, delegate sessions and `ynh agent run` refuse it until accepted, since acceptance covers the level they open at |
 
 ### `VIA`: how an acceptance was made
 

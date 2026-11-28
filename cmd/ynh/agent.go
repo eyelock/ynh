@@ -319,7 +319,11 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	}
 
 	opts.TrustGate = func(h *harness.Harness, id string) error {
-		return trustGate(id, h, stderr)
+		if err := trustGate(id, h, stderr); err != nil {
+			return err
+		}
+		// An agent worker is always one-shot (ynh #1058, N2).
+		return oneShotAcceptanceGate(id, h)
 	}
 
 	opts.Trusted = func(h *harness.Harness, id string) bool { return gateTrusted(id, h) }

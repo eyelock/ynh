@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -59,9 +60,13 @@ type listEntry struct {
 	VersionAvailable string `json:"version_available,omitempty"`
 	Description      string `json:"description,omitempty"`
 	DefaultVendor    string `json:"default_vendor"`
-	Path             string `json:"path"`
-	RefInstalled     string `json:"ref_installed,omitempty"`
-	RefAvailable     string `json:"ref_available,omitempty"`
+	// AutoApprove is the level the harness opens at when run unattended: its
+	// declared one, else "all". AutoApproveFrom is "harness" or "default".
+	AutoApprove     string `json:"auto_approve"`
+	AutoApproveFrom string `json:"auto_approve_from"`
+	Path            string `json:"path"`
+	RefInstalled    string `json:"ref_installed,omitempty"`
+	RefAvailable    string `json:"ref_available,omitempty"`
 	// SHAAvailable is the live upstream SHA for the harness source itself
 	// (probed via ls-remote against the recorded install ref). Distinct from
 	// RefAvailable, which for registry harnesses comes from the registry
@@ -157,6 +162,11 @@ type listDelegate struct {
 	// default, or the built-in default.
 	Transport     string `json:"transport"`
 	TransportFrom string `json:"transport_from"`
+	// AutoApprove is the level the entry declares for the delegate's
+	// unattended runs; AutoApproveFrom is "entry". Both absent when the entry
+	// declares none (the delegate's own level then applies).
+	AutoApprove     string `json:"auto_approve,omitempty"`
+	AutoApproveFrom string `json:"auto_approve_from,omitempty"`
 }
 
 func cmdList(args []string) error {
@@ -517,6 +527,8 @@ func buildListEntry(p *harness.Harness) listEntry {
 		VersionInstalled: p.Version,
 		Description:      p.Description,
 		DefaultVendor:    p.DefaultVendor,
+		AutoApprove:      string(p.AutoApproveOf()),
+		AutoApproveFrom:  string(p.AutoApproveOrigin()),
 		Path:             p.Dir,
 		Artifacts:        scanArtifactCounts(p.Dir),
 		Includes:         buildIncludes(p.Includes),
@@ -610,16 +622,22 @@ func buildDelegates(p *harness.Harness) []listDelegate {
 		if probeRef == "" {
 			probeRef = del.Ref
 		}
+		entryLevel, entryFrom := del.AutoApprove, ""
+		if entryLevel != "" {
+			entryFrom = string(permission.SourceEntry)
+		}
 		result = append(result, listDelegate{
-			Git:           del.Git,
-			Ref:           probeRef,
-			RefInstalled:  refInstalled,
-			IsPinned:      harness.IsPinnedRef(del.Ref),
-			Path:          del.Path,
-			Profile:       del.Profile,
-			Focus:         del.Focus,
-			Transport:     p.TransportOf(del),
-			TransportFrom: p.TransportOrigin(del),
+			AutoApprove:     entryLevel,
+			AutoApproveFrom: entryFrom,
+			Git:             del.Git,
+			Ref:             probeRef,
+			RefInstalled:    refInstalled,
+			IsPinned:        harness.IsPinnedRef(del.Ref),
+			Path:            del.Path,
+			Profile:         del.Profile,
+			Focus:           del.Focus,
+			Transport:       p.TransportOf(del),
+			TransportFrom:   p.TransportOrigin(del),
 		})
 	}
 	return result
