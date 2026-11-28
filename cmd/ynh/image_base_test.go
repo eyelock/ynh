@@ -127,7 +127,7 @@ func TestCmdImage_BaseVersionWarning(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
-			installTestHarness(t, "warntest")
+			acceptForTest(t, installTestHarness(t, "warntest"))
 			stubBaseLabels(t, tt.labels)
 
 			var stdout, stderr bytes.Buffer
