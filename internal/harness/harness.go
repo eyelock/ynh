@@ -901,6 +901,9 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		}
 	}
 
+	if err := p.CheckNativeAutoApprove(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -1150,6 +1153,9 @@ func LoadFile(path string) (*Harness, error) {
 		p.SensorOverrides = hj.SensorOverrides
 	}
 
+	if err := p.CheckNativeAutoApprove(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 

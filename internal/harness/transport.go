@@ -2,6 +2,7 @@ package harness
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -79,6 +80,10 @@ func (h *Harness) CheckDelegateTransports(vendorName string) error {
 		return fmt.Errorf("%s: %w", h.Name, err)
 	}
 	if err := h.CheckAutoApprove(); err != nil {
+		// CheckNativeAutoApprove's message already names the harness.
+		if strings.HasPrefix(err.Error(), h.Name+": ") {
+			return err
+		}
 		return fmt.Errorf("%s: %w", h.Name, err)
 	}
 	if vendorName == "" {
