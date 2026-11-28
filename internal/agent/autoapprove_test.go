@@ -14,6 +14,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/permission"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -31,12 +34,16 @@ func TestValidateAutoApprove(t *testing.T) {
 		{"all", "codex", ""},
 		{"all", "cursor", ""},
 		{"all", "opencode", ""},
-		{"edits", "opencode", "opencode cannot auto-approve edits only"},
-		{"edits", "codex", "codex cannot auto-approve edits only"},
-		{"edits", "cursor", "cursor cannot auto-approve edits only"},
+		{"none", "claude", ""},
+		{"none", "codex", ""},
+		{"none", "opencode", ""},
+		{"edits", "opencode", ""},
+		{"none", "cursor", "cursor cannot hold auto-approve none exactly"},
+		{"edits", "codex", "codex cannot hold auto-approve edits exactly"},
+		{"edits", "cursor", "cursor cannot hold auto-approve edits exactly"},
 		{"all", "copilot", "not supported by the copilot backend"},
-		{"yes", "claude", `unknown --auto-approve level "yes"`},
-		{"Edits", "claude", "unknown --auto-approve level"},
+		{"yes", "claude", `unknown auto-approve level "yes"`},
+		{"Edits", "claude", "unknown auto-approve level"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.level+"/"+tt.backend, func(t *testing.T) {
@@ -57,7 +64,7 @@ func TestValidateAutoApprove(t *testing.T) {
 // permissionFlags is every vendor flag that widens what a worker may do
 // without asking. None may appear unless --auto-approve asked for it.
 var permissionFlags = []string{
-	"--permission-mode", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
+	"--permission-mode", "--disallowedTools", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
 	"--dangerously-bypass-approvals-and-sandbox", "--yolo", "--full-auto", "--ask-for-approval",
 	"-a", "--sandbox", "-s", "--force", "-f", "--auto",
 }
@@ -84,9 +91,11 @@ func TestBackendArgs_AutoApproveMapping(t *testing.T) {
 		// The old doctrine, kept as a regression guard: by default ynh
 		// passes no permission flag to any backend.
 		{"claude", "", nil},
+		{"claude", "none", []string{"--permission-mode", "default"}},
+		{"codex", "none", []string{"--sandbox", "read-only"}},
 		{"codex", "", nil},
 		{"cursor", "", nil},
-		{"claude", "edits", []string{"--permission-mode", "acceptEdits"}},
+		{"claude", "edits", []string{"--permission-mode", "acceptEdits", "--disallowedTools"}},
 		{"claude", "all", []string{"--permission-mode", "bypassPermissions"}},
 		{"codex", "all", []string{"--dangerously-bypass-approvals-and-sandbox"}},
 		{"cursor", "all", []string{"--force"}},
@@ -100,7 +109,7 @@ func TestBackendArgs_AutoApproveMapping(t *testing.T) {
 			for i, a := range args {
 				if slices.Contains(permissionFlags, a) {
 					got = append(got, a)
-					if a == "--permission-mode" && i+1 < len(args) {
+					if (a == "--permission-mode" || a == "--sandbox") && i+1 < len(args) {
 						got = append(got, args[i+1])
 					}
 				}
@@ -127,103 +136,6 @@ func writeFile(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestProjectPermissionSetting(t *testing.T) {
-	tests := []struct {
-		name    string
-		backend string
-		files   map[string]string
-		wantSub string // "" means no project setting
-		wantErr bool
-	}{
-		{name: "claude, no settings", backend: "claude"},
-		{
-			name:    "claude settings.json sets defaultMode",
-			backend: "claude",
-			files:   map[string]string{".claude/settings.json": `{"permissions":{"defaultMode":"plan"}}`},
-			wantSub: `settings.json sets permissions.defaultMode "plan"`,
-		},
-		{
-			name:    "claude settings.local.json sets defaultMode",
-			backend: "claude",
-			files:   map[string]string{".claude/settings.local.json": `{"permissions":{"defaultMode":"acceptEdits"}}`},
-			wantSub: `settings.local.json sets permissions.defaultMode "acceptEdits"`,
-		},
-		{
-			name:    "claude settings without a mode",
-			backend: "claude",
-			files:   map[string]string{".claude/settings.json": `{"permissions":{"allow":["Bash(go test:*)"]}}`},
-		},
-		{
-			name:    "claude settings that do not parse",
-			backend: "claude",
-			files:   map[string]string{".claude/settings.json": `{`},
-			wantErr: true,
-		},
-		{
-			name:    "codex top-level approval_policy",
-			backend: "codex",
-			files:   map[string]string{".codex/config.toml": "model = \"x\"\napproval_policy = \"on-request\"\n"},
-			wantSub: `config.toml sets approval_policy = "on-request"`,
-		},
-		{
-			name:    "codex top-level sandbox_mode",
-			backend: "codex",
-			files:   map[string]string{".codex/config.toml": "sandbox_mode = \"workspace-write\"\n"},
-			wantSub: `sets sandbox_mode = "workspace-write"`,
-		},
-		{
-			name:    "codex keys under a table or commented out do not count",
-			backend: "codex",
-			files: map[string]string{".codex/config.toml": "# approval_policy = \"never\"\n" +
-				"[profiles.ci]\napproval_policy = \"never\"\n"},
-		},
-		{
-			name:    "cursor project file holds only allow and deny lists",
-			backend: "cursor",
-			files:   map[string]string{".cursor/cli.json": `{"permissions":{"allow":[],"deny":["Shell(rm)"]}}`},
-		},
-		{
-			name:    "another vendor's settings are not this backend's",
-			backend: "codex",
-			files:   map[string]string{".claude/settings.json": `{"permissions":{"defaultMode":"plan"}}`},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			for rel, content := range tt.files {
-				writeFile(t, filepath.Join(dir, rel), content)
-			}
-			got, err := projectPermissionSetting(dir, tt.backend)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
-			}
-			if tt.wantSub == "" && got != "" {
-				t.Errorf("reason = %q, want none", got)
-			}
-			if tt.wantSub != "" && !strings.Contains(got, tt.wantSub) {
-				t.Errorf("reason = %q, want it to contain %q", got, tt.wantSub)
-			}
-		})
-	}
-}
-
-// User-level settings are the operator's own defaults; the flag overrides
-// them for one run, so they are never consulted.
-func TestProjectPermissionSetting_IgnoresUserSettings(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":{"defaultMode":"plan"}}`)
-	writeFile(t, filepath.Join(home, ".codex", "config.toml"), "approval_policy = \"never\"\n")
-	project := t.TempDir()
-	for _, backend := range []string{"claude", "codex", "cursor", "opencode"} {
-		got, err := projectPermissionSetting(project, backend)
-		if err != nil || got != "" {
-			t.Errorf("%s: got %q, %v; want no setting", backend, got, err)
-		}
 	}
 }
 
@@ -279,6 +191,46 @@ func TestRunLoop_AutoApproveIsRecordedAndPassed(t *testing.T) {
 	}
 }
 
+func TestRunLoop_ProjectModeNarrowsAndNeverRefuses(t *testing.T) {
+	tests := []struct {
+		name, backend, level, file, content string
+		wantLevel                           string
+		wantLine                            bool
+		wantFromProject                     bool
+	}{
+		{"narrower claude project mode wins", "claude", "all", ".claude/settings.json", `{"permissions":{"defaultMode":"plan"}}`, "none", true, true},
+		{"narrower local mode wins", "claude", "all", ".claude/settings.local.json", `{"permissions":{"defaultMode":"acceptEdits"}}`, "edits", true, true},
+		{"wider project mode loses to the flag", "claude", "edits", ".claude/settings.json", `{"permissions":{"defaultMode":"bypassPermissions"}}`, "edits", false, false},
+		{"equal mode is the flag's", "claude", "edits", ".claude/settings.json", `{"permissions":{"defaultMode":"acceptEdits"}}`, "edits", false, false},
+		{"codex read-only wins over all", "codex", "all", ".codex/config.toml", "sandbox_mode = \"read-only\"\n", "none", true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, tt.file), tt.content)
+			mb := &mockBackend{name: tt.backend, turns: []Turn{{Content: "done"}}}
+			var stdout, stderr bytes.Buffer
+			opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
+			opts.Backend = tt.backend
+			opts.AutoApprove = tt.level
+			opts.WorktreeDir = dir
+			if _, err := RunLoop(opts); err != nil {
+				t.Fatalf("a project mode must never refuse the run: %v", err)
+			}
+			if len(mb.startOpts) != 1 {
+				t.Fatalf("worker starts = %d, want 1", len(mb.startOpts))
+			}
+			got := mb.startOpts[0]
+			if got.AutoApprove != tt.wantLevel || (got.ProjectArgs != nil) != tt.wantFromProject {
+				t.Errorf("opened at %q (from project %v), want %q (%v)", got.AutoApprove, got.ProjectArgs != nil, tt.wantLevel, tt.wantFromProject)
+			}
+			if has := strings.Contains(stderr.String(), "opening at the project's mode"); has != tt.wantLine {
+				t.Errorf("line printed = %v, want %v (stderr %q)", has, tt.wantLine, stderr.String())
+			}
+		})
+	}
+}
+
 func TestRunLoop_AutoApproveRefusedBeforeTheWorkerStarts(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -287,30 +239,9 @@ func TestRunLoop_AutoApproveRefusedBeforeTheWorkerStarts(t *testing.T) {
 		files   map[string]string
 		wantSub string
 	}{
-		{
-			name:    "project settings.json chooses a mode",
-			backend: "claude",
-			level:   "edits",
-			files:   map[string]string{".claude/settings.json": `{"permissions":{"defaultMode":"default"}}`},
-			wantSub: "the project's choice wins",
-		},
-		{
-			name:    "project settings.local.json chooses a mode",
-			backend: "claude",
-			level:   "all",
-			files:   map[string]string{".claude/settings.local.json": `{"permissions":{"defaultMode":"plan"}}`},
-			wantSub: "settings.local.json sets permissions.defaultMode",
-		},
-		{
-			name:    "codex project config chooses a policy",
-			backend: "codex",
-			level:   "all",
-			files:   map[string]string{".codex/config.toml": "approval_policy = \"on-request\"\n"},
-			wantSub: "approval_policy",
-		},
-		{name: "edits on codex", backend: "codex", level: "edits", wantSub: "cannot auto-approve edits only"},
-		{name: "edits on cursor", backend: "cursor", level: "edits", wantSub: "cannot auto-approve edits only"},
-		{name: "unknown level", backend: "claude", level: "everything", wantSub: "unknown --auto-approve level"},
+		{name: "edits on codex", backend: "codex", level: "edits", wantSub: "cannot hold auto-approve edits exactly"},
+		{name: "edits on cursor", backend: "cursor", level: "edits", wantSub: "cannot hold auto-approve edits exactly"},
+		{name: "unknown level", backend: "claude", level: "everything", wantSub: "unknown auto-approve level"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -525,5 +456,103 @@ func TestStderrTail_KeepsTheEnd(t *testing.T) {
 	}
 	if strings.HasPrefix(got, "oise") || !strings.HasPrefix(got, "noise") {
 		t.Errorf("tail should start on a line boundary, starts %q", got[:10])
+	}
+}
+
+// A project-narrowed worker is passed the project's own mode explicitly, so a
+// wider user-level setting (Codex danger-full-access, say) cannot widen it; and
+// Claude's opened-mode check compares against that mode.
+func TestBackendArgs_ProjectModeIsExplicit(t *testing.T) {
+	codex := backendArgs("codex", StartOptions{AutoApprove: "none", ProjectArgs: []string{"--sandbox", "read-only"}, Model: "m"})
+	if !slices.Contains(codex, "--sandbox") || slices.Contains(codex, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("codex args = %q", codex)
+	}
+	claude := backendArgs("claude", StartOptions{AutoApprove: "none", ProjectArgs: []string{"--permission-mode", "plan"}, ProjectMode: "plan"})
+	i := slices.Index(claude, "--permission-mode")
+	if i < 0 || claude[i+1] != "plan" {
+		t.Errorf("claude args = %q", claude)
+	}
+	opts := StartOptions{AutoApprove: "none", ProjectMode: "plan"}
+	if got := claudePermissionMode(opts); got != "plan" {
+		t.Errorf("expected opened mode = %q, want plan", got)
+	}
+	if err := claudeModeMismatch(claudeOutputEvent{Subtype: "init", PermissionMode: "bypassPermissions"}, claudePermissionMode(opts)); err == nil {
+		t.Error("a session that opened wider than the project's mode must be stopped")
+	}
+}
+
+// OpenCode's permission block is merged into the MCP isolation's one
+// OPENCODE_CONFIG_CONTENT: the servers it turned off stay off.
+func TestOpenCodeEnv_PermissionKeepsMCPIsolation(t *testing.T) {
+	isolation := []string{"OPENCODE_CONFIG_CONTENT=" + `{"mcp":{"servers":{"web":{"enabled":false}}}}`}
+	env, err := openCodeEnv(StartOptions{AutoApprove: "none"}, isolation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var copies []string
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "OPENCODE_CONFIG_CONTENT="); ok {
+			copies = append(copies, v)
+		}
+	}
+	if len(copies) != 1 || !strings.Contains(copies[0], `"web":{"enabled":false}`) || !strings.Contains(copies[0], `"edit":"deny"`) {
+		t.Errorf("config content = %q", copies)
+	}
+}
+
+// An accepted harness's worker opens at the harness's level (D7): its
+// declared one, else all, and --auto-approve may only narrow it.
+func TestRunLoop_AcceptedHarnessOpensAtItsLevel(t *testing.T) {
+	install := func(t *testing.T, level string) string {
+		t.Helper()
+		t.Setenv("YNH_HOME", t.TempDir())
+		t.Setenv(permission.CapEnv, "")
+		const id = "local/level-test"
+		dir := harness.InstalledDirByID(id)
+		if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		m := `{"name":"level-test","version":"0.1.0","default_vendor":"claude"`
+		if level != "" {
+			m += `,"auto_approve":"` + level + `"`
+		}
+		writeFile(t, filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), m+"}")
+		return id
+	}
+	tests := []struct {
+		name, declared, flag, want, wantErr string
+	}{
+		{name: "undeclared opens at all", want: "all"},
+		{name: "declared level", declared: "edits", want: "edits"},
+		{name: "flag narrows", declared: "edits", flag: "none", want: "none"},
+		{name: "flag cannot widen", declared: "edits", flag: "all", wantErr: "wider than the ceiling"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := install(t, tt.declared)
+			mb := &mockBackend{name: "claude", turns: []Turn{{Content: "done"}}}
+			var stderr bytes.Buffer
+			opts := baseOpts(mb, io.Discard, &stderr, strings.NewReader(""))
+			opts.Backend = "claude"
+			opts.HarnessName = id
+			opts.AutoApprove = tt.flag
+			opts.WorktreeDir = t.TempDir()
+			opts.YNHBinary = filepath.Join(t.TempDir(), "no-such-ynh")
+			opts.TrustGate = func(*harness.Harness, string) error { return nil }
+			opts.Trusted = func(*harness.Harness, string) bool { return true }
+			_, err := RunLoop(opts)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) || len(mb.startOpts) != 0 {
+					t.Fatalf("err = %v, starts = %d", err, len(mb.startOpts))
+				}
+				return
+			}
+			if len(mb.startOpts) != 1 {
+				t.Fatalf("worker started %d times; err: %v", len(mb.startOpts), err)
+			}
+			if got := mb.startOpts[0].AutoApprove; got != tt.want {
+				t.Errorf("opened at %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

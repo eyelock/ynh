@@ -91,15 +91,37 @@ func gateTrusted(id string, p *harness.Harness) bool {
 	return installedGate(id, p, store) == nil
 }
 
-// copilotOneShotRefusal refuses a one-shot Copilot run of a harness that
-// is not trusted: Copilot's one-shot mode approves every tool, so there is no
-// narrower grant to give (decision 5b).
-func copilotOneShotRefusal(id string, p *harness.Harness) error {
-	if id == "" {
-		return untrustedf("refusing to run %s one-shot on copilot: a run from a folder is not trust-checked, and copilot's one-shot mode approves every tool.\n"+
-			"Install it and accept what it executes (ynh install <folder>, then ynh trust accept local/%s), run it interactively, or use another vendor.", p.Name, p.Name)
+// oneShotAcceptanceGate is the extra check of a one-shot run (a delegate
+// session, `ynh run <id> -- "<task>"`, `ynh agent run`) of an installed
+// harness: the level it opens at is part of what acceptance covers, so a
+// harness that executes nothing, which an interactive run lets through
+// unaccepted, is refused until accepted (ynh #1058, N2). One that executes
+// something is already decided by trustGate. A folder run has no record to
+// check and is left to the folder route.
+func oneShotAcceptanceGate(id string, p *harness.Harness) error {
+	if id == "" || p == nil {
+		return nil
 	}
-	return untrustedf("refusing to run %s one-shot on copilot: copilot's one-shot mode approves every tool, and you have not accepted what %s executes.\n"+
+	store, err := loadTrustStore()
+	if err != nil {
+		return untrustedf("refusing to run %s one-shot: the trust record could not be read: %v", id, err)
+	}
+	if trustStatusFor(id, p, store, nil).State != trustNoCommands {
+		return nil
+	}
+	return untrustedf("refusing to run %s one-shot: you have not accepted it. It executes no commands, but a one-shot run opens at %s with nobody to approve (%s).\n"+
+		"Review it: ynh trust show %s\nThen accept:  ynh trust accept %s", id, p.AutoApproveOf(), p.AutoApproveOrigin(), id, id)
+}
+
+// oneShotFolderRefusal refuses a one-shot run of a harness from a folder
+// that was not accepted with --trust: a one-shot run opens at its level with
+// nobody to approve, and a folder has no record to vouch for it (S8, N2).
+func oneShotFolderRefusal(id string, p *harness.Harness) error {
+	if id == "" {
+		return untrustedf("refusing to run %s one-shot from a folder: it opens at %s with nobody to approve, and a folder is not trust-checked.\n"+
+			"Run it with --trust (its remote includes and a2a delegates must be pinned at a full SHA), or install it and accept it (ynh install <folder>, then ynh trust accept local/%s).", p.Name, p.AutoApproveOf(), p.Name)
+	}
+	return untrustedf("refusing to run %s one-shot: you have not accepted what %s executes.\n"+
 		"Accept it: ynh trust accept %s", id, id, id)
 }
 

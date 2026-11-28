@@ -105,7 +105,7 @@ An image's baked record is keyed the same way, by what the image will see. `ynh 
 
 ## The gate
 
-`ynh run`, `ynh agent run` (and its `--resume`), `ynh check` and `ynh sensors run` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`. Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
+`ynh run`, `ynh agent run` (and its `--resume`), `ynh check` and `ynh sensors run` refuse an **installed** harness, before any vendor starts, unless its record says `accepted` or `no-commands`; a one-shot run (`ynh run <id> -- "<task>"`, a delegate session or `ynh agent run`) of a `no-commands` harness is refused too until it is accepted, because acceptance covers the permission level the run opens at (see below). Refused states are `unreviewed` (never accepted), `changed` (what it executes differs from what you accepted, or you accepted under an older digest scheme) and `unavailable` (an include is not in the cache, so what runs cannot be read in full).
 
 A refusal exits 1 and prints, on stderr (a harness installed from `/home/you/acme`, with a hook, a sensor and two requested workspace folders):
 
@@ -125,7 +125,7 @@ The `It requests workspace folders:` list appears only when the harness requests
 
 For a `changed` harness the first line says when you accepted it. Longer lists stop after eight entries and point at `ynh trust show`, which lists them all. Under `--format json`, `ynh check` and `ynh sensors run` (which only emits JSON) write the error envelope with code `untrusted`, and `ynh agent run` carries `error_code: "untrusted"` in its result, also with exit code 1 (capabilities `0.11.0`; see [Structured output](cli-structured.md)). A harness whose workspace folders are not allow-listed has them granted by accepting it.
 
-What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `It requests workspace folders:` list and the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance.
+What counts as something to review is the commands (sensors, hooks, MCP servers), the workspace folders and the focuses of delegates. A harness that only requests workspace folders is refused until you accept it, like any other: its refusal has no `It executes:` list, only the `It requests workspace folders:` list and the `Review them:` and `Then accept:` lines, and accepting grants the folders. Only a harness with none of these (`no-commands`) runs without acceptance, and only interactively: a one-shot run, which has nobody to approve, opens at the harness's `auto_approve` level (`all` when it declares none) and so needs the harness accepted. `ynh trust show` lists that level, and `ynh trust accept` says it.
 
 Three refusals are not "you have not accepted this":
 
@@ -207,13 +207,15 @@ Pin it to a 40-character commit SHA: reinstall at one, for example 'ynh install 
 | `ynh image <name> --from <source> --trust` (with `--ref <sha>` for a remote source) | the harness built into the image, baked as a record with `via: image` | before the image is built: the source's own ref, its remote includes' refs and its native delegate entries' refs, after the includes are fetched |
 | `ynh run <dir> --trust`, `ynh agent run --harness <dir> --trust` | the remote includes of a folder run | before the run launches: the remote includes and the native delegate entries (the delegates are refused before the includes are warmed) |
 | `ynh update local/<name> --trust`, for a harness installed from a folder | the harness again, after the update | before anything is fetched |
-| `ynh include add local/<name> <url> --trust` (with `--replace` too) and `ynh include update local/<name> <url> --trust`, for a harness installed from a folder | the harness again, after the change | after the change, because the includes are only known then |
+| `ynh include add local/<name> <url> --trust` (with `--replace` too), `ynh include update local/<name> <url> --trust` and `ynh include remove local/<name> <url> --trust`, for a harness installed from a folder | the harness again, after the change | as the change would leave it, judged before the change is written (the include is fetched first, since what it brings is only known then); a refusal writes nothing, so nothing is changed |
 
 Notes on the routes:
 
 - `ynh run --trust` is ynh's own flag. It is not passed on to Cursor.
 - An **installed harness never takes `--trust` at run time**: it is refused, with the commands that do accept it (`ynh trust accept <harness>`, or `ynh install --trust`). A run-time `--trust` that you type from habit would otherwise accept whatever the harness had become.
-- `include add --trust` and `include update --trust` make the change first. If something is then unpinned, the change stays, the acceptance is refused with the reason, and the harness is as untrusted as it would have been without the flag. `--trust` on `include remove` is refused: removing an include needs no acceptance.
+- `include add --trust`, `include update --trust` and `include remove --trust` build the harness as it would be after the change, in memory, and judge that before writing anything. What an include brings is only known once it is fetched, so `include add` and `include update` fetch it first. If something is unpinned, or the includes cannot be read in full, the call is refused with the reason and nothing is written: the harness's manifest and its trust record are exactly as they were, and nothing is printed as done.
+  The refusal names a way out that works on a harness left unchanged: pin each remote include to a full SHA and run it again with `--trust`, or make the change without `--trust` and then run `ynh trust accept <harness>`, which accepts an include that floats at the commit installed now. For an include that cannot be read in full it says to make the change without `--trust`, run `ynh update <harness>` to fetch the includes, and then `ynh trust accept <harness>`; `ynh update` has nothing to fetch before the change is made.
+- `include remove` changes what the harness executes, so an accepted harness reads `changed` afterwards. Without `--trust` it says so ("no longer trusted") and names `ynh trust show` and `ynh trust accept`. With `--trust` it records the new digest as accepted, under the same full-SHA rule as the other routes: what stays in the harness must be pinned.
 - `--trust` is for an installed id on `update` and `include`, not a path.
 
 ### Without `--trust`
@@ -224,9 +226,19 @@ Notes on the routes:
 
 A trust record carries `via`: `accept` (`ynh trust accept`), `install --trust`, `run --trust`, `update --trust` or `include --trust`. A further value, `image`, is written by [`ynh image`](#ynh-image) into the record it bakes. `ynh trust show` and `ynh trust` print it, and `--format json` carries it as `accepted_via`. It records how you accepted, not what was safe: an acceptance by `--trust` is as strong as the pins it required.
 
+## A parent and its a2a delegates
+
+An a2a delegate is its own harness with its own record. Accepting a parent, with `ynh trust accept`,
+`ynh install --trust` or `ynh run <folder> --trust`, accepts the whole tree of its a2a delegates, nested
+ones included, each with its own record at the commit it is installed at: a change to one re-gates only
+it. `ynh trust show <parent>` first lists each one, with the level it opens at and what it runs, and the
+acceptance is all or nothing: if any delegate cannot be accepted, nothing is recorded, the parent
+included. `ynh trust ls` shows a delegate accepted this way as `with <parent>`. Native delegates are part
+of the parent's own review.
+
 ## What follows trust
 
-Some approvals let a run act without asking you. ynh gives them only to a harness that passed the gate as **trusted**: installed, and accepted or with nothing to accept. A harness run from a folder is never trusted, because the gate does not check its own commands.
+Some approvals let a run act without asking you. ynh gives them only to a harness that passed the gate as **trusted**: installed, and accepted or, for an interactive run, with nothing to accept. A harness run from a folder is never trusted, because the gate does not check its own commands.
 
 | What | A trusted harness | A folder run, or an installed harness you have not accepted |
 |---|---|---|
@@ -266,11 +278,11 @@ Review them: ynh trust show local/acme
 Then accept:  ynh trust accept local/acme
 ```
 
-An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one.
+An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness that executes nothing is no exception: the image runs one-shot, and a one-shot run needs the harness accepted (it opens at the harness's `auto_approve` level), so building its image without an acceptance is refused, naming `ynh trust accept <id>`. Accepted on the host, it bakes the record like any other.
 
 ### `ynh image --from`
 
-`ynh image <name> --from <source>` builds from a Git URL or a local path rather than an installed harness, so nothing has accepted it yet. A harness with hooks, MCP servers, sensors or workspace folders is refused at build time, with exit 1, the `untrusted` error code and a `Fix:` line naming `--trust`; a harness with nothing to accept builds, with no record and no label.
+`ynh image <name> --from <source>` builds from a Git URL or a local path rather than an installed harness, so nothing has accepted it yet. A harness with hooks, MCP servers, sensors or workspace folders is refused at build time, with exit 1, the `untrusted` error code and a `Fix:` line naming `--trust`; a harness with nothing to accept is refused too, naming `--trust`, because the image runs one-shot and needs an acceptance baked in.
 
 `--trust` accepts what the source executes and bakes the record, with `via` set to `image`, as above, so the image's start passes its gate. It follows the full-SHA rule of `ynh install --trust`: a remote source must be pinned with `--ref` at a 40-character commit SHA, and so must every remote include that brings commands and every native delegate entry from a remote source or another repository, or the build is refused, naming what floats (a tag, a branch, a short SHA or no ref). A local folder is your own files and needs no pin; its remote includes still do.
 

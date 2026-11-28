@@ -122,6 +122,9 @@ type Delegate struct {
 	// Transport is the entry's own transport ("a2a", "native" or empty for
 	// the harness's; see Harness.TransportOf).
 	Transport string
+	// AutoApprove is the entry's own permission level for the delegate's
+	// unattended runs, as written ("" when unset; see CheckAutoApprove).
+	AutoApprove string
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for pre-migration installs.
 	SHA string
@@ -195,9 +198,12 @@ type Harness struct {
 	DelegatesTo   []Delegate
 	// Transport is the harness-level default transport of its delegates_to
 	// entries, as written ("" when unset); see TransportOf.
-	Transport  string
-	Hooks      map[string][]plugin.HookEntry
-	MCPServers map[string]plugin.MCPServer
+	Transport string
+	// AutoApprove is the permission level the harness opens at when run
+	// unattended, as written ("" when undeclared; see CheckAutoApprove).
+	AutoApprove string
+	Hooks       map[string][]plugin.HookEntry
+	MCPServers  map[string]plugin.MCPServer
 	// MCPRemovals names servers inherited from included harnesses that this
 	// harness drops: the null entries of mcp_servers, and, once a profile is
 	// resolved, the nulls of the profile. ComposeMCPServers applies them after
@@ -648,6 +654,25 @@ func LoadByID(id string) (*Harness, error) {
 	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
 }
 
+// includesOf is the includes a manifest declares, as the harness holds them.
+func includesOf(hj *plugin.HarnessJSON) ([]Include, error) {
+	var out []Include
+	for _, inc := range hj.Includes {
+		if err := ValidateIncludeAlias(inc.As); err != nil {
+			return nil, err
+		}
+		out = append(out, Include{
+			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
+			Pick:         inc.Pick,
+			Sensors:      inc.Sensors,
+			As:           inc.As,
+			Hooks:        inc.Hooks,
+			Instructions: inc.Instructions,
+		})
+	}
+	return out, nil
+}
+
 // LoadDir loads a harness from a directory. The format chain runs first:
 // it converts an install ynh owns and refuses, with the `ynd migrate` fix,
 // any other tree whose manifest ynh no longer reads, so callers never handle
@@ -730,28 +755,22 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		p.Dir = dir
 	}
 
-	for _, inc := range hj.Includes {
-		if err := ValidateIncludeAlias(inc.As); err != nil {
-			return nil, err
-		}
-		p.Includes = append(p.Includes, Include{
-			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:         inc.Pick,
-			Sensors:      inc.Sensors,
-			As:           inc.As,
-			Hooks:        inc.Hooks,
-			Instructions: inc.Instructions,
-		})
+	includes, err := includesOf(hj)
+	if err != nil {
+		return nil, err
 	}
+	p.Includes = includes
 	for _, del := range hj.DelegatesTo {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
-			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
-			Profile:   del.Profile,
-			Focus:     del.Focus,
-			Transport: del.Transport,
+			GitSource:   GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
+			Profile:     del.Profile,
+			Focus:       del.Focus,
+			Transport:   del.Transport,
+			AutoApprove: del.AutoApprove,
 		})
 	}
 	p.Transport = hj.Transport
+	p.AutoApprove = hj.AutoApprove
 
 	// Backfill resolved SHAs and resolved refs from installed.json onto
 	// includes/delegates so downstream consumers (list, info,
@@ -1063,28 +1082,22 @@ func LoadFile(path string) (*Harness, error) {
 		Author: hj.Author, Keywords: hj.Keywords, Manifest: hj}
 	p.DefaultVendor = hj.DefaultVendor
 
-	for _, inc := range hj.Includes {
-		if err := ValidateIncludeAlias(inc.As); err != nil {
-			return nil, err
-		}
-		p.Includes = append(p.Includes, Include{
-			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:         inc.Pick,
-			Sensors:      inc.Sensors,
-			As:           inc.As,
-			Hooks:        inc.Hooks,
-			Instructions: inc.Instructions,
-		})
+	includes, err := includesOf(hj)
+	if err != nil {
+		return nil, err
 	}
+	p.Includes = includes
 	for _, del := range hj.DelegatesTo {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
-			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
-			Profile:   del.Profile,
-			Focus:     del.Focus,
-			Transport: del.Transport,
+			GitSource:   GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
+			Profile:     del.Profile,
+			Focus:       del.Focus,
+			Transport:   del.Transport,
+			AutoApprove: del.AutoApprove,
 		})
 	}
 	p.Transport = hj.Transport
+	p.AutoApprove = hj.AutoApprove
 	if len(hj.Hooks) > 0 {
 		p.Hooks = hj.Hooks
 	}

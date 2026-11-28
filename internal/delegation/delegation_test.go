@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/eyelock/ynh/internal/permission"
 )
 
 // The tests start real sessions. The session process is this test binary run
@@ -640,5 +642,11 @@ func TestStartTimeUnreadableStillSettlesAKilledSupervisor(t *testing.T) {
 	}
 	if got.Status != StatusFailed {
 		t.Fatalf("want failed, got %s", got.Status)
+	}
+}
+
+func TestAutoApproveInteractiveIsAPermissionSource(t *testing.T) {
+	if AutoApproveInteractive != string(permission.SourceInteractive) {
+		t.Errorf("%q is not permission.SourceInteractive", AutoApproveInteractive)
 	}
 }

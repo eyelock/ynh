@@ -74,10 +74,14 @@ type RunOptions struct {
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
 	Sandbox string
-	// AutoApprove is "", "edits" or "all". Empty passes no permission flag to
+	// AutoApprove is "", "none", "edits" or "all". Empty passes no permission flag to
 	// the worker. Set per run only: it is not read from the harness manifest
 	// and not restored on resume, so the operator re-grants it every time.
 	AutoApprove string
+	// ProjectArgs and ProjectMode are set by RunLoop when the project's own
+	// mode narrowed AutoApprove (see StartOptions).
+	ProjectArgs []string
+	ProjectMode string
 	// Model overrides the worker's default model. Empty means backend default.
 	Model string
 	// Effort is the reasoning effort to ask the worker for: "low", "medium"
@@ -331,9 +335,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, fmt.Errorf("resolving working directory: %w", err)
 		}
 	}
-	// The project's own permission choice wins over a run-time grant.
-	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
-		return result, err
+	// A run with no harness has the flag as the caller's own grant: a narrower
+	// project permission mode wins over it (D5), with a line saying so, and a
+	// wider one never refuses the run. A run of an accepted harness resolves
+	// its level below, once the harness is loaded.
+	if opts.HarnessName == "" {
+		if err := settleAutoApprove(&opts); err != nil {
+			return result, err
+		}
 	}
 
 	result.Worktree = opts.WorktreeDir
@@ -424,6 +433,25 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// (decision 5c).
 		if opts.TrustGate != nil && opts.AutoApprove != "" && !harnessTrusted {
 			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: autoApproveRefusal(harnessObj, loadedID, opts.AutoApprove)}
+		}
+		// An accepted harness's worker opens at the harness's level (D7): its
+		// declared one, else all, narrowed by --auto-approve and by the
+		// session that called it (D6). A wider --auto-approve is refused.
+		if opts.TrustGate != nil && harnessTrusted {
+			step, lerr := agentHarnessStep(harnessObj, opts.AutoApprove)
+			if lerr != nil {
+				return result, &ExitError{Code: ExitRefused, Message: lerr.Error()}
+			}
+			opts.AutoApprove = string(step.Level)
+			if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
+				return result, err
+			}
+			if opts.Stderr != nil {
+				_, _ = fmt.Fprintf(opts.Stderr, "auto-approve: %s (%s)\n", step.Level, step.From)
+			}
+		}
+		if err := settleAutoApprove(&opts); err != nil {
+			return result, err
 		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
 			id := loadedID
@@ -810,6 +838,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		SrtDenyRead:    srtDenyRead,
 		SessionDir:     sessionDir,
 		AutoApprove:    opts.AutoApprove,
+		ProjectArgs:    opts.ProjectArgs,
+		ProjectMode:    opts.ProjectMode,
 		Model:          opts.Model,
 		Effort:         opts.Effort,
 		IsolatedMCP:    isolatedMCP,

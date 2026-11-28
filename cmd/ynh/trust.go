@@ -21,6 +21,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -81,6 +82,10 @@ type trustRecord struct {
 	// commit it was at then (ynh #1002). Informational: the digest decides
 	// whether what runs changed.
 	Floating []floatingPin `json:"floating,omitempty"`
+	// Parent is the harness whose acceptance accepted this one, for an a2a
+	// delegate accepted through its parent (ynh #1058, N1); `trust ls` shows
+	// it as "with <parent>". Absent for a harness accepted on its own.
+	Parent string `json:"parent,omitempty"`
 }
 
 type trustStore struct {
@@ -224,6 +229,14 @@ type trustSet struct {
 	// between a2a and native, must still change the digest, so the entry itself
 	// is covered, not only what it resolves to.
 	DelegateSources []string
+	// AutoApprove is the level the harness declares for its unattended runs,
+	// "" when undeclared (ynh #1058, D8). Only a declared level is digested,
+	// so no existing acceptance changes; AutoApproveOf is what is shown.
+	AutoApprove string
+	// DelegateLevels are the levels delegates_to entries declare, one line
+	// each ("<label>: <level>"), in entry order, for the listing. The digest
+	// covers them through DelegateSources.
+	DelegateLevels []string
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -524,9 +537,14 @@ func entrySourceKey(e harness.Delegate) string {
 	return strings.Join([]string{e.Git, e.Local, e.Path, e.Ref, e.Profile, e.Focus}, "\x00")
 }
 
-// entryKey is entrySourceKey with the entry's settled transport.
+// entryKey is entrySourceKey with the entry's settled transport, and its
+// auto_approve only when declared so an entry without one keeps its digest.
 func entryKey(e harness.Delegate) string {
-	return entrySourceKey(e) + "\x00" + e.Transport
+	k := entrySourceKey(e) + "\x00" + e.Transport
+	if e.AutoApprove != "" {
+		k += "\x00auto_approve=" + e.AutoApprove
+	}
+	return k
 }
 
 func sensorKey(e executable) string {
@@ -673,6 +691,12 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		set.Workspace = slices.Sorted(slices.Values(p.Workspace))
 	}
 	set.LaunchFocus = launchFocusFor(p)
+	set.AutoApprove = p.AutoApprove
+	for _, d := range p.DelegatesTo {
+		if d.AutoApprove != "" {
+			set.DelegateLevels = append(set.DelegateLevels, d.Label()+": "+d.AutoApprove)
+		}
+	}
 	views, problems := runViews(p)
 	set.Problems = problems
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
@@ -795,6 +819,12 @@ func executablesDigest(set trustSet) string {
 	for _, ds := range set.DelegateSources {
 		field(h, "delegate_source")
 		field(h, ds)
+	}
+	// Likewise only when declared: an undeclared level is the default, which
+	// every earlier acceptance already lived with.
+	if set.AutoApprove != "" {
+		field(h, "auto_approve")
+		field(h, set.AutoApprove)
 	}
 	for _, df := range set.DelegateFocuses {
 		field(h, "delegate_focus")
@@ -970,6 +1000,22 @@ type trustStatus struct {
 	DelegateFocuses []delegateFocusReport `json:"delegate_focuses,omitempty"`
 	// delegateFocuses is the set's, for `trust show` to fill the field.
 	delegateFocuses []delegateFocusReport
+	// AutoApprove is the level the harness opens at when run unattended, and
+	// AutoApproveFrom where it comes from ("harness" or "default").
+	// DelegateLevels are the levels its delegates_to entries declare. All are
+	// covered by Digest when declared. Filled by `trust show` only.
+	AutoApprove     string   `json:"auto_approve,omitempty"`
+	AutoApproveFrom string   `json:"auto_approve_from,omitempty"`
+	DelegateLevels  []string `json:"delegate_levels,omitempty"`
+	// A2ADelegates are the a2a delegates the parent's acceptance covers, each
+	// with its own state. Filled by `trust show` only.
+	A2ADelegates []a2aDelegateReport `json:"a2a_delegates,omitempty"`
+	// AcceptedDelegates are the delegates `trust accept` recorded, each with
+	// its id and digest. Filled by `trust accept` only.
+	AcceptedDelegates []acceptedDelegate `json:"accepted_delegates,omitempty"`
+	// AcceptedWith is the parent whose acceptance covered this harness, for a
+	// delegate accepted through its parent.
+	AcceptedWith string `json:"accepted_with,omitempty"`
 	// Moved is why a record that matches the digest still does not count:
 	// the harness is installed from another source or at another commit than
 	// the one accepted. Set only when the state is "changed" for that reason.
@@ -1018,6 +1064,7 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 	}
 	if rec, ok := store.Harnesses[id]; ok {
 		st.AcceptedDigest, st.AcceptedAt, st.AcceptedVia = rec.Digest, rec.AcceptedAt, rec.Via
+		st.AcceptedWith = rec.Parent
 		st.LegacyDigest = rec.Scheme < trustScheme
 		st.acceptedScheme = rec.Scheme
 		st.Moved = provenanceMoved(rec, st)
@@ -1177,6 +1224,8 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	st.Workspace = workspaceReportFor(p)
 	st.LaunchFocus = launchFocusFor(p)
 	st.DelegateFocuses = st.delegateFocuses
+	fillAutoApprove(&st, p)
+	st.A2ADelegates = a2aDelegateReports(p, store)
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -1202,11 +1251,6 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
-	store, err := loadTrustStore()
-	if err != nil {
-		return cliError(stderr, structured, errCodeIOError, err.Error())
-	}
-
 	set := harnessExecutables(p)
 	if len(set.Problems) > 0 {
 		// Accepting a partial set would record "I reviewed it" for commands
@@ -1230,36 +1274,48 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		return cliError(stderr, structured, errCodeConfigError, rerr.Error())
 	}
 	floating := floatingPins(p, remote)
-	rec := trustRecord{
-		Digest:     executablesDigest(set),
-		Commands:   set.count(),
-		Scheme:     trustScheme,
-		Via:        viaAccept,
-		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
-		Floating:   floating,
+	rec := newAcceptance(p, set, viaAccept, time.Now().UTC().Format(time.RFC3339))
+	rec.Floating = floating
+
+	// The parent and its whole a2a delegate tree are accepted together, all or
+	// nothing, each delegate with its own record (ynh #1058, N1). Each one's
+	// commands are shown before anything is recorded.
+	shown := io.Writer(stdout)
+	if format == "json" {
+		shown = io.Discard
 	}
-	if pr := p.InstalledFrom; pr != nil {
-		rec.Source, rec.Ref, rec.SHA = pr.Source, pr.Ref, pr.SHA
+	accepted, err := acceptA2ATree(p, name, viaAccept, map[string]trustRecord{name: rec}, shown)
+	if err != nil {
+		return cliError(stderr, structured, errCodeConfigError, err.Error())
 	}
-	store.Harnesses[name] = rec
-	if err := saveTrustStore(store); err != nil {
+	store, err := loadTrustStore()
+	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
 
 	if format == "json" {
-		return writeJSON(stdout, trustStatusFor(name, p, store, os.Environ()))
+		st := trustStatusFor(name, p, store, os.Environ())
+		fillAutoApprove(&st, p)
+		st.A2ADelegates = a2aDelegateReports(p, store)
+		st.AcceptedDelegates = accepted
+		return writeJSON(stdout, st)
 	}
 	workspaceNote := ""
 	if n := len(set.Workspace); n > 0 {
 		workspaceNote = fmt.Sprintf(", %d workspace folder(s)", n)
 	}
-	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest)
+	_, err = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)%s, %s, opens at %s when run unattended\n", name, viaAccept, rec.Commands, workspaceNote, rec.Digest, p.AutoApproveOf())
 	if err == nil && rec.SHA != "" && notPinned(rec.Ref) != "" {
 		// The ref floats, so say which commit the acceptance is of.
 		_, err = fmt.Fprintf(stdout, "It is accepted at commit %s, the one installed; if %q moves, the harness reads as changed.\n", rec.SHA, rec.Ref)
 	}
 	if err == nil {
 		err = printFloating(stdout, floating)
+	}
+	if err == nil {
+		// The level acceptance covers (ynh #1058, D3): said at the moment it
+		// is accepted, with where it comes from and each entry's own.
+		printAcceptedLevel(stdout, p, set)
 	}
 	return err
 }
@@ -1288,6 +1344,9 @@ func printTrustList(w io.Writer, statuses []trustStatus) error {
 		via := s.AcceptedVia
 		if via == "" {
 			via = "-"
+		}
+		if s.AcceptedWith != "" {
+			via = "with " + s.AcceptedWith
 		}
 		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n", s.Harness, s.State, via, len(s.Executables)+len(s.Hooks)+len(s.MCPServers), src); err != nil {
 			return err
@@ -1332,9 +1391,14 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	if s.AcceptedVia != "" {
 		_, _ = fmt.Fprintf(w, "  via:      %s\n", s.AcceptedVia)
 	}
+	if s.AcceptedWith != "" {
+		_, _ = fmt.Fprintf(w, "  with:     %s (accepted through its parent)\n", s.AcceptedWith)
+	}
 
 	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
+		printAutoApproveSection(w, s)
+		printA2ADelegates(w, s)
 		return nil
 	}
 
@@ -1394,6 +1458,9 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		}
 	}
 
+	printAutoApproveSection(w, s)
+	printA2ADelegates(w, s)
+
 	if len(s.UndeclaredEnv) > 0 {
 		_, _ = fmt.Fprintf(w, "\nThese commands inherit your full environment. %d variable(s) reach them\n"+
 			"that this harness never declared in env_passthrough:\n\n", len(s.UndeclaredEnv))
@@ -1416,4 +1483,83 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 			"'ynh trust accept %s' records the new set.\n", s.Harness)
 	}
 	return nil
+}
+
+// printAutoApproveSection lists the permission level a one-shot run of the
+// harness opens at, which acceptance covers (ynh #1058, D3, N2): an undeclared
+// level is "all", said plainly, and each delegates_to entry's declared level
+// follows.
+func printAutoApproveSection(w io.Writer, s trustStatus) {
+	if s.AutoApprove == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nPermission level when run unattended (a delegate session, a one-shot 'ynh run' or 'ynh agent run'):\n\n")
+	if s.AutoApproveFrom == string(permission.SourceDefault) {
+		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (not declared; the default for an accepted harness)\n", s.AutoApprove)
+	} else {
+		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (declared by the harness)\n", s.AutoApprove)
+	}
+	for _, l := range s.DelegateLevels {
+		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
+	}
+}
+
+// fillAutoApprove sets the level fields of a status: the level the harness
+// opens at when run unattended, where it comes from, and the levels its
+// delegates_to entries declare. Used by `trust show` and `trust accept`.
+func fillAutoApprove(st *trustStatus, p *harness.Harness) {
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
+	st.DelegateLevels = harnessExecutables(p).DelegateLevels
+}
+
+// printAcceptedLevel says what level an acceptance of p covers.
+func printAcceptedLevel(w io.Writer, p *harness.Harness, set trustSet) {
+	_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
+	for _, l := range set.DelegateLevels {
+		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
+	}
+}
+
+// printA2ADelegates lists the whole tree of a2a delegates the parent's
+// acceptance covers, each with its own trust state, the level it opens at and
+// what it runs, so nothing is accepted that was not shown.
+func printA2ADelegates(w io.Writer, s trustStatus) {
+	if len(s.A2ADelegates) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nA2A delegates, the whole tree, each its own harness with its own record. 'ynh trust accept %s' accepts them all, or none:\n", s.Harness)
+	for _, d := range s.A2ADelegates {
+		pad := strings.Repeat("  ", d.Depth)
+		id := d.ID
+		if id == "" {
+			id = "(not installed; accepting installs it)"
+		}
+		_, _ = fmt.Fprintf(w, "\n%s  %s: %s [%s], declared by %s\n", pad, d.Delegate, id, d.State, d.Parent)
+		if d.Problem != "" {
+			_, _ = fmt.Fprintf(w, "%s    cannot be read in full, so it cannot be accepted: %s\n", pad, d.Problem)
+			continue
+		}
+		if d.AutoApprove != "" {
+			_, _ = fmt.Fprintf(w, "%s    opens at %s when run unattended (%s)\n", pad, d.AutoApprove, d.From)
+		}
+		if len(d.Executables)+len(d.Hooks)+len(d.MCPServers)+len(d.Workspace) == 0 {
+			_, _ = fmt.Fprintf(w, "%s    runs no commands\n", pad)
+		}
+		for _, e := range d.Executables {
+			_, _ = fmt.Fprintf(w, "%s    sensor %s (%s): %s\n", pad, e.Sensor, e.Field, e.Value)
+		}
+		for _, h := range d.Hooks {
+			_, _ = fmt.Fprintf(w, "%s    hook %s: %s\n", pad, h.Event, h.Command)
+		}
+		for _, m := range d.MCPServers {
+			what := strings.Join(append([]string{m.Command}, m.Args...), " ")
+			if m.URL != "" {
+				what = m.URL
+			}
+			_, _ = fmt.Fprintf(w, "%s    MCP server %s: %s\n", pad, m.Name, strings.TrimSpace(what))
+		}
+		for _, f := range d.Workspace {
+			_, _ = fmt.Fprintf(w, "%s    workspace folder %s\n", pad, f)
+		}
+	}
 }

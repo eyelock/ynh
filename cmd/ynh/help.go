@@ -40,6 +40,13 @@ reads the env file, replaces ${VAR} in the command's arguments and in its own
 environment values with the file's variables only (an unknown reference is an
 error), then becomes the command, so stdin and stdout are the server's.`,
 
+	"permission-check": `ynh permission-check --expect <mode> --event <user_prompt|pre_tool>
+
+Internal. The hook of the opened-mode check: ynh run adds it (as UserPromptSubmit
+and PreToolUse hooks) to a one-shot Claude Code session, and it stops the
+session when Claude opens in a different permission mode than the level ynh
+resolved (the same message as ynh agent run).`,
+
 	"delegate-run": `ynh delegate-run <start|status|cancel|supervise> ...
 
 Internal. Run a delegates_to delegate as its own detached ynh session, and keep
@@ -591,7 +598,9 @@ bring until you run 'ynh trust accept <dir>', or pass --trust to 'ynh run',
 'ynh check' or 'ynh agent run --harness' to fetch and accept them in the same
 step (each include pinned to a full SHA). Review them first with
 'ynh trust show <dir>'. A harness with nothing to review
-(no-commands) needs no acceptance. 'ynh trust accept' of an installed harness
+(no-commands) needs no acceptance to run interactively; a one-shot run, a
+delegate session and 'ynh agent run' need it accepted, since acceptance covers
+the level they open at. 'ynh trust accept' of an installed harness
 whose ref floats (a branch or tag) records the exact commit that was installed,
 and the harness reads as changed if it later moves; floating includes and native
 delegate entries are accepted at the commit they are at now, and an install that

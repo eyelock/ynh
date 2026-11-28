@@ -122,6 +122,11 @@
     "mcp_servers": {
       "$ref": "#/$defs/mcp_servers"
     },
+    "auto_approve": {
+      "description": "The permission level this harness opens at when it is run unattended (a delegate session, a one-shot `ynh run`, `ynh agent run`): none, edits or all. Undeclared, an accepted harness opens at all. A delegates_to entry, a per-call argument and `--auto-approve` may only narrow it. A profile cannot change it. Declaring or changing it asks for `ynh trust accept` again.",
+      "type": "string",
+      "enum": ["none", "edits", "all"]
+    },
     "transport": {
       "description": "How this harness's delegates_to entries are reached when an entry names no transport of its own: a2a (each delegate is its own detached ynh session; the default) or native (the vendor's own subagents). A delegate set to native on a vendor with no native subagents (today Cursor) is refused by ynh install, ynh run and ynd validate.",
       "type": "string",
@@ -793,6 +798,11 @@
             "type": "string",
             "minLength": 1,
             "description": "One of the delegate harness's own focuses: its profile is applied and its prompt becomes standing instructions in the delegate's agent. Not with profile, since a focus carries its profile."
+          },
+          "auto_approve": {
+            "type": "string",
+            "enum": ["none", "edits", "all"],
+            "description": "The most this entry lets the delegate open at when it runs unattended. It may only narrow the delegate harness's own level; undeclared, the delegate's level applies. Changing it asks for `ynh trust accept` again."
           },
           "transport": {
             "type": "string",

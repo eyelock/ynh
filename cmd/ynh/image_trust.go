@@ -43,6 +43,14 @@ func imageTrustRecord(id string, p *harness.Harness) (*trustRecord, error) {
 		return nil, err
 	}
 	st := trustStatusFor(id, p, store, nil)
+	if st.State == trustNoCommands {
+		// The image's entrypoint is a one-shot run, which needs the harness
+		// accepted even when it executes nothing (ynh #1058, N2): an image
+		// built without the acceptance could not run its task, and nothing
+		// inside the image can fix that.
+		return nil, untrustedf("refusing to build an image of %s: you have not accepted it. It executes no commands, but the image runs one-shot, and a one-shot run opens at %s with nobody to approve (%s).\n"+
+			"  Fix: review it with 'ynh trust show %s', accept it with 'ynh trust accept %s', then build the image again", id, p.AutoApproveOf(), p.AutoApproveOrigin(), id, id)
+	}
 	if st.State != trustAccepted {
 		return nil, nil
 	}
@@ -107,7 +115,20 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 	}
 	st := trustStatusFor(id, p, empty, nil)
 	if st.State == trustNoCommands {
-		return nil, nil
+		if ia.trust {
+			return nil, nil
+		}
+		// The image runs one-shot, which needs an acceptance baked in even
+		// for a harness that executes nothing (ynh #1058, N2); without
+		// --trust there is none to bake.
+		var b strings.Builder
+		fmt.Fprintf(&b, "refusing to build an image of %s from %s: you have not accepted it. It executes no commands, but the image runs one-shot, and a one-shot run opens at %s with nobody to approve (%s).\n", p.Name, ia.from, p.AutoApproveOf(), p.AutoApproveOrigin())
+		if isLocal {
+			fmt.Fprintf(&b, "  Fix: review it, then build with 'ynh image %s --from %s --trust'", ia.name, ia.from)
+		} else {
+			fmt.Fprintf(&b, "  Fix: review it, then build with 'ynh image %s --from %s --ref <40-character commit SHA> --trust'", ia.name, ia.from)
+		}
+		return nil, &untrustedError{msg: b.String()}
 	}
 	if err := installedGate(id, p, empty); err != nil {
 		// Unreadable commands or scripts refuse a build whatever --trust says;
