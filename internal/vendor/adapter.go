@@ -351,6 +351,72 @@ type MarketplacePluginInfo struct {
 	Name        string
 	Description string
 	Version     string
+	// Source says where the plugin is. nil means the plugin was built into
+	// ./plugins/<name> beside the index (the old build); a source means the
+	// index points at it where it is published (ynh #395).
+	Source *MarketplaceSource
+}
+
+// MarketplaceSource is where a plugin listed in an index is published.
+// Type is "local" (Path is relative to the index's repository), "github"
+// (Repo is host/owner/repo), "url" or "git-subdir" (URL and Path).
+type MarketplaceSource struct {
+	Type string
+	Repo string
+	URL  string
+	Path string
+	Ref  string
+	SHA  string
+}
+
+// UnsupportedSourceError is a plugin source an index of this vendor cannot
+// carry; the build refuses it rather than write an index the vendor rejects.
+type UnsupportedSourceError struct {
+	Vendor, Entry, Type string
+}
+
+func (e *UnsupportedSourceError) Error() string {
+	return fmt.Sprintf("entry %q: %s's marketplace cannot carry a %s source", e.Entry, e.Vendor, e.Type)
+}
+
+// indexSource returns the "source" value of a Claude-style marketplace entry
+// (Claude Code, Cursor and Copilot CLI read this shape): a relative path
+// string, or an object naming where the plugin is. It returns the source's
+// effective type too, so a vendor can refuse the ones it cannot install from.
+func indexSource(name string, s *MarketplaceSource) (value any, typ string) {
+	if s == nil {
+		return "./plugins/" + name, "local"
+	}
+	obj := func(kind string, kv map[string]string) map[string]string {
+		m := map[string]string{"source": kind}
+		for k, v := range kv {
+			if v != "" {
+				m[k] = v
+			}
+		}
+		return m
+	}
+	switch s.Type {
+	case "local":
+		return s.Path, "local"
+	case "github":
+		host, rest, _ := strings.Cut(s.Repo, "/")
+		if host == "github.com" && s.Path == "" {
+			return obj("github", map[string]string{"repo": rest, "ref": s.Ref, "sha": s.SHA}), "github"
+		}
+		url := "https://" + s.Repo + ".git"
+		if s.Path == "" {
+			return obj("url", map[string]string{"url": url, "ref": s.Ref, "sha": s.SHA}), "url"
+		}
+		return obj("git-subdir", map[string]string{"url": url, "path": s.Path, "ref": s.Ref, "sha": s.SHA}), "git-subdir"
+	case "url":
+		if s.Path == "" {
+			return obj("url", map[string]string{"url": s.URL, "ref": s.Ref, "sha": s.SHA}), "url"
+		}
+		return obj("git-subdir", map[string]string{"url": s.URL, "path": s.Path, "ref": s.Ref, "sha": s.SHA}), "git-subdir"
+	default: // git-subdir
+		return obj("git-subdir", map[string]string{"url": s.URL, "path": s.Path, "ref": s.Ref, "sha": s.SHA}), "git-subdir"
+	}
 }
 
 // DefaultName is the fallback vendor when no vendor is specified.

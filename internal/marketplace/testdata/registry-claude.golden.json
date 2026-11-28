@@ -1,0 +1,39 @@
+{
+  "name": "acme",
+  "owner": {
+    "name": "Acme",
+    "email": "dev@acme.test"
+  },
+  "description": "Acme's tools",
+  "plugins": [
+    {
+      "name": "reviewer",
+      "description": "Code reviewer",
+      "version": "1.0.0",
+      "source": "./harnesses/reviewer"
+    },
+    {
+      "name": "lint-tools",
+      "description": "Linters",
+      "version": "1.2.0",
+      "source": "./harnesses/plugins/lint-tools"
+    },
+    {
+      "name": "formatter",
+      "source": {
+        "ref": "v1.0.0",
+        "repo": "acme/formatter",
+        "sha": "0123456789abcdef0123456789abcdef01234567",
+        "source": "github"
+      }
+    },
+    {
+      "name": "scanner",
+      "source": {
+        "ref": "main",
+        "source": "url",
+        "url": "https://git.acme.test/scanner.git"
+      }
+    }
+  ]
+}

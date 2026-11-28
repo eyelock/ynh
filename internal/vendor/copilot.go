@@ -536,7 +536,7 @@ func (c *Copilot) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins [
 		Name        string `json:"name"`
 		Description string `json:"description,omitempty"`
 		Version     string `json:"version,omitempty"`
-		Source      string `json:"source"`
+		Source      any    `json:"source"`
 	}
 	type indexOwner struct {
 		Name  string `json:"name"`
@@ -555,11 +555,15 @@ func (c *Copilot) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins [
 		Description: cfg.Description,
 	}
 	for _, p := range plugins {
+		src, srcType := indexSource(p.Name, p.Source)
+		if srcType == "git-subdir" {
+			return nil, &UnsupportedSourceError{Vendor: "Copilot CLI", Entry: p.Name, Type: srcType}
+		}
 		idx.Plugins = append(idx.Plugins, indexPlugin{
 			Name:        p.Name,
 			Description: p.Description,
 			Version:     p.Version,
-			Source:      "./plugins/" + p.Name,
+			Source:      src,
 		})
 	}
 

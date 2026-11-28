@@ -494,3 +494,46 @@ func TestCmdMarketplaceBuild_FormatAgentPlugin(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+// With no argument, `ynd marketplace build` reads the manifest directory's
+// registry index and writes each vendor's index in place, beside it at the
+// repository root, building no content (ynh #395, M1, D3).
+func TestCmdMarketplaceBuild_NoArgumentReadsTheRegistryIndex(t *testing.T) {
+	root := t.TempDir()
+	idxDir := filepath.Join(root, ".agents", "harness")
+	if err := os.MkdirAll(idxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"$schema":"https://eyelock.github.io/ynh/schema/marketplace.schema.json","name":"acme","owner":{"name":"Acme"},
+	"harnesses":[{"name":"reviewer","source":"./harnesses/reviewer"}],
+	"plugins":[{"name":"formatter","source":{"type":"github","repo":"github.com/acme/formatter"}}]}`
+	if err := os.WriteFile(filepath.Join(idxDir, "marketplace.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
+	t.Setenv("YNH_HOME", t.TempDir())
+
+	// Codex lists local plugins only, so the formatter is refused there: name
+	// the vendors that carry both.
+	if err := cmdMarketplace([]string{"build", "-v", "claude,cursor,copilot"}); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	for _, rel := range []string{".claude-plugin", ".cursor-plugin", ".github/plugin"} {
+		assertExists(t, filepath.Join(root, rel, "marketplace.json"))
+	}
+	for _, rel := range []string{"plugins", "dist", "README.md", ".git"} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
+			t.Errorf("%s was built: a registry index builds no content", rel)
+		}
+	}
+	claude, _ := os.ReadFile(filepath.Join(root, ".claude-plugin", "marketplace.json"))
+	if !strings.Contains(string(claude), `"repo": "acme/formatter"`) || !strings.Contains(string(claude), `"./harnesses/reviewer"`) {
+		t.Errorf("claude index:\n%s", claude)
+	}
+
+	// All vendors by default: Codex refuses the remote plugin, naming it.
+	err := cmdMarketplace([]string{"build"})
+	if err == nil || !strings.Contains(err.Error(), `"formatter"`) || !strings.Contains(err.Error(), "codex") {
+		t.Errorf("err = %v, want a refusal naming the entry and the vendor", err)
+	}
+}

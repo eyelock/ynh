@@ -1,0 +1,28 @@
+{
+  "name": "acme",
+  "interface": {
+    "displayName": "acme"
+  },
+  "plugins": [
+    {
+      "name": "reviewer",
+      "source": {
+        "source": "local",
+        "path": "./harnesses/reviewer"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    },
+    {
+      "name": "lint-tools",
+      "source": {
+        "source": "local",
+        "path": "./harnesses/plugins/lint-tools"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    }
+  ]
+}
