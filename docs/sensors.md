@@ -747,7 +747,7 @@ $ ynh baseline local/demo
 
 The baseline stores twelve-character fingerprints rather than findings, so the
 file answers *how much* is forgiven and *when* it was accepted, but not *what*.
-`--explain` runs the sensors and matches current output against the recorded
+`--explain` runs the sensors, so it passes the [trust gate](trust.md#the-gate) first and refuses a harness that is not accepted; without it the command only reads. It matches current output against the recorded
 hashes, which is the only way to turn a fingerprint back into the line it
 forgives:
 

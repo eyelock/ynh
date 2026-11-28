@@ -123,7 +123,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh prune` | |
 | `ynh migrate` | `--dry-run`, `--skip-broken`, `--format <text\|json>` (`--json` is the older spelling). Moves the ynh home to the current schema; most commands do this on first use |
 | `ynh quarantine <list\|restore\|drop>` | `list`, `restore <name>`, `drop <name>`; `--format <text\|json>` on `list`. Manages harnesses quarantined by a failed migration |
-| `ynh baseline <harness>` | `--explain`, `--cwd <dir>`, `--format <text\|json>`. Reports what a harness's ratchet currently forgives |
+| `ynh baseline <harness>` (`--explain` refuses an installed harness that is not accepted, since it runs the sensors; without it the command only reads; see [Trust](trust.md#the-gate)) | `--explain`, `--cwd <dir>`, `--format <text\|json>`. Reports what a harness's ratchet currently forgives |
 | `ynh version` | `--format <text\|json>` (`ynh --version` is the same command) |
 | `ynh help [command]` | Also `ynh <command> --help`; `ynh help` lists the commands |
 | `ynh mcp-exec` | Internal, not typed: `--env-file <path> -- <command> [args...]`. Starts an MCP server with its secrets filled in from an env file |
