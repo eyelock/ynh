@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -61,7 +62,7 @@ func TestIncludeAddTrust_RefusalChangesNothing(t *testing.T) {
 		t.Error("a refused include add --trust changed the manifest")
 	}
 	afterStore, _ := loadTrustStore()
-	if afterStore.Harnesses[id] != beforeStore.Harnesses[id] {
+	if !reflect.DeepEqual(afterStore.Harnesses[id], beforeStore.Harnesses[id]) {
 		t.Errorf("the trust record changed: %+v -> %+v", beforeStore.Harnesses[id], afterStore.Harnesses[id])
 	}
 	if got := trustStateOf(id); got != trustAccepted {
@@ -202,7 +203,7 @@ func TestIncludeAddTrust_NestedUncachedRefusesBeforeWriting(t *testing.T) {
 	if out.Len() != 0 {
 		t.Errorf("a refused call printed output:\n%s", out.String())
 	}
-	if afterStore, _ := loadTrustStore(); afterStore.Harnesses[id] != beforeStore.Harnesses[id] {
+	if afterStore, _ := loadTrustStore(); !reflect.DeepEqual(afterStore.Harnesses[id], beforeStore.Harnesses[id]) {
 		t.Error("the trust record changed")
 	}
 	if got := trustStateOf(id); got != trustAccepted {
