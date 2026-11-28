@@ -81,25 +81,10 @@ func Request(ceiling, request Level) (Level, error) {
 	return request, nil
 }
 
-// Where a resolved level came from (auto_approve_from), in the order a level
-// is narrowed: the harness's own, the delegates_to entry, the per-call
-// request or the --auto-approve flag, the session that called it, and the
-// project's own mode.
-const (
-	FromDefault         = "default"          // no level declared: the default, all
-	FromHarness         = "harness"          // a harness's own declaration, run directly
-	FromDelegateDefault = "delegate_default" // the delegate harness's own declaration
-	FromEntry           = "entry"            // the parent's delegates_to entry
-	FromCall            = "call"             // the per-call auto_approve of delegate_to
-	FromFlag            = "flag"             // --auto-approve on ynh run or ynh agent run
-	FromCallerCap       = "caller_cap"       // the level of the session that called it (D6)
-	FromProject         = "project"          // the project's own narrower mode (D5)
-)
-
 // Step is a level and where it came from.
 type Step struct {
 	Level Level
-	From  string
+	From  Source
 }
 
 // Narrowed returns cur narrowed by by: by wins, and its source with it, only
@@ -114,7 +99,7 @@ func (cur Step) Narrowed(by Step) Step {
 // Ask applies a request (the entry, the call or the flag) to cur: a wider
 // request is refused (D2), an equal or narrower one is taken, with its source
 // when it narrows. An empty request changes nothing.
-func (cur Step) Ask(request Level, from string) (Step, error) {
+func (cur Step) Ask(request Level, from Source) (Step, error) {
 	if request == "" {
 		return cur, nil
 	}

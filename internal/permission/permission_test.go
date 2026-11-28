@@ -345,8 +345,8 @@ func TestFor_ProvisionalCells(t *testing.T) {
 			}
 		}
 	}
-	if !slices.Equal(got, []string{"claude/none"}) {
-		t.Errorf("provisional cells = %v, want [claude/none]", got)
+	if len(got) != 0 {
+		t.Errorf("provisional cells = %v, want none", got)
 	}
 }
 

@@ -67,7 +67,7 @@ type Options struct {
 	// after the delegate's own level, the delegates_to entry and the calling
 	// session's cap (ynh #1058); a task may narrow it with MetaAutoApprove.
 	AutoApprove     permission.Level
-	AutoApproveFrom string
+	AutoApproveFrom permission.Source
 	// TakeBy is how long a queued task may wait to be taken before the sender
 	// is told it is still waiting (delegation.DefaultTakeBy when 0).
 	TakeBy time.Duration
@@ -351,13 +351,13 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 	}
 	// The level this task opens at: the endpoint's, narrowed by the call. A
 	// wider request is refused before any session starts (D2).
-	level, from := string(x.o.AutoApprove), x.o.AutoApproveFrom
+	level, from := string(x.o.AutoApprove), string(x.o.AutoApproveFrom)
 	if want, _ := ec.Message.Metadata[MetaAutoApprove].(string); want != "" {
-		step, err := permission.Step{Level: x.o.AutoApprove, From: x.o.AutoApproveFrom}.Ask(permission.Level(want), permission.FromCall)
+		step, err := permission.Step{Level: x.o.AutoApprove, From: x.o.AutoApproveFrom}.Ask(permission.Level(want), permission.SourceCall)
 		if err != nil {
 			return nil, "", fmt.Errorf("auto_approve: %w", err)
 		}
-		level, from = string(step.Level), step.From
+		level, from = string(step.Level), string(step.From)
 	}
 	if onLive != "headless" {
 		if live := delegation.LiveSessionsOf(x.o.Delegate); len(live) > 0 {

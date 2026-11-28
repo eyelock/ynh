@@ -40,6 +40,13 @@ reads the env file, replaces ${VAR} in the command's arguments and in its own
 environment values with the file's variables only (an unknown reference is an
 error), then becomes the command, so stdin and stdout are the server's.`,
 
+	"permission-check": `ynh permission-check --expect <mode>
+
+Internal. The SessionStart hook of the opened-mode check: ynh run adds it to a
+one-shot Claude Code session, and it stops the session when Claude opens in a
+different permission mode than the level ynh resolved (the same message as
+ynh agent run).`,
+
 	"delegate-run": `ynh delegate-run <start|status|cancel|supervise> ...
 
 Internal. Run a delegates_to delegate as its own detached ynh session, and keep

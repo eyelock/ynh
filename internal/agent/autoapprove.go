@@ -167,12 +167,12 @@ func settleAutoApprove(opts *RunOptions) error {
 // harness's own, narrowed by --auto-approve (which may only narrow) and by the
 // calling session's cap.
 func agentHarnessStep(h *harness.Harness, flag string) (permission.Step, error) {
-	from := permission.FromHarness
+	from := permission.SourceHarness
 	if h.AutoApprove == "" {
-		from = permission.FromDefault
+		from = permission.SourceDefault
 	}
 	step := permission.Step{Level: h.AutoApproveOf(), From: from}
-	step, err := step.Ask(permission.Level(flag), permission.FromFlag)
+	step, err := step.Ask(permission.Level(flag), permission.SourceFlag)
 	if err != nil {
 		return step, fmt.Errorf("--auto-approve: %w", err)
 	}
@@ -180,5 +180,5 @@ func agentHarnessStep(h *harness.Harness, flag string) (permission.Step, error) 
 	if err != nil {
 		return step, err
 	}
-	return step.Narrowed(permission.Step{Level: limit, From: permission.FromCallerCap}), nil
+	return step.Narrowed(permission.Step{Level: limit, From: permission.SourceCallerCap}), nil
 }

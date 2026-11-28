@@ -507,7 +507,7 @@ func TestTaskAutoApproveNarrowsAndNeverWidens(t *testing.T) {
 	e, err := Open(Options{
 		Name: "reviewer", Label: "github.com/x/reviewer", Parent: "local/parent", Delegate: "local/reviewer",
 		Folder: folder, Supervisor: []string{os.Args[0]},
-		AutoApprove: permission.Edits, AutoApproveFrom: permission.FromEntry,
+		AutoApprove: permission.Edits, AutoApproveFrom: permission.SourceEntry,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -527,13 +527,22 @@ func TestTaskAutoApproveNarrowsAndNeverWidens(t *testing.T) {
 		task, _ := r.(*a2a.Task)
 		return task, nil
 	}
+	seen := map[string]bool{}
+	// level is the level of the record that appeared since the last call.
 	level := func() (string, string) {
-		recs := records(t)
-		rec, err := delegation.Load(recs[len(recs)-1])
-		if err != nil {
-			t.Fatal(err)
+		for _, p := range records(t) {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			rec, err := delegation.Load(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return rec.AutoApprove, rec.AutoApproveFrom
 		}
-		return rec.AutoApprove, rec.AutoApproveFrom
+		t.Fatal("no new record")
+		return "", ""
 	}
 
 	if _, err := sendMeta(""); err != nil {

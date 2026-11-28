@@ -129,6 +129,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh mcp-exec` | Internal, not typed: `--env-file <path> -- <command> [args...]`. Starts an MCP server with its secrets filled in from an env file |
 | `ynh mcp-headers` | Internal, not typed: `--env-file <path> -- "Name: value" ...`. Prints a remote MCP server's headers as JSON, with `${VAR}` filled in from an env file |
 | `ynh delegate-run` | Internal, not typed: `start`, `status`, `cancel`, `supervise`. Runs a `delegates_to` delegate as its own detached session |
+| `ynh permission-check` | Internal, not typed: the SessionStart hook of a one-shot Claude Code session. It stops the session when Claude opens in a different permission mode than the level ynh resolved |
 | `ynh delegate-mcp` | Internal, not typed: `--parent <id>`, `--folder <dir>`, `--max-wait <seconds>`. The MCP server for a parent's A2A delegates |
 | `ynh inbox-mcp` | Internal, not typed: `--harness <run name>`, `--session <id>` (`YNH_SESSION_ID` when not given). The MCP server an interactive session uses to take a task delegated to its harness ([Delegating to a live session](delegate-sessions.md#delegating-to-a-live-session)) |
 | `ynh parent-mcp` | Internal, not typed: `--record <path>`, `--max-wait <seconds>`. The MCP server a delegate session uses to ask its parent |

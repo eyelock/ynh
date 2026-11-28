@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -45,7 +46,7 @@ func TestResolveRunPermission_GoldenPerVendor(t *testing.T) {
 
 func TestResolveRunPermission_UndeclaredOpensAtAll(t *testing.T) {
 	rp, err := resolveRunPermission(&harness.Harness{Name: "h"}, "claude", "", t.TempDir(), false, noEnv, 1000)
-	if err != nil || rp.Level != permission.All || rp.From != permission.FromDefault {
+	if err != nil || rp.Level != permission.All || rp.From != permission.SourceDefault {
 		t.Fatalf("%+v %v", rp, err)
 	}
 	if !slices.Equal(rp.Args, []string{"--permission-mode", "bypassPermissions"}) {
@@ -57,7 +58,7 @@ func TestResolveRunPermission_Narrowing(t *testing.T) {
 	p := &harness.Harness{Name: "h", AutoApprove: "edits"}
 	// The flag narrows, with its own source.
 	rp, err := resolveRunPermission(p, "claude", "none", t.TempDir(), false, noEnv, 1000)
-	if err != nil || rp.Level != permission.None || rp.From != permission.FromFlag {
+	if err != nil || rp.Level != permission.None || rp.From != permission.SourceFlag {
 		t.Fatalf("%+v %v", rp, err)
 	}
 	// A wider flag is refused.
@@ -70,12 +71,12 @@ func TestResolveRunPermission_Narrowing(t *testing.T) {
 	}
 	// The caller's cap narrows (D6), and says so.
 	rp, err = resolveRunPermission(&harness.Harness{Name: "h"}, "codex", "", t.TempDir(), true, envOf(map[string]string{permission.CapEnv: "none"}), 1000)
-	if err != nil || rp.Level != permission.None || rp.From != permission.FromCallerCap {
+	if err != nil || rp.Level != permission.None || rp.From != permission.SourceCallerCap {
 		t.Fatalf("%+v %v", rp, err)
 	}
 	// A delegate's own declaration is delegate_default; a request source comes from the entry or call.
 	rp, _ = resolveRunPermission(p, "claude", "", t.TempDir(), true, noEnv, 1000)
-	if rp.From != permission.FromDelegateDefault {
+	if rp.From != permission.SourceDelegateDefault {
 		t.Errorf("from = %s", rp.From)
 	}
 	rp, _ = resolveRunPermission(p, "claude", "none", t.TempDir(), true, envOf(map[string]string{permission.SourceEnv: "entry"}), 1000)
@@ -93,8 +94,13 @@ func TestResolveRunPermission_ProjectModeAndRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	rp, err := resolveRunPermission(&harness.Harness{Name: "h"}, "claude", "", dir, false, noEnv, 1000)
-	if err != nil || rp.Level != permission.None || rp.From != permission.FromProject || len(rp.Args) != 0 {
+	if err != nil || rp.Level != permission.None || rp.From != permission.SourceProject {
 		t.Fatalf("%+v %v", rp, err)
+	}
+	// The project's mode is passed explicitly, so a user-level setting cannot
+	// widen the run, and it is what Claude's opened-mode check expects.
+	if !slices.Equal(rp.Args, []string{"--permission-mode", "plan"}) || rp.OpenedMode != "plan" {
+		t.Errorf("args %q opened %q", rp.Args, rp.OpenedMode)
 	}
 	if !strings.Contains(strings.Join(rp.Lines, "\n"), "settings.json") {
 		t.Errorf("no project line: %q", rp.Lines)
@@ -107,13 +113,27 @@ func TestResolveRunPermission_ProjectModeAndRoot(t *testing.T) {
 	}
 }
 
-func TestMergeJSONObject(t *testing.T) {
-	got, err := mergeJSONObject(`{"mcp":{"a":1},"permission":{"x":1}}`, `{"permission":{"edit":"deny"}}`)
-	if err != nil || got != `{"mcp":{"a":1},"permission":{"edit":"deny"}}` {
-		t.Errorf("%s %v", got, err)
+// OpenCode's permission block is merged into the caller's own
+// OPENCODE_CONFIG_CONTENT, nested keys included: a narrower rule of the
+// caller's own stays.
+func TestApplyEnv_KeepsTheCallersNestedPermissionKeys(t *testing.T) {
+	t.Setenv("OPENCODE_CONFIG_CONTENT", `{"theme":"dark","permission":{"webfetch":"deny","bash":{"rm *":"deny"}}}`)
+	t.Setenv(permission.CapEnv, "")
+	rp, err := resolveRunPermission(&harness.Harness{Name: "h", AutoApprove: "edits"}, "opencode", "", t.TempDir(), false, os.Getenv, 1000)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := mergeJSONObject(`[`, `{}`); err == nil {
-		t.Error("a non-object must fail")
+	if err := rp.applyEnv(); err != nil {
+		t.Fatal(err)
+	}
+	got := os.Getenv("OPENCODE_CONFIG_CONTENT")
+	for _, want := range []string{`"theme":"dark"`, `"webfetch":"deny"`, `"edit":"allow"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s lost from %s", want, got)
+		}
+	}
+	if os.Getenv(permission.CapEnv) != "edits" {
+		t.Errorf("cap = %q", os.Getenv(permission.CapEnv))
 	}
 }
 
@@ -175,22 +195,130 @@ func TestDelegateStep(t *testing.T) {
 	declared := &harness.Harness{Name: "d", AutoApprove: "edits"}
 	undeclared := &harness.Harness{Name: "d"}
 	step, err := delegateStep(undeclared, harness.Delegate{}, noEnv)
-	if err != nil || step.Level != permission.All || step.From != permission.FromDefault {
+	if err != nil || step.Level != permission.All || step.From != permission.SourceDefault {
 		t.Errorf("%+v %v", step, err)
 	}
 	step, _ = delegateStep(declared, harness.Delegate{}, noEnv)
-	if step.Level != permission.Edits || step.From != permission.FromDelegateDefault {
+	if step.Level != permission.Edits || step.From != permission.SourceDelegateDefault {
 		t.Errorf("%+v", step)
 	}
 	step, _ = delegateStep(declared, harness.Delegate{AutoApprove: "none"}, noEnv)
-	if step.Level != permission.None || step.From != permission.FromEntry {
+	if step.Level != permission.None || step.From != permission.SourceEntry {
 		t.Errorf("%+v", step)
 	}
 	step, _ = delegateStep(undeclared, harness.Delegate{AutoApprove: "edits"}, envOf(map[string]string{permission.CapEnv: "none"}))
-	if step.Level != permission.None || step.From != permission.FromCallerCap {
+	if step.Level != permission.None || step.From != permission.SourceCallerCap {
 		t.Errorf("%+v", step)
 	}
 	if _, err := delegateStep(declared, harness.Delegate{AutoApprove: "all"}, noEnv); err == nil || !strings.Contains(err.Error(), "wider than the ceiling") {
 		t.Errorf("a wider entry must be refused: %v", err)
+	}
+}
+
+// Codex: a project that narrows the run is passed --sandbox explicitly.
+func TestResolveRunPermission_CodexProjectModeIsExplicit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".codex", "config.toml"), []byte("approval_policy = \"on-request\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rp, err := resolveRunPermission(&harness.Harness{Name: "h"}, "codex", "", dir, false, noEnv, 1000)
+	if err != nil || !slices.Contains(rp.Args, "--sandbox") || slices.Contains(rp.Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("%+v %v", rp, err)
+	}
+}
+
+// The opened-mode check (ynw-c5hme): a one-shot Claude Code session carries a
+// SessionStart hook, on ynh run and on a delegate session alike.
+func TestOpenedModeSettings(t *testing.T) {
+	if got, err := openedModeSettings("codex", "", nil); got != nil || err != nil {
+		t.Errorf("only Claude reports a mode: %v %v", got, err)
+	}
+	got, err := openedModeSettings("claude", "acceptEdits", nil)
+	if err != nil || len(got) != 2 || got[0] != "--settings" || !strings.Contains(got[1], "permission-check --expect") || !strings.Contains(got[1], "acceptEdits") || !strings.Contains(got[1], "SessionStart") {
+		t.Fatalf("%q %v", got, err)
+	}
+	if got, _ := openedModeSettings("claude", "acceptEdits", []string{"--settings", "{}"}); got != nil {
+		t.Errorf("a run with its own --settings is left alone")
+	}
+}
+
+func TestRun_OneShotClaudeCarriesTheOpenedModeCheck(t *testing.T) {
+	for _, delegate := range []bool{false, true} {
+		isolateRun(t)
+		t.Chdir(t.TempDir())
+		t.Setenv(permission.CapEnv, "")
+		if delegate {
+			t.Setenv(delegationHandleEnv, "dlg-test")
+		}
+		dir := filepath.Join(t.TempDir(), "h")
+		writeSkillHarness(t, dir, "h")
+		var got []string
+		stubLaunchArgs(t, func(a []string) error { got = a; return nil })
+		if err := cmdRun([]string{dir, "-v", "claude", "--trust", "--auto-approve", "edits", "--", "hi"}); err != nil {
+			t.Fatalf("delegate=%v: %v", delegate, err)
+		}
+		joined := strings.Join(got, " ")
+		if !strings.Contains(joined, "--permission-mode acceptEdits --disallowedTools Bash") || !strings.Contains(joined, "permission-check --expect") {
+			t.Errorf("delegate=%v: args = %q", delegate, got)
+		}
+	}
+}
+
+func TestCmdPermissionCheck(t *testing.T) {
+	run := func(expect, input string) (string, string) {
+		var out, errb strings.Builder
+		if err := cmdPermissionCheck([]string{"--expect", expect}, strings.NewReader(input), &out, &errb); err != nil {
+			t.Fatal(err)
+		}
+		return out.String(), errb.String()
+	}
+	if out, _ := run("acceptEdits", `{"permission_mode":"acceptEdits"}`); out != "" {
+		t.Errorf("a matching mode must not stop the session: %q", out)
+	}
+	out, msg := run("acceptEdits", `{"permission_mode":"bypassPermissions"}`)
+	if !strings.Contains(out, `"continue":false`) || !strings.Contains(msg, `started in "bypassPermissions"`) {
+		t.Errorf("out %q msg %q", out, msg)
+	}
+	if out, _ := run("acceptEdits", `{"nothing":1}`); out != "" {
+		t.Errorf("a hook input without a mode passes: %q", out)
+	}
+}
+
+// The delegate's own run writes the level it opened at back to its record, so
+// delegate_status reports it after the project's narrowing (ynw-id091).
+func TestRun_DelegateWritesTheOpenedLevelBackToItsRecord(t *testing.T) {
+	isolateRun(t)
+	work := t.TempDir()
+	t.Chdir(work)
+	t.Setenv(permission.CapEnv, "")
+	t.Setenv(delegationHandleEnv, "dlg-test")
+	if err := os.MkdirAll(filepath.Join(work, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, ".claude", "settings.json"), []byte(`{"permissions":{"defaultMode":"plan"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recPath := filepath.Join(t.TempDir(), "rec.json")
+	rec := delegation.Record{Handle: "dlg-test", Parent: "local/p", Delegate: "local/h", Folder: work, Status: delegation.StatusRunning, AutoApprove: "all", AutoApproveFrom: "default"}
+	data, _ := json.Marshal(rec)
+	if err := os.WriteFile(recPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(delegationRecordEnv, recPath)
+	dir := filepath.Join(t.TempDir(), "h")
+	writeSkillHarness(t, dir, "h")
+	stubLaunchArgs(t, func([]string) error { return nil })
+	if err := cmdRun([]string{dir, "-v", "claude", "--trust", "--", "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := delegation.Load(recPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AutoApprove != "none" || got.AutoApproveFrom != "project" {
+		t.Errorf("record shows %s (%s), want none (project)", got.AutoApprove, got.AutoApproveFrom)
 	}
 }

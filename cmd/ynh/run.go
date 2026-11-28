@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/inboxmcp"
 	"github.com/eyelock/ynh/internal/labels"
@@ -299,6 +300,23 @@ func cmdRun(args []string) (runErr error) {
 			return err
 		}
 		vendorArgs = append(append([]string{}, rp.Args...), vendorArgs...)
+		// A delegate's record shows the level the session actually opens at,
+		// after its own project narrowing (D5).
+		if path := os.Getenv(delegationRecordEnv); path != "" {
+			if _, err := delegation.Update(path, func(r *delegation.Record) {
+				r.AutoApprove, r.AutoApproveFrom = string(rp.Level), string(rp.From)
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "ynh: could not record the level on the delegation: %v\n", err)
+			}
+		}
+		// Claude Code reports the mode it opened in; a mismatch with the
+		// resolved level stops the session (ynw-c5hme). Other vendors report
+		// none to check.
+		if hook, herr := openedModeSettings(adapter.Name(), rp.OpenedMode, vendorArgs); herr != nil {
+			return herr
+		} else if hook != nil {
+			vendorArgs = append(hook, vendorArgs...)
+		}
 	} else if action == "" && ra.AutoApprove != "" {
 		if err := capInteractive(ra.AutoApprove); err != nil {
 			return err

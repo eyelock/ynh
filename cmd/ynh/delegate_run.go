@@ -113,7 +113,7 @@ func delegateRunStart(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if step, err = step.Ask(permission.Level(autoApprove), permission.FromCall); err != nil {
+	if step, err = step.Ask(permission.Level(autoApprove), permission.SourceCall); err != nil {
 		return fmt.Errorf("--auto-approve: %w", err)
 	}
 	exe, err := os.Executable()
@@ -123,7 +123,7 @@ func delegateRunStart(args []string, stdout io.Writer) error {
 	rec, path, err := delegation.Start(delegation.StartOptions{
 		Parent: parentID, Delegate: resolved.ID, Task: task, Model: model,
 		Profile: resolved.Profile, Focus: resolved.Focus, Folder: folder,
-		AutoApprove: string(step.Level), AutoApproveFrom: step.From,
+		AutoApprove: string(step.Level), AutoApproveFrom: string(step.From),
 		Supervisor: []string{exe, "delegate-run", "supervise"},
 	})
 	if err != nil {
