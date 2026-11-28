@@ -155,7 +155,7 @@ A refusal says which act it refused. The gate says `refusing to run`; an accepta
 $ ynh trust accept ./dir
 Error: refusing to accept dir: what its includes execute could not be read in full.
   the harness: include github.com/you/shared is not in the cache, so what it executes cannot be read: resolving github.com/you/shared: not in the include cache
-Fetch them by running it with --trust, once each remote include and native delegate is pinned to a full 40-character commit SHA (ynh run <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only.
+Fetch them by running it with --trust, once each remote include and native delegate is pinned to a full 40-character commit SHA (ynh run <folder> --trust, ynh check <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only.
 ```
 
 `ynh check` and `ynh run` refuse the same untrusted harness alike: exit 1, error code `untrusted`, the same message, whether the harness is installed or a folder, and including a folder whose remote include cannot be read.
