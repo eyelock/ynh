@@ -269,9 +269,30 @@ func cmdPermissionCheck(args []string, stdin io.Reader, stdout, stderr io.Writer
 		return nil
 	}
 	if args[3] == openedModePreTool {
+		if path := os.Getenv(permission.StopEnv); path != "" {
+			_ = os.WriteFile(path, []byte(mismatch.Error()), 0o600)
+		}
 		return json.NewEncoder(stdout).Encode(map[string]any{"hookSpecificOutput": map[string]any{
 			"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": mismatch.Error()}})
 	}
 	_, _ = fmt.Fprintln(stderr, mismatch)
+	if path := os.Getenv(permission.StopEnv); path != "" {
+		_ = os.WriteFile(path, []byte(mismatch.Error()), 0o600)
+	}
 	return &exitCodeError{code: 2, err: mismatch}
+}
+
+// stoppedByOpenedModeCheck turns a launch that the opened-mode check stopped
+// into an error, so ynh exits nonzero and says why on stderr: Claude Code ends
+// such a session with exit 0, and a script would read that as success. A launch
+// that already failed keeps its own error.
+func stoppedByOpenedModeCheck(stopFile string, launchErr error) error {
+	if launchErr != nil || stopFile == "" {
+		return launchErr
+	}
+	msg, err := os.ReadFile(stopFile)
+	if err != nil || len(msg) == 0 {
+		return nil
+	}
+	return fmt.Errorf("the session was stopped by the opened-mode check: %s", msg)
 }

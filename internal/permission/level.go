@@ -130,6 +130,11 @@ func CapFrom(getenv func(string) string) (Level, error) {
 	return l, nil
 }
 
+// StopEnv names the file the opened-mode hook writes its message to when it
+// stops a session. The vendor ends with exit 0 in that case, so ynh run reads
+// the file after it and exits nonzero.
+const StopEnv = "YNH_PERMISSION_STOP"
+
 // SourceEnv carries the source of the --auto-approve a delegate's ynh run was
 // started with (entry or call), so its own report names it.
 const SourceEnv = "YNH_AUTO_APPROVE_SOURCE"

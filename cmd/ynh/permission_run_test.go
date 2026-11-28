@@ -374,3 +374,47 @@ func TestRun_DelegateWritesTheOpenedLevelBackToItsRecord(t *testing.T) {
 		t.Errorf("record shows %s (%s), want none (project)", got.AutoApprove, got.AutoApproveFrom)
 	}
 }
+
+// A session the opened-mode check stops ends the vendor with exit 0; ynh run
+// then exits nonzero and says why (ynw-bty92).
+func TestStoppedByOpenedModeCheck(t *testing.T) {
+	if err := stoppedByOpenedModeCheck("", nil); err != nil {
+		t.Errorf("no check: %v", err)
+	}
+	stop := filepath.Join(t.TempDir(), "stop")
+	if err := stoppedByOpenedModeCheck(stop, nil); err != nil {
+		t.Errorf("a run the check did not stop: %v", err)
+	}
+	t.Setenv(permission.StopEnv, stop)
+	for _, event := range []string{"user_prompt", "pre_tool"} {
+		_ = os.Remove(stop)
+		_ = cmdPermissionCheck([]string{"--expect", "plan", "--event", event}, strings.NewReader(`{"permission_mode":"bypassPermissions"}`), io.Discard, io.Discard)
+		err := stoppedByOpenedModeCheck(stop, nil)
+		if err == nil || !strings.Contains(err.Error(), "stopped by the opened-mode check") || !strings.Contains(err.Error(), `started in "bypassPermissions"`) {
+			t.Errorf("%s: err = %v", event, err)
+		}
+	}
+	// A launch that already failed keeps its own error.
+	boom := errors.New("vendor failed")
+	if err := stoppedByOpenedModeCheck(stop, boom); !errors.Is(err, boom) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// End to end: a run whose vendor exits 0 after the hook stopped it is an error.
+func TestRun_OneShotStoppedByTheCheckExitsNonzero(t *testing.T) {
+	isolateRun(t)
+	t.Chdir(t.TempDir())
+	t.Setenv(permission.CapEnv, "")
+	dir := filepath.Join(t.TempDir(), "h")
+	writeSkillHarness(t, dir, "h")
+	stubLaunchArgs(t, func([]string) error {
+		// What the hook does when Claude opens in another mode, then Claude exits 0.
+		_ = cmdPermissionCheck([]string{"--expect", "acceptEdits", "--event", "user_prompt"}, strings.NewReader(`{"permission_mode":"bypassPermissions"}`), io.Discard, io.Discard)
+		return nil
+	})
+	err := cmdRun([]string{dir, "-v", "claude", "--trust", "--auto-approve", "edits", "--", "hi"})
+	if err == nil || !strings.Contains(err.Error(), "stopped by the opened-mode check") {
+		t.Fatalf("err = %v, want a nonzero exit saying why", err)
+	}
+}

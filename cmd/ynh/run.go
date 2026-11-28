@@ -24,6 +24,7 @@ import (
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/parentmcp"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/runsnap"
@@ -284,6 +285,7 @@ func cmdRun(args []string) (runErr error) {
 	// The level this run opens at (D1-D6): a one-shot run is passed the
 	// vendor's arguments for it; an interactive one is unchanged, and with
 	// --auto-approve only caps its delegates (S4).
+	stopFile := "" // set when the opened-mode check is on (see below)
 	if action == "" && oneShot {
 		wd, wdErr := os.Getwd()
 		if wdErr != nil {
@@ -317,6 +319,17 @@ func cmdRun(args []string) (runErr error) {
 			return herr
 		}
 		vendorArgs = checked
+		// A session the check stops still ends the vendor with exit 0, so the
+		// hook leaves a note here and this run then exits nonzero.
+		if adapter.Name() == permission.Claude && rp.OpenedMode != "" {
+			id, _ := sessions.NewID()
+			stopFile = filepath.Join(os.TempDir(), "ynh-permission-stop-"+id)
+			_ = os.Remove(stopFile)
+			if err := os.Setenv(permission.StopEnv, stopFile); err != nil {
+				return err
+			}
+			defer func() { _ = os.Remove(stopFile) }()
+		}
 	} else if action == "" && ra.AutoApprove != "" {
 		if err := capInteractive(ra.AutoApprove); err != nil {
 			return err
@@ -878,7 +891,8 @@ func cmdRun(args []string) (runErr error) {
 		defer removeHook()
 		endPresence := startPresence(sessionID, adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession, inboxWired)
 		defer endPresence()
-		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		launchErr := launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		return stoppedByOpenedModeCheck(stopFile, launchErr)
 	}
 }
 
