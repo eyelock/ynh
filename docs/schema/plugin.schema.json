@@ -813,7 +813,7 @@
           "auto_approve": {
             "type": "string",
             "enum": ["none", "edits", "all"],
-            "description": "The most this entry lets the delegate open at when it runs unattended. It may only narrow the delegate harness's own level; undeclared, the delegate's level applies. Changing it asks for `ynh trust accept` again."
+            "description": "The most this entry lets the delegate open at when it runs unattended. It may only narrow the delegate harness's own level; undeclared, the delegate's level applies. For an a2a entry only: a native delegate is a subagent in the parent's session and runs at the parent's level, so an entry that resolves to transport native and declares one is refused wherever the harness is loaded. Changing it asks for `ynh trust accept` again."
           },
           "transport": {
             "type": "string",
