@@ -287,12 +287,13 @@ func cmdPermissionCheck(args []string, stdin io.Reader, stdout, stderr io.Writer
 // such a session with exit 0, and a script would read that as success. A launch
 // that already failed keeps its own error.
 func stoppedByOpenedModeCheck(stopFile string, launchErr error) error {
-	if launchErr != nil || stopFile == "" {
+	if stopFile == "" {
 		return launchErr
 	}
-	msg, err := os.ReadFile(stopFile)
-	if err != nil || len(msg) == 0 {
-		return nil
+	// What the hook wrote is the specific reason, and wins over the generic
+	// error of a session ynh then found without a hook response.
+	if msg, err := os.ReadFile(stopFile); err == nil && len(msg) > 0 {
+		return fmt.Errorf("the session was stopped by the opened-mode check: %s", msg)
 	}
-	return fmt.Errorf("the session was stopped by the opened-mode check: %s", msg)
+	return launchErr
 }

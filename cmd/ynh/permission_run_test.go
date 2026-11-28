@@ -394,8 +394,13 @@ func TestStoppedByOpenedModeCheck(t *testing.T) {
 			t.Errorf("%s: err = %v", event, err)
 		}
 	}
-	// A launch that already failed keeps its own error.
+	// The hook's message is the specific reason and wins over a generic error;
+	// a launch that failed on its own keeps its own error.
 	boom := errors.New("vendor failed")
+	if err := stoppedByOpenedModeCheck(stop, boom); err == nil || !strings.Contains(err.Error(), "stopped by the opened-mode check") {
+		t.Errorf("err = %v", err)
+	}
+	_ = os.Remove(stop)
 	if err := stoppedByOpenedModeCheck(stop, boom); !errors.Is(err, boom) {
 		t.Errorf("err = %v", err)
 	}

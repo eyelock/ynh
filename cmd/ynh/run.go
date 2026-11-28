@@ -286,6 +286,7 @@ func cmdRun(args []string) (runErr error) {
 	// vendor's arguments for it; an interactive one is unchanged, and with
 	// --auto-approve only caps its delegates (S4).
 	stopFile := "" // set when the opened-mode check is on (see below)
+	streamMode := ""
 	if action == "" && oneShot {
 		wd, wdErr := os.Getwd()
 		if wdErr != nil {
@@ -329,6 +330,14 @@ func cmdRun(args []string) (runErr error) {
 				return err
 			}
 			defer func() { _ = os.Remove(stopFile) }()
+			// ynh reads the session's stream, so a session whose hooks never
+			// ran is refused, and renders the answer itself.
+			streamed, serr := withClaudeStream(vendorArgs)
+			if serr != nil {
+				return serr
+			}
+			vendorArgs = streamed
+			streamMode = rp.OpenedMode
 		}
 	} else if action == "" && ra.AutoApprove != "" {
 		if err := capInteractive(ra.AutoApprove); err != nil {
@@ -891,6 +900,10 @@ func cmdRun(args []string) (runErr error) {
 		defer removeHook()
 		endPresence := startPresence(sessionID, adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession, inboxWired)
 		defer endPresence()
+		if streamMode != "" {
+			removeStream := vendor.OnChildStdout(claudeStreamFilter(streamMode, os.Stdout))
+			defer removeStream()
+		}
 		launchErr := launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 		return stoppedByOpenedModeCheck(stopFile, launchErr)
 	}
