@@ -57,15 +57,15 @@ func For(vendor string, level Level) (Mapping, error) {
 	}
 	switch vendor {
 	case Claude:
-		// none and edits are provisional: none waits on ynw-sg5jw (allow lists
-		// widening default); edits is the human's decision on ynw-mpnjz, pending
-		// Weller's live proof on ynh #1059 (if it fails, edits becomes a
-		// RefusedError here).
+		// none is provisional: a project allow list did not widen it, but the
+		// folder was not one Claude Code trusts, so that its allow rules were
+		// read at all is not shown (ynh #1059, ynw-sg5jw). edits holds live
+		// (ynh #1059, ynw-mpnjz): sh -c, touch and mkdir are refused, Write works.
 		switch level {
 		case None:
 			return Mapping{Args: []string{"--permission-mode", "default"}, Provisional: true}, nil
 		case Edits:
-			return Mapping{Args: []string{"--permission-mode", "acceptEdits", "--disallowedTools", "Bash"}, Provisional: true}, nil
+			return Mapping{Args: []string{"--permission-mode", "acceptEdits", "--disallowedTools", "Bash"}}, nil
 		}
 		return Mapping{Args: []string{"--permission-mode", "bypassPermissions"}}, nil
 	case Codex:
@@ -79,9 +79,9 @@ func For(vendor string, level Level) (Mapping, error) {
 	case Cursor:
 		switch level {
 		case None:
-			// Provisional refusal: --mode ask may make this exact (being
-			// tested); flip it here. P0 (ynh #1059): print mode without --force still writes files,
-			// and a folder's .cursor/cli.json allow list widens it.
+			// Final (ynh #1059): --mode plan is the only setting that held none,
+			// and a project allow list widened even that; --mode ask allowed the
+			// edit. Print mode without --force still writes files.
 			return Mapping{}, &RefusedError{vendor, level, "print mode without --force still writes files and a project allow list widens it; use all, or a different vendor"}
 		case Edits:
 			return Mapping{}, &RefusedError{vendor, level, noEditsOnly}
@@ -90,9 +90,9 @@ func For(vendor string, level Level) (Mapping, error) {
 	case OpenCode:
 		switch level {
 		case None:
-			return Mapping{Args: []string{"--standalone"}, Env: []string{opencodePermission("deny", "deny")}, Provisional: true}, nil
+			return Mapping{Args: []string{"--standalone"}, Env: []string{opencodePermission("deny", "deny")}}, nil
 		case Edits:
-			return Mapping{Args: []string{"--standalone"}, Env: []string{opencodePermission("allow", "deny")}, Provisional: true}, nil
+			return Mapping{Args: []string{"--standalone"}, Env: []string{opencodePermission("allow", "deny")}}, nil
 		}
 		return Mapping{Args: []string{"--auto"}}, nil
 	case Copilot:

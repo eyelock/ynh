@@ -331,3 +331,20 @@ func TestMergeEnv_KeepsIsolationAndTheCallersContent(t *testing.T) {
 		t.Error("a non-object must fail")
 	}
 }
+
+// Only Claude Code's none is still provisional against ynh #1059's final
+// results (its project allow rules were not shown to be read in a trusted
+// folder). Clearing it is one edit in For.
+func TestFor_ProvisionalCells(t *testing.T) {
+	var got []string
+	for _, v := range []string{Claude, Codex, Cursor, OpenCode, Copilot} {
+		for _, l := range []Level{None, Edits, All} {
+			if m, err := For(v, l); err == nil && m.Provisional {
+				got = append(got, v+"/"+string(l))
+			}
+		}
+	}
+	if !slices.Equal(got, []string{"claude/none"}) {
+		t.Errorf("provisional cells = %v, want [claude/none]", got)
+	}
+}
