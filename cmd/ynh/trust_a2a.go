@@ -191,7 +191,24 @@ func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src dele
 	if err != nil {
 		return nil, err
 	}
-	return harness.LoadDir(base)
+	dh, err := harness.LoadDir(base)
+	if err != nil {
+		return nil, err
+	}
+	dh.InstalledFrom = cacheProvenance(src)
+	return dh, nil
+}
+
+// cacheProvenance is the provenance of a delegate read from the cache rather
+// than installed, so an entry of its own naming its repository ("." or
+// "./sub") resolves to that repository at the commit it was read at
+// (delegateEntrySource), not to the cache folder as if it were a local one.
+func cacheProvenance(src delegateSource) *harness.Provenance {
+	pr := &harness.Provenance{SourceType: "git", Source: src.url, Path: src.path, Ref: src.ref}
+	if isFullSHA(src.ref) {
+		pr.SHA = src.ref
+	}
+	return pr
 }
 
 // acceptedDelegate is what acceptA2ATree recorded for one delegate.

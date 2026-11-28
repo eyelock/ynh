@@ -299,3 +299,31 @@ func TestFolderRunTrustAcceptsA2ADelegates(t *testing.T) {
 		t.Errorf("a floating a2a delegate must be refused, got %v", err)
 	}
 }
+
+// A nested delegate naming its own repository (git ".") inside a delegate read
+// from the cache resolves to that repository at the pinned commit, not to the
+// cache folder as a local one (ynw-68k6d).
+func TestNestedOwnRepoEntryInCacheLoadedDelegateResolvesToItsRepository(t *testing.T) {
+	src := delegateSource{url: "github.com/o/a", path: "harnesses/a", ref: sha1}
+	dh := &harness.Harness{Name: "a", Dir: t.TempDir(), InstalledFrom: cacheProvenance(src)}
+	entry := harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "../b"}}
+
+	got, err := delegateEntrySource(dh, entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.local != "" || got.url != "github.com/o/a" || got.path != "harnesses/b" {
+		t.Errorf("want the delegate's own repository, got %+v", got)
+	}
+
+	args := installArgsFor(dh, harness.Delegate{GitSource: harness.GitSource{Git: "."}}, delegateSource{url: "github.com/o/a", path: "harnesses/b"})
+	if strings.Join(args, " ") != "github.com/o/a --path harnesses/b --ref "+sha1 {
+		t.Errorf("a nested own-repo delegate installs at the containing delegate's pinned commit: %q", args)
+	}
+
+	// Without the provenance it would read as a local folder, the bug.
+	bare := &harness.Harness{Name: "a", Dir: t.TempDir()}
+	if got, _ := delegateEntrySource(bare, entry); got.local == "" {
+		t.Errorf("control: a harness with no provenance reads . as local: %+v", got)
+	}
+}
