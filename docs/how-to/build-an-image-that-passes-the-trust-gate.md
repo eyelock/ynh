@@ -71,7 +71,17 @@ The image flags themselves are in [Docker: Harness Images](../docker.md#harness-
    For a local folder, leave out `--ref`; its remote includes still need full SHAs.
 
    `--trust` accepts what the source runs and bakes that acceptance into the image. Without it, a
-   harness with hooks, MCP servers, sensors or workspace folders is refused at build time, exit 1:
+   harness with hooks, MCP servers, sensors or workspace folders is refused at build time, exit 1.
+   While a remote include is not in this machine's include cache yet (the usual case the first time),
+   ynh cannot read what it executes, and says so:
+
+   ```
+   Error: refusing to build an image of local/reviewer: local/reviewer cannot be reviewed yet: what it executes could not be read in full.
+     the harness: include github.com/<org>/<include-repo> is not in the cache, so what it executes cannot be read: resolving github.com/<org>/<include-repo>: not in the include cache
+   Fix: review it, then build with 'ynh image reviewer --from <source> --trust', which fetches its includes (each remote include must be pinned to a 40-character commit SHA).
+   ```
+
+   Once its includes are cached, or when it has no remote includes, it lists what it executes:
 
    ```
    Error: refusing to build an image of reviewer from <source>: you have not accepted what it executes.

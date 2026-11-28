@@ -137,7 +137,7 @@ delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`submitted`, 
 | `delegate_to_<name>` (`task`, optional `wait`, optional `on_live`) | Sends the task through the delegate's A2A endpoint, with its token. When a live interactive session of the delegate accepts tasks it is queued there (state `submitted`, `route: live`) and nothing starts; otherwise a headless session starts (state `working`, `route: headless`). `on_live` is `queue` (the default) or `headless`, and `headless` always starts a session of its own. It returns the handle: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
 | `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
-| `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is the delegate's question. |
+| `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is `<delegate> asks: <question>`. |
 | `delegate_result` (`task_id`, optional `wait`) | The result once completed; the state for one still going. |
 | `delegate_cancel` (`task_id`) | Cancels and stops the run's process group. |
 | `delegate_reply` (`task_id`, `message`, optional `wait`) | A message on the same task: the answer to a question. |
@@ -260,7 +260,7 @@ that name is refused at run.
 
 `ask_parent` (`question`, optional `wait`) writes the question to the delegation record and waits, at most 45
 seconds (`YNH_PARENT_ASK_MAX_WAIT`, in seconds). The record puts the delegate's A2A task into
-`input-required`, with the question as its message. The parent sees it by its route. By default
+`input-required`, with the bare question as its A2A status message (what `a2a task get` shows); ynh's `delegate_status` reports it as `<delegate> asks: <question>`. The parent sees it by its route. By default
 the route follows the session ([`delegate_questions`](harnesses.md#delegate-questions-optional) absent): an
 interactive parent gets the two client routes below, where its client offers them, and a headless parent
 gets the result route. A harness that sets `delegate_questions` to `model` gets the result route whatever
