@@ -2,6 +2,20 @@ package permission
 
 import "fmt"
 
+// RootAllNote is what `trust show` and `trust accept` say about a harness that
+// opens at all (N4, ynw-44fxh): as root, Claude Code opens all only when one of
+// the two sandbox variables is set (the same two CheckRoot honours), and
+// otherwise ynh refuses it.
+const RootAllNote = "As root, Claude Code opens 'all' only when IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set; otherwise 'all' is refused as root."
+
+// RootNote is RootAllNote for a harness opening at level, and "" for any other.
+func RootNote(level Level) string {
+	if level == All {
+		return RootAllNote
+	}
+	return ""
+}
+
 // CheckRoot refuses a Claude Code run at level all as root (N4), before
 // Claude starts: Claude refuses bypassPermissions as root itself, and ynh
 // says so first, once, with the fixes. euid is the caller's effective uid,

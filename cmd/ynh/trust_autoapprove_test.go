@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -177,5 +178,46 @@ func TestTrustAcceptListsEntryLevels(t *testing.T) {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("want %q in:\n%s", want, b.String())
 		}
+	}
+}
+
+// ynw-44fxh: a harness opening at all says what running as root does to it, in
+// trust show and trust accept, in text and JSON; any other level says nothing.
+func TestTrustSaysAllAsRootNeedsASandboxVariable(t *testing.T) {
+	note := permission.RootAllNote
+	for _, want := range []string{"IS_SANDBOX=1", "CLAUDE_CODE_BUBBLEWRAP", "refused as root"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("the note must name %q: %s", want, note)
+		}
+	}
+
+	all := harnessWithSensors(t, nil) // declares nothing: opens at all
+	edits := harnessWithSensors(t, nil)
+	edits.AutoApprove = "edits"
+
+	var st trustStatus
+	fillAutoApprove(&st, all)
+	if st.AutoApproveAsRoot != note {
+		t.Errorf("JSON field for all = %q", st.AutoApproveAsRoot)
+	}
+	if out := showText(t, st); !strings.Contains(out, note) {
+		t.Errorf("trust show text lacks the note:\n%s", out)
+	}
+	var b bytes.Buffer
+	printAcceptedLevel(&b, all, trustSet{})
+	if !strings.Contains(b.String(), note) {
+		t.Errorf("trust accept text lacks the note:\n%s", b.String())
+	}
+	js, err := json.Marshal(st)
+	if err != nil || !strings.Contains(string(js), `"auto_approve_as_root"`) {
+		t.Errorf("JSON lacks auto_approve_as_root: %s (%v)", js, err)
+	}
+
+	var e trustStatus
+	fillAutoApprove(&e, edits)
+	b.Reset()
+	printAcceptedLevel(&b, edits, trustSet{})
+	if e.AutoApproveAsRoot != "" || strings.Contains(b.String(), "IS_SANDBOX") || strings.Contains(showText(t, e), "IS_SANDBOX") {
+		t.Errorf("a level other than all must not carry the note: %+v", e)
 	}
 }

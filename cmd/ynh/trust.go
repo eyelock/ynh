@@ -1003,6 +1003,9 @@ type trustStatus struct {
 	AutoApprove     string   `json:"auto_approve,omitempty"`
 	AutoApproveFrom string   `json:"auto_approve_from,omitempty"`
 	DelegateLevels  []string `json:"delegate_levels,omitempty"`
+	// AutoApproveAsRoot says what running as root does to a level of all
+	// (permission.RootAllNote); absent for any other level.
+	AutoApproveAsRoot string `json:"auto_approve_as_root,omitempty"`
 	// Moved is why a record that matches the digest still does not count:
 	// the harness is installed from another source or at another commit than
 	// the one accepted. Set only when the state is "changed" for that reason.
@@ -1465,6 +1468,9 @@ func printAutoApproveSection(w io.Writer, s trustStatus) {
 	} else {
 		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (declared by the harness)\n", s.AutoApprove)
 	}
+	if s.AutoApproveAsRoot != "" {
+		_, _ = fmt.Fprintf(w, "  %s\n", s.AutoApproveAsRoot)
+	}
 	for _, l := range s.DelegateLevels {
 		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
 	}
@@ -1476,11 +1482,15 @@ func printAutoApproveSection(w io.Writer, s trustStatus) {
 func fillAutoApprove(st *trustStatus, p *harness.Harness) {
 	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
 	st.DelegateLevels = harnessExecutables(p).DelegateLevels
+	st.AutoApproveAsRoot = permission.RootNote(p.AutoApproveOf())
 }
 
 // printAcceptedLevel says what level an acceptance of p covers.
 func printAcceptedLevel(w io.Writer, p *harness.Harness, set trustSet) {
 	_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
+	if note := permission.RootNote(p.AutoApproveOf()); note != "" {
+		_, _ = fmt.Fprintf(w, "  %s\n", note)
+	}
 	for _, l := range set.DelegateLevels {
 		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
 	}
