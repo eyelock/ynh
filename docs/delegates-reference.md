@@ -46,9 +46,11 @@ size, cost or urgency. Model and effort each resolve on their own, from the high
 | Layer | Where it is set | Applies to |
 |---|---|---|
 | 1. The call | optional `model` and `effort` arguments of the `delegate_to_<name>` tool | that delegation only |
-| 2. The parent's entry | `model` and `effort` on the `delegates_to` entry in the parent's manifest | every call that names none |
-| 3. The delegate's own default | `default_model` and `default_effort` in the delegate harness's manifest | a delegate session, when layers 1 and 2 name none |
+| 2. The parent's entry | `model` and `effort` on the `delegates_to` entry in the parent's manifest | every call that names none, except a task queued at a live session, which runs with its own |
+| 3. The delegate's own default | `default_model` and `default_effort` in the delegate harness's manifest | a delegate session of its own (not a task queued at a live session), when layers 1 and 2 name none |
 | 4. The vendor's default | nothing is passed | the vendor's own model and effort |
+
+A live interactive session of the delegate is the exception. It keeps its own model and effort, so layers 2 and 3 are not applied to a task queued at it, and a call that names a `model` or `effort` while one is live is refused before it is queued (resend with `on_live: headless`, which runs a session of its own with them, or without them). A task queued at a live session reports `model_from` and `effort_from` as `live_session`, with no value, since ynh does not know the session's own.
 
 `effort` is `low`, `medium` or `high`, the same three levels as `ynh agent run --effort`. A `model` is a
 vendor's model name, passed as `--model=<name>`; one that is empty, starts with `-` or holds white space is
@@ -69,8 +71,8 @@ session's own ([the parity record](vendor-parity.md#l42-a-delegate-s-model-and-e
 What a delegation used is recorded, and shown:
 
 - `delegate_to_<name>`, `delegate_status`, `delegate_result` and `delegate_list` carry `model`, `model_from`,
-  `effort` and `effort_from`. A `_from` is `call`, `entry`, `delegate_default` or `vendor_default`; with
-  `vendor_default` the value is absent, as nothing was passed.
+  `effort` and `effort_from`. A `_from` is `call`, `entry`, `delegate_default`, `vendor_default` or `live_session`; with
+  `vendor_default` the value is absent, as nothing was passed, and with `live_session` it is absent too: the task was queued at a live session, which runs with its own.
 - `ynh info` shows what each delegate opens with when a call names none: `model=haiku (entry)`,
   `effort=low (delegate default)` or `model=(vendor default)` in text, and `model`, `model_from`, `effort` and
   `effort_from` in JSON. It reads the delegate harness's own default; for a delegate it cannot read it shows

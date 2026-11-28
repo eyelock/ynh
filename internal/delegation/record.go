@@ -105,7 +105,8 @@ type Record struct {
 	Task   string `json:"task"`
 	// Model and Effort are what the delegate was started with, and ModelFrom
 	// and EffortFrom where each came from (call, entry, delegate_default; a
-	// vendor_default is no value, so the vendor's own applies). Vendor is the
+	// vendor_default is no value, so the vendor's own applies; nor is a
+	// live_session, a task queued at a live session, which runs with its own). Vendor is the
 	// delegate's vendor, which Effort was mapped onto.
 	Model      string `json:"model,omitempty"`
 	ModelFrom  string `json:"model_from,omitempty"`
