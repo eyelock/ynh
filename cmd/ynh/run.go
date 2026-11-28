@@ -789,6 +789,9 @@ func cmdRun(args []string) (runErr error) {
 		if inboxWired {
 			vendorArgs = append(inboxAllowArgs(adapter.Name(), p.Name), vendorArgs...)
 			_ = os.Setenv(inboxSessionEnv, sessionID)
+			// A task queued while the session sits idle at its prompt is told to
+			// the person at the terminal (bell, title, OS notification).
+			defer startIdleNotice(runDirName, sessionID)()
 		}
 
 		// Workspace folders the harness requested and the operator granted,

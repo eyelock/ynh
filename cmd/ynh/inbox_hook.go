@@ -134,6 +134,14 @@ func cmdInboxHook(args []string, stdin io.Reader, stdout io.Writer) error {
 	if run == "" || vendorName == "" || (event != inboxEventBeforePrompt && event != inboxEventOnStop) {
 		return fmt.Errorf("usage: ynh inbox-hook --harness <run name> --vendor <vendor> --event <before_prompt|on_stop>")
 	}
+	session := os.Getenv(inboxSessionEnv)
+	// A turn starting or ending is what the idle notice waits on: it does not
+	// ring a session that is in the middle of a turn.
+	if event == inboxEventBeforePrompt {
+		writeActivity(session, activityBusy)
+	} else {
+		writeActivity(session, activityIdle)
+	}
 	es, err := delegation.Inbox(run)
 	if err != nil || len(es) == 0 {
 		return nil
@@ -142,7 +150,6 @@ func cmdInboxHook(args []string, stdin io.Reader, stdout io.Writer) error {
 		StopHookActive bool `json:"stop_hook_active"`
 	}
 	_ = json.NewDecoder(stdin).Decode(&in)
-	session := os.Getenv(inboxSessionEnv)
 	announced := readAnnounced(session)
 	out, fresh := inboxHookOutput(vendorName, event, es, announced, in.StopHookActive)
 	if out == "" {
