@@ -157,6 +157,14 @@ which is smaller than ynh's, so pass `CODEX_HOME` or `XDG_CONFIG_HOME` in
 `env_passthrough` if the worker should see your config at all. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
+**Codex and the harness's instructions.** A `codex` worker runs in the
+worktree, and Codex reads `AGENTS.md` only from there and from `~/.codex`, not
+from the run directory where ynh composes the harness's instructions. So on
+every turn ynh passes them as `-c developer_instructions=<text>`, and writes
+nothing into the worktree. They add to the project's own `AGENTS.md`: Codex
+still reads that file from the worktree, and the harness's text does not
+replace it. A harness with no instructions passes nothing.
+
 **Codex and MCP approval.** A `codex` worker runs `codex exec`, which has no one
 to ask, so ynh approves the tools of the MCP servers the harness composes on
 every turn, as a one-shot `ynh run` does (see
