@@ -344,7 +344,7 @@ func warmFolderIncludes(p *harness.Harness) error {
 		return refuseUnpinnedWith(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))}, uncachedUnpinnedClosing)
 	}
 	if err != nil {
-		return fmt.Errorf("--trust could not fetch the includes of %s: %w", p.Name, err)
+		return fmt.Errorf("--trust could not fetch the includes and native delegates of %s: %w", p.Name, err)
 	}
 	return nil
 }
