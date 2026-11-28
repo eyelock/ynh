@@ -591,7 +591,9 @@ bring until you run 'ynh trust accept <dir>', or pass --trust to 'ynh run',
 'ynh check' or 'ynh agent run --harness' to fetch and accept them in the same
 step (each include pinned to a full SHA). Review them first with
 'ynh trust show <dir>'. A harness with nothing to review
-(no-commands) needs no acceptance. 'ynh install --trust' accepts in the same step,
+(no-commands) needs no acceptance to run interactively; a one-shot run, a
+delegate session and 'ynh agent run' need it accepted, since acceptance covers
+the level they open at. 'ynh install --trust' accepts in the same step,
 at full commit SHAs. See docs/trust.md.
 
 The record lives in $YNH_HOME/trust.json, deliberately outside the harness
