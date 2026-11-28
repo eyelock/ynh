@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"sort"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -311,8 +312,8 @@ func IsFullSHA(ref string) bool {
 // An uncached include that is not full-SHA pinned is not fetched and ends the
 // walk with an *UnpinnedUncachedError. It is the operator's explicit act
 // (`--trust` on a folder run); a check of the gate never calls it.
-func WarmPinnedIncludes(p *harness.Harness) error {
-	_, _, err := resolveSelected(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+func WarmPinnedIncludes(p *harness.Harness, cfg *config.Config) error {
+	_, _, err := resolveSelected(p, cfg, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
 		fetch := repoFunc(func(gitURL, ref string) (RepoResult, error) {
 			if res, ok := LookupCache(gitURL, ref); ok {
 				return res, nil

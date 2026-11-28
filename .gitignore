@@ -44,3 +44,4 @@ Thumbs.db
 
 # Eval report (scripts/evals.sh)
 /evals-report.txt
+/cmd/ynh/ynh
