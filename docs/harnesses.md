@@ -101,7 +101,7 @@ If omitted, falls back to `~/.ynh/config.json` default.
 
 ### default_model and default_effort (optional)
 
-The model and the reasoning effort (`low`, `medium` or `high`) this harness opens with when a parent runs it as a
+From v0.18.1; v0.18.0 does not read them. The model and the reasoning effort (`low`, `medium` or `high`) this harness opens with when a parent runs it as a
 delegate, and neither the parent's call nor its `delegates_to` entry names one. Unset leaves the vendor's own
 default. They apply to a delegate session only, not to a plain `ynh run`. See
 [Model and effort](delegates-reference.md#model-and-effort).
@@ -319,8 +319,8 @@ Other harnesses this one can invoke as subagents.
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
-| `model` | no | The model the delegate opens with unless the call names its own; wins over the delegate's `default_model`. See [Model and effort](delegates-reference.md#model-and-effort). |
-| `effort` | no | The reasoning effort (`low`, `medium` or `high`) the delegate opens with unless the call names its own; wins over the delegate's `default_effort`. |
+| `model` | no | From v0.18.1. The model the delegate opens with unless the call names its own; wins over the delegate's `default_model`. See [Model and effort](delegates-reference.md#model-and-effort). |
+| `effort` | no | From v0.18.1. The reasoning effort (`low`, `medium` or `high`) the delegate opens with unless the call names its own; wins over the delegate's `default_effort`. |
 | `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
 
 #### Transport

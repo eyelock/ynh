@@ -1,6 +1,6 @@
 # Delegates reference
 
-Facts about how a delegate runs under `ynh run`, as of v0.18.0. For why it is built this way, see
+Facts about how a delegate runs under `ynh run`, as of v0.18.1. The model and effort choices ([Model and effort](#model-and-effort)) arrive in v0.18.1; everything else here is as of v0.18.0. For why it is built this way, see
 [Delegate sessions](delegate-sessions.md). The manifest fields are in
 [delegates_to](harnesses.md#delegates-to-optional) and [Transport](harnesses.md#transport). What was shown
 live, and what was not, is under limit
@@ -40,7 +40,7 @@ OpenCode declare native subagents.
 
 ## Model and effort
 
-A parent chooses the model and the reasoning effort a delegate opens with, at call time, from the task's
+New in v0.18.1: v0.18.0 has none of this. A parent chooses the model and the reasoning effort a delegate opens with, at call time, from the task's
 size, cost or urgency. Model and effort each resolve on their own, from the highest layer that names one:
 
 | Layer | Where it is set | Applies to |
@@ -174,12 +174,12 @@ there is the handle, not the A2A task id the CLI used. A task started with the C
 Every tool returns `structuredContent` with a declared `outputSchema`, and the same JSON as text. A
 delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`working`, `input-required`, `completed`,
 `failed` or `canceled`), `message`, and `result` once completed or `log_tail` once failed; `asked_at` and
-`waiting_seconds` while `input-required`; `model`, `model_from`, `effort` and `effort_from` ([Model and effort](#model-and-effort)). `delegate_list` returns them as a list under `delegations`, and
+`waiting_seconds` while `input-required`; `model`, `model_from`, `effort` and `effort_from` ([Model and effort](#model-and-effort), from v0.18.1). `delegate_list` returns them as a list under `delegations`, and
 `ynh_ps` returns `sessions`.
 
 | Tool | Does |
 |---|---|
-| `delegate_to_<name>` (`task`, optional `wait`, `model`, `effort`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle with state `working`: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
+| `delegate_to_<name>` (`task`, optional `wait`, and from v0.18.1 `model`, `effort`) | Starts the delegate through its A2A endpoint, with its token, and returns its handle with state `working`: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
 | `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is `<delegate> asks: <question>`. |
