@@ -18,7 +18,7 @@
       "name": "lint-tools",
       "source": {
         "source": "local",
-        "path": "./harnesses/plugins/lint-tools"
+        "path": "./plugins/lint-tools"
       },
       "policy": {
         "installation": "AVAILABLE"

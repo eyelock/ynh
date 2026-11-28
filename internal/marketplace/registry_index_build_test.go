@@ -135,3 +135,38 @@ func TestLoadRegistryIndex_Checks(t *testing.T) {
 		}
 	}
 }
+
+// metadata.harnessRoot prefixes a harness's relative path, never a plugin's: a
+// plugin's is relative to the repository root.
+func TestLoadRegistryIndex_HarnessRootDoesNotPrefixPlugins(t *testing.T) {
+	idx, err := LoadRegistryIndex(registryFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, e := range idx.Entries {
+		if e.Source.Type == "local" {
+			got[e.Name] = e.Source.Path
+		}
+	}
+	if got["reviewer"] != "./harnesses/reviewer" || got["lint-tools"] != "./plugins/lint-tools" {
+		t.Errorf("local paths = %v", got)
+	}
+}
+
+// A default build over every vendor still refuses when one cannot carry an
+// entry, naming the entry, the vendor and the -v fix.
+func TestBuildFromRegistryIndex_DefaultAllVendorsRefusesAndNamesTheFix(t *testing.T) {
+	idx, err := LoadRegistryIndex(registryFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	_, err = BuildFromRegistryIndex(idx, RegistryBuildOptions{OutputDir: out})
+	if err == nil || !strings.Contains(err.Error(), `"formatter"`) || !strings.Contains(err.Error(), "-v") {
+		t.Fatalf("err = %v, want a refusal naming the entry, the vendor and the -v fix", err)
+	}
+	if entries, _ := os.ReadDir(out); len(entries) != 0 {
+		t.Errorf("a refused build wrote %d entries", len(entries))
+	}
+}

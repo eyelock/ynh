@@ -68,7 +68,11 @@ func LoadRegistryIndex(path string) (*RegistryIndex, error) {
 				return nil, fmt.Errorf("registry index %s: %q is listed twice", path, e.Name)
 			}
 			seen[e.Name] = true
-			src, err := indexEntrySource(e, root)
+			entryRoot := root
+			if list.kind == "plugins" {
+				entryRoot = ""
+			}
+			src, err := indexEntrySource(e, entryRoot)
 			if err != nil {
 				return nil, fmt.Errorf("registry index %s: %s entry %q: %w", path, list.kind, e.Name, err)
 			}
@@ -84,6 +88,9 @@ func LoadRegistryIndex(path string) (*RegistryIndex, error) {
 }
 
 // indexEntrySource maps a registry source onto the vendor-neutral source.
+//
+// harnessRoot prefixes a harness's relative path; a plugin's is relative to the
+// repository root and takes no prefix (ynh #395, ruled 2026-11-28).
 func indexEntrySource(e *plugin.HarnessEntry, harnessRoot string) (*vendor.MarketplaceSource, error) {
 	if p, ok := e.SourcePath(); ok {
 		if !strings.HasPrefix(p, "./") {

@@ -15,7 +15,7 @@
     },
     {
       "name": "lint-tools",
-      "source": "./harnesses/plugins/lint-tools",
+      "source": "./plugins/lint-tools",
       "description": "Linters"
     },
     {

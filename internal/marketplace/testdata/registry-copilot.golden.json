@@ -16,7 +16,7 @@
       "name": "lint-tools",
       "description": "Linters",
       "version": "1.2.0",
-      "source": "./harnesses/plugins/lint-tools"
+      "source": "./plugins/lint-tools"
     },
     {
       "name": "formatter",
