@@ -335,19 +335,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, fmt.Errorf("resolving working directory: %w", err)
 		}
 	}
-	// A narrower project permission mode wins over the run's level (D5),
-	// with a line saying so; a wider one never refuses the run.
-	res, err := resolveProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir, opts.Stderr)
-	if err != nil {
-		return result, err
-	}
-	opts.AutoApprove = string(res.Level)
-	opts.ProjectArgs, opts.ProjectMode = nil, ""
-	if res.FromProject() {
-		opts.ProjectArgs, opts.ProjectMode = res.Project.Args, res.Project.Opened
-	}
-	if err := checkRoot(opts.AutoApprove, opts.Backend); err != nil {
-		return result, &ExitError{Code: ExitRefused, Message: err.Error()}
+	// A run with no harness has the flag as the caller's own grant: a narrower
+	// project permission mode wins over it (D5), with a line saying so, and a
+	// wider one never refuses the run. A run of an accepted harness resolves
+	// its level below, once the harness is loaded.
+	if opts.HarnessName == "" {
+		if err := settleAutoApprove(&opts); err != nil {
+			return result, err
+		}
 	}
 
 	result.Worktree = opts.WorktreeDir
@@ -438,6 +433,25 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// (decision 5c).
 		if opts.TrustGate != nil && opts.AutoApprove != "" && !harnessTrusted {
 			return result, &ExitError{Code: ExitRefused, ErrorCode: untrustedCode, Message: autoApproveRefusal(harnessObj, loadedID, opts.AutoApprove)}
+		}
+		// An accepted harness's worker opens at the harness's level (D7): its
+		// declared one, else all, narrowed by --auto-approve and by the
+		// session that called it (D6). A wider --auto-approve is refused.
+		if opts.TrustGate != nil && harnessTrusted {
+			step, lerr := agentHarnessStep(harnessObj, opts.AutoApprove)
+			if lerr != nil {
+				return result, &ExitError{Code: ExitRefused, Message: lerr.Error()}
+			}
+			opts.AutoApprove = string(step.Level)
+			if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
+				return result, err
+			}
+			if opts.Stderr != nil {
+				_, _ = fmt.Fprintf(opts.Stderr, "auto-approve: %s (%s)\n", step.Level, step.From)
+			}
+		}
+		if err := settleAutoApprove(&opts); err != nil {
+			return result, err
 		}
 		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
 			id := loadedID

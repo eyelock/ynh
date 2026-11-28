@@ -93,9 +93,15 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 		if src, serr := delegateEntrySource(p, d); serr == nil {
 			label = src.String()
 		}
+		step, err := delegateStep(rd.Harness, d, os.Getenv)
+		if err != nil {
+			closeAll()
+			return nil, err
+		}
 		e, err := a2aserve.Open(a2aserve.Options{
 			Name: rd.Harness.Name, Label: label, Parent: parentID, Delegate: rd.ID,
 			Profile: rd.Profile, Focus: rd.Focus, Folder: folder,
+			AutoApprove: step.Level, AutoApproveFrom: step.From,
 			Supervisor: []string{exe, "delegate-run", "supervise"},
 		})
 		if err != nil {

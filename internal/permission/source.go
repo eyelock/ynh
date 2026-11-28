@@ -26,7 +26,11 @@ const (
 	// SourceDefault is the default for an accepted harness that declares no
 	// level.
 	SourceDefault Source = "default"
+	// SourceInteractive is a task queued to a live interactive session: a
+	// person approves each action there, so no level is recorded for it. It is
+	// only the source of a delegation's record, never of a run's level.
+	SourceInteractive Source = "interactive"
 )
 
 // Sources lists every Source, in the order the schemas list them.
-var Sources = []Source{SourceCall, SourceEntry, SourceFlag, SourceHarness, SourceDelegateDefault, SourceCallerCap, SourceProject, SourceDefault}
+var Sources = []Source{SourceCall, SourceEntry, SourceFlag, SourceHarness, SourceDelegateDefault, SourceCallerCap, SourceProject, SourceDefault, SourceInteractive}

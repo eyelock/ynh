@@ -3,6 +3,7 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -46,6 +47,29 @@ func OnChildStart(fn func()) (remove func()) {
 	return func() {
 		childStartMu.Lock()
 		childStartHook = nil
+		childStartMu.Unlock()
+	}
+}
+
+// StdoutFilter reads the vendor child's standard output instead of passing it
+// through. kill ends the child at once. A non-nil error stops being a vendor
+// result: runChildProcess returns it in place of the child's exit status.
+type StdoutFilter func(r io.Reader, kill func()) error
+
+var childStdoutFilter StdoutFilter
+
+// OnChildStdout registers fn to read the standard output of the vendor child
+// in place of passing it to ynh's own. `ynh run` uses it for a one-shot Claude
+// Code session, whose stream ynh reads to check what the session opened in and
+// to render the answer itself. One slot, like OnChildStart; the returned
+// function removes it.
+func OnChildStdout(fn StdoutFilter) (remove func()) {
+	childStartMu.Lock()
+	childStdoutFilter = fn
+	childStartMu.Unlock()
+	return func() {
+		childStartMu.Lock()
+		childStdoutFilter = nil
 		childStartMu.Unlock()
 	}
 }
@@ -109,9 +133,21 @@ func execVendor(bin string, argv []string, env []string) error {
 // any other error when the child could not be started.
 func runChildProcess(cmd *exec.Cmd) error {
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = withParentDeathSignal(cmd.SysProcAttr)
+	childStartMu.Lock()
+	filter := childStdoutFilter
+	childStartMu.Unlock()
+	var stdoutPipe io.ReadCloser
+	if filter != nil {
+		pipe, err := cmd.StdoutPipe()
+		if err != nil {
+			return err
+		}
+		stdoutPipe = pipe
+	} else {
+		cmd.Stdout = os.Stdout
+	}
 
 	// Subscribe before the child starts so no signal is missed in between.
 	intCh := make(chan os.Signal, 1)
@@ -151,8 +187,17 @@ func runChildProcess(cmd *exec.Cmd) error {
 		}
 	}()
 
+	// The filter reads the output to its end before Wait, as the pipe requires.
+	var filterErr error
+	if filter != nil {
+		filterErr = filter(stdoutPipe, func() { _ = cmd.Process.Kill() })
+		_, _ = io.Copy(io.Discard, stdoutPipe)
+	}
 	err := cmd.Wait()
 	close(done)
+	if filterErr != nil {
+		return filterErr
+	}
 	return childResult(err)
 }
 

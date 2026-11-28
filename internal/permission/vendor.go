@@ -57,13 +57,11 @@ func For(vendor string, level Level) (Mapping, error) {
 	}
 	switch vendor {
 	case Claude:
-		// none is provisional: a project allow list did not widen it, but the
-		// folder was not one Claude Code trusts, so that its allow rules were
-		// read at all is not shown (ynh #1059, ynw-sg5jw). edits holds live
-		// (ynh #1059, ynw-mpnjz): sh -c, touch and mkdir are refused, Write works.
+		// none and edits hold (ynh #1059, ynw-sg5jw, ynw-22war, ynw-mpnjz):
+		// sh -c, touch and mkdir are refused at edits, Write works.
 		switch level {
 		case None:
-			return Mapping{Args: []string{"--permission-mode", "default"}, Provisional: true}, nil
+			return Mapping{Args: []string{"--permission-mode", "default"}}, nil
 		case Edits:
 			return Mapping{Args: []string{"--permission-mode", "acceptEdits", "--disallowedTools", "Bash"}}, nil
 		}
