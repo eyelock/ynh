@@ -106,6 +106,11 @@ type Record struct {
 	Model   string `json:"model,omitempty"`
 	Profile string `json:"profile,omitempty"`
 	Focus   string `json:"focus,omitempty"`
+	// AutoApprove is the permission level the delegate opens at, and
+	// AutoApproveFrom where it came from: call, entry, delegate_default,
+	// default or caller_cap (ynh #1058).
+	AutoApprove     string `json:"auto_approve,omitempty"`
+	AutoApproveFrom string `json:"auto_approve_from,omitempty"`
 	// Chain is the ancestry of the delegate: the canonical ids of the
 	// harnesses above it, root first, ending with Parent (Guard).
 	Chain []string `json:"chain,omitempty"`

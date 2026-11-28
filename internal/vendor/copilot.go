@@ -85,11 +85,28 @@ func (c *Copilot) LaunchInteractive(configPath string, extraArgs []string) error
 }
 
 func (c *Copilot) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
-	// --allow-all-tools is documented as required for non-interactive mode —
-	// without it, a scripted run hangs on a permission prompt with no TTY to
-	// answer it. Confirmed via `copilot help`.
-	args := append([]string{"-p", prompt, "--allow-all-tools"}, extraArgs...)
-	return launchCopilot(configPath, "", args)
+	return launchCopilot(configPath, "", copilotNonInteractiveArgs(prompt, extraArgs))
+}
+
+// copilotNonInteractiveArgs is the argument list of a one-shot run.
+// --allow-all-tools is documented as required for non-interactive mode:
+// without it a scripted run hangs on a permission prompt with no TTY to answer
+// it (confirmed via `copilot help`). It is added unless the caller already
+// chose Copilot's tool permissions (a permission level's arguments, ynh
+// #1058), which then stand as given.
+func copilotNonInteractiveArgs(prompt string, extraArgs []string) []string {
+	args := []string{"-p", prompt}
+	chosen := false
+	for _, a := range extraArgs {
+		switch a {
+		case "--allow-all-tools", "--allow-tool", "--deny-tool", "--no-ask-user":
+			chosen = true
+		}
+	}
+	if !chosen {
+		args = append(args, "--allow-all-tools")
+	}
+	return append(args, extraArgs...)
 }
 
 func (c *Copilot) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {

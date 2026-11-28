@@ -723,3 +723,17 @@ func TestARefusedDelegationAlwaysCarriesItsReasonAndFixLine(t *testing.T) {
 		})
 	}
 }
+
+// delegate_status, delegate_result and delegate_list carry the level the
+// delegate opened at and where it came from (ynh #1058).
+func TestResultCarriesTheLevelAndItsSource(t *testing.T) {
+	s := New(Config{})
+	r := s.resultOf(&delegation.Record{Handle: "dlg-1", Delegate: "local/reviewer", Status: delegation.StatusRunning, AutoApprove: "edits", AutoApproveFrom: "entry"})
+	if r.AutoApprove != "edits" || r.AutoApproveFrom != "entry" {
+		t.Errorf("result = %+v", r)
+	}
+	b, _ := json.Marshal(r)
+	if !strings.Contains(string(b), `"auto_approve":"edits"`) || !strings.Contains(string(b), `"auto_approve_from":"entry"`) {
+		t.Errorf("json = %s", b)
+	}
+}

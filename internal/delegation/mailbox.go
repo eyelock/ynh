@@ -45,6 +45,8 @@ type QueueOptions struct {
 	Task             string
 	Model            string
 	Profile, Focus   string
+	AutoApprove      string
+	AutoApproveFrom  string
 	Folder           string
 	Supervisor       []string
 	Session          presence.Entry
@@ -92,6 +94,7 @@ func Queue(o QueueOptions) (*Record, string, error) {
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
 		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
+		AutoApprove: o.AutoApprove, AutoApproveFrom: o.AutoApproveFrom,
 		Log:   strings.TrimSuffix(path, ".json") + ".log",
 		Route: RouteLive, Session: o.Session.SessionID, SessionCwd: o.Session.Cwd,
 		QueuedAt: &now, TakeBy: &by, Supervisor: o.Supervisor,

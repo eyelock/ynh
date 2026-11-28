@@ -80,3 +80,71 @@ func Request(ceiling, request Level) (Level, error) {
 	}
 	return request, nil
 }
+
+// Where a resolved level came from (auto_approve_from), in the order a level
+// is narrowed: the harness's own, the delegates_to entry, the per-call
+// request or the --auto-approve flag, the session that called it, and the
+// project's own mode.
+const (
+	FromDefault         = "default"          // no level declared: the default, all
+	FromHarness         = "harness"          // a harness's own declaration, run directly
+	FromDelegateDefault = "delegate_default" // the delegate harness's own declaration
+	FromEntry           = "entry"            // the parent's delegates_to entry
+	FromCall            = "call"             // the per-call auto_approve of delegate_to
+	FromFlag            = "flag"             // --auto-approve on ynh run or ynh agent run
+	FromCallerCap       = "caller_cap"       // the level of the session that called it (D6)
+	FromProject         = "project"          // the project's own narrower mode (D5)
+)
+
+// Step is a level and where it came from.
+type Step struct {
+	Level Level
+	From  string
+}
+
+// Narrowed returns cur narrowed by by: by wins, and its source with it, only
+// when it is strictly narrower. An empty by changes nothing.
+func (cur Step) Narrowed(by Step) Step {
+	if by.Level == "" || !by.Level.Narrower(cur.Level) {
+		return cur
+	}
+	return by
+}
+
+// Ask applies a request (the entry, the call or the flag) to cur: a wider
+// request is refused (D2), an equal or narrower one is taken, with its source
+// when it narrows. An empty request changes nothing.
+func (cur Step) Ask(request Level, from string) (Step, error) {
+	if request == "" {
+		return cur, nil
+	}
+	l, err := Request(cur.Level, request)
+	if err != nil {
+		return cur, fmt.Errorf("%s: %w", from, err)
+	}
+	return cur.Narrowed(Step{Level: l, From: from}), nil
+}
+
+// CapEnv carries, to every process a session starts, the level of that session:
+// the most a delegate it starts may open at (D6). An interactive session sets
+// it only when run with --auto-approve (S4); a one-shot run sets it to the level
+// it opened at.
+const CapEnv = "YNH_AUTO_APPROVE_CAP"
+
+// CapFrom reads the caller's cap from the environment: "" when there is none,
+// an error when it is not a level.
+func CapFrom(getenv func(string) string) (Level, error) {
+	v := getenv(CapEnv)
+	if v == "" {
+		return "", nil
+	}
+	l, err := Parse(v)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", CapEnv, err)
+	}
+	return l, nil
+}
+
+// SourceEnv carries the source of the --auto-approve a delegate's ynh run was
+// started with (entry or call), so its own report names it.
+const SourceEnv = "YNH_AUTO_APPROVE_SOURCE"

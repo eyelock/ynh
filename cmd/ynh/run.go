@@ -275,8 +275,34 @@ func cmdRun(args []string) (runErr error) {
 			return err
 		}
 	}
-	if action == "" && oneShot && !trusted && adapter.Name() == "copilot" {
-		return copilotOneShotRefusal(harnessID, loaded)
+	// A one-shot run opens at its level with nobody to approve, so a folder
+	// run needs --trust (S8) and is otherwise refused, on every vendor.
+	if action == "" && oneShot && !trusted && !(harnessID == "" && ra.Trust) {
+		return oneShotFolderRefusal(harnessID, loaded)
+	}
+	// The level this run opens at (D1-D6): a one-shot run is passed the
+	// vendor's arguments for it; an interactive one is unchanged, and with
+	// --auto-approve only caps its delegates (S4).
+	if action == "" && oneShot {
+		wd, wdErr := os.Getwd()
+		if wdErr != nil {
+			return wdErr
+		}
+		rp, perr := resolveRunPermission(loaded, adapter.Name(), ra.AutoApprove, wd, os.Getenv(delegationHandleEnv) != "", os.Getenv, os.Geteuid())
+		if perr != nil {
+			return perr
+		}
+		for _, l := range rp.Lines {
+			fmt.Fprintln(os.Stderr, l)
+		}
+		if err := rp.applyEnv(); err != nil {
+			return err
+		}
+		vendorArgs = append(append([]string{}, rp.Args...), vendorArgs...)
+	} else if action == "" && ra.AutoApprove != "" {
+		if err := capInteractive(ra.AutoApprove); err != nil {
+			return err
+		}
 	}
 
 	// Print per-source status
@@ -1288,6 +1314,7 @@ type runArgs struct {
 	OnLive        string   // --on-live=refuse|allow: what to do when a session of the harness is live; not forwarded
 	NoWorkspace   bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 	Labels        []string // --label key:value, repeatable; key: removes a label; not forwarded
+	AutoApprove   string   // --auto-approve none|edits|all: narrows a one-shot run, caps an interactive one's delegates; not forwarded
 	Trust         bool     // --trust: accept the folder run's full-SHA-pinned remote includes; not forwarded
 	Relay         bool     // --telemetry-relay: collect the vendor's own telemetry into the spool; not forwarded
 	RelayEndpoint string   // --telemetry-relay-endpoint: a standing relay's loopback endpoint; not forwarded
@@ -1299,6 +1326,7 @@ var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
 	"--label": true, "--on-live": true, "--telemetry-relay-endpoint": true,
+	"--auto-approve": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1384,6 +1412,11 @@ func parseRunArgs(args []string) runArgs {
 			ra.Relay = true
 		case flagArgs[i] == "--trust":
 			ra.Trust = true
+		case flagArgs[i] == "--auto-approve" && i+1 < len(flagArgs):
+			ra.AutoApprove = flagArgs[i+1]
+			i++
+		case strings.HasPrefix(flagArgs[i], "--auto-approve="):
+			ra.AutoApprove = strings.TrimPrefix(flagArgs[i], "--auto-approve=")
 		case flagArgs[i] == "--telemetry-relay-endpoint" && i+1 < len(flagArgs):
 			ra.RelayEndpoint = flagArgs[i+1]
 			i++
