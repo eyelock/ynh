@@ -23,7 +23,9 @@ func launchFocusRun(t *testing.T, s *sandbox, harnessDir, argvFile string, args 
 	if err := os.WriteFile(filepath.Join(shims, "claude"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGV_OUT\"\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(ynhBinary(t), append([]string{"run", harnessDir}, args...)...)
+	// A folder run that is one-shot (an explicit focus or prompt) opens at all with nobody to
+	// approve, so ynh refuses it without --trust (S8); the test accepts it the way a person does.
+	cmd := exec.Command(ynhBinary(t), append([]string{"run", harnessDir, "--trust"}, args...)...)
 	cmd.Dir = t.TempDir()
 	cmd.Env = append(os.Environ(),
 		"PATH="+shims+string(os.PathListSeparator)+os.Getenv("PATH"),
@@ -147,7 +149,7 @@ func TestRunDoubleDashArgv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = os.Remove(argvFile)
-			cmd := exec.Command(ynhBinary(t), append([]string{"run", harnessDir, "-v", "codex"}, tt.args...)...)
+			cmd := exec.Command(ynhBinary(t), append([]string{"run", harnessDir, "--trust", "-v", "codex"}, tt.args...)...)
 			cmd.Dir = t.TempDir()
 			cmd.Env = append(os.Environ(),
 				"PATH="+shims+string(os.PathListSeparator)+os.Getenv("PATH"),
