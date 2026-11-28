@@ -233,10 +233,11 @@ func TestProject_OpensExplicitly(t *testing.T) {
 		wantOpened                  string
 	}{
 		{"claude plan", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"plan"}}`, []string{"--permission-mode", "plan"}, "plan"},
-		{"claude acceptEdits", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"acceptEdits"}}`, []string{"--permission-mode", "acceptEdits"}, "acceptEdits"},
+		{"claude acceptEdits is exactly the edits mapping", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"acceptEdits"}}`, []string{"--permission-mode", "acceptEdits", "--disallowedTools", "Bash"}, "acceptEdits"},
 		{"claude unplaced opens default", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"auto"}}`, []string{"--permission-mode", "default"}, "default"},
 		{"codex sandbox", Codex, ".codex/config.toml", "sandbox_mode = \"read-only\"\n", []string{"--sandbox", "read-only"}, ""},
-		{"codex approval", Codex, ".codex/config.toml", "approval_policy = \"untrusted\"\n", []string{"-c", `approval_policy="untrusted"`}, ""},
+		{"codex approval alone still passes --sandbox", Codex, ".codex/config.toml", "approval_policy = \"untrusted\"\n", []string{"-c", `approval_policy="untrusted"`, "--sandbox", "read-only"}, ""},
+		{"codex on-request approval alone is held at read-only", Codex, ".codex/config.toml", "approval_policy = \"on-request\"\n", []string{"-c", `approval_policy="on-request"`, "--sandbox", "read-only"}, ""},
 		{"codex both keys", Codex, ".codex/config.toml", "sandbox_mode = \"workspace-write\"\napproval_policy = \"untrusted\"\n", []string{"--sandbox", "workspace-write", "-c", `approval_policy="untrusted"`}, ""},
 		{"codex unplaced opens read-only", Codex, ".codex/config.toml", "sandbox_mode = \"strange\"\n", []string{"--sandbox", "read-only"}, ""},
 	}
@@ -346,5 +347,20 @@ func TestFor_ProvisionalCells(t *testing.T) {
 	}
 	if !slices.Equal(got, []string{"claude/none"}) {
 		t.Errorf("provisional cells = %v, want [claude/none]", got)
+	}
+}
+
+// A Codex project that sets only approval_policy is still passed --sandbox,
+// and is reported at the level that sandbox gives: none.
+func TestResolve_CodexApprovalOnlyProjectGetsASandbox(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, ".codex/config.toml"), "approval_policy = \"on-request\"\n")
+	r, err := Resolve(dir, Codex, All)
+	if err != nil || !r.FromProject() || r.Level != None {
+		t.Fatalf("%+v %v", r, err)
+	}
+	m, _ := r.Mapping(Codex)
+	if !slices.Contains(m.Args, "--sandbox") || slices.Contains(m.Args, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("args = %q", m.Args)
 	}
 }

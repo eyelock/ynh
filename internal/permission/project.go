@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/vendor"
@@ -99,8 +100,15 @@ func claudeProject(path string) (*ProjectMode, error) {
 	if !ok {
 		lvl, word = None, "default"
 	}
+	args := []string{"--permission-mode", word}
+	if lvl == Edits {
+		// A project's edits is exactly the edits mapping: file edits, no commands.
+		if em, err := For(Claude, Edits); err == nil {
+			args = em.Args
+		}
+	}
 	return &ProjectMode{Level: lvl, File: path, Setting: fmt.Sprintf("permissions.defaultMode %q", m),
-		Args: []string{"--permission-mode", word}, Opened: word}, nil
+		Args: args, Opened: word}, nil
 }
 
 // codexProject reads a top-level sandbox_mode or approval_policy. Only
@@ -162,6 +170,13 @@ func codexProject(path string) (*ProjectMode, error) {
 	}
 	if err := sc.Err(); err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	// Always pass --sandbox, whatever the project sets: a project that sets
+	// only approval_policy leaves the sandbox to the user's own config, which
+	// may be danger-full-access. The narrowest, read-only, is passed then.
+	if found != nil && !slices.Contains(found.Args, "--sandbox") {
+		found.Args = append(found.Args, "--sandbox", "read-only")
+		found.Level = None
 	}
 	return found, nil
 }
