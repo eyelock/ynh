@@ -345,8 +345,8 @@ func TestFor_ProvisionalCells(t *testing.T) {
 			}
 		}
 	}
-	if !slices.Equal(got, []string{"claude/none"}) {
-		t.Errorf("provisional cells = %v, want [claude/none]", got)
+	if len(got) != 0 {
+		t.Errorf("provisional cells = %v, want none", got)
 	}
 }
 
@@ -362,5 +362,34 @@ func TestResolve_CodexApprovalOnlyProjectGetsASandbox(t *testing.T) {
 	m, _ := r.Mapping(Codex)
 	if !slices.Contains(m.Args, "--sandbox") || slices.Contains(m.Args, "--dangerously-bypass-approvals-and-sandbox") {
 		t.Errorf("args = %q", m.Args)
+	}
+}
+
+// Root opens "all" only when IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set
+// (the human's decision, ynh #1058): pinned with and without each.
+func TestCheckRoot_PinsTheTwoVariables(t *testing.T) {
+	env := func(kv map[string]string) func(string) string { return func(k string) string { return kv[k] } }
+	for _, tt := range []struct {
+		name    string
+		vars    map[string]string
+		refused bool
+	}{
+		{"neither", nil, true},
+		{"IS_SANDBOX=1", map[string]string{"IS_SANDBOX": "1"}, false},
+		{"IS_SANDBOX=0 is not set", map[string]string{"IS_SANDBOX": "0"}, true},
+		{"IS_SANDBOX empty", map[string]string{"IS_SANDBOX": ""}, true},
+		{"CLAUDE_CODE_BUBBLEWRAP=1", map[string]string{"CLAUDE_CODE_BUBBLEWRAP": "1"}, false},
+		{"CLAUDE_CODE_BUBBLEWRAP empty", map[string]string{"CLAUDE_CODE_BUBBLEWRAP": ""}, true},
+		{"both", map[string]string{"IS_SANDBOX": "1", "CLAUDE_CODE_BUBBLEWRAP": "1"}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckRoot(Claude, All, 0, env(tt.vars))
+			if (err != nil) != tt.refused {
+				t.Fatalf("err = %v, refused want %v", err, tt.refused)
+			}
+			if err != nil && !strings.Contains(err.Error(), "IS_SANDBOX=1") {
+				t.Errorf("the refusal must name the variable that lifts it: %v", err)
+			}
+		})
 	}
 }

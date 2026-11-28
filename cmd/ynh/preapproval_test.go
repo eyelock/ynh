@@ -150,7 +150,7 @@ func TestRunOneShotNoteOnlyWithMCPServers(t *testing.T) {
 		}
 		old := os.Stderr
 		os.Stderr = w
-		runErr := cmdRun([]string{dir, "-v", "codex", "--", "hi"})
+		runErr := cmdRun([]string{dir, "-v", "codex", "--trust", "--", "hi"})
 		os.Stderr = old
 		_ = w.Close()
 		out, _ := io.ReadAll(r)
@@ -186,8 +186,23 @@ func TestRunCopilotOneShotFollowsTrust(t *testing.T) {
 		if launched {
 			t.Error("copilot was launched")
 		}
-		if !strings.Contains(err.Error(), "approves every tool") {
+		if !strings.Contains(err.Error(), "--trust") {
 			t.Errorf("refusal does not say why: %v", err)
+		}
+	})
+
+	t.Run("folder run with --trust opens at the level on copilot", func(t *testing.T) {
+		isolateRun(t)
+		t.Chdir(t.TempDir())
+		dir := filepath.Join(t.TempDir(), "cop")
+		writeSkillHarness(t, dir, "cop")
+		var got []string
+		stubLaunchArgs(t, func(a []string) error { got = a; return nil })
+		if err := cmdRun([]string{dir, "-v", "copilot", "--trust", "--auto-approve", "edits", "--", "hi"}); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(got, " ") != "--no-ask-user --allow-tool write --deny-tool shell" {
+			t.Errorf("vendor args = %q", got)
 		}
 	})
 

@@ -17,6 +17,11 @@ import (
 
 // DefaultTakeBy is how long a queued task may wait for the live session to
 // take it before the sender is told it is still waiting (and may choose).
+// AutoApproveInteractive is the auto_approve_from of a task queued to a live
+// interactive session (permission.SourceInteractive): a person approves each
+// action there, so the record shows no level.
+const AutoApproveInteractive = "interactive"
+
 const DefaultTakeBy = 5 * time.Minute
 
 // ErrNotQueued is what Take returns for a task another session already took,
@@ -45,6 +50,8 @@ type QueueOptions struct {
 	Task             string
 	Model            string
 	Profile, Focus   string
+	AutoApprove      string
+	AutoApproveFrom  string
 	Folder           string
 	Supervisor       []string
 	Session          presence.Entry
@@ -114,6 +121,8 @@ func Queue(o QueueOptions) (*Record, string, error) {
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
 		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
+		AutoApproveFrom:     AutoApproveInteractive,
+		FallbackAutoApprove: o.AutoApprove, FallbackAutoApproveFrom: o.AutoApproveFrom,
 		Log:   strings.TrimSuffix(path, ".json") + ".log",
 		Route: RouteLive, Session: o.Session.SessionID, SessionCwd: o.Session.Cwd,
 		QueuedAt: &now, TakeBy: &by, Supervisor: o.Supervisor,
@@ -257,6 +266,9 @@ func settleLive(path string, rec *Record) (*Record, error) {
 			}
 			started = true
 			r.Route, r.Status = RouteHeadless, StatusStarted
+			// A headless session opens at the level the task resolved to.
+			r.AutoApprove, r.AutoApproveFrom = r.FallbackAutoApprove, r.FallbackAutoApproveFrom
+			r.FallbackAutoApprove, r.FallbackAutoApproveFrom = "", ""
 			r.Error = "the live session ended before it took the task: started headless with the same task"
 		})
 		if err != nil || !started {

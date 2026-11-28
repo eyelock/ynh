@@ -13,13 +13,19 @@ import (
 
 // HarnessJSON represents the plugin.json manifest: the single source of truth.
 type HarnessJSON struct {
-	Schema        string         `json:"$schema,omitempty"`
-	Name          string         `json:"name"`
-	Version       string         `json:"version"`
-	Description   string         `json:"description,omitempty"`
-	Author        *AuthorInfo    `json:"author,omitempty"`
-	Keywords      []string       `json:"keywords,omitempty"`
-	DefaultVendor string         `json:"default_vendor,omitempty"`
+	Schema        string      `json:"$schema,omitempty"`
+	Name          string      `json:"name"`
+	Version       string      `json:"version"`
+	Description   string      `json:"description,omitempty"`
+	Author        *AuthorInfo `json:"author,omitempty"`
+	Keywords      []string    `json:"keywords,omitempty"`
+	DefaultVendor string      `json:"default_vendor,omitempty"`
+	// DefaultModel and DefaultEffort are the model and reasoning effort
+	// ("low", "medium" or "high") this harness opens with when a parent runs
+	// it as a delegate and neither the call nor the parent's delegates_to
+	// entry names one. Empty leaves it to the vendor's own default.
+	DefaultModel  string         `json:"default_model,omitempty"`
+	DefaultEffort string         `json:"default_effort,omitempty"`
 	Includes      []IncludeMeta  `json:"includes,omitempty"`
 	DelegatesTo   []DelegateMeta `json:"delegates_to,omitempty"`
 	// Transport is the default transport of the harness's delegates_to
@@ -843,6 +849,11 @@ type DelegateMeta struct {
 	// detached ynh session) or "native" (the vendor's subagents). Empty
 	// takes the harness's transport, then a2a.
 	Transport string `json:"transport,omitempty"`
+	// Model and Effort are the model and reasoning effort ("low", "medium"
+	// or "high") the delegate opens with, unless the call names its own. They
+	// win over the delegate harness's default_model and default_effort.
+	Model  string `json:"model,omitempty"`
+	Effort string `json:"effort,omitempty"`
 	// AutoApprove is the most this entry lets the delegate open at when it
 	// runs unattended: "none", "edits" or "all". It may only narrow the
 	// delegate harness's own level. Empty takes the delegate's.

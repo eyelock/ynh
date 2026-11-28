@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/permission"
 )
 
 // cmdDelegateRun is the runner of delegates_to: it starts a resolved delegate
@@ -17,7 +18,7 @@ import (
 // internal, not listed in `ynh help`: the delegate server calls it, and
 // `supervise` is what a started session runs as.
 //
-//	ynh delegate-run start --parent <id> --entry <n> --task <text> [--model <m>] [--folder <dir>]
+//	ynh delegate-run start --parent <id> --entry <n> --task <text> [--model <m>] [--effort <low|medium|high>] [--folder <dir>] [--auto-approve <level>]
 //	ynh delegate-run status --handle <handle>
 //	ynh delegate-run cancel --handle <handle>
 //	ynh delegate-run supervise <record-path>
@@ -50,7 +51,7 @@ func cmdDelegateRunTo(args []string, stdout io.Writer) error {
 // It prints the handle and record path as JSON and returns once the session is
 // launched.
 func delegateRunStart(args []string, stdout io.Writer) error {
-	var parentID, task, model, folder string
+	var parentID, task, model, effort, folder, autoApprove string
 	entry := -1
 	for i := 0; i < len(args); i++ {
 		if i+1 >= len(args) {
@@ -70,15 +71,19 @@ func delegateRunStart(args []string, stdout io.Writer) error {
 			task = v
 		case "--model":
 			model = v
+		case "--effort":
+			effort = v
 		case "--folder":
 			folder = v
+		case "--auto-approve":
+			autoApprove = v
 		default:
 			return fmt.Errorf("unknown flag: %s", args[i])
 		}
 		i++
 	}
 	if parentID == "" || entry < 0 || task == "" {
-		return fmt.Errorf("usage: ynh delegate-run start --parent <id> --entry <n> --task <text> [--model <m>] [--folder <dir>]")
+		return fmt.Errorf("usage: ynh delegate-run start --parent <id> --entry <n> --task <text> [--model <m>] [--effort <low|medium|high>] [--folder <dir>] [--auto-approve <level>]")
 	}
 	if folder == "" {
 		wd, err := os.Getwd()
@@ -103,19 +108,46 @@ func delegateRunStart(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// The level the delegate opens at: its own, narrowed by the entry, the
+	// call and the session that called it; a wider request is refused here,
+	// before any session starts.
+	step, err := delegateStep(resolved.Harness, parent.DelegatesTo[entry], os.Getenv)
+	if err != nil {
+		return err
+	}
+	if step, err = step.Ask(permission.Level(autoApprove), permission.SourceCall); err != nil {
+		return fmt.Errorf("--auto-approve: %w", err)
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("finding the ynh binary: %w", err)
 	}
+	vendorName, err := delegateVendor(resolved.Harness)
+	if err != nil {
+		return fmt.Errorf("delegate %s: %w", resolved.ID, err)
+	}
+	// The call's own choice wins over the entry's, the delegate's default and
+	// the vendor's (delegation.Resolve).
+	m, e := chooseModelAndEffort(model, effort, resolved)
 	rec, path, err := delegation.Start(delegation.StartOptions{
-		Parent: parentID, Delegate: resolved.ID, Task: task, Model: model,
+		Parent: parentID, Delegate: resolved.ID, Task: task,
+		Model: m.Value, ModelFrom: m.From, Effort: e.Value, EffortFrom: e.From, Vendor: vendorName,
 		Profile: resolved.Profile, Focus: resolved.Focus, Folder: folder,
+		AutoApprove: string(step.Level), AutoApproveFrom: string(step.From),
 		Supervisor: []string{exe, "delegate-run", "supervise"},
 	})
 	if err != nil {
 		return err
 	}
 	return writeJSON(stdout, map[string]string{"handle": rec.Handle, "record": path})
+}
+
+// chooseModelAndEffort is the model and effort a delegation opens with: the
+// call's own, else the delegates_to entry's, else the delegate harness's
+// default, else none, which leaves the vendor's own (delegation.Resolve).
+func chooseModelAndEffort(callModel, callEffort string, rd *resolvedDelegate) (model, effort delegation.Setting) {
+	return delegation.Resolve(callModel, rd.Entry.Model, rd.Harness.DefaultModel),
+		delegation.Resolve(callEffort, rd.Entry.Effort, rd.Harness.DefaultEffort)
 }
 
 // delegateRunRecord prints the record, after cancelling it when cancel is set.
@@ -160,10 +192,13 @@ func delegateLauncher(rec *delegation.Record) *exec.Cmd {
 	}
 	cmd := exec.Command(exe, delegateRunArgs(rec)...)
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "YNH_FOCUS=") || strings.HasPrefix(kv, "YNH_HARNESS_FILE=") {
+		if strings.HasPrefix(kv, "YNH_FOCUS=") || strings.HasPrefix(kv, "YNH_HARNESS_FILE=") || strings.HasPrefix(kv, permission.SourceEnv+"=") {
 			continue
 		}
 		cmd.Env = append(cmd.Env, kv)
+	}
+	if rec.AutoApproveFrom != "" {
+		cmd.Env = append(cmd.Env, permission.SourceEnv+"="+rec.AutoApproveFrom)
 	}
 	cmd.Env = append(cmd.Env, delegationHandleEnv+"="+rec.Handle,
 		"YNH_DELEGATION_RECORD="+delegation.RecordPath(rec.Parent, rec.Folder, rec.Handle))
@@ -179,6 +214,9 @@ func delegateRunArgs(rec *delegation.Record) []string {
 	case rec.Profile != "":
 		args = append(args, "--profile", rec.Profile)
 	}
+	if rec.AutoApprove != "" {
+		args = append(args, "--auto-approve", rec.AutoApprove)
+	}
 	task := rec.Task
 	// A first word after -- that starts with "-" is a vendor flag, never the
 	// prompt; a leading space keeps a task that starts with one a prompt.
@@ -188,6 +226,12 @@ func delegateRunArgs(rec *delegation.Record) []string {
 	args = append(args, "--", task)
 	if rec.Model != "" {
 		args = append(args, "--model="+rec.Model)
+	}
+	// The vendor and effort were checked when the delegation started, so an
+	// error here is not expected; the effort is then left off rather than
+	// guessed.
+	if eff, err := delegation.VendorEffortArgs(rec.Vendor, rec.Effort); err == nil {
+		args = append(args, eff...)
 	}
 	return args
 }

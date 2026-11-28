@@ -99,6 +99,13 @@ Which vendor CLI to launch by default. Overridable with `-v` flag.
 
 If omitted, falls back to `~/.ynh/config.json` default.
 
+### default_model and default_effort (optional)
+
+From v0.18.1; v0.18.0 does not read them. The model and the reasoning effort (`low`, `medium` or `high`) this harness opens with when a parent runs it as a
+delegate, and neither the parent's call nor its `delegates_to` entry names one. Unset leaves the vendor's own
+default. They apply to a delegate session only, not to a plain `ynh run`. See
+[Model and effort](delegates-reference.md#model-and-effort).
+
 ### includes (optional)
 
 Additional sources to pull artifacts from. Each include is either a remote
@@ -240,13 +247,11 @@ harnesses that each name `./inc` get their own repos. The same applies to
 An include or delegate whose source is the harness's own repo (`"git": "."`)
 is refreshed from that repo on every run, so one committed after the first run
 is found without `ynh update`. Uncommitted work is not picked up: a `path` that
-is on disk but not committed fails the run, and `ynh doctor` says so. This works
-only when the harness sits at the root of its repository. A run clones the
-source, and git clones only a repository's root, so a harness in a subfolder of
-its repo, with `"git": "."` (or `"./sub"`), fails every run; the same holds for
-includes and delegates alike. Give such a source a Git URL, or keep the harness
-at the repo's root. `ynh doctor` reports the delegate case; it does not check
-includes yet. Every other source, including another repo on disk, is served from
+is on disk but not committed fails the run, and `ynh doctor` says so. A harness in a
+subfolder of its repository works too: a `"."` source means the repository the
+harness came from, fetched at its root, and the entry's `path` is taken
+relative to the harness's own folder. `ynh doctor` reports the delegate case
+(a `path` that is not committed); it does not check includes yet. Every other source, including another repo on disk, is served from
 the cache until `ynh update`; if a delegate or include `path` is missing from
 it, the error says the cached copy may be out of date and suggests `ynh update`.
 
@@ -312,6 +317,8 @@ Other harnesses this one can invoke as subagents.
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 | `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
 | `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
+| `model` | no | From v0.18.1. The model the delegate opens with unless the call names its own; wins over the delegate's `default_model`. See [Model and effort](delegates-reference.md#model-and-effort). |
+| `effort` | no | From v0.18.1. The reasoning effort (`low`, `medium` or `high`) the delegate opens with unless the call names its own; wins over the delegate's `default_effort`. |
 | `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
 
 #### Transport
