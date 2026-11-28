@@ -96,7 +96,7 @@ func unpinnedNativeDelegates(p *harness.Harness) []string {
 // refuseUnpinnedDelegates is the delegate half of the pin rule, which reads
 // only the manifest and so runs first, before an include is fetched or read.
 func refuseUnpinnedDelegates(what, flag string, p *harness.Harness) error {
-	if bad := unpinnedNativeDelegates(p); len(bad) > 0 {
+	if bad := unpinnedDelegates(p); len(bad) > 0 {
 		return refuseUnpinned(what, flag, bad)
 	}
 	return nil
@@ -107,7 +107,15 @@ func refuseUnpinnedDelegates(what, flag string, p *harness.Harness) error {
 // must be pinned to a full commit SHA (ynh #1002). Routes add their own ref
 // (a git or registry install's) on top.
 func unpinnedForAcceptance(p *harness.Harness, remote []remoteInclude) []string {
-	return append(unpinnedIncludes(remote), unpinnedNativeDelegates(p)...)
+	return append(unpinnedIncludes(remote), unpinnedDelegates(p)...)
+}
+
+// unpinnedDelegates is every delegates_to entry the --trust routes judge: the
+// native ones, whose commands the parent's digest covers, and the a2a ones,
+// whose acceptance the parent's covers (ynh #1058, N1). Each must be pinned
+// to a full SHA.
+func unpinnedDelegates(p *harness.Harness) []string {
+	return append(unpinnedNativeDelegates(p), unpinnedA2ADelegates(p)...)
 }
 
 // refuseUnpinned is the refusal of --trust when something that runs is not
@@ -205,7 +213,11 @@ func acceptInstalled(id string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return recordAcceptance(id, p, viaInstallTrus, stdout)
+	if err := recordAcceptance(id, p, viaInstallTrus, stdout); err != nil {
+		return err
+	}
+	_, err = acceptA2ADelegates(p, viaInstallTrus, stdout)
+	return err
 }
 
 // acceptFolderRun is `ynh run <dir> --trust` and `ynh agent run --harness
@@ -238,7 +250,7 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 		return refuseUnpinned(p.Name, "--trust", bad)
 	}
 	if len(remote) == 0 {
-		return nil
+		return acceptFolderDelegates(p, stdout)
 	}
 	store, err := loadTrustStore()
 	if err != nil {
@@ -256,7 +268,17 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 		_, _ = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)\n", r.Key, viaRunTrust, r.Set.count())
 		_, _ = fmt.Fprint(stdout, listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
 	}
-	return saveTrustStore(store)
+	if err := saveTrustStore(store); err != nil {
+		return err
+	}
+	return acceptFolderDelegates(p, stdout)
+}
+
+// acceptFolderDelegates accepts the a2a delegates of a folder run, which the
+// run's delegate sessions start as harnesses of their own (ynh #1058, S8).
+func acceptFolderDelegates(p *harness.Harness, stdout io.Writer) error {
+	_, err := acceptA2ADelegates(p, viaRunTrust, stdout)
+	return err
 }
 
 // warmFolderIncludes fetches the remote includes of a folder run that are

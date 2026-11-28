@@ -1003,6 +1003,9 @@ type trustStatus struct {
 	AutoApprove     string   `json:"auto_approve,omitempty"`
 	AutoApproveFrom string   `json:"auto_approve_from,omitempty"`
 	DelegateLevels  []string `json:"delegate_levels,omitempty"`
+	// A2ADelegates are the a2a delegates the parent's acceptance covers, each
+	// with its own state. Filled by `trust show` only.
+	A2ADelegates []a2aDelegateReport `json:"a2a_delegates,omitempty"`
 	// Moved is why a record that matches the digest still does not count:
 	// the harness is installed from another source or at another commit than
 	// the one accepted. Set only when the state is "changed" for that reason.
@@ -1211,6 +1214,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	st.LaunchFocus = launchFocusFor(p)
 	st.DelegateFocuses = st.delegateFocuses
 	fillAutoApprove(&st, p)
+	st.A2ADelegates = a2aDelegateReports(p, store)
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -1274,6 +1278,10 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if format == "json" {
+		// Each a2a delegate is accepted with its own record (ynh #1058, N1).
+		if _, err := acceptA2ADelegates(p, viaAccept, io.Discard); err != nil {
+			return cliError(stderr, structured, errCodeConfigError, err.Error())
+		}
 		st := trustStatusFor(name, p, store, os.Environ())
 		fillAutoApprove(&st, p)
 		return writeJSON(stdout, st)
@@ -1290,6 +1298,8 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		// The level acceptance covers (ynh #1058, D3): said at the moment it
 		// is accepted, with where it comes from and each entry's own.
 		printAcceptedLevel(stdout, p, set)
+		// Each a2a delegate is accepted with its own record (ynh #1058, N1).
+		_, err = acceptA2ADelegates(p, viaAccept, stdout)
 	}
 	return err
 }
@@ -1366,6 +1376,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
 		printAutoApproveSection(w, s)
+		printA2ADelegates(w, s)
 		return nil
 	}
 
@@ -1426,6 +1437,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	}
 
 	printAutoApproveSection(w, s)
+	printA2ADelegates(w, s)
 
 	if len(s.UndeclaredEnv) > 0 {
 		_, _ = fmt.Fprintf(w, "\nThese commands inherit your full environment. %d variable(s) reach them\n"+
@@ -1483,5 +1495,25 @@ func printAcceptedLevel(w io.Writer, p *harness.Harness, set trustSet) {
 	_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (%s)\n", p.AutoApproveOf(), p.AutoApproveOrigin())
 	for _, l := range set.DelegateLevels {
 		_, _ = fmt.Fprintf(w, "  delegate %s\n", l)
+	}
+}
+
+// printA2ADelegates lists the a2a delegates the parent's acceptance covers,
+// each with its own trust state and the level it opens at.
+func printA2ADelegates(w io.Writer, s trustStatus) {
+	if len(s.A2ADelegates) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "\nA2A delegates, each its own harness with its own record. 'ynh trust accept %s' accepts them too:\n\n", s.Harness)
+	for _, d := range s.A2ADelegates {
+		id := d.ID
+		if id == "" {
+			id = "(not installed; accepting installs it)"
+		}
+		line := fmt.Sprintf("  %s: %s [%s]", d.Delegate, id, d.State)
+		if d.AutoApprove != "" {
+			line += fmt.Sprintf(", opens at %s when run unattended (%s)", d.AutoApprove, d.From)
+		}
+		_, _ = fmt.Fprintln(w, line)
 	}
 }
