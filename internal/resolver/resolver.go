@@ -116,20 +116,48 @@ func GitSourceURL(gitURL, harnessDir string) string {
 	return abs
 }
 
+// GitSourceRoot is what to fetch for a git source, and the subfolder of it to
+// join before the source's own path. For a source that names another place it
+// is GitSourceURL and the source's path. For a relative source ("." or
+// "./sub") of a harness that sits in a subfolder of a git working tree, the
+// harness's own repository, it is that repository's root and the harness's
+// folder within it: the relative source means the repository the harness
+// came from, and a subfolder is not a repository root to clone (ynh #1068).
+func GitSourceRoot(gs harness.GitSource, harnessDir string) (url, sub string) {
+	url, sub = GitSourceURL(gs.Git, harnessDir), gs.Path
+	if !strings.HasPrefix(gs.Git, ".") || harnessDir == "" {
+		return url, sub
+	}
+	top := gitToplevel(harnessDir)
+	if top == "" {
+		return url, sub
+	}
+	real := url
+	if r, err := filepath.EvalSymlinks(url); err == nil {
+		real = r
+	}
+	rel, err := filepath.Rel(top, real)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return url, sub
+	}
+	return top, filepath.Join(rel, gs.Path)
+}
+
 // resolveGitSourceWith resolves a GitSource using the given repo function. A
 // relative source is resolved against harnessDir (see GitSourceURL).
 func resolveGitSourceWith(gs harness.GitSource, harnessDir string, fetch repoFunc) (string, *RepoResult, error) {
-	result, err := fetch(GitSourceURL(gs.Git, harnessDir), gs.Ref)
+	url, sub := GitSourceRoot(gs, harnessDir)
+	result, err := fetch(url, gs.Ref)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
 	}
 
 	basePath := result.Path
-	if gs.Path != "" {
+	if gs.Path != "" || sub != "" {
 		if err := pathutil.CheckSubpath(gs.Path); err != nil {
 			return "", nil, fmt.Errorf("include path: %w", err)
 		}
-		basePath = filepath.Join(result.Path, gs.Path)
+		basePath = filepath.Join(result.Path, sub)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
 			return "", nil, &missingPathError{path: gs.Path, git: gs.Git}
 		}
