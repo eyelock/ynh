@@ -345,7 +345,7 @@ team-lead \
 stopping to ask you. ynh prints:
 
 ```
-Opened 1 A2A delegate endpoint(s): reviewer
+Opened 1 A2A delegate endpoint(s): reviewer (opens at all)
 Launching claude...
 ```
 
@@ -510,7 +510,7 @@ team-lead \
 ```
 
 ```
-Opened 2 A2A delegate endpoint(s): librarian,reviewer
+Opened 2 A2A delegate endpoint(s): librarian (opens at all), reviewer (opens at all)
 Launching claude...
 ```
 

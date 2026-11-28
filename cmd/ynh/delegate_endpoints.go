@@ -9,6 +9,7 @@ import (
 	"github.com/eyelock/ynh/internal/a2acli"
 	"github.com/eyelock/ynh/internal/a2aserve"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/permission"
 )
 
 // openDelegateEndpoints opens one localhost A2A endpoint for each delegates_to
@@ -78,6 +79,8 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 	}
 	parentID = parentIDOf(p, parentID)
 	var eps []*a2aserve.Endpoint
+	// What each delegate opens at, by name, for the launch line.
+	levels := map[string]permission.Level{}
 	closeAll := func() {
 		for _, e := range eps {
 			_ = e.Close()
@@ -116,6 +119,7 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 			return nil, err
 		}
 		eps = append(eps, e)
+		levels[rd.Harness.Name] = step.Level
 	}
 	env, err := a2aserve.Env(eps)
 	if err != nil {
@@ -148,7 +152,7 @@ func openEndpointsWith(p *harness.Harness, parentID, folder string, store *trust
 		closeAll()
 		return nil, err
 	}
-	_, _ = fmt.Fprintf(stderr, "Opened %d A2A delegate endpoint(s): %s\n", len(eps), os.Getenv("YNH_DELEGATES"))
+	_, _ = fmt.Fprintf(stderr, "Opened %d A2A delegate endpoint(s): %s\n", len(eps), delegateLaunchList(os.Getenv("YNH_DELEGATES"), levels))
 	return &openedEndpoints{eps: eps, close: closeAll}, nil
 }
 
@@ -175,4 +179,18 @@ func scrubParentEndpoints() {
 			_ = os.Unsetenv(k)
 		}
 	}
+}
+
+// delegateLaunchList is the delegates of the launch line, each with the level
+// it opens at when run unattended: "reviewer (opens at all)" (ynh #1058, S2).
+// names is YNH_DELEGATES, comma-separated; a name with no level is shown bare.
+func delegateLaunchList(names string, levels map[string]permission.Level) string {
+	var out []string
+	for _, n := range strings.Split(names, ",") {
+		if l, ok := levels[n]; ok {
+			n += " (opens at " + string(l) + ")"
+		}
+		out = append(out, n)
+	}
+	return strings.Join(out, ", ")
 }
