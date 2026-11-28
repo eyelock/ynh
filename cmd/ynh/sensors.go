@@ -422,19 +422,22 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 			"usage: ynh sensors run <harness-id|path> <sensor-name> [--cwd dir] [--no-content]")
 	}
 
-	p, err := loadHarnessRef(harnessName)
+	// One load: the gate judges the harness the sensor then runs from, never a second reading of it,
+	// and a harness that cannot be loaded is refused, never waved through (ynh #1058). The trust
+	// record covers the harness as loaded, before a profile or an include merge reshapes it.
+	loaded, err := harness.LoadIDOrPath(harnessName)
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
-	// The trust gate, before any sensor command starts: this command runs the
-	// harness's own executable through /bin/sh, so it passes the gate `ynh run`
-	// and `ynh check` pass, on the harness as loaded (a profile or an include
-	// merge reshapes p, and the trust record covers the harness before them).
-	// A refusal exits 1 with code untrusted (ynh #1010).
-	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
-		if gerr := trustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
-			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
-		}
+	// The trust gate, before any sensor command starts: this command runs the harness's own
+	// executable through /bin/sh, so it passes the gate `ynh run` and `ynh check` pass. A refusal
+	// exits 1 with code untrusted (ynh #1010).
+	if gerr := trustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
+		return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
+	}
+	p, err := reshapeLoaded(loaded, "")
+	if err != nil {
+		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
 	s, ok := p.Sensors[sensorName]
 	if !ok {

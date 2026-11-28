@@ -145,13 +145,17 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			return cliError(stderr, structured, errCodeUntrusted, aerr.Error())
 		}
 	}
-	if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
-		if gerr := checkTrustGate(gateRef(harnessName), loaded, stderr); gerr != nil {
-			// Exit 1, a refusal, not 2: the check was not unable to run, it was not allowed to.
-			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
-		}
+	// One load: the gate judges the harness the sensors then run, never a second reading of it, and a
+	// harness that cannot be loaded is refused, never waved through (ynh #1058).
+	asLoaded, lerr := harness.LoadIDOrPath(harnessName)
+	if lerr != nil {
+		return checkExecErr(cliError(stderr, structured, errCodeNotFound, folderCheckHint(harnessName, lerr.Error())))
 	}
-	p, err := loadHarnessRefProfile(harnessName, profileName)
+	if gerr := checkTrustGate(gateRef(harnessName), asLoaded, stderr); gerr != nil {
+		// Exit 1, a refusal, not 2: the check was not unable to run, it was not allowed to.
+		return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
+	}
+	p, err := reshapeLoaded(asLoaded, profileName)
 	if err != nil {
 		return checkExecErr(cliError(stderr, structured, errCodeNotFound, folderCheckHint(harnessName, err.Error())))
 	}
@@ -814,7 +818,14 @@ func loadHarnessRefProfile(ref, profile string) (*harness.Harness, error) {
 	if err != nil {
 		return nil, err
 	}
-	if h, err = harness.ResolveProfile(h, profile); err != nil {
+	return reshapeLoaded(h, profile)
+}
+
+// reshapeLoaded applies a profile and folds in the sensors the includes declare, to a harness
+// already loaded: what a command that gates the loaded harness runs on.
+func reshapeLoaded(h *harness.Harness, profile string) (*harness.Harness, error) {
+	h, err := harness.ResolveProfile(h, profile)
+	if err != nil {
 		return nil, err
 	}
 	return resolver.WithIncludedSensors(h)

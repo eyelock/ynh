@@ -132,3 +132,37 @@ func TestBaselineExplainRefusesAnUnacceptedHarness(t *testing.T) {
 		t.Error("the unaccepted harness's sensor ran")
 	}
 }
+
+// A harness that cannot be loaded is refused, never waved through: check, sensors run and baseline
+// --explain run nothing for a folder whose manifest does not load (ynh #1058).
+func TestGatedCommandsFailClosedWhenTheHarnessCannotBeLoaded(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "ran")
+	// Valid JSON that is not a harness the loader accepts: a sensor command that would touch the marker.
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(`{"name":"bad","sensors":{"s":{"source":{"command":"touch `+marker+`"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"check", dir},
+		{"sensors", "run", dir, "s"},
+		{"baseline", dir, "--explain"},
+	} {
+		var out, errb bytes.Buffer
+		var err error
+		switch args[0] {
+		case "check":
+			err = cmdCheck(args[1:], &out, &errb)
+		case "sensors":
+			err = cmdSensors(args[1:])
+		default:
+			err = cmdBaseline(args[1:], &out, &errb)
+		}
+		if err == nil {
+			t.Errorf("ynh %s of a harness that cannot be loaded must fail", strings.Join(args, " "))
+		}
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("a sensor ran for a harness that could not be loaded")
+	}
+}
