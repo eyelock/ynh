@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -1088,6 +1089,22 @@ func LookupCache(gitURL string, ref string) (RepoResult, bool) {
 // to avoid network access when the cache is warm.
 func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string, *RepoResult, error) {
 	return resolveGitSourceWith(gs, harnessDir, CacheOnlyRepo)
+}
+
+// ErrNotCached is what ResolveGitSourceCacheOnly returns for a repository that
+// is not in the cache.
+var ErrNotCached = errors.New("not in the cache")
+
+// ResolveGitSourceCacheOnly resolves a GitSource from the cache and never
+// reaches the network: a repository that is not cached is ErrNotCached. It is
+// for a caller that must decide whether, and under which rules, to fetch.
+func ResolveGitSourceCacheOnly(gs harness.GitSource, harnessDir string) (string, *RepoResult, error) {
+	return resolveGitSourceWith(gs, harnessDir, func(url, ref string) (RepoResult, error) {
+		if res, ok := LookupCache(url, ref); ok {
+			return res, nil
+		}
+		return RepoResult{}, ErrNotCached
+	})
 }
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
