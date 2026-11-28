@@ -63,6 +63,13 @@ func TestImageFromTrust_RefusesFloatingSource(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "--trust refuses to accept this image") || !strings.Contains(err.Error(), "the source's own ref") {
 				t.Fatalf("err = %v, want a refusal naming the source's ref", err)
 			}
+			// Golden: the Fix line names the pin for --ref, never trust accept.
+			if !strings.HasSuffix(err.Error(), "\nFix: build again with --ref <40-character commit SHA>") {
+				t.Errorf("refusal does not end with the --ref Fix line:\n%s", err)
+			}
+			if strings.Contains(err.Error(), "trust accept") {
+				t.Errorf("refusal names 'ynh trust accept', which cannot apply to --from:\n%s", err)
+			}
 		})
 	}
 }
@@ -112,9 +119,29 @@ func TestImageFromTrust_RefusesFloatingInclude(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "floats") || !strings.Contains(err.Error(), "--trust refuses") {
 		t.Fatalf("err = %v, want a refusal naming the floating include", err)
 	}
+	if !strings.HasSuffix(err.Error(), "then build again") || strings.Contains(err.Error(), "trust accept") {
+		t.Errorf("refusal should end with the pin Fix line and not name trust accept:\n%s", err)
+	}
 	pinned := installFolder(t, "sha")
 	if err := cmdImageTo([]string{"fld", "--from", pinned, "--trust", "--dry-run"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("pinned include: %v", err)
+	}
+}
+
+// For a Git source the manifest is the one at the --ref commit, so building
+// again with the same --ref reads the same floating includes: the Fix line
+// names the new commit and --ref at it.
+func TestImageFromTrust_RefusesFloatingIncludeInGitSource(t *testing.T) {
+	fakeHome(t)
+	remote := filepath.Join(t.TempDir(), "remote")
+	gitRepo(t, remote, "remote-sensor")
+	src, sha := remoteSource(t, `,"includes":[{"git":"file://`+remote+`","ref":"main"}]`)
+	err := cmdImageTo([]string{"hh", "--from", "file://" + src, "--ref", sha, "--trust", "--dry-run"}, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "--trust refuses") || !strings.Contains(err.Error(), "floats") && !strings.Contains(err.Error(), "tag or branch") {
+		t.Fatalf("err = %v, want a refusal naming the floating include", err)
+	}
+	if !strings.Contains(err.Error(), "commit that, then build again with --ref <the new commit's 40-character SHA>") || strings.Contains(err.Error(), "trust accept") {
+		t.Errorf("Git-source Fix line should name the new commit and --ref:\n%s", err)
 	}
 }
 
@@ -181,6 +208,33 @@ func TestImageFromTrust_Flags(t *testing.T) {
 	}
 	if err := cmdImageTo([]string{"x", "--from", t.TempDir(), "--ref", "v1"}, io.Discard, io.Discard); err == nil || !strings.Contains(err.Error(), "--ref") {
 		t.Errorf("--ref on a local source: %v", err)
+	}
+}
+
+// A base image whose ynh predates the trust gate runs the baked harness with
+// no check: building on one warns (ynh #1024), and the build still goes ahead.
+func TestImageFromTrust_WarnsOnPreGateBase(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	args := []string{"hh", "--from", "file://" + src, "--ref", sha, "--trust", "--dry-run"}
+	for _, tt := range []struct {
+		labels string
+		warns  bool
+	}{
+		{`{"dev.ynh.version":"0.17.1"}`, true},
+		{`{"dev.ynh.version":"0.18.0"}`, false},
+	} {
+		stubBaseLabels(t, tt.labels)
+		var out, errOut bytes.Buffer
+		if err := cmdImageTo(args, &out, &errOut); err != nil {
+			t.Fatalf("%s: %v", tt.labels, err)
+		}
+		if got := strings.Contains(errOut.String(), "predates the trust gate"); got != tt.warns {
+			t.Errorf("%s: warned = %v, want %v:\n%s", tt.labels, got, tt.warns, errOut.String())
+		}
+		if !strings.Contains(out.String(), "trust-digest") {
+			t.Errorf("%s: the build did not go ahead:\n%s", tt.labels, out.String())
+		}
 	}
 }
 

@@ -262,6 +262,8 @@ Then accept:  ynh trust accept local/acme
 
 An accepted harness is built, and the image **bakes the accepted record**: the trust record, with `via` set to `image`, is written as `trust.json` in the image's home, keyed `local/<name>`, the id the image's entrypoint runs the harness under, so the run inside the image passes its own gate. The image carries the label `dev.ynh.harness.trust-digest` with the digest. A harness with nothing to accept gets no record and no label, and the image runs it without one.
 
+An image runs the ynh of its base, and the gate that checks the baked record arrived in ynh 0.18.0. When the base image is already pulled and its `dev.ynh.version` label names an older release, every build that bakes a record, an installed harness's or a `--from` one, prints a warning to stderr, in a dry run too, saying the image will run the harness with no trust check; pass `--base <image>` to build on a newer ynh image. It is a warning, not a refusal: the base is your choice, and the build still bakes what you accepted. A base that is not pulled, or whose version is not a release, is not checked, so the check never pulls or runs anything.
+
 ### `ynh image --from`
 
 `ynh image <name> --from <source>` builds from a Git URL or a local path rather than an installed harness, so nothing has accepted it yet. A harness with hooks, MCP servers, sensors or workspace folders is refused at build time, with exit 1, the `untrusted` error code and a `Fix:` line naming `--trust`; a harness with nothing to accept builds, with no record and no label.
@@ -271,6 +273,8 @@ An accepted harness is built, and the image **bakes the accepted record**: the t
 ```bash
 ynh image acme --from github.com/org/acme --ref 0123456789abcdef0123456789abcdef01234567 --trust
 ```
+
+A refusal for a floating source or include ends with a `Fix:` line that names the pin: `--ref <40-character commit SHA>` for the source, or the include's own ref in the manifest. For a local folder, pin the include and build again. For a Git source the manifest is the one at the `--ref` commit, so building again with the same `--ref` reads the same floating includes: commit the pins, then build with `--ref` at the new commit's SHA. It never points at `ynh trust accept`, because a `--from` build has nothing installed to accept.
 
 `--trust` is only valid with `--from`; an installed harness is accepted with `ynh trust accept`. `--ref` is likewise `--from` only, and not valid for a local folder. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
 

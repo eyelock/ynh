@@ -70,6 +70,10 @@ pulled is not checked, so the check never pulls or runs anything.
 
 **Trust.** `ynh image` refuses a harness you have not accepted, and an accepted harness's image carries its trust record, so its run passes the gate inside the image. The machine that runs the image is never asked. See [Build an image that passes the trust gate](how-to/build-an-image-that-passes-the-trust-gate.md).
 
+A base whose ynh is older than 0.18.0 predates the [trust gate](trust.md#ynh-image):
+it runs the baked harness with no trust check. A build that bakes an acceptance
+record warns about that too, with the same `--base` fix.
+
 ### What goes into the image
 
 The harness source is copied into the build context the way git sees it: tracked

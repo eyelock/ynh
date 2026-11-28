@@ -432,7 +432,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			// --trust refuses a floating source before anything is fetched.
 			if ia.trust {
 				if why := notPinned(resolved.ref); why != "" {
-					return refuseUnpinned("this image", "--trust", []string{"the source's own ref: " + why})
+					return refuseUnpinnedWith("this image", "--trust", []string{"the source's own ref: " + why}, imageSourceUnpinnedClosing)
 				}
 			}
 			if err := cfg.CheckSource(source, ""); err != nil {
@@ -624,6 +624,13 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// labels only, so this neither pulls nor runs anything, in a dry run too.
 	if w, ok := baseVersionWarning(ia.base, config.Version); ok {
 		warn.Print(stderr, w)
+	}
+
+	// An image that bakes a trust record relies on the base's ynh to check it.
+	if bakedTrust != nil {
+		if w, ok := baseTrustGateWarning(ia.base); ok {
+			warn.Print(stderr, w)
+		}
 	}
 
 	if imageContextHook != nil {
