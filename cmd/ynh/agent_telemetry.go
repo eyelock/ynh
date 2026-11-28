@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -148,6 +149,10 @@ func (r runTelemetry) StartCall(_ string, turn int) ([]string, func(string, bool
 var (
 	relayReadyTimeout = telemetry.RelayReadyTimeout
 	relayStopTimeout  = telemetry.RelayStopTimeout
+	// relayReadyAfter is the clock behind relayReadyTimeout. A test replaces it
+	// so the wait ends only once the relay stub has run, not after a bound a
+	// loaded machine can spend before the stub's first line (ynh #1027).
+	relayReadyAfter = time.After
 )
 
 // telemetryRelayEnv names the telemetry relay setting's variable.
@@ -284,7 +289,7 @@ func (r *runRelay) start(backend string) {
 		skip("ynr is not on PATH")
 		return
 	}
-	relay, err := telemetry.StartRelay(bin, r.tel.SpoolDir(), relayReadyTimeout)
+	relay, err := telemetry.StartRelayAfter(bin, r.tel.SpoolDir(), relayReadyTimeout, relayReadyAfter)
 	if err != nil {
 		skip(err.Error())
 		return

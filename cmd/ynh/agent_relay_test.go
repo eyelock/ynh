@@ -52,7 +52,7 @@ func claudeRelaySettings(endpoint string) []string {
 const relayStubEndpoint = "http://127.0.0.1:9"
 
 // stubRelay is a fake ynr on PATH and the files it records into.
-type stubRelay struct{ dir, args, pid, log string }
+type stubRelay struct{ dir, args, pid, log, upFile string }
 
 // installStubYnr puts a shell `ynr` first on PATH that records its
 // arguments, pid and SIGTERM, and behaves as mode says:
@@ -69,7 +69,7 @@ func installStubYnr(t *testing.T, mode string) stubRelay {
 		t.Skip("shell stub is POSIX-only")
 	}
 	dir := t.TempDir()
-	s := stubRelay{dir: dir, args: filepath.Join(dir, "args"), pid: filepath.Join(dir, "pid"), log: filepath.Join(dir, "log")}
+	s := stubRelay{dir: dir, args: filepath.Join(dir, "args"), pid: filepath.Join(dir, "pid"), log: filepath.Join(dir, "log"), upFile: filepath.Join(dir, "up")}
 	ready := `echo '{"endpoint":"` + relayStubEndpoint + `","pid":'$$'}'`
 	body := map[string]string{
 		// As ynr relay --exit-on-stdin-eof: stdin closing stops it too.
@@ -82,7 +82,7 @@ func installStubYnr(t *testing.T, mode string) stubRelay {
 		"silent":   "trap 'exit 0' TERM\nwhile :; do sleep 0.05; done\n",
 		"garbage":  "trap 'exit 0' TERM\necho 'starting up'\nwhile :; do sleep 0.05; done\n",
 	}[mode]
-	script := "#!/bin/sh\nD='" + dir + "'\necho \"$@\" > \"$D/args\"\necho $$ > \"$D/pid\"\n" + body
+	script := "#!/bin/sh\nD='" + dir + "'\necho \"$@\" > \"$D/args\"\necho $$ > \"$D/pid\"\n: > \"$D/up\"\n" + body
 	if err := os.WriteFile(filepath.Join(dir, "ynr"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -101,6 +101,13 @@ func hideFromPath(t *testing.T, name string) {
 		}
 	}
 	t.Setenv("PATH", strings.Join(keep, string(os.PathListSeparator)))
+}
+
+// up is true once the stub has finished its header: its arguments and pid are
+// written in full, so it is a running process the test can signal.
+func (s stubRelay) up() bool {
+	_, err := os.Stat(s.upFile)
+	return err == nil
 }
 
 func (s stubRelay) started() bool {
@@ -219,7 +226,8 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 		{name: "ynr ignores SIGTERM", relay: "stubborn", setting: "env", spool: "spool", started: true, serving: true, note: "was killed"},
 	}
 	saved := [2]time.Duration{relayReadyTimeout, relayStopTimeout}
-	t.Cleanup(func() { relayReadyTimeout, relayStopTimeout = saved[0], saved[1] })
+	savedAfter := relayReadyAfter
+	t.Cleanup(func() { relayReadyTimeout, relayStopTimeout, relayReadyAfter = saved[0], saved[1], savedAfter })
 
 	var baseline map[string]any
 	for _, tt := range tests {
@@ -228,8 +236,12 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 			// loaded machine needs: a short bound there is a flake, not a
 			// test. Only the two stubs that exercise a bound get a short one.
 			relayReadyTimeout, relayStopTimeout = 30*time.Second, 30*time.Second
+			relayReadyAfter = time.After
 			switch tt.relay {
 			case "silent":
+				// The bound is spent only once the stub has run its first line
+				// (it records its arguments and pid), so a loaded machine cannot kill
+				// it before it started. The bound itself is then immediate.
 				relayReadyTimeout = 500 * time.Millisecond
 			case "stubborn":
 				relayStopTimeout = 500 * time.Millisecond
@@ -256,6 +268,20 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 			var stub stubRelay
 			if tt.relay != "" {
 				stub = installStubYnr(t, tt.relay)
+				if tt.relay == "silent" {
+					relayReadyAfter = func(time.Duration) <-chan time.Time {
+						fired := make(chan time.Time, 1)
+						go func() {
+							// Capped, so a stub that never starts fails the test
+							// instead of hanging it.
+							for deadline := time.Now().Add(30 * time.Second); !stub.up() && time.Now().Before(deadline); {
+								time.Sleep(5 * time.Millisecond)
+							}
+							fired <- time.Now()
+						}()
+						return fired
+					}
+				}
 			} else {
 				hideFromPath(t, "ynr")
 			}
