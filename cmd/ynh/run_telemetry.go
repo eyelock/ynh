@@ -84,7 +84,7 @@ func standingRelayEndpoint(flag string, stderr io.Writer) string {
 // function that stops the relay, safe to defer and to call when no relay
 // started, and the vendor arguments that point a vendor configured on its
 // command line (Claude Code, Codex) at the relay.
-func startRunRelay(backend string, flag bool, endpointFlag string, stderr io.Writer) (func(), []string) {
+func startRunRelay(backend string, flag bool, endpointFlag, sessionID string, stderr io.Writer) (func(), []string) {
 	standing := standingRelayEndpoint(endpointFlag, stderr)
 	if standing == "" && !telemetryRelaySetting(flag, stderr) {
 		return func() {}, nil
@@ -95,6 +95,7 @@ func startRunRelay(backend string, flag bool, endpointFlag string, stderr io.Wri
 		stderr:    stderr,
 		supported: agent.SupportsRunRelay,
 		standing:  standing,
+		sessionID: sessionID,
 	}
 	endpoint := r.endpoint(backend)
 	if endpoint == "" {
@@ -131,6 +132,16 @@ func startLaunchRecord(vendorName string, loaded *harness.Harness, harnessID, fo
 	rec.session = tel.StartSession(launchAttributes(vendorName, loaded, harnessID, focus, profile, resumed)...)
 	rec.session.ApplyEnv()
 	return rec
+}
+
+// relaySessionID is the launch's session id for a per-launch relay to stamp
+// on the vendor's records, or "" when the launch writes no record of its own
+// (nothing then names the session) or there is no record at all.
+func (r *launchRecord) relaySessionID() string {
+	if r == nil || !r.tel.Active() {
+		return ""
+	}
+	return r.session.ID()
 }
 
 // markStarted is called as the vendor CLI is about to start.

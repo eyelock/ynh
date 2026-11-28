@@ -76,6 +76,9 @@ func installStubYnr(t *testing.T, mode string) stubRelay {
 		// fd 3, because a background job's stdin is /dev/null.
 		"serve": "trap 'echo term >> \"$D/log\"; exit 0' TERM\nexec 3<&0\n" +
 			"( cat <&3 >/dev/null; echo eof >> \"$D/log\"; kill -TERM $$ ) &\n" + ready + "\nwhile :; do sleep 0.05; done\n",
+		// An older ynr: the flag package refuses an option it does not know.
+		"old": "case \"$*\" in *--resource-attr*) echo 'flag provided but not defined: -resource-attr' >&2; exit 2;; esac\n" +
+			"trap 'echo term >> \"$D/log\"; exit 0' TERM\n" + ready + "\nwhile :; do sleep 0.05; done\n",
 		"stubborn": "trap '' TERM\n" + ready + "\nwhile :; do sleep 0.05; done\n",
 		"die":      ready + "\necho 'relay: crashed' >&2\nexit 1\n",
 		"exit":     "echo 'relay: cannot open spool' >&2\nexit 3\n",

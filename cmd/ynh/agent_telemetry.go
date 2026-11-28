@@ -205,6 +205,10 @@ type runRelay struct {
 	// standing is a configured standing relay endpoint. When set, the vendor
 	// is pointed at it and no relay is started.
 	standing string
+	// sessionID is the launch's ynh.session.id, which a per-launch relay
+	// stamps on every record it writes (ynr's --resource-attr). Empty means
+	// none is passed. A standing relay gets nothing: it serves many seats.
+	sessionID string
 	// endpointURL is the standing endpoint once it has passed the checks.
 	endpointURL string
 
@@ -284,7 +288,7 @@ func (r *runRelay) start(backend string) {
 		skip("ynr is not on PATH")
 		return
 	}
-	relay, err := telemetry.StartRelay(bin, r.tel.SpoolDir(), relayReadyTimeout)
+	relay, err := r.startWithSession(bin)
 	if err != nil {
 		skip(err.Error())
 		return
@@ -292,6 +296,30 @@ func (r *runRelay) start(backend string) {
 	r.sigs = make(chan os.Signal, 1)
 	signal.Notify(r.sigs, syscall.SIGINT, syscall.SIGTERM)
 	r.relay = relay
+}
+
+// startWithSession starts the per-launch relay with the launch's session id
+// as a resource attribute, so every vendor record names the session. A ynr
+// that does not take the option (older than the release carrying ynr's
+// --resource-attr) refuses it, so the relay is started again without it, with
+// one note: the run never fails over it.
+func (r *runRelay) startWithSession(bin string) (*telemetry.Relay, error) {
+	if r.sessionID == "" {
+		return telemetry.StartRelay(bin, r.tel.SpoolDir(), relayReadyTimeout)
+	}
+	relay, err := telemetry.StartRelay(bin, r.tel.SpoolDir(), relayReadyTimeout,
+		"--resource-attr", string(telemetry.AttrSessionID)+"="+r.sessionID)
+	if err == nil {
+		return relay, nil
+	}
+	// Only a relay that starts without the option shows the note; one that
+	// fails either way is the run's one "continues without" note.
+	relay, rerr := telemetry.StartRelay(bin, r.tel.SpoolDir(), relayReadyTimeout)
+	if rerr != nil {
+		return nil, rerr
+	}
+	_, _ = fmt.Fprintf(r.stderr, "ynh: the telemetry relay would not take %s (%v); it started without, so the vendor's records do not name the session (ynr 0.5.0 or later takes it)\n", telemetry.AttrSessionID, err)
+	return relay, nil
 }
 
 // stop stops the relay, if one is running, within relayStopTimeout. It is

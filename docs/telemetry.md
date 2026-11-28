@@ -456,6 +456,17 @@ its spool file, and waits up to 10 seconds before killing it. The same happens
 when ynh itself is interrupted with `SIGINT` or `SIGTERM`, or a run ends in a
 panic.
 
+Under `ynh run`, when the launch writes its own record, the per-launch relay is also
+started with `--resource-attr ynh.session.id=<the launch's session id>`, so every record
+the relay writes for the vendor names the session, whichever vendor sent it and whatever
+it did with `OTEL_RESOURCE_ATTRIBUTES`. The key is declared in ynh's telemetry registry,
+which `ynr relay` reads from `ynh` on `PATH`. This needs `ynr` 0.5.0 or later. An older
+one refuses the option, so ynh starts the relay again without it and shows one note on
+stderr (`the telemetry relay would not take ynh.session.id ...`); the run goes on, and the
+vendor's records do not name the session. A [standing relay](#a-standing-relay) is
+given nothing: it serves many launches, so ynh has no one session to stamp on it. `ynh agent
+run` does not pass the option.
+
 A relay that fails to start (it exits, prints nothing within the bound, or
 prints something other than a loopback endpoint) or dies during the run costs
 the run only the vendor's telemetry, with one note on stderr. The run's

@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
+	"os/exec"
 	"reflect"
 
 	"os"
@@ -63,7 +66,7 @@ func TestStartRunRelay(t *testing.T) {
 			}
 
 			var stderr bytes.Buffer
-			stop, args := startRunRelay(tt.backend, tt.flag, "", &stderr)
+			stop, args := startRunRelay(tt.backend, tt.flag, "", "", &stderr)
 			if got := stub.started(); got != tt.started {
 				t.Fatalf("relay started = %v, want %v (stderr %q)", got, tt.started, stderr.String())
 			}
@@ -177,7 +180,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 		stub := setup(t)
 		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", true, "", &stderr)
+		stop, args := startRunRelay("claude", true, "", "", &stderr)
 		if !stub.started() {
 			t.Fatalf("no relay started (stderr %q)", stderr.String())
 		}
@@ -210,11 +213,54 @@ func TestStartRunRelay_Claude(t *testing.T) {
 		}
 	})
 
+	t.Run("per-launch relay is given the launch's session id", func(t *testing.T) {
+		stub := setup(t)
+		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
+		var stderr bytes.Buffer
+		stop, _ := startRunRelay("claude", true, "", "5f1c0e9a7b3d4a68b2c9e04d1a7f3b52", &stderr)
+		defer stop()
+		args, _ := os.ReadFile(stub.args)
+		if want := "--resource-attr ynh.session.id=5f1c0e9a7b3d4a68b2c9e04d1a7f3b52"; !strings.Contains(string(args), want) {
+			t.Errorf("relay args %q lack %q", args, want)
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("unexpected stderr %q", stderr.String())
+		}
+	})
+
+	t.Run("older ynr without the option: relay starts without it, one note", func(t *testing.T) {
+		stub := installStubYnr(t, "old")
+		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
+		var stderr bytes.Buffer
+		stop, args := startRunRelay("claude", true, "", "abc123", &stderr)
+		if len(args) == 0 || os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != relayStubEndpoint {
+			t.Fatalf("the run was not pointed at a relay (stderr %q)", stderr.String())
+		}
+		got, _ := os.ReadFile(stub.args)
+		if strings.Contains(string(got), "resource-attr") {
+			t.Errorf("the relay that started was given the option: %q", got)
+		}
+		if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "ynh.session.id") {
+			t.Errorf("want one note naming ynh.session.id, got %q", stderr.String())
+		}
+		stop()
+	})
+
+	t.Run("standing endpoint: no session id, nothing started", func(t *testing.T) {
+		stub := setup(t)
+		var stderr bytes.Buffer
+		stop, _ := startRunRelay("claude", false, "http://127.0.0.1:4318", "abc123", &stderr)
+		defer stop()
+		if stub.started() {
+			t.Error("a relay started for a standing endpoint")
+		}
+	})
+
 	t.Run("standing endpoint: pointed at it, no relay starts", func(t *testing.T) {
 		stub := setup(t)
 		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", false, "http://127.0.0.1:4318", &stderr)
+		stop, args := startRunRelay("claude", false, "http://127.0.0.1:4318", "", &stderr)
 		defer stop()
 		if stub.started() {
 			t.Fatal("a relay started with a standing endpoint")
@@ -255,7 +301,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 	t.Run("a standing endpoint off the loopback is refused", func(t *testing.T) {
 		stub := setup(t)
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", false, "http://collector.example:4318", &stderr)
+		stop, args := startRunRelay("claude", false, "http://collector.example:4318", "", &stderr)
 		defer stop()
 		if stub.started() || len(args) != 0 {
 			t.Errorf("started %v, args %q", stub.started(), args)
@@ -278,7 +324,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 				t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
 				var stderr bytes.Buffer
-				stop, args := startRunRelay("claude", tt.flag, tt.endpoint, &stderr)
+				stop, args := startRunRelay("claude", tt.flag, tt.endpoint, "", &stderr)
 				defer stop()
 				if stub.started() || len(args) != 0 {
 					t.Errorf("started %v, args %q", stub.started(), args)
@@ -301,7 +347,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 		t.Setenv("YNR_SPOOL", filepath.Join(t.TempDir(), "spool"))
 		before := os.Environ()
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("claude", false, "", &stderr)
+		stop, args := startRunRelay("claude", false, "", "", &stderr)
 		stop()
 		if stub.started() || len(args) != 0 || stderr.Len() != 0 {
 			t.Errorf("started %v, args %q, stderr %q", stub.started(), args, stderr.String())
@@ -314,7 +360,7 @@ func TestStartRunRelay_Claude(t *testing.T) {
 	t.Run("unsupported vendor with a standing endpoint: a note, no change", func(t *testing.T) {
 		setup(t)
 		var stderr bytes.Buffer
-		stop, args := startRunRelay("opencode", false, "http://127.0.0.1:4318", &stderr)
+		stop, args := startRunRelay("opencode", false, "http://127.0.0.1:4318", "", &stderr)
 		defer stop()
 		if len(args) != 0 || !strings.Contains(stderr.String(), "does not configure opencode's telemetry") {
 			t.Errorf("args %q stderr %q", args, stderr.String())
@@ -336,5 +382,59 @@ func TestParseRunArgs_TelemetryRelayEndpoint(t *testing.T) {
 				t.Errorf("%q: forwarded %q to the vendor", args, a)
 			}
 		}
+	}
+}
+
+// With a real ynr that takes --resource-attr, and ynh on PATH to declare the
+// key, a record the vendor sends through the per-launch relay is written to
+// the spool carrying the launch's ynh.session.id. It skips without such a ynr:
+// CI's pinned ynr (the Dockerfile's YNR_VERSION) must be 0.5.0 or later.
+func TestStartRunRelay_RealRelayStampsSessionID(t *testing.T) {
+	bin, err := exec.LookPath("ynr")
+	if err != nil {
+		t.Skip("ynr is not on PATH")
+	}
+	if out, _ := exec.Command(bin, "relay", "-h").CombinedOutput(); !strings.Contains(string(out), "resource-attr") {
+		t.Skip("this ynr has no relay --resource-attr (it needs 0.5.0 or later)")
+	}
+	if _, err := exec.LookPath("ynh"); err != nil {
+		t.Skip("ynh is not on PATH, so ynr cannot read its registry")
+	}
+	for _, kv := range agent.RunRelayEnv("claude", "") {
+		t.Setenv(kv[0], "")
+	}
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	spool := filepath.Join(t.TempDir(), "spool")
+	if err := os.MkdirAll(spool, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("YNR_SPOOL", spool)
+	const id = "5f1c0e9a7b3d4a68b2c9e04d1a7f3b52"
+	var stderr bytes.Buffer
+	stop, _ := startRunRelay("claude", true, "", id, &stderr)
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		t.Fatalf("no relay started: %s", stderr.String())
+	}
+	now := time.Now().UnixNano()
+	body := fmt.Sprintf(`{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"claude-code-stub"}}]},`+
+		`"scopeSpans":[{"scope":{"name":"stub"},"spans":[{"traceId":"4bf92f3577b34da6a3ce929d0e0e4736","spanId":"5ca1ab1e5ca1ab1e",`+
+		`"name":"claude_code.interaction","kind":1,"startTimeUnixNano":"%d","endTimeUnixNano":"%d"}]}]}]}`, now-1000, now)
+	resp, err := http.Post(endpoint+"/v1/traces", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	stop()
+	var found bool
+	entries, _ := os.ReadDir(spool)
+	for _, e := range entries {
+		data, _ := os.ReadFile(filepath.Join(spool, e.Name()))
+		if strings.Contains(string(data), `"ynh.session.id"`) && strings.Contains(string(data), id) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no spool record carries ynh.session.id=%s (stderr %q)", id, stderr.String())
 	}
 }
