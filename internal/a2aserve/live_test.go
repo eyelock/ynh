@@ -434,7 +434,7 @@ func TestAModelWithOnLiveHeadlessIsHonouredBesideALiveSession(t *testing.T) {
 // live session and claims no value, since the session's own are not known.
 func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.T) {
 	folder := setup(t)
-	liveSession(t, "eno-1", "eno")
+	end, _ := liveSession(t, "eno-1", "eno")
 	e := openFor(t, folder, "eno", "local/parent", func(o *Options) {
 		o.Model, o.Effort = "entry-m", "medium"
 		o.DefaultModel, o.DefaultEffort = "def-m", "low"
@@ -444,10 +444,30 @@ func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.
 	if task.Metadata[MetaRoute] != "live" {
 		t.Fatalf("metadata = %v, want route live", task.Metadata)
 	}
-	rec, _ := recordOf(t, task)
+	rec, path := recordOf(t, task)
 	if rec.Status != delegation.StatusQueued || rec.Model != "" || rec.Effort != "" ||
 		rec.ModelFrom != delegation.FromLiveSession || rec.EffortFrom != delegation.FromLiveSession {
 		t.Errorf("record = status %s model %q from %q, effort %q from %q; want queued, no value, from live_session",
 			rec.Status, rec.Model, rec.ModelFrom, rec.Effort, rec.EffortFrom)
+	}
+	// If the session ends and the task falls back to headless, the record no
+	// longer claims the live session as the source.
+	end()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		cur, err := delegation.Reconcile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cur.Route == delegation.RouteHeadless {
+			if cur.ModelFrom == delegation.FromLiveSession || cur.EffortFrom == delegation.FromLiveSession {
+				t.Errorf("after the fallback the record still names the live session: %q %q", cur.ModelFrom, cur.EffortFrom)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("route stayed %s", cur.Route)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

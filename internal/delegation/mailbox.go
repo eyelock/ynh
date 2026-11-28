@@ -99,14 +99,11 @@ func Queue(o QueueOptions) (*Record, string, error) {
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
 		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
-<<<<<<< HEAD
 		AutoApproveFrom:     AutoApproveInteractive,
 		FallbackAutoApprove: o.AutoApprove, FallbackAutoApproveFrom: o.AutoApproveFrom,
-=======
 		// A live session runs with its own model and effort: the record says so
 		// and names no value (ynh #1074).
 		ModelFrom: FromLiveSession, EffortFrom: FromLiveSession,
->>>>>>> 4558eb70 (fix(delegation): a task queued at a live session reports live_session as the source of model and effort (#1074))
 		Log:   strings.TrimSuffix(path, ".json") + ".log",
 		Route: RouteLive, Session: o.Session.SessionID, SessionCwd: o.Session.Cwd,
 		QueuedAt: &now, TakeBy: &by, Supervisor: o.Supervisor,
@@ -253,6 +250,13 @@ func settleLive(path string, rec *Record) (*Record, error) {
 			// A headless session opens at the level the task resolved to.
 			r.AutoApprove, r.AutoApproveFrom = r.FallbackAutoApprove, r.FallbackAutoApproveFrom
 			r.FallbackAutoApprove, r.FallbackAutoApproveFrom = "", ""
+			// No live session's own model and effort apply to a headless one.
+			if r.ModelFrom == FromLiveSession {
+				r.ModelFrom = ""
+			}
+			if r.EffortFrom == FromLiveSession {
+				r.EffortFrom = ""
+			}
 			r.Error = "the live session ended before it took the task: started headless with the same task"
 		})
 		if err != nil || !started {
