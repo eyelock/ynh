@@ -563,7 +563,12 @@ are shown and covered by what you accept.
   ynh trust show <dir>           A folder's remote includes that bring commands,
                                  with each one's state, to review before
                                  'ynh trust accept <dir>'
-  ynh trust accept <harness>     Record that you have read them
+  ynh trust accept <harness>     Record that you have read them. A step for a
+                                 person who has reviewed them: a remote include
+                                 or native delegate entry with no full SHA ref
+                                 is accepted at the commit it is at now, and that
+                                 commit is recorded. A CI script installs with
+                                 'ynh install --ref <sha> --trust'
 
 Flags:
   --format text|json   Output format (default text)

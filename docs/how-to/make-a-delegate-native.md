@@ -17,12 +17,16 @@ After these steps `ynh run` assembles it into the parent's run dir.
    ```json
    {
      "delegates_to": [
-       {"git": "github.com/eyelock/team-dev-harness", "transport": "native"}
+       {"git": "github.com/eyelock/team-dev-harness", "ref": "<40-character commit SHA>", "transport": "native"}
      ]
    }
    ```
 
    or `"transport": "native"` at the top level for the harness default.
+
+   Pin the entry's `ref` to a full 40-character commit SHA. `--trust` refuses a native delegate entry
+   from another repository with no ref, a tag, a branch or a short SHA, because it floats. `ynh trust
+   accept` (step 3) accepts it anyway, at the commit it is at now, and records that commit. An entry that names the parent's own repository (`.` or `./sub`) needs no pin.
 
 2. Check the manifest. `ynd validate` checks the harness in the current folder, or the one at `[path]`:
 
@@ -45,7 +49,7 @@ After these steps `ynh run` assembles it into the parent's run dir.
 
 4. Confirm: `ynh info <parent's installed id>` prints `transport=native (entry)` or `(harness)`.
 
-A native delegate needs no installed harness and no `ynh trust accept` of its own. `ynd export` exports it;
+A native delegate needs no installed harness and no `ynh trust accept` of its own, but its entry must be pinned to be accepted with the parent. `ynd export` exports it;
 an `a2a` delegate is left out with one warning.
 
 ## Checked against

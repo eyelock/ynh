@@ -314,6 +314,8 @@ type remoteInclude struct {
 	// Key is the include's repository, subpath and ref (RemoteKey).
 	Key string
 	Set trustSet
+	// Commit is the commit the include was read at, "" when none is known.
+	Commit string
 }
 
 // remoteIncludes returns the remote includes of p that bring commands, each
@@ -361,7 +363,7 @@ func remoteIncludesFor(p *harness.Harness, verb, fix string) ([]remoteInclude, e
 		if set.count() == 0 {
 			continue
 		}
-		out = append(out, remoteInclude{Key: r.RemoteKey, Set: set})
+		out = append(out, remoteInclude{Key: r.RemoteKey, Set: set, Commit: r.Commit})
 	}
 	slices.SortFunc(out, func(a, b remoteInclude) int { return strings.Compare(a.Key, b.Key) })
 	return out, nil
@@ -404,11 +406,17 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 	if err != nil {
 		return cliError(stderr, structured, errCodeConfigError, err.Error())
 	}
+	// Acceptance covers what is read now: a floating include or native
+	// delegate entry is accepted at its current commit, not refused (ynh #1002).
+	floating := floatingPins(p, remote)
 	if len(remote) == 0 {
 		if format == "json" {
-			return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": []string{}})
+			return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": []string{}, "floating": floating})
 		}
 		_, err = fmt.Fprintf(stdout, "Nothing to accept: %s has no remote include that brings commands.\n", p.Dir)
+		if err == nil {
+			err = printFloating(stdout, floating)
+		}
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -421,6 +429,8 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 			Scheme:     trustScheme,
 			Via:        viaAccept,
 			AcceptedAt: now,
+			SHA:        r.Commit,
+			Floating:   floatingFor(floating, r.Key),
 		}
 		keys = append(keys, r.Key)
 		commands += r.Set.count()
@@ -429,9 +439,12 @@ func acceptFolderIncludes(path, format string, structured bool, stdout, stderr i
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
 	if format == "json" {
-		return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": keys, "commands": commands})
+		return writeJSON(stdout, map[string]any{"harness": p.Dir, "accepted": keys, "commands": commands, "floating": floating})
 	}
 	_, err = fmt.Fprintf(stdout, "Accepted %d remote include(s) of %s: %d command(s)\n", len(keys), p.Dir, commands)
+	if err == nil {
+		err = printFloating(stdout, floating)
+	}
 	return err
 }
 

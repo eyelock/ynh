@@ -16,7 +16,7 @@ ynh trust [ls|show|accept] [harness] [--format text|json]
 |---|---|
 | `ynh trust`, `ynh trust ls` | One line per installed harness: `HARNESS`, `STATE`, `VIA`, `COMMANDS`, `SOURCE` |
 | `ynh trust show <id>` | Everything the harness runs, the scripts behind it, its digest, and, when accepted, the accepted digest, date and route |
-| `ynh trust accept <id>` | Records the harness's current digest as accepted |
+| `ynh trust accept <id>` | Records the harness's current digest as accepted. A remote include that brings commands, or a native delegate entry from another repository, with no full 40-character SHA ref is accepted at the commit it is at now, which is recorded (`floating` in the record) and printed; nothing is refused for floating |
 | `ynh trust accept <folder>` | Records the remote includes of a folder, for runs of that folder |
 
 | Flag | Values | Default |
@@ -79,23 +79,24 @@ object. The full shape is in [Structured CLI output](cli-structured.md) and `ynh
 ## The `--trust` flag
 
 `--trust` accepts in the same step as the command, without a separate `ynh trust accept`. Everything it
-accepts must be pinned to a full 40-character commit SHA; otherwise the command is refused, exit 1,
-naming what can move. A local folder needs no pin for its own files; its remote includes do.
+accepts (unlike `ynh trust accept`, which accepts what you reviewed at the commit installed) must be pinned to a full 40-character commit SHA; otherwise the command is refused, exit 1,
+naming what can move. A local folder needs no pin for its own files; its remote includes and its native delegate entries from another repository do. `ynh install <url> --ref <branch> --trust` is refused before anything is cloned.
 
 | Command | Accepts | Pins required |
 |---|---|---|
-| `ynh install <url> --ref <sha> --trust` | the installed harness | `--ref`, and every remote include that brings commands |
-| `ynh install ./<folder> --trust` | the installed harness, as `local/<name>` | every remote include that brings commands |
-| `ynh run ./<folder> --trust` | the folder's remote includes, fetching any not in the cache | every remote include that brings commands |
+| `ynh install <url> --ref <sha> --trust` | the installed harness | `--ref`, and every remote include that brings commands, and every native delegate entry from another repository |
+| `ynh install ./<folder> --trust` | the installed harness, as `local/<name>` | every remote include that brings commands, and every native delegate entry from another repository |
+| `ynh run ./<folder> --trust` | the folder's remote includes, fetching any not in the cache | every remote include that brings commands, and every native delegate entry from another repository |
 | `ynh agent run --harness ./<folder> --trust` | the same | the same |
-| `ynh image <name> --from <source> --trust` | the harness built into the image, baked as `via: image` | `--ref` for a Git source, and every remote include that brings commands |
-| `ynh update local/<name> --trust`, for a harness installed from a folder | the harness again, after the update | every remote include that brings commands |
-| `ynh include add local/<name> <url> --ref <sha> --trust`, `ynh include update ... --trust`, for a harness installed from a folder | the harness again, after the change | every remote include that brings commands |
+| `ynh image <name> --from <source> --trust` | the harness built into the image, baked as `via: image` | `--ref` for a Git source, and every remote include that brings commands, and every native delegate entry from another repository |
+| `ynh update local/<name> --trust`, for a harness installed from a folder | the harness again, after the update | every remote include that brings commands, and every native delegate entry from another repository |
+| `ynh include add local/<name> <url> --ref <sha> --trust`, `ynh include update ... --trust`, for a harness installed from a folder | the harness again, after the change | every remote include that brings commands, and every native delegate entry from another repository |
 
 Refusals:
 
 | Command | Output |
 |---|---|
+| `ynh trust accept <id>` or `<folder>` with a remote include or native delegate entry not at a full SHA | not a refusal: `Accepted ...`, then `Floating, accepted at what is installed now (what it executes reads as changed if it moves):` and one line each, for example `native delegate ...: no ref, so it floats with the default branch; accepted at commit <sha>, the one installed` (or `no commit could be told, so none is recorded`) |
 | a ref that can move | `Error: --trust refuses to accept this install: it is not pinned to a full commit SHA, so what runs could change under the acceptance:` then each ref, such as `the harness's own ref: "main" is a tag or branch, which can move` |
 | `ynh run <id> --trust` on an installed id | `Error: --trust is for a run from a folder; an installed harness is accepted with 'ynh trust accept <id>', or at install with 'ynh install --trust'` |
 | `ynh include remove ... --trust` | `Error: --trust goes with ynh include add or update: removing an include needs no acceptance` |
