@@ -96,6 +96,7 @@ The image flags themselves are in [Docker: Harness Images](../docker.md#harness-
    ```
    Error: --trust refuses to accept this image: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
      the source's own ref: "main" is a tag or branch, which can move
+   Fix: build again with --ref <40-character commit SHA>
    ```
 
    A harness with nothing to accept builds without `--trust`.
