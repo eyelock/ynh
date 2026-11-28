@@ -131,6 +131,25 @@ func installedMatches(h *harness.Harness, src delegateSource) bool {
 // It installs and trusts nothing: when no install matches, or the match is
 // not trusted, the error names the command to run.
 func resolveDelegate(parent *harness.Harness, d harness.Delegate, store trustStore) (*resolvedDelegate, error) {
+	rd, err := resolveDelegateEntry(parent, d, store)
+	if err != nil {
+		return nil, fmt.Errorf("%w\n%s", err, parentAcceptHint(parent))
+	}
+	return rd, nil
+}
+
+// parentAcceptHint names the parent and the one command that accepts it with
+// its a2a delegates (ynh #1058, S1), so a refusal about a delegate does not
+// leave the reader accepting delegates one by one.
+func parentAcceptHint(parent *harness.Harness) string {
+	id := canonicalIDForHarness(parent)
+	if h, err := harness.LoadByID(id); err != nil || !sameDir(h.Dir, parent.Dir) {
+		return fmt.Sprintf("  %s runs from a folder: 'ynh run <folder> --trust' accepts its a2a delegates with it.", parent.Name)
+	}
+	return fmt.Sprintf("  Accept the parent, which accepts all its a2a delegates with it: ynh trust accept %s", id)
+}
+
+func resolveDelegateEntry(parent *harness.Harness, d harness.Delegate, store trustStore) (*resolvedDelegate, error) {
 	src, err := delegateEntrySource(parent, d)
 	if err != nil {
 		return nil, fmt.Errorf("delegate of %s: %w", parent.Name, err)

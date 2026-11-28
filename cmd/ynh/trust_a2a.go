@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/permission"
@@ -93,84 +96,217 @@ func installArgsFor(parent *harness.Harness, d harness.Delegate, src delegateSou
 }
 
 // installDelegate installs the harness a delegates_to entry points at, the
-// way `ynh install` would, so it has an id and a record of its own. A
-// variable so tests stand it aside, set in init because cmdInstall reaches
-// this file through install --trust.
+// way `ynh install` would, so it has an id and a record of its own. Its
+// output goes to stderr, so a command that writes one JSON document to stdout
+// stays one document. A variable so tests stand it aside, set in init because
+// cmdInstall reaches this file through install --trust.
 var installDelegate func(parent *harness.Harness, d harness.Delegate, src delegateSource) error
 
 func init() {
 	installDelegate = func(parent *harness.Harness, d harness.Delegate, src delegateSource) error {
+		out := os.Stdout
+		os.Stdout = os.Stderr
+		defer func() { os.Stdout = out }()
 		return cmdInstall(installArgsFor(parent, d, src))
 	}
 }
 
-// acceptA2ADelegates records an acceptance of each a2a delegate of p, each
-// under its own id at the commit it is installed at, installing one that is
-// not installed yet. It returns the ids it accepted.
-func acceptA2ADelegates(p *harness.Harness, via string, stdout io.Writer) ([]string, error) {
-	var ids []string
-	for _, d := range a2aEntries(p) {
-		src, err := delegateEntrySource(p, d)
-		if err != nil {
-			return ids, fmt.Errorf("delegate of %s: %w", p.Name, err)
-		}
-		matches, err := installedMatchesOf(src)
-		if err != nil {
-			return ids, fmt.Errorf("delegate %s: listing installed harnesses: %w", src, err)
-		}
-		if len(matches) == 0 {
-			if err := installDelegate(p, d, src); err != nil {
-				return ids, fmt.Errorf("delegate %s of %s: installing it: %w", src, p.Name, err)
+// a2aNode is one a2a delegate in the tree below a parent: the harness it
+// resolves to, installed or, when it is not installed yet, read from the
+// cache, and what it runs.
+type a2aNode struct {
+	Label     string // where it points
+	Parent    string // the harness that declares it
+	ParentH   *harness.Harness
+	Depth     int
+	Entry     harness.Delegate
+	Src       delegateSource
+	ID        string // the installed id, "" until installed
+	H         *harness.Harness
+	Installed bool
+	Set       trustSet
+	Level     permission.Level
+	From      permission.Source
+	Problem   string // why what it runs could not be read
+}
+
+// planA2ATree lists every a2a delegate below p, nested ones included, each
+// once, in declaration order, with what each runs. It installs and records
+// nothing: `trust show` shows it and `trust accept` accepts exactly it.
+func planA2ATree(p *harness.Harness) []a2aNode {
+	var out []a2aNode
+	seen := map[string]bool{}
+	var walk func(h *harness.Harness, depth int, parent string)
+	walk = func(h *harness.Harness, depth int, parent string) {
+		for _, d := range a2aEntries(h) {
+			n := a2aNode{Label: d.Label(), Parent: parent, ParentH: h, Depth: depth, Entry: d}
+			src, err := delegateEntrySource(h, d)
+			if err != nil {
+				n.Problem = err.Error()
+				out = append(out, n)
+				continue
 			}
-			if matches, err = installedMatchesOf(src); err != nil {
-				return ids, err
+			n.Src, n.Label = src, src.String()
+			if seen[n.Label] {
+				continue
+			}
+			seen[n.Label] = true
+			if ms, err := installedMatchesOf(src); err == nil && len(ms) > 0 {
+				n.ID, n.H, n.Installed = ms[0].ID, ms[0].H, true
+			} else if dh, lerr := loadDelegateFromCache(h, d, src); lerr == nil {
+				n.H = dh
+			} else {
+				n.Problem = fmt.Sprintf("it is not installed and cannot be read from the cache (%v), so what it runs cannot be shown", lerr)
+			}
+			if n.H != nil {
+				n.Set = harnessExecutables(n.H)
+				if len(n.Set.Problems) > 0 {
+					n.Problem = strings.Join(n.Set.Problems, "; ")
+				} else if b := scriptBlockers(n.Set.Sensors, n.Set.Hooks, n.Set.MCPServers); len(b) > 0 {
+					n.Problem = strings.Join(b, "; ")
+				}
+				n.Level, n.From = n.H.AutoApproveOf(), n.H.AutoApproveOrigin()
+				// An entry may only narrow the delegate's own level (D2).
+				if e := permission.Level(d.AutoApprove); e != "" && e.Narrower(n.Level) {
+					n.Level, n.From = e, permission.SourceEntry
+				}
+			}
+			out = append(out, n)
+			if n.H != nil {
+				walk(n.H, depth+1, n.Label)
 			}
 		}
-		if len(matches) == 0 {
-			return ids, fmt.Errorf("delegate %s of %s is not installed, and installing it did not make it so", src, p.Name)
-		}
-		m := matches[0]
-		if err := recordAcceptance(m.ID, m.H, via, stdout); err != nil {
-			return ids, fmt.Errorf("delegate %s of %s: %w", src, p.Name, err)
-		}
-		ids = append(ids, m.ID)
 	}
-	return ids, nil
+	walk(p, 0, p.Name)
+	return out
+}
+
+// loadDelegateFromCache reads the harness an entry points at from the local
+// folder or the include cache, without fetching.
+func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src delegateSource) (*harness.Harness, error) {
+	if src.local != "" {
+		return harness.LoadDir(src.local)
+	}
+	base, _, err := resolver.ResolveGitSourceFromCache(d.GitSource, parent.Dir)
+	if err != nil {
+		return nil, err
+	}
+	return harness.LoadDir(base)
+}
+
+// acceptedDelegate is what acceptA2ATree recorded for one delegate.
+type acceptedDelegate struct {
+	ID     string `json:"id"`
+	Digest string `json:"digest"`
+}
+
+// acceptA2ATree is the one function every acceptance route calls to accept
+// the a2a delegates of a parent (ynh #1058, N1): the whole tree below p,
+// nested delegates included, each with its own record under its own id at the
+// commit it is installed at, and the level it opens at.
+//
+// Nothing is accepted unseen: every delegate's commands, hooks, MCP servers
+// and level are written to w before anything is recorded, and a delegate that
+// cannot be read in full refuses the whole acceptance. A delegate not
+// installed yet is installed (its output goes to stderr) and must match what
+// was shown.
+//
+// All or nothing: extra holds the records the caller accepts with the tree,
+// the parent's own and a folder run's includes, and they are written in the
+// same store write as the delegates', after every delegate has been read and
+// installed. If any delegate cannot be accepted nothing is recorded, and the
+// error names the delegate and why. rootID is the harness whose acceptance
+// this is, noted on each delegate's record (trust ls shows "with <rootID>").
+func acceptA2ATree(p *harness.Harness, rootID, via string, extra map[string]trustRecord, w io.Writer) ([]acceptedDelegate, error) {
+	nodes := planA2ATree(p)
+	for _, n := range nodes {
+		if n.Problem != "" {
+			return nil, fmt.Errorf("nothing was accepted: delegate %s of %s cannot be accepted: %s", n.Label, n.Parent, n.Problem)
+		}
+	}
+	for _, n := range nodes {
+		_, _ = fmt.Fprintf(w, "A2A delegate %s of %s, opens at %s when run unattended (%s):\n", n.Label, n.Parent, n.Level, n.From)
+		_, _ = fmt.Fprint(w, listExecutables(n.Set.Sensors, n.Set.Hooks, n.Set.MCPServers))
+	}
+	// Install the ones that are not, then check each is what was shown.
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Installed {
+			continue
+		}
+		if err := installDelegate(n.ParentH, n.Entry, n.Src); err != nil {
+			return nil, fmt.Errorf("nothing was accepted: delegate %s of %s: installing it: %w", n.Label, n.Parent, err)
+		}
+		ms, err := installedMatchesOf(n.Src)
+		if err != nil || len(ms) == 0 {
+			return nil, fmt.Errorf("nothing was accepted: delegate %s of %s is not installed, and installing it did not make it so", n.Label, n.Parent)
+		}
+		shown := executablesDigest(n.Set)
+		n.ID, n.H, n.Installed = ms[0].ID, ms[0].H, true
+		n.Set = harnessExecutables(n.H)
+		if got := executablesDigest(n.Set); got != shown {
+			return nil, fmt.Errorf("nothing was accepted: delegate %s of %s installed as %s runs something other than what was shown (%s, then %s)", n.Label, n.Parent, n.ID, shown, got)
+		}
+	}
+	store, err := loadTrustStore()
+	if err != nil {
+		return nil, err
+	}
+	var done []acceptedDelegate
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, n := range nodes {
+		rec := newAcceptance(n.H, n.Set, via, now)
+		rec.Parent = rootID
+		store.Harnesses[n.ID] = rec
+		done = append(done, acceptedDelegate{ID: n.ID, Digest: rec.Digest})
+	}
+	for id, rec := range extra {
+		store.Harnesses[id] = rec
+	}
+	if err := saveTrustStore(store); err != nil {
+		return nil, err
+	}
+	for _, n := range nodes {
+		_, _ = fmt.Fprintf(w, "Accepted %s (%s, with %s): %d command(s), %s, opens at %s when run unattended\n",
+			n.ID, via, rootID, n.Set.count(), store.Harnesses[n.ID].Digest, n.Level)
+	}
+	return done, nil
 }
 
 // a2aDelegateReport is one a2a delegate as `trust show` lists it: where it
-// points, the id it is installed under, its own trust state, and the level it
-// opens at when run unattended.
+// points, who declares it, the id it is installed under, its own trust state,
+// what it runs, and the level it opens at when run unattended.
 type a2aDelegateReport struct {
-	Delegate    string `json:"delegate"`
-	ID          string `json:"id,omitempty"`
-	State       string `json:"state"`
-	AutoApprove string `json:"auto_approve,omitempty"`
-	From        string `json:"auto_approve_from,omitempty"`
+	Delegate    string       `json:"delegate"`
+	Parent      string       `json:"parent"`
+	Depth       int          `json:"depth"`
+	ID          string       `json:"id,omitempty"`
+	State       string       `json:"state"`
+	Digest      string       `json:"digest,omitempty"`
+	AutoApprove string       `json:"auto_approve,omitempty"`
+	From        string       `json:"auto_approve_from,omitempty"`
+	Executables []executable `json:"executables,omitempty"`
+	Hooks       []hookExec   `json:"hooks,omitempty"`
+	MCPServers  []mcpExec    `json:"mcp_servers,omitempty"`
+	Workspace   []string     `json:"workspace,omitempty"`
+	Problem     string       `json:"problem,omitempty"`
 }
 
-// a2aDelegateReports lists each a2a delegate of p with its own state. A
-// delegate that is not installed reads "not-installed": accepting the parent
-// installs and accepts it.
+// a2aDelegateReports lists the whole tree of a2a delegates below p with its
+// own state and what each runs. A delegate that is not installed reads
+// "not-installed": accepting the parent installs and accepts it.
 func a2aDelegateReports(p *harness.Harness, store trustStore) []a2aDelegateReport {
 	var out []a2aDelegateReport
-	for _, d := range a2aEntries(p) {
-		r := a2aDelegateReport{Delegate: d.Label(), State: "not-installed"}
-		if src, err := delegateEntrySource(p, d); err == nil {
-			r.Delegate = src.String()
-			if ms, err := installedMatchesOf(src); err == nil && len(ms) > 0 {
-				m := ms[0]
-				r.ID = m.ID
-				r.State = trustStatusFor(m.ID, m.H, store, nil).State
-				level, from := m.H.AutoApproveOf(), m.H.AutoApproveOrigin()
-				if d.AutoApprove != "" {
-					// An entry may only narrow the delegate's own level (D2).
-					if e := permission.Level(d.AutoApprove); e.Narrower(level) {
-						level, from = e, harness.AutoApproveFromEntry
-					}
-				}
-				r.AutoApprove, r.From = string(level), from
-			}
+	for _, n := range planA2ATree(p) {
+		r := a2aDelegateReport{Delegate: n.Label, Parent: n.Parent, Depth: n.Depth, State: "not-installed", Problem: n.Problem}
+		if n.H != nil {
+			r.Digest = executablesDigest(n.Set)
+			r.Executables, r.Hooks, r.MCPServers, r.Workspace = n.Set.Sensors, n.Set.Hooks, n.Set.MCPServers, n.Set.Workspace
+			r.AutoApprove, r.From = string(n.Level), string(n.From)
+		}
+		if n.Installed {
+			r.ID = n.ID
+			r.State = trustStatusFor(n.ID, n.H, store, nil).State
 		}
 		out = append(out, r)
 	}
