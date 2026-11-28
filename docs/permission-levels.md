@@ -30,7 +30,7 @@ The order is `all` > `edits` > `none`. Finer control, such as which commands, is
 | Field or flag | Where | Can it widen? |
 |---|---|---|
 | `auto_approve` | top level of the harness manifest (`.agents/harness/plugin.json`). A profile cannot change it | it sets the harness's ceiling |
-| `auto_approve` | on a `delegates_to` entry of the parent | no: narrows the delegate only |
+| `auto_approve` | on an `a2a` `delegates_to` entry of the parent | no: narrows the delegate only. On a `native` entry it is refused when the harness is loaded: a native delegate runs inside its parent's session, at the parent's level |
 | `auto_approve` | the per-call argument of `delegate_to_<name>` (A2A metadata `ynh.auto_approve`; the native bridge's `--auto-approve`) | no |
 | `--auto-approve none\|edits\|all` | `ynh run`, one-shot or interactive | no |
 | `--auto-approve none\|edits\|all` | `ynh agent run` | no, with `--harness`; without it, it is the grant |
@@ -129,13 +129,35 @@ which Claude Code itself allows `bypassPermissions` as root.
 
 ### The mode a session opened in
 
-Claude Code reports the mode it opened in. If a managed or user setting (such as
-`permissions.disableBypassPermissionsMode`) made it open in another mode than ynh chose, ynh stops the
-run:
+ynh checks the mode a one-shot Claude Code session opened in, before it does anything:
 
-```
-asked for --permission-mode bypassPermissions but the session started in "default"; a managed or user setting (such as permissions.disableBypassPermissionsMode) overrides it, so --auto-approve does not apply
-```
+- **It reads the run as a stream.** A one-shot Claude Code run is passed `--output-format stream-json
+  --verbose --include-hook-events`, and a `UserPromptSubmit` and `PreToolUse` hook
+  (`ynh permission-check --expect <mode>`) in `--settings`. ynh renders the answer itself, so the
+  output still reads as text.
+- **A caller's own `--output-format` or `--input-format` is refused**, exit 1, because ynh needs the
+  stream. A script that passed `--output-format json` to `ynh run` stops working:
+
+  ```
+  refusing to run: --output-format is passed, but ynh reads a one-shot Claude Code run as a stream to check the mode it opened in and renders the answer itself; remove it
+  ```
+
+- **A mismatch stops the run.** If a managed or user setting (such as
+  `permissions.disableBypassPermissionsMode`) made the session open in another mode than ynh chose:
+
+  ```
+  asked for --permission-mode bypassPermissions but the session started in "default"; a managed or user setting (such as permissions.disableBypassPermissionsMode) overrides it, so --auto-approve does not apply
+  ```
+
+- **A session whose hooks are off is stopped.** If the check's hook never answered before the session
+  used a tool or finished (hooks switched off by `disableAllHooks` or by policy):
+
+  ```
+  the opened-mode check did not run: no successful UserPromptSubmit hook response was seen before the session used a tool or finished (hooks may be switched off by disableAllHooks or by policy), so the session was stopped
+  ```
+
+A run the check stops exits nonzero. The texts are from `cmd/ynh/claude_stream.go` and
+`internal/permission/root.go` at develop; the mismatch and the hooks-off cases were not run here.
 
 ## The project's own mode
 
@@ -156,8 +178,13 @@ auto-approve: opening at the project's mode (none) rather than all: /work/repo/.
 | | | `acceptEdits` | `edits` |
 | | | `bypassPermissions` | `all` |
 | Codex | `.codex/config.toml`, top-level keys only | `sandbox_mode`: `read-only` / `workspace-write` / `danger-full-access` | `none` / `edits` / `all` |
-| | | `approval_policy`: `untrusted` / `on-request`, `on-failure` | `none` / `edits` |
+| | | `approval_policy` alone, any value but `never` | `none`: ynh always passes a sandbox, and with no `sandbox_mode` it passes `--sandbox read-only` |
+| | | `approval_policy = "untrusted"` with a `sandbox_mode` | `none`, or the sandbox's level if narrower |
+| | | `approval_policy = "on-request"` or `"on-failure"` with a `sandbox_mode` | the sandbox's level, at most `edits` |
 | | | `approval_policy = "never"` | sets no bound |
+
+Only `sandbox_mode = "workspace-write"` gives `edits` on Codex. When both keys are set, ynh passes both
+and the run opens at the narrower.
 | Cursor, OpenCode, Copilot CLI | none | they have no project approval mode | |
 
 A value ynh cannot place counts as `none`, so it never widens a run.

@@ -378,7 +378,8 @@ unattended agent your credentials. Narrow it, in the manifest or per run.
   are not consulted.
 - **Claude Code as root.** A claude worker at `all` as root is refused before
   Claude starts, exit 1, naming the fixes (a non-root user, ynh's agent image,
-  or `--auto-approve edits`); see
+  `--auto-approve edits`, or `IS_SANDBOX=1` or `CLAUDE_CODE_BUBBLEWRAP` in a
+  container that is the sandbox); see
   [Permission levels: Claude Code as root](permission-levels.md#claude-code-as-root).
 - **A vendor refusal is a worker error.** A managed setting can disable a mode.
   Claude does not fail when a setting disables the mode, it starts in another
