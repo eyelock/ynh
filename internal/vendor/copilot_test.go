@@ -3,6 +3,7 @@ package vendor
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -617,5 +618,137 @@ func TestBuildCopilotArgsWritesNothingToRunDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, copilotInstructionsRelPath)); err != nil {
 		t.Errorf("instructions not projected into the project: %v", err)
+	}
+}
+
+func gitIn(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return string(out)
+}
+
+// The projected instructions file does not show as a change in the project,
+// or in a worktree of it, and a `git add -A` does not pick it up (ynh #792).
+func TestProjectCopilotInstructions_DoesNotDirtyTheProject(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	cfg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("Be brief.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	gitIn(t, project, "init", "-q")
+	if err := os.WriteFile(filepath.Join(project, "README.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, project, "add", "README.md")
+	gitIn(t, project, "commit", "-q", "-m", "init")
+
+	for i := 0; i < 2; i++ { // twice: the exclude line is not repeated
+		if err := projectCopilotInstructions(cfg, project); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(project, copilotInstructionsRelPath)); err != nil {
+		t.Fatalf("the file is not projected: %v", err)
+	}
+	if got := gitIn(t, project, "status", "--porcelain"); got != "" {
+		t.Errorf("git status shows %q, want clean", got)
+	}
+	gitIn(t, project, "add", "-A")
+	if got := gitIn(t, project, "status", "--porcelain"); got != "" {
+		t.Errorf("git add -A picked up %q", got)
+	}
+	exclude, _ := os.ReadFile(filepath.Join(project, ".git", "info", "exclude"))
+	if n := strings.Count(string(exclude), "/"+copilotInstructionsRelPath); n != 1 {
+		t.Errorf("the exclude line appears %d times:\n%s", n, exclude)
+	}
+
+	// A worktree of the project shares the exclude file: the file projected
+	// into it is not a change either.
+	wt := filepath.Join(t.TempDir(), "wt")
+	gitIn(t, project, "worktree", "add", "-q", "-b", "task", wt)
+	if err := projectCopilotInstructions(cfg, wt); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitIn(t, wt, "status", "--porcelain"); got != "" {
+		t.Errorf("the worktree shows %q, want clean", got)
+	}
+}
+
+// A folder that is not a git repository is left alone, and not an error.
+func TestProjectCopilotInstructions_NotARepositoryIsFine(t *testing.T) {
+	cfg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("Be brief.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := projectCopilotInstructions(cfg, project); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(project, ".git")); err == nil {
+		t.Error("a .git was created")
+	}
+}
+
+// Run from a subdirectory of the repository (a monorepo package) or of a
+// worktree, the projected file is still not a change: the exclude line names
+// its path from the top of the working tree.
+func TestProjectCopilotInstructions_FromASubdirectory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	cfg := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg, "AGENTS.md"), []byte("Be brief.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	gitIn(t, project, "init", "-q")
+	sub := filepath.Join(project, "sub", "pkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "x.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, project, "add", ".")
+	gitIn(t, project, "commit", "-q", "-m", "init")
+
+	if err := projectCopilotInstructions(cfg, sub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(sub, copilotInstructionsRelPath)); err != nil {
+		t.Fatalf("not projected: %v", err)
+	}
+	if got := gitIn(t, project, "status", "--porcelain"); got != "" {
+		t.Errorf("git status in the repository shows %q, want clean", got)
+	}
+	exclude, _ := os.ReadFile(filepath.Join(project, ".git", "info", "exclude"))
+	if !strings.Contains(string(exclude), "/sub/pkg/"+copilotInstructionsRelPath) {
+		t.Errorf("exclude does not name the path from the top level:\n%s", exclude)
+	}
+
+	// The same from a subdirectory of a worktree.
+	wt := filepath.Join(t.TempDir(), "wt")
+	gitIn(t, project, "worktree", "add", "-q", "-b", "task", wt)
+	wtSub := filepath.Join(wt, "sub", "pkg")
+	if err := projectCopilotInstructions(cfg, wtSub); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitIn(t, wt, "status", "--porcelain"); got != "" {
+		t.Errorf("git status in the worktree shows %q, want clean", got)
+	}
+	// And a second run adds no line.
+	if err := projectCopilotInstructions(cfg, sub); err != nil {
+		t.Fatal(err)
+	}
+	exclude, _ = os.ReadFile(filepath.Join(project, ".git", "info", "exclude"))
+	if n := strings.Count(string(exclude), "/sub/pkg/"+copilotInstructionsRelPath); n != 1 {
+		t.Errorf("the line appears %d times", n)
 	}
 }

@@ -133,3 +133,42 @@ func TestValidateHarnessTransport(t *testing.T) {
 		})
 	}
 }
+
+// model and effort are accepted on a delegates_to entry and as a harness's own
+// default; an effort that is not low, medium or high, and a model that is empty,
+// starts with a dash or holds white space, are refused.
+func TestValidateHarnessDelegateModelAndEffort(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	tests := []struct {
+		name, manifest, wantIssue string
+	}{
+		{"entry model and effort", `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","model":"opus","effort":"high"}]}`, ""},
+		{"the harness's own default", `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","default_model":"claude-opus-4-8","default_effort":"low"}`, ""},
+		{"entry effort outside low, medium, high", `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","effort":"max"}]}`, "effort"},
+		{"default effort outside low, medium, high", `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","default_effort":"turbo"}`, "default_effort"},
+		{"entry model that starts with a dash", `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","model":"--yolo"}]}`, "model"},
+		{"default model with a space", `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","default_model":"two words"}`, "default_model"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(tc.manifest))
+			var err error
+			var buf bytes.Buffer
+			withStdout(t, &buf, func() { err = validateHarness(dir) })
+			got := buf.String()
+			if err != nil {
+				got += err.Error()
+			}
+			if tc.wantIssue == "" {
+				if err != nil || strings.Contains(got, "INVALID") {
+					t.Errorf("no issue expected:\n%s", got)
+				}
+				return
+			}
+			if !strings.Contains(got, tc.wantIssue) {
+				t.Errorf("want %q in:\n%s", tc.wantIssue, got)
+			}
+		})
+	}
+}

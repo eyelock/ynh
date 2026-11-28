@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/delegation"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -27,6 +28,9 @@ type ExportDelegate struct {
 	focus    *harness.DelegateFocus
 	declared []string
 	servers  map[string]plugin.MCPServer
+	// model and effort are what the subagent runs with: its entry's own, else
+	// the delegate harness's default, else none (the vendor's).
+	model, effort string
 }
 
 // ResolveExportDelegates resolves each delegate as a harness: its includes
@@ -65,7 +69,9 @@ func ResolveExportDelegatesBy(delegates []harness.Delegate, harnessDir, rootName
 		if err != nil {
 			return nil, nil, err
 		}
-		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, focus: focus, declared: fd.Declared, servers: servers})
+		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, focus: focus, declared: fd.Declared, servers: servers,
+			model:  delegation.Resolve("", fd.Entry.Model, delHarness.DefaultModel).Value,
+			effort: delegation.Resolve("", fd.Entry.Effort, delHarness.DefaultEffort).Value})
 	}
 	return out, skipped, nil
 }
@@ -93,6 +99,11 @@ func WriteDelegates(outputDir string, delegates []ExportDelegate, carrier assemb
 			}
 		}
 
+		if sc, ok := carrier.(assembler.DelegateSettingsCarrier); ok && sc != nil {
+			if lines := sc.DelegateSettingsFrontmatter(del.model, del.effort); len(lines) > 0 {
+				mcpLine = strings.Join(append(lines, nonEmptyLine(mcpLine)...), "\n")
+			}
+		}
 		agentContent := assembler.BuildDelegateAgent(del.harness, del.basePath, del.included, del.focus, del.declared, mcpLine)
 		agentFile := filepath.Join(agentsDir, del.harness.Name+".md")
 		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
@@ -101,6 +112,13 @@ func WriteDelegates(outputDir string, delegates []ExportDelegate, carrier assemb
 	}
 
 	return nil
+}
+
+func nonEmptyLine(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
 }
 
 // delegateCarrier returns the adapter's way of carrying a delegate's MCP

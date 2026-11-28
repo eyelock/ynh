@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/delegation"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 func TestDelegateRunArgs(t *testing.T) {
@@ -21,6 +22,10 @@ func TestDelegateRunArgs(t *testing.T) {
 			[]string{"run", "local/rev", "--", "review it"}},
 		{"focus and model", delegation.Record{Delegate: "local/rev", Task: "go", Focus: "deep", Model: "opus"},
 			[]string{"run", "local/rev", "--focus", "deep", "--", "go", "--model=opus"}},
+		{"claude effort", delegation.Record{Delegate: "local/rev", Task: "go", Vendor: "claude", Model: "opus", Effort: "high"},
+			[]string{"run", "local/rev", "--", "go", "--model=opus", "--effort", "high"}},
+		{"codex effort", delegation.Record{Delegate: "local/rev", Task: "go", Vendor: "codex", Effort: "low"},
+			[]string{"run", "local/rev", "--", "go", "-c", `model_reasoning_effort="low"`}},
 		{"profile", delegation.Record{Delegate: "local/rev", Task: "go", Profile: "ci"},
 			[]string{"run", "local/rev", "--profile", "ci", "--", "go"}},
 		{"a task that starts with a dash is still the prompt", delegation.Record{Delegate: "local/rev", Task: "--help me"},
@@ -37,8 +42,11 @@ func TestDelegateRunArgs(t *testing.T) {
 			if ra.HarnessName != tt.rec.Delegate || strings.TrimSpace(ra.Prompt) != tt.rec.Task || ra.Interactive {
 				t.Errorf("ynh run reads %+v", ra)
 			}
-			if tt.rec.Model != "" && !reflect.DeepEqual(ra.VendorArgs, []string{"--model=" + tt.rec.Model}) {
+			if tt.rec.Model != "" && tt.rec.Effort == "" && !reflect.DeepEqual(ra.VendorArgs, []string{"--model=" + tt.rec.Model}) {
 				t.Errorf("vendor args = %q", ra.VendorArgs)
+			}
+			if tt.rec.Effort != "" && !reflect.DeepEqual(ra.VendorArgs, got[4:]) {
+				t.Errorf("vendor args = %q, want everything after the task %q", ra.VendorArgs, got[4:])
 			}
 		})
 	}
@@ -122,5 +130,41 @@ func TestDelegateRunStatusAndCancelReadTheRecord(t *testing.T) {
 	// A final delegation is left as it is.
 	if err := cmdDelegateRunTo([]string{"cancel", "--record", path}, &out); err != nil || !strings.Contains(out.String(), `"succeeded"`) {
 		t.Fatalf("cancel: %v %s", err, out.String())
+	}
+}
+
+// The four levels on the native-start path, model and effort each on its own:
+// the call, the entry, the delegate harness's default, the vendor's.
+func TestChooseModelAndEffortLayers(t *testing.T) {
+	rd := func(entryM, entryE, defM, defE string) *resolvedDelegate {
+		return &resolvedDelegate{
+			Entry:   harness.Delegate{Model: entryM, Effort: entryE},
+			Harness: &harness.Harness{DefaultModel: defM, DefaultEffort: defE},
+		}
+	}
+	tests := []struct {
+		name         string
+		callM, callE string
+		rd           *resolvedDelegate
+		wantM, wantE delegation.Setting
+	}{
+		{"call over all", "cm", "high", rd("em", "medium", "dm", "low"),
+			delegation.Setting{Value: "cm", From: "call"}, delegation.Setting{Value: "high", From: "call"}},
+		{"entry over default", "", "", rd("em", "medium", "dm", "low"),
+			delegation.Setting{Value: "em", From: "entry"}, delegation.Setting{Value: "medium", From: "entry"}},
+		{"delegate default over vendor", "", "", rd("", "", "dm", "low"),
+			delegation.Setting{Value: "dm", From: "delegate_default"}, delegation.Setting{Value: "low", From: "delegate_default"}},
+		{"vendor default", "", "", rd("", "", "", ""),
+			delegation.Setting{From: "vendor_default"}, delegation.Setting{From: "vendor_default"}},
+		{"each on its own", "cm", "", rd("em", "medium", "dm", "low"),
+			delegation.Setting{Value: "cm", From: "call"}, delegation.Setting{Value: "medium", From: "entry"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m, e := chooseModelAndEffort(tt.callM, tt.callE, tt.rd)
+			if m != tt.wantM || e != tt.wantE {
+				t.Errorf("model %+v effort %+v, want %+v %+v", m, e, tt.wantM, tt.wantE)
+			}
+		})
 	}
 }

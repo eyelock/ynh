@@ -26,7 +26,7 @@ func installGitHarness(t *testing.T, source, subpath, ref, name, fields string) 
 		t.Fatal(err)
 	}
 	if err := plugin.SaveInstalledJSON(dir, &plugin.InstalledJSON{
-		SourceType: "git", Source: source, Path: subpath, Ref: ref, InstalledAt: "2026-11-06T00:00:00Z",
+		SourceType: "git", Source: source, Path: subpath, Ref: ref, SHA: fullSHAOrEmpty(ref), InstalledAt: "2026-11-06T00:00:00Z",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -224,4 +224,13 @@ func TestResolveDelegateSeveralMatchesPreferTrusted(t *testing.T) {
 			t.Errorf("error = %v, want the smallest id's refusal", err)
 		}
 	})
+}
+
+// fullSHAOrEmpty is ref when it is a full commit SHA: a real install of one records it as the commit
+// it was at, which trust accept needs to find (ynh #1032).
+func fullSHAOrEmpty(ref string) string {
+	if isFullSHA(ref) {
+		return ref
+	}
+	return ""
 }
