@@ -13,7 +13,7 @@ JSON error code `untrusted`. The steps are in
 |---|---|---|---|
 | Installed, never accepted | `unreviewed` | `refusing to run <id>: you have not accepted what it executes.`, then the list, `Review them:` and `Then accept:` | `ynh trust show <id>`, then `ynh trust accept <id>` |
 | Installed, only asks for workspace folders, never accepted | `unreviewed` | `refusing to run <id>: you have not accepted what it asks for.`, then `It requests workspace folders:` | the same |
-| A hook, MCP server or sensor is added, removed or changed | `changed` | `refusing to run <id>: its commands differ from what you accepted on <date>.` | the same |
+| A hook, MCP server or sensor is added, removed or changed | `changed` | `refusing to run <id>: what it executes or its settings differ from what you accepted on <date>.` | the same |
 | A script that a hook, MCP server or sensor runs changes, with the command text the same | `changed` | the same | the same |
 | A workspace folder it asks for, its launch focus prompt, or a delegate's focus prompt changes | `changed` | the same | the same |
 | A folder you installed with `ynh install ./<folder>` is edited in any of the ways above | `changed` | the same | the same |
@@ -22,6 +22,10 @@ JSON error code `untrusted`. The steps are in
 | `ynh include add`, `include update` or `include remove` changes what runs | `changed` | at the change: the same `is no longer trusted` message | `ynh trust show <id>`, then `ynh trust accept <id>`; for `include add` or `include update` on a harness installed from a folder, the same command with `--trust` accepts in one step (`include remove` refuses `--trust`) |
 | The harness is uninstalled and installed again | `unreviewed`: uninstalling removes its record | the `unreviewed` refusal of the first rows: `refusing to run <id>: you have not accepted what it executes.` (or `what it asks for.`) | `ynh trust show <id>`, then `ynh trust accept <id>` |
 | The harness was accepted with ynh v0.17 or earlier, and ynh is now v0.18.0 or later | `changed` | the `changed` refusal, then `Your acceptance predates the digest covering the contents of the scripts ...` | `ynh trust show <id>`, then `ynh trust accept <id>` |
+| `env_passthrough` changes, at the top level or in a profile (digest scheme 4) | `changed` | the `changed` refusal | `ynh trust show <id>`, then `ynh trust accept <id>` |
+| `mcp_manual_approval` changes, at the top level or in a profile (scheme 4) | `changed` | the same | the same |
+| The harness's own `default_vendor` changes (scheme 4) | `changed` | the same | the same |
+| The harness was accepted under digest scheme 3, and ynh is now at scheme 4 | `changed` once, with a note | the `changed` refusal, then a note about `env_passthrough`, `mcp_manual_approval`, `default_vendor` and the full-length digest | the same |
 | An include is missing from ynh's cache | `unavailable` | `refusing to run <id>: <id> cannot be reviewed yet: what it executes could not be read in full.` | `ynh update <id>` |
 | A script is a link that leads outside the harness, or a covered script is missing | refused, accepted or not | `a script its commands run cannot be read in full, so what runs cannot be reviewed:` and a `Fix:` line | make it a regular file inside the harness, as the `Fix:` line says; accepting does not help |
 
@@ -30,6 +34,7 @@ JSON error code `untrusted`. The steps are in
 | Event | State |
 |---|---|
 | Instructions, skills, agents, rules or commands change in a folder you installed | stays `accepted` |
+| A run is given `-v <vendor>` or `YNH_VENDOR` | stays `accepted` |
 | Project code a hook or sensor runs changes, such as `scripts/wake.sh` or a sensor's `./lint.sh` | stays `accepted` |
 | A program found on `PATH` changes, such as `gofmt` or a package `npx` downloads | stays `accepted` |
 
@@ -59,7 +64,7 @@ own commands. It checks the commands its remote includes bring:
 |---|---|---|
 | `ynh image <id>` of a harness that is `unreviewed` or `changed` | `refusing to build an image of <id>: ...`, before Docker starts | accept it, then build |
 | `ynh image <name> --from <source>` of a harness with commands, without `--trust` | `refusing to build an image of <name> from <source>: ...` and a `Fix:` line | build with `--trust`, and `--ref <40-character-sha>` for a Git source |
-| A layer built on top of the image changes the harness | the image's run: `refusing to run local/<name>: its commands differ from what you accepted on <date>.` | change the harness before the build, accept it, and build again |
+| A layer built on top of the image changes the harness | the image's run: `refusing to run local/<name>: what it executes or its settings differ from what you accepted on <date>.` | change the harness before the build, accept it, and build again |
 
 ## Related
 

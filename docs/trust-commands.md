@@ -27,13 +27,13 @@ ynh trust [ls|show|accept] [harness] [--format text|json]
 
 ### Output
 
-`ynh trust accept <id>`:
+`ynh trust accept <id>` (`sha256:<64 hex>` stands for your harness's own 64 hexadecimal characters):
 
 ```
-Accepted local/greeter (accept): 2 command(s), sha256:aff830900fd54227
+Accepted local/greeter (accept): 2 command(s), sha256:<64 hex>
 ```
 
-A harness that only asks for workspace folders: `Accepted local/ws (accept): 0 command(s), 1 workspace folder(s), sha256:fcec517cd7869c57`.
+A harness that only asks for workspace folders: `Accepted local/ws (accept): 0 command(s), 1 workspace folder(s), sha256:<64 hex>`.
 
 `ynh trust accept <folder>`:
 

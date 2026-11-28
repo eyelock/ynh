@@ -1,4 +1,4 @@
-<!-- Tutorial. Every command below was run, and its output copied, on a build of ynh v0.18.0 (develop) in a scratch YNH_HOME, 2026-11-27. -->
+<!-- Tutorial. Every command below was run, and its output copied, on a build of ynh v0.18.0 (develop) in a scratch YNH_HOME, 2026-11-28. -->
 
 # Your First Trusted Harness
 
@@ -89,12 +89,14 @@ Error: refusing to run local/greeter: you have not accepted what it executes.
 It executes:
   hook before_tool: ./hooks/guard.sh
   sensor hello (command): echo hello
+Its settings that widen what runs, or what runs without asking:
+  default_vendor: claude
 Review them: ynh trust show local/greeter
 Then accept:  ynh trust accept local/greeter
 ```
 
 Nothing started: no assistant, no hook, no sensor. ynh lists the two things this harness would run on
-our machine and names the two commands that come next.
+our machine, the one setting it declares that widens what runs, and names the two commands that come next.
 
 Ask ynh for the state of every installed harness:
 
@@ -121,7 +123,7 @@ ynh trust show local/greeter
 local/greeter
   source:   /tmp/ynh-trust/greeter
   state:    unreviewed
-  digest:   sha256:aff830900fd54227
+  digest:   sha256:7b1b5fb555ee2977f94849dd579f3bc6129b70d33ea9ab61031dfd26faac34e2
 
 Sensors, executed via /bin/sh -c in the tree being measured:
 
@@ -133,6 +135,10 @@ Hooks, executed by the vendor CLI with your environment:
   before_tool [Bash]
     ./hooks/guard.sh
     script:  ./hooks/guard.sh (covered with its folder hooks: 1 file(s), sha256:2ba26b3474b456ed)
+
+Settings that widen what runs, or what runs without asking (an unset env_passthrough shows (none), an unset mcp_manual_approval false; an unset default_vendor is not listed):
+
+  default_vendor: claude
 
 These commands inherit your full environment. 57 variable(s) reach them
 that this harness never declared in env_passthrough:
@@ -148,6 +154,9 @@ Notice the `script:` line under the hook. ynh found the script `./hooks/guard.sh
 `hooks` folder it lives in. The `digest` at the top is a fingerprint of everything on this page,
 the script's contents included.
 
+The `Settings` section lists what the harness declares that widens what runs. Ours declares only the vendor it
+starts, `claude`.
+
 Open `greeter/hooks/guard.sh` and read it: it does nothing but `exit 0`. We are happy with that.
 
 ## Accept it
@@ -157,7 +166,7 @@ ynh trust accept local/greeter
 ```
 
 ```
-Accepted local/greeter (accept): 2 command(s), sha256:aff830900fd54227
+Accepted local/greeter (accept): 2 command(s), sha256:7b1b5fb555ee2977f94849dd579f3bc6129b70d33ea9ab61031dfd26faac34e2
 ```
 
 The digest it accepted is the one `ynh trust show` printed. Check the state again:
@@ -219,10 +228,12 @@ ynh run local/greeter
 ```
 
 ```
-Error: refusing to run local/greeter: its commands differ from what you accepted on 2026-11-27T16:48:25Z.
+Error: refusing to run local/greeter: what it executes or its settings differ from what you accepted on 2026-11-28T00:07:00Z.
 It executes:
   hook before_tool: ./hooks/guard.sh
   sensor hello (command): echo hello
+Its settings that widen what runs, or what runs without asking:
+  default_vendor: claude
 Review them: ynh trust show local/greeter
 Then accept:  ynh trust accept local/greeter
 ```
@@ -242,15 +253,15 @@ The page now begins with the old and the new fingerprints:
 local/greeter
   source:   /tmp/ynh-trust/greeter
   state:    changed
-  digest:   sha256:296fb74a19b43412
-  accepted: sha256:aff830900fd54227 on 2026-11-27T16:48:25Z
+  digest:   sha256:d3f2cc9bd612c95c30546158ca3f6b032b33447cec956c9dcff52dbec2869340
+  accepted: sha256:7b1b5fb555ee2977f94849dd579f3bc6129b70d33ea9ab61031dfd26faac34e2 on 2026-11-28T00:07:00Z
   via:      accept
 ```
 
 and ends:
 
 ```
-These commands have changed since you accepted them.
+What it executes, or the settings above, have changed since you accepted it.
 'ynh trust accept local/greeter' records the new set.
 ```
 
@@ -262,7 +273,7 @@ ynh trust accept local/greeter
 ```
 
 ```
-Accepted local/greeter (accept): 2 command(s), sha256:296fb74a19b43412
+Accepted local/greeter (accept): 2 command(s), sha256:d3f2cc9bd612c95c30546158ca3f6b032b33447cec956c9dcff52dbec2869340
 ```
 
 ```bash

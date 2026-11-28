@@ -21,12 +21,15 @@ The trust pages, in reading order:
 
 ## What the digest covers
 
-The digest covers everything `ynh trust show` prints, as resolved for a run, for the harness and each of its profiles:
+The digest covers everything `ynh trust show` prints (the settings and the default vendor included, in their own section), as resolved for a run, for the harness and each of its profiles:
 
 - sensor `command` and `version_command` strings, including sensors an include contributes;
 - hook commands with their event and matcher, including hooks of an included harness that consented with `"hooks": true`;
 - MCP servers: command, arguments, URL, `cwd` and the values of `env` entries and headers (hashed, never printed), including those a native delegate carries on its own and those of every harness the includes reach;
-- the `workspace` folders, the `launch_focus` prompt, the `delegates_to` entries and the focus prompts they select.
+- the `workspace` folders, the `launch_focus` prompt, the `delegates_to` entries and the focus prompts they select;
+- **the settings that widen what runs, or what runs without asking** (since scheme 4): `env_passthrough` (the names, sorted, so their order is not a change, and for a harness with includes the names a run composes: its own and every included harness's) and `mcp_manual_approval`, each at the top level and in every profile that changes it (a profile that turns `mcp_manual_approval` off under a harness that turns it on is a change), and the harness's own `default_vendor`.
+
+The rule behind that last item is the rule for what belongs in the digest: every manifest field that widens what runs, or what runs without asking. A field the manifest gains later that meets the rule goes in with the next scheme.
 
 It also covers **the scripts those commands run**, so changing a script's body, with its command text untouched, is noticed.
 
@@ -69,6 +72,8 @@ Only regular files inside the harness are read:
 
 ### What the digest leaves out
 
+- **The vendor a run is given.** `default_vendor` is the harness's own content and is covered. The `-v <vendor>` of one run, or `YNH_VENDOR`, is your choice for that run and is not.
+- **Instructions, skills, agents, rules and commands.** They are context the vendor reads, not something ynh runs or grants, so changing one does not change the digest. A harness's `launch_focus` and the focus a `delegates_to` entry selects are covered, because ynh itself sends those prompts as the user's message.
 - **Project code.** A script in the project (`bash scripts/wake.sh`, a sensor's `./lint.sh`) is the project's, like `make check`. `ynh trust show` says it is not covered.
 - **A file on this host.** A script at an absolute path outside the harness (`/usr/local/bin/format-check.sh`), or one named from the home directory (`~/bin/check.sh`, `$HOME/bin/check.sh` or `${HOME}/bin/check.sh`), is whatever is installed on the machine, not part of the project. `ynh trust show` says it is not covered, and labels it differently from project code.
 - **Anything a covered script reaches outside its own folder.** A script that sources `../lib/common.sh`, or runs another script elsewhere, is covered for its own folder only.
@@ -93,7 +98,11 @@ The JSON has the same facts in a `script` object on each executable, hook and MC
 
 ### When the scheme changes
 
-A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. An acceptance that covered only command text (ynh v0.17 and earlier) sees the note about scripts; one that covered only sensors sees the note about hooks and MCP servers. Old records are never accepted on your behalf: review, then `ynh trust accept` again.
+A record carries the digest scheme it was made under. A harness accepted under an older scheme reads `changed` once even if nothing in it moved, and `ynh trust show` says why: the old acceptance never saw what the new scheme adds. A harness accepted under scheme 3 sees the note about `env_passthrough`, `mcp_manual_approval`, `default_vendor` and the full-length digest; under scheme 2 (command text only), the note about scripts; under the first scheme (sensors only), the note about hooks and MCP servers. Old records are never accepted on your behalf and nothing is carried forward: review, then `ynh trust accept` again.
+
+Scheme 4 also stores the whole SHA-256, `sha256:` and 64 hexadecimal characters, in `trust.json`, the JSON, the image label `dev.ynh.harness.trust-digest` and [`trust.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust.schema.json); schemes 1 to 3 kept the first 16. Comparison is always on the full value.
+
+What each event does to a record, with the scheme 4 settings, is in [What invalidates trust](what-invalidates-trust.md).
 
 ## What a record is keyed by
 
@@ -140,10 +149,11 @@ If the trust record itself cannot be read, the run is refused too.
 Every way of accepting prints the same verb, `Accepted`, then what was accepted and, in brackets, the route (`accept`, `install --trust`, `run --trust`, `update --trust`, `include --trust`, `image`). `ynh image <name> --from <source> --trust` prints it on stderr, as `Accepted local/<name> (image): <n> command(s), <digest>`, so a `--dry-run` Dockerfile on stdout stays clean; a build that accepts nothing prints nothing:
 
 ```
+# the digests below are examples: yours is the full 64 hexadecimal characters of your harness
 $ ynh trust accept local/acme
-Accepted local/acme (accept): 2 command(s), sha256:95539ec8b7d7abe6
+Accepted local/acme (accept): 2 command(s), sha256:<64 hex>
 $ ynh install ./acme --trust
-Accepted local/acme (install --trust): 2 command(s), sha256:95539ec8b7d7abe6
+Accepted local/acme (install --trust): 2 command(s), sha256:<64 hex>
 It executes:
   hook before_tool: ./hooks/guard.sh
   sensor lint (command): gofmt -l .

@@ -312,14 +312,14 @@ func TestDigestStableWithoutWorkspace(t *testing.T) {
 	p := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("make lint", "make --version")})
 	h := sha256.New()
 	f := func(s string) { _, _ = fmt.Fprintf(h, "%d:%s\x00", len(s), s) }
-	f("ynh-trust/3")
+	f("ynh-trust/4")
 	for _, s := range []string{"sensor", "", "", "lint", "command", "make lint"} {
 		f(s)
 	}
 	for _, s := range []string{"sensor", "", "", "lint", "version_command", "make --version"} {
 		f(s)
 	}
-	want := "sha256:" + hex.EncodeToString(h.Sum(nil))[:16]
+	want := "sha256:" + hex.EncodeToString(h.Sum(nil))
 	if got := executablesDigest(harnessExecutables(p)); got != want {
 		t.Fatalf("digest moved for a harness without workspace: %s, want %s", got, want)
 	}

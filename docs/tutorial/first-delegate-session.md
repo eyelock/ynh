@@ -329,7 +329,7 @@ ynh trust accept local/reviewer
 Accepted local/reviewer (accept): 1 command(s), sha256:...
 ```
 
-The `sha256:` value is the one `ynh trust show` printed as `digest:`. It depends on your ynh's digest scheme as well as on the reviewer, so it is not shown here: a build of `develop` from 2026-11-26 prints `sha256:abab6f64cd7a3573`. This trust is recorded in `/tmp/ynh-tutorial/home`, not in your usual ynh home.
+The `sha256:` value is the one `ynh trust show` printed as `digest:`. It depends on your ynh's digest scheme as well as on the reviewer, so it is not shown here: it is `sha256:` followed by 64 hexadecimal characters. This trust is recorded in `/tmp/ynh-tutorial/home`, not in your usual ynh home.
 
 ## Get a review
 
@@ -444,8 +444,8 @@ github.com/eyelock/ynh/librarian
 ```
 
 `(develop)` is the branch ynh fetched, ynh's default. The `commit:` line names the commit it fetched;
-yours will differ. So does the digest, which depends on your ynh's digest scheme: a build of `develop`
-from 2026-11-26 prints `sha256:8ed89d1ee6cd8c32`. Then
+yours will differ. So does the digest, which depends on your ynh's digest scheme: it is `sha256:` followed
+by 64 hexadecimal characters. Then
 it lists the hook:
 
 ```

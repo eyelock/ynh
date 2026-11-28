@@ -51,7 +51,7 @@ It depends on the delegate's transport, which `ynh info <parent>` prints beside 
    ```
 
    ```
-   Accepted local/reviewer (accept): 2 command(s), sha256:b6a68a3387879e68
+   Accepted local/reviewer (accept): 2 command(s), sha256:<64 hex>
    ```
 
 4. Run the parent again. ynh opens the delegate's endpoint and starts the vendor:
