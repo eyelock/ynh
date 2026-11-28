@@ -87,6 +87,12 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 	// Without this a cold include cache reads as unavailable and --trust can
 	// never get past the gate (ynw-twt3a).
 	if ia.trust {
+		// A floating native delegate entry is judged from the manifest alone,
+		// before anything is fetched: an unpinned one is never fetched, so it
+		// would otherwise read as unreadable rather than as unpinned.
+		if err := refuseUnpinnedDelegates("this image", "--trust", p); err != nil {
+			return nil, err
+		}
 		if err := fetchIncludesForTrust(p, cfg); err != nil {
 			return nil, err
 		}
@@ -138,7 +144,7 @@ func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, 
 	if err != nil {
 		return nil, err
 	}
-	if bad := unpinnedIncludes(remote); len(bad) > 0 {
+	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
 		return nil, refuseUnpinned("this image", "--trust", bad)
 	}
 	rec := trustRecord{
