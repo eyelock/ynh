@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -176,6 +177,75 @@ func TestTrustAcceptListsEntryLevels(t *testing.T) {
 	for _, want := range []string{"opens at all when run unattended (default)", "delegate github.com/o/reviewer: none"} {
 		if !strings.Contains(b.String(), want) {
 			t.Errorf("want %q in:\n%s", want, b.String())
+		}
+	}
+}
+
+// ynw-44fxh: a harness opening at all says what running as root does to it, in
+// trust show and trust accept, in text and JSON; any other level says nothing.
+func TestTrustSaysAllAsRootNeedsASandboxVariable(t *testing.T) {
+	note := permission.RootAllNote
+	for _, want := range []string{"IS_SANDBOX=1", "CLAUDE_CODE_BUBBLEWRAP", "Claude Code run", "Other vendors are unaffected"} {
+		if !strings.Contains(note, want) {
+			t.Fatalf("the note must name %q: %s", want, note)
+		}
+	}
+
+	all := harnessWithSensors(t, nil) // declares nothing: opens at all
+	edits := harnessWithSensors(t, nil)
+	edits.AutoApprove = "edits"
+
+	var st trustStatus
+	fillAutoApprove(&st, all)
+	if st.AutoApproveAsRoot != note {
+		t.Errorf("JSON field for all = %q", st.AutoApproveAsRoot)
+	}
+	if out := showText(t, st); !strings.Contains(out, note) {
+		t.Errorf("trust show text lacks the note:\n%s", out)
+	}
+	var b bytes.Buffer
+	printAcceptedLevel(&b, all, trustSet{})
+	if !strings.Contains(b.String(), note) {
+		t.Errorf("trust accept text lacks the note:\n%s", b.String())
+	}
+	js, err := json.Marshal(st)
+	if err != nil || !strings.Contains(string(js), `"auto_approve_as_root"`) {
+		t.Errorf("JSON lacks auto_approve_as_root: %s (%v)", js, err)
+	}
+
+	var e trustStatus
+	fillAutoApprove(&e, edits)
+	b.Reset()
+	printAcceptedLevel(&b, edits, trustSet{})
+	if e.AutoApproveAsRoot != "" || strings.Contains(b.String(), "IS_SANDBOX") || strings.Contains(showText(t, e), "IS_SANDBOX") {
+		t.Errorf("a level other than all must not carry the note: %+v", e)
+	}
+}
+
+// ynw-xngvy: the vendor is chosen per run, so the note is shown for every
+// harness at all whatever its default vendor, and it is worded for Claude Code
+// alone.
+func TestRootNoteIsShownAtAllWhateverTheDefaultVendor(t *testing.T) {
+	if permission.RootNote(permission.All) == "" {
+		t.Fatal("level all must carry the note")
+	}
+	if permission.RootNote(permission.Edits) != "" || permission.RootNote(permission.None) != "" {
+		t.Error("a level other than all carries no note")
+	}
+	for _, v := range []string{"", "claude", "codex", "cursor", "opencode", "copilot"} {
+		h := harnessWithSensors(t, nil)
+		h.DefaultVendor = v
+		var st trustStatus
+		fillAutoApprove(&st, h)
+		var b bytes.Buffer
+		printAcceptedLevel(&b, h, trustSet{})
+		if st.AutoApproveAsRoot != permission.RootAllNote || !strings.Contains(b.String(), "IS_SANDBOX") || !strings.Contains(showText(t, st), "IS_SANDBOX") {
+			t.Errorf("default_vendor %q: the note must show in JSON and text: %+v", v, st)
+		}
+	}
+	for _, want := range []string{"Claude Code", "Other vendors are unaffected"} {
+		if !strings.Contains(permission.RootAllNote, want) {
+			t.Errorf("the note must say %q", want)
 		}
 	}
 }
