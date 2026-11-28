@@ -77,6 +77,9 @@ const (
 	MetaRoute   = "ynh.route"
 	MetaSession = "ynh.live_session"
 	MetaCwd     = "ynh.live_cwd"
+	// MetaRouteReason is why a task went headless although a live session of
+	// the delegate was open.
+	MetaRouteReason = "ynh.route_reason"
 )
 
 // RouteMeta is the task metadata for rec's route, session and folder.
@@ -84,6 +87,9 @@ func RouteMeta(rec *delegation.Record) map[string]any {
 	m := map[string]any{MetaHandle: rec.Handle, MetaRoute: rec.Route}
 	if rec.Session != "" {
 		m[MetaSession], m[MetaCwd] = rec.Session, rec.SessionCwd
+	}
+	if rec.RouteReason != "" {
+		m[MetaRouteReason] = rec.RouteReason
 	}
 	return m
 }
@@ -341,9 +347,16 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 			})
 		}
 	}
+	// A live session that takes no task (its vendor cannot be told one is
+	// waiting, say) is why this one goes headless, and the result says so.
+	reason := ""
+	if onLive != "headless" {
+		reason = delegation.LiveRefusalOf(x.o.Delegate)
+	}
 	return delegation.Start(delegation.StartOptions{
 		Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
 		Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
+		RouteReason: reason,
 	})
 }
 

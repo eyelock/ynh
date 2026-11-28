@@ -354,6 +354,14 @@ func cmdRun(args []string) (runErr error) {
 	// task delegated to its harness (docs/delegate-sessions.md).
 	sessionID, _ := sessions.NewID()
 	inboxWired := false
+	// Whether this session can take a task, and if not why (shown on the
+	// result of a task that went headless instead).
+	interactiveSession := !oneShot && !delegationNamesHarness(runDirName)
+	inboxWhy := ""
+	if interactiveSession {
+		inboxWhy = inboxRefusal(adapter.Name(), harnessID != "", p.MCPManualApproval, adapter.Name() != "codex" || workspaceTrusted(harnessID, loaded))
+	}
+	inboxEligible := interactiveSession && inboxWhy == ""
 	decideWorkspace := func() error {
 		if wsDecided {
 			return nil
@@ -427,7 +435,17 @@ func cmdRun(args []string) (runErr error) {
 		// Generate vendor-native hook config files, and copy in the scripts
 		// those hooks run from the harness. The hooks are the root's and
 		// those of the included harnesses that consented to them.
-		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, p, resolved, assembler.DelegateServerNames(delegateMCP)...)
+		// An interactive session that can take a delegated task also gets ynh's
+		// own before_prompt and on_stop hooks, which tell it one is waiting.
+		hookRoot := p
+		if action == "" && inboxEligible {
+			exe, exeErr := os.Executable()
+			if exeErr != nil {
+				return fmt.Errorf("finding the ynh binary: %w", exeErr)
+			}
+			hookRoot = withInboxHooks(p, exe, runDirName, adapter.Name())
+		}
+		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, hookRoot, resolved, assembler.DelegateServerNames(delegateMCP)...)
 		if err != nil {
 			return err
 		}
@@ -503,7 +521,7 @@ func cmdRun(args []string) (runErr error) {
 		// taken here, on the vendors the spike showed honour its launch-time
 		// allow rule. A folder or inline run has no installed id to address, so
 		// it takes no tasks and records accepts_tasks: false.
-		if action == "" && inboxSession(adapter.Name(), !oneShot && !delegationNamesHarness(runDirName), harnessID != "", p.MCPManualApproval) {
+		if action == "" && inboxEligible {
 			ientry, iErr := inboxMCPEntry(runDirName)
 			if iErr != nil {
 				return iErr
@@ -832,7 +850,7 @@ func cmdRun(args []string) (runErr error) {
 			launchRec.markStarted()
 		})
 		defer removeHook()
-		endPresence := startPresence(sessionID, adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession, inboxWired)
+		endPresence := startPresence(sessionID, adapter.Name(), runDirName, prompt != "" && !ra.Interactive, isDelegateSession, inboxWired, inboxWhy)
 		defer endPresence()
 		return launchSessionFn(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}

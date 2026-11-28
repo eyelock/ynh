@@ -63,12 +63,15 @@ type Record struct {
 	// AcceptsTasks is true for an interactive session that can take a task a
 	// parent delegated to its harness: it has the ynh-inbox MCP server and an
 	// allow rule for it, on a vendor that supports it (docs/delegate-sessions.md).
-	AcceptsTasks bool      `json:"accepts_tasks"`
-	OwnerSession string    `json:"owner_session,omitempty"`
-	Address      string    `json:"address"`
-	State        string    `json:"state"`
-	LastBeat     time.Time `json:"last_beat"`
-	Ended        bool      `json:"ended"`
+	AcceptsTasks bool `json:"accepts_tasks"`
+	// NoTasksReason says why an interactive session takes no task, when it
+	// does not (a task for its harness then goes headless, and says why).
+	NoTasksReason string    `json:"no_tasks_reason,omitempty"`
+	OwnerSession  string    `json:"owner_session,omitempty"`
+	Address       string    `json:"address"`
+	State         string    `json:"state"`
+	LastBeat      time.Time `json:"last_beat"`
+	Ended         bool      `json:"ended"`
 }
 
 // Entry is a Record with its derived status, the shape `ynh ps` lists.

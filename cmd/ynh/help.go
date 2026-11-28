@@ -82,6 +82,12 @@ delegate"). The question goes on the delegation record at --record.
 ynh run writes the entry that calls this, for a delegate's session; it is not
 meant to be typed.`,
 
+	"inbox-hook": `ynh inbox-hook --harness <run name> --vendor <vendor> --event <before_prompt|on_stop>
+
+Internal. The hook ynh adds to an interactive session that can take delegated
+tasks: it prints a line telling the model a task is waiting in the harness's
+inbox, in the form the vendor passes to the model, and nothing otherwise.`,
+
 	"inbox-mcp": `ynh inbox-mcp --harness <run name> [--session <session id>]
 
 Internal. The MCP server a vendor starts over stdio for an interactive session:

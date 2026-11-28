@@ -68,6 +68,28 @@ func LiveSessionsOf(delegate string) []presence.Entry {
 	return out
 }
 
+// LiveRefusalOf is why a live interactive session of the installed harness id
+// takes no task, when one is open and does not ("" when none is open, or one
+// accepts tasks). A task that goes headless because of it says why.
+func LiveRefusalOf(delegate string) string {
+	live, err := presence.List(false)
+	if err != nil {
+		return ""
+	}
+	run := namespace.IDToFSName(delegate)
+	for _, e := range live {
+		if e.Status == presence.StatusLive && e.Mode == presence.ModeInteractive && e.Harness == run {
+			if e.AcceptsTasks {
+				return ""
+			}
+			if e.NoTasksReason != "" {
+				return e.NoTasksReason
+			}
+		}
+	}
+	return ""
+}
+
 // Queue writes the task as a queued delegation addressed to a live session of
 // the delegate and puts it in the harness's mailbox. It starts nothing.
 func Queue(o QueueOptions) (*Record, string, error) {

@@ -114,6 +114,8 @@ func main() {
 		err = cmdDelegateMCP(os.Args[2:])
 	case "parent-mcp":
 		err = cmdParentMCP(os.Args[2:])
+	case "inbox-hook":
+		err = cmdInboxHook(os.Args[2:], os.Stdin, os.Stdout)
 	case "inbox-mcp":
 		err = cmdInboxMCP(os.Args[2:])
 	case "mcp-headers":
