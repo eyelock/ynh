@@ -6,6 +6,7 @@
 # Usage: scripts/permission-mapping-live.sh [claude] [codex] [cursor] [opencode] [copilot]
 #        (default: every vendor whose CLI is on PATH)
 # Env:   CELL_TIMEOUT  seconds per run (default 150); a run that hits it is NOT-RUN
+#        KEEP          set to 1 to keep each cell's folder and out.txt for inspection
 #        SELF_TEST     set to 1 to run only the offline checks (verdict logic)
 #
 # What each run does: the vendor is started the way the design says a harness
@@ -56,7 +57,7 @@ if [ ${#vendors[@]} -eq 0 ]; then
 fi
 
 base=$(mktemp -d "$HOME/ynh-permission-spike.XXXXXX")
-trap 'rm -rf "$base"' EXIT
+[ "${KEEP:-0}" = 1 ] && echo "keeping $base" || trap 'rm -rf "$base"' EXIT
 
 summary=()
 nrun=0; nshown=0; nrefused=0; nnotrun=0
@@ -68,7 +69,7 @@ cell_args() {
   CMD=(); ENV=()
   case "$1:$2" in
     claude:none)   CMD=(claude -p "$prompt" --permission-mode default) ;;
-    claude:edits)  CMD=(claude -p "$prompt" --permission-mode acceptEdits) ;;
+    claude:edits)  CMD=(claude -p "$prompt" --permission-mode acceptEdits --disallowedTools Bash) ;; # decided on ynw-mpnjz: no commands at all
     claude:all)    CMD=(claude -p "$prompt" --permission-mode bypassPermissions) ;;
     codex:none)    CMD=(codex exec --skip-git-repo-check -s read-only "$prompt") ;;
     codex:edits)   CMD=(codex exec --skip-git-repo-check -s workspace-write "$prompt") ;; # nearest; not exact
@@ -89,6 +90,57 @@ cell_args() {
     codex:d5-proj-none-flag-all)
       mkdir -p "$dir/.codex"; printf 'sandbox_mode = "read-only"\n' > "$dir/.codex/config.toml"
       CMD=(codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox "$prompt") ;;
+    cursor:d5-proj-deny-flag-all)
+      mkdir -p "$dir/.cursor"
+      echo '{"permissions":{"allow":[],"deny":["Shell(sh)","Write(**)"]}}' > "$dir/.cursor/cli.json"
+      CMD=(cursor-agent -p --trust --force --workspace "$dir" "$prompt") ;;
+    opencode:d5-proj-allow-env-none)
+      echo '{"permission":{"edit":"allow","bash":"allow"}}' > "$dir/opencode.json"
+      ENV=('OPENCODE_CONFIG_CONTENT={"permission":{"edit":"deny","bash":"deny"}}'); CMD=(opencode run --standalone "$prompt") ;;
+    opencode:d5-proj-deny-flag-all)
+      echo '{"permission":{"edit":"deny","bash":"deny"}}' > "$dir/opencode.json"
+      CMD=(opencode run --standalone --auto "$prompt") ;;
+    copilot:d5-proj-all-noflag)
+      git -C "$dir" init -q; mkdir -p "$dir/.github/copilot"
+      echo '{"defaultPermissionMode":"allow-all"}' > "$dir/.github/copilot/settings.json"
+      CMD=(copilot -p "$prompt" --no-ask-user) ;;
+    copilot:d5-proj-all-flag-none)
+      git -C "$dir" init -q; mkdir -p "$dir/.github/copilot"
+      echo '{"defaultPermissionMode":"allow-all"}' > "$dir/.github/copilot/settings.json"
+      CMD=(copilot -p "$prompt" --no-ask-user --deny-tool shell --deny-tool write) ;;
+    # allow-list widening (ynw-sg5jw): a project allow rule against none and edits
+    claude:allow-*)
+      mkdir -p "$dir/.claude"; echo '{"permissions":{"allow":["Bash","Write","Edit"]}}' > "$dir/.claude/settings.json"
+      case $2 in
+        allow-none)               CMD=(claude -p "$prompt" --permission-mode default) ;;
+        allow-none-srcuser)       CMD=(claude -p "$prompt" --permission-mode default --setting-sources user) ;;
+        allow-none-disallowed)    CMD=(claude -p "$prompt" --permission-mode default --disallowedTools Bash Write Edit) ;;
+        allow-edits)              CMD=(claude -p "$prompt" --permission-mode acceptEdits) ;;
+        allow-edits-srcuser)      CMD=(claude -p "$prompt" --permission-mode acceptEdits --setting-sources user) ;;
+        allow-edits-disallowed)   CMD=(claude -p "$prompt" --permission-mode acceptEdits --disallowedTools Bash) ;;
+      esac ;;
+    opencode:allow-edits)
+      echo '{"permission":{"edit":"allow","bash":"allow"}}' > "$dir/opencode.json"
+      ENV=('OPENCODE_CONFIG_CONTENT={"permission":{"edit":"allow","bash":"deny"}}'); CMD=(opencode run --standalone "$prompt") ;;
+    cursor:plan-allowlist)
+      mkdir -p "$dir/.cursor"; echo '{"permissions":{"allow":["Shell(sh)","Write(**)"],"deny":[]}}' > "$dir/.cursor/cli.json"
+      CMD=(cursor-agent -p --trust --mode plan --workspace "$dir" "$prompt") ;;
+    cursor:mode-ask)     CMD=(cursor-agent -p --trust --mode ask --workspace "$dir" "$prompt") ;;
+    cursor:mode-plan)    CMD=(cursor-agent -p --trust --mode plan --workspace "$dir" "$prompt") ;;
+    cursor:sandbox-on)   CMD=(cursor-agent -p --trust --sandbox enabled --workspace "$dir" "$prompt") ;;
+    cursor:allowlist-sandbox-on)
+      mkdir -p "$dir/.cursor"; echo '{"permissions":{"allow":["Shell(sh)","Write(**)"],"deny":[]}}' > "$dir/.cursor/cli.json"
+      CMD=(cursor-agent -p --trust --sandbox enabled --workspace "$dir" "$prompt") ;;
+    # codex D5 in a folder trusted for this run only (-c, nothing written to the user's config)
+    codex:d5t-proj-all-noflag)
+      mkdir -p "$dir/.codex"; printf 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\n' > "$dir/.codex/config.toml"
+      CMD=(codex exec --skip-git-repo-check -c "projects.\"$dir\".trust_level=\"trusted\"" "$prompt") ;;
+    codex:d5t-proj-all-flag-none)
+      mkdir -p "$dir/.codex"; printf 'sandbox_mode = "danger-full-access"\napproval_policy = "never"\n' > "$dir/.codex/config.toml"
+      CMD=(codex exec --skip-git-repo-check -c "projects.\"$dir\".trust_level=\"trusted\"" -s read-only "$prompt") ;;
+    codex:d5t-proj-none-flag-all)
+      mkdir -p "$dir/.codex"; printf 'sandbox_mode = "read-only"\n' > "$dir/.codex/config.toml"
+      CMD=(codex exec --skip-git-repo-check -c "projects.\"$dir\".trust_level=\"trusted\"" --dangerously-bypass-approvals-and-sandbox "$prompt") ;;
     cursor:none)   CMD=(cursor-agent -p --trust --workspace "$dir" "$prompt") ;;
     cursor:all)    CMD=(cursor-agent -p --trust --force --workspace "$dir" "$prompt") ;;
     cursor:none+allowlist)
@@ -137,36 +189,83 @@ run_cell() {
   summary+=("$label: $res")
 }
 
+# root_cells: N4. Claude Code as uid 0 in a throwaway node container (needs a
+# running Docker and the network). No login carries into the container, so only
+# what happens before the first model call can be seen: the startup refusal.
+root_cells() {
+  if ! docker info >/dev/null 2>&1; then
+    echo "claude-root: NOT-RUN (docker is not running)"; summary+=("claude-root: NOT-RUN (docker is not running)"); nnotrun=$((nnotrun+1)); return
+  fi
+  local out
+  out=$(docker run --rm node:22-slim bash -c '
+    npm i -g @anthropic-ai/claude-code >/dev/null 2>&1; echo "uid $(id -u), $(claude --version)"
+    t() { printf "%s => " "$1"; shift; timeout 40 "$@" </dev/null 2>&1 | head -1 | cut -c1-110; }
+    t "mode default" claude -p hi --permission-mode default
+    t "mode acceptEdits" claude -p hi --permission-mode acceptEdits
+    t "mode bypassPermissions" claude -p hi --permission-mode bypassPermissions
+    t "bypassPermissions IS_SANDBOX=1" env IS_SANDBOX=1 claude -p hi --permission-mode bypassPermissions
+    t "bypassPermissions CLAUDE_CODE_BUBBLEWRAP=1" env CLAUDE_CODE_BUBBLEWRAP=1 claude -p hi --permission-mode bypassPermissions' 2>&1 | tail -6)
+  printf '%s\n' "$out"
+  summary+=("claude-root (refusal seen at startup only; no login in the container):" "$out")
+  case $out in *"bypassPermissions =>"*"cannot be used with root"*) nshown=$((nshown+1)) ;; *) nnotrun=$((nnotrun+1)) ;; esac
+  nrun=$((nrun+1))
+}
+
 for v in "${vendors[@]}"; do
   echo "== $v"
   case $v in
     claude)
       run_cell claude none denied denied
       run_cell claude edits denied ok
-      run_cell claude edits denied ok "touch SHELLPROBE"   # acceptEdits auto-approves filesystem commands
+      run_cell claude edits denied ok "touch SHELLPROBE"   # acceptEdits alone auto-approves these; --disallowedTools Bash must stop them
+      run_cell claude edits denied ok "mkdir -p SHELLPROBE.d && touch SHELLPROBE"
       run_cell claude all ok ok
-      # D5: which wins, the project's mode or ynh's flag? EXPECT is the design's outcome.
+      # D5: the project's mode against the flag ynh passes. The expectation is D5's text:
+      # the narrower of the two applies, so a wider project mode never widens the run and a
+      # narrower one narrows it. "REFUSED" here means the vendor does not do that itself.
       run_cell claude d5-proj-edits-noflag denied ok
       run_cell claude d5-proj-all-flag-none denied denied
-      run_cell claude d5-proj-none-flag-all ok ok ;;
+      run_cell claude d5-proj-none-flag-all denied denied
+      # allow-list widening and the two controls that might stop it (ynw-sg5jw)
+      run_cell claude allow-none denied denied
+      run_cell claude allow-none-srcuser denied denied
+      run_cell claude allow-none-disallowed denied denied
+      run_cell claude allow-edits denied ok
+      run_cell claude allow-edits-srcuser denied ok
+      run_cell claude allow-edits-disallowed denied ok ;;
     codex)
       run_cell codex none denied denied
       run_cell codex edits denied ok   # nearest mapping is workspace-write: shell can write too
       run_cell codex all ok ok
       run_cell codex d5-proj-all-flag-none denied denied
-      run_cell codex d5-proj-none-flag-all ok ok ;;
+      run_cell codex d5-proj-none-flag-all denied denied
+      run_cell codex d5t-proj-all-noflag ok ok   # does a trusted folder's project file take effect at all
+      run_cell codex d5t-proj-all-flag-none denied denied
+      run_cell codex d5t-proj-none-flag-all denied denied ;;
     cursor)
       run_cell cursor none denied denied
       run_cell cursor none+allowlist denied denied   # can an allow list widen none?
-      run_cell cursor all ok ok ;;
+      run_cell cursor all ok ok
+      run_cell cursor d5-proj-deny-flag-all denied denied
+      run_cell cursor mode-ask denied denied
+      run_cell cursor mode-plan denied denied
+      run_cell cursor plan-allowlist denied denied
+      run_cell cursor sandbox-on denied denied
+      run_cell cursor allowlist-sandbox-on denied denied ;;
     opencode)
       run_cell opencode none denied denied
       run_cell opencode edits denied ok
-      run_cell opencode all ok ok ;;
+      run_cell opencode all ok ok
+      run_cell opencode d5-proj-allow-env-none denied denied
+      run_cell opencode d5-proj-deny-flag-all denied denied
+      run_cell opencode allow-edits denied ok ;;
     copilot)
       run_cell copilot none denied denied
       run_cell copilot edits denied ok
-      run_cell copilot all ok ok ;;
+      run_cell copilot all ok ok
+      run_cell copilot d5-proj-all-noflag denied denied   # does a project allow-all widen a headless run?
+      run_cell copilot d5-proj-all-flag-none denied denied ;;
+    claude-root) root_cells ;;
     *) echo "unknown vendor $v" >&2; exit 2 ;;
   esac
 done
@@ -176,69 +275,96 @@ echo "== summary (${nshown} shown, ${nrefused} refused, ${nnotrun} not run, of $
 printf '%s\n' "${summary[@]}"
 [ "$nnotrun" -eq 0 ]
 
-# FINDINGS (run of 2026-11-28; Claude Code 2.1.332, codex-cli 0.172.0,
+# FINDINGS (runs of 2026-11-28; Claude Code 2.1.332, codex-cli 0.172.0,
 # cursor-agent 2026.11.13, Copilot CLI 1.0.113, OpenCode 2.2.3; all five logged
-# in, run as a non-root user on macOS)
+# in, run as a non-root user on macOS; every cell below was seen unless it says
+# NOT RUN). A cell is SHOWN, REFUSED (not exact, so ynh refuses the level on that
+# vendor at start, D4) or NOT RUN.
 #
-# Per-vendor mapping, as run (a harness started at the level, delegate or one-shot):
-#   level  claude                codex                    cursor                      opencode                    copilot
-#   none   SHOWN default         SHOWN -s read-only       REFUSED, see below          SHOWN permission block      SHOWN --deny-tool shell
-#                                                                                      edit deny, bash deny        --deny-tool write
-#   edits  SHOWN acceptEdits,    REFUSED (workspace-write REFUSED (no flag holds  SHOWN permission block      SHOWN --allow-tool write
-#          but see below         lets shell write too)    it)                       edit allow, bash deny       --deny-tool shell
-#   all    SHOWN bypassPerm.     SHOWN --dangerously-     SHOWN --force               SHOWN --auto                SHOWN --allow-all-tools
-#                                bypass-approvals-and-
-#                                sandbox
+#   level  claude                         codex                 cursor           opencode              copilot
+#   none   SHOWN --permission-mode       SHOWN -s read-only    REFUSED (below)  SHOWN permission      SHOWN --deny-tool shell
+#          default                                                               block, --standalone   --deny-tool write
+#   edits  SHOWN acceptEdits             REFUSED               REFUSED          SHOWN permission      SHOWN --allow-tool write
+#          --disallowedTools Bash                                                block, --standalone   --deny-tool shell
+#   all    SHOWN bypassPermissions       SHOWN --dangerously-  SHOWN --force    SHOWN --auto          SHOWN --allow-all-tools
+#          (refused as root)             bypass-...
 #
-# Notes that change what P1 and P4 must do:
-#  - claude edits: acceptEdits denies an arbitrary shell command (sh -c 'echo x >
-#    f') but auto-approves simple filesystem commands (touch ran). So "edits"
-#    holds shell denied for commands that run programs, not for touch/mkdir and
-#    similar. Shown live; the exact set is Claude Code's, not ynh's.
-#  - cursor none: without --force, in print mode, cursor-agent denied the shell
-#    command but WROTE the file. "no --force" is therefore not "none": a write
-#    is allowed. And an allow list in the folder's .cursor/cli.json
-#    (Shell(sh), Write(**)) WIDENED a no---force run to shell ok, edit ok. The
-#    spike's answer: yes, allow lists widen it. A user-level allow list in
-#    cursor's own config was not tried (it would change the human's real
-#    config); a project one working means user config cannot be assumed to be
-#    ignored. cursor none is REFUSED (D4), as are cursor edits (no flag at all).
-#  - opencode: `opencode run` talks to a background service by default and
-#    OPENCODE_CONFIG_CONTENT set on the client is ignored there (first run: none
-#    and edits both left shell and edit open). With --standalone (a private
-#    server) the permission block is honoured and the levels hold. P1 must pass
-#    --standalone, or write the permission block where the running service reads it.
-#  - copilot none: --deny-tool shell --deny-tool write, with --no-ask-user, did
-#    not hang (exit 0, both refused). copilot edits: the unscoped write rule
-#    approves a shell redirection into a file per `copilot help permissions`, but
-#    deny wins over every allow, so --deny-tool shell held: shell refused, edit ok.
+# Claude edits (ynw-mpnjz, decided by the human): acceptEdits ALONE auto-approves
+# touch/mkdir, so it was not exact (seen: touch ran). With --disallowedTools Bash
+# the three probes, sh -c, touch and mkdir, were all refused while the Write tool
+# worked: SHOWN. Hence the mapping is acceptEdits plus --disallowedTools Bash.
 #
-# Root (N4): NOT RUN live. This machine has no root (sudo needs a password) and
-# no running Docker. Static evidence only, from the installed claude binary: it
-# exits 1 with "--dangerously-skip-permissions cannot be used with root/sudo
-# privileges for security reasons" when the permission mode is bypassPermissions
-# and uid is 0, unless IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set. So N4's
-# refusal at "all" is right, ynh's check must also honour those two variables
-# (or be stricter on purpose), and the other modes as root were not seen.
+# Codex edits: workspace-write lets the shell write too (seen). REFUSED.
 #
-# D5, project modes against the flag (Claude Code and Codex shown live; Cursor,
-# OpenCode, Copilot not run):
-#  - Claude Code: project .claude/settings.json defaultMode acceptEdits with no
-#    flag opened at edits. With the flag given, THE FLAG WINS both ways: project
-#    bypassPermissions + --permission-mode default stayed at none, and project
-#    default + --permission-mode bypassPermissions went to all. So a narrower
-#    project mode is NOT honoured by Claude Code once ynh passes a flag; ynh has
-#    to read the project file itself and pass the narrower mode (D5).
-#  - Codex: the same. .codex/config.toml sandbox_mode danger-full-access +
-#    -s read-only stayed read-only; sandbox_mode read-only + the bypass flag went
-#    to all. The folder was not a trusted project, so whether Codex reads the
-#    project file at all was not shown; these two cells show only that the flag
-#    wins over it. ynh must still read it to apply D5.
-#  - Order, narrowest to widest, in ynh's words:
-#      claude  plan < default < acceptEdits < bypassPermissions   (dontAsk not run)
-#      codex   sandbox read-only < workspace-write < danger-full-access, with
-#              approval_policy untrusted < on-request < on-failure < never
-#      none/edits/all place against them as: none = default / read-only,
-#      edits = acceptEdits (claude only), all = bypassPermissions / full access.
-#    The claude order and the codex sandbox order are from the vendors' own docs
-#    and the cells above; plan mode was not run.
+# Cursor (ynw-sg5jw): none is REFUSED.
+#  - no --force: the shell command was denied but the file WAS written.
+#  - --mode plan: shell and edit both denied (the only cursor setting that
+#    held none), BUT a project .cursor/cli.json allow list (Shell(sh)) widened
+#    it: shell ran. So plan holds only until a project allow list exists.
+#  - --mode ask: edit allowed. REFUSED. --sandbox enabled: shell and edit both
+#    ran. REFUSED. A project allow list widened no-flag and sandbox runs
+#    (shell and edit ran). A project DENY list beat --force (d5-proj-deny-flag-all).
+#  - A user-level allow list was not tried (it would change the real config).
+#
+# Allow-list widening on the other vendors (ynw-sg5jw):
+#  - Claude Code: a project .claude/settings.json permissions.allow of Bash,
+#    Write, Edit did NOT widen none or edits (default and acceptEdits), with or
+#    without --setting-sources user or --disallowedTools. Caveat: the folder was
+#    not one Claude Code trusts; that the allow rules were read at all was not
+#    shown (a project defaultMode in the same file WAS honoured). A trusted
+#    folder was not tried.
+#  - OpenCode: a project opencode.json allowing edit and bash did not widen the
+#    permission block in OPENCODE_CONFIG_CONTENT (none and edits both held), so
+#    the env block wins. A project deny beat --auto.
+#  - Copilot: a project .github/copilot/settings.json defaultPermissionMode
+#    allow-all did not widen a run with no allow flags, nor beat --deny-tool
+#    (deny wins). Copilot's user-level saved approvals (permissions-config.json)
+#    were not tried (real config). The repo settings may be ignored for an
+#    untrusted folder; not shown either way.
+#
+# OpenCode: `opencode run` talks to a background service and ignores
+# OPENCODE_CONFIG_CONTENT set on the client (first run left both open); with
+# --standalone the block holds. P1 must pass --standalone.
+# Copilot none: --no-ask-user with both denies exited 0, no hang.
+#
+# Root (N4, ynw-purnb): Claude Code 2.1.332 as uid 0 in a throwaway node:22-slim
+# container (root_cells; Docker Desktop was started with `open -a Docker`, no
+# password). No login reaches the container, so only the startup is seen, NOT
+# the behaviour of a level once running:
+#   --permission-mode default             starts (reaches "Not logged in")
+#   --permission-mode acceptEdits         starts (same)
+#   --permission-mode bypassPermissions   exits 1: "--dangerously-skip-permissions
+#                                         cannot be used with root/sudo privileges..."
+#   bypassPermissions + IS_SANDBOX=1      refusal lifted (reaches "Not logged in")
+#   bypassPermissions + CLAUDE_CODE_BUBBLEWRAP=1   refusal lifted (same)
+#   --dangerously-skip-permissions        same refusal as bypassPermissions
+# NOT RUN: what none, edits (acceptEdits --disallowedTools Bash) and all do as root
+# once logged in, because no login could be put in the container.
+# So N4's "all as root is refused" is seen live; ynh's check must honour
+# IS_SANDBOX=1 and CLAUDE_CODE_BUBBLEWRAP or be stricter on purpose.
+#
+# D5 (ynw-jxcnd), project mode against the flag, per vendor. D5's text: a
+# narrower project mode applies, a wider one does not widen. The cells expect
+# that outcome; REFUSED means the vendor does not do it itself, so ynh must.
+#  - Claude Code: project defaultMode acceptEdits with no flag opened at edits
+#    (the file is read). With a flag the flag wins both ways: project bypass +
+#    default stayed none (good); project default + bypassPermissions went to all
+#    (REFUSED: ynh must read the file and pass the narrower mode).
+#    Order narrowest to widest: plan < default < acceptEdits < bypassPermissions
+#    (plan and dontAsk not run).
+#  - Codex: in a folder trusted for the run only (-c projects."<dir>".trust_level),
+#    project sandbox_mode danger-full-access with no flag still ran read-only
+#    (REFUSED: the project file was not shown to take effect even trusted, so the
+#    two flag cells show the flag wins, nothing more). Flag -s read-only beat a
+#    wider project; the bypass flag beat a narrower project (ran as all, REFUSED).
+#    Order: sandbox read-only < workspace-write < danger-full-access
+#    (workspace-write not run as a project mode).
+#  - Cursor: no project mode, only project allow and deny lists. Allow widens a
+#    no-flag run; deny beats --force. Order of the flags: --mode plan < ask <
+#    no flag < --force; a project allow list widens any of them but all.
+#  - OpenCode: env block beats a wider project file; a project deny beats --auto.
+#    Order: deny < allow per permission key; --auto is above both only where
+#    nothing is denied.
+#  - Copilot: a project allow-all setting did not widen a headless run; --deny-tool
+#    beats it. Order: --deny-tool > --allow-tool > project setting; --allow-all-tools
+#    last, but deny still wins over it.
