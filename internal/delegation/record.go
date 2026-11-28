@@ -101,11 +101,19 @@ type Record struct {
 	Parent   string `json:"parent"`
 	Delegate string `json:"delegate"`
 	// Folder is the parent's working folder, the delegate's too.
-	Folder  string `json:"folder"`
-	Task    string `json:"task"`
-	Model   string `json:"model,omitempty"`
-	Profile string `json:"profile,omitempty"`
-	Focus   string `json:"focus,omitempty"`
+	Folder string `json:"folder"`
+	Task   string `json:"task"`
+	// Model and Effort are what the delegate was started with, and ModelFrom
+	// and EffortFrom where each came from (call, entry, delegate_default; a
+	// vendor_default is no value, so the vendor's own applies). Vendor is the
+	// delegate's vendor, which Effort was mapped onto.
+	Model      string `json:"model,omitempty"`
+	ModelFrom  string `json:"model_from,omitempty"`
+	Effort     string `json:"effort,omitempty"`
+	EffortFrom string `json:"effort_from,omitempty"`
+	Vendor     string `json:"vendor,omitempty"`
+	Profile    string `json:"profile,omitempty"`
+	Focus      string `json:"focus,omitempty"`
 	// AutoApprove is the permission level the delegate opens at, and
 	// AutoApproveFrom where it came from, one of permission.Sources (call,
 	// entry, harness, flag, delegate_default, caller_cap, project, default; or

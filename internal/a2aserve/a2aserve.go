@@ -37,6 +37,14 @@ import (
 // outlives this endpoint: a parent that comes back reads the record by it.
 const MetaHandle = "ynh.handle"
 
+// MetaModel and MetaEffort are the keys under which a message's metadata
+// carries the parent's per-call model and reasoning effort for the delegate:
+// the highest layer of delegation.Resolve.
+const (
+	MetaModel  = "ynh.model"
+	MetaEffort = "ynh.effort"
+)
+
 // LogTailLines is how much of a failed run's log goes into the task's status
 // message, so a delegate that wrote nothing to its output still says why.
 const LogTailLines = 40
@@ -54,6 +62,13 @@ type Options struct {
 	// Parent and Delegate are the canonical ids (see delegation.StartOptions).
 	Parent, Delegate string
 	Profile, Focus   string
+	// Model and Effort are the delegates_to entry's own model and effort,
+	// DefaultModel and DefaultEffort the delegate harness's, and Vendor the
+	// vendor the delegate runs on. A call's own choice (MetaModel, MetaEffort)
+	// is read from the first message and wins over all of them.
+	Model, Effort               string
+	DefaultModel, DefaultEffort string
+	Vendor                      string
 	// Folder is the working folder the delegate runs in: the parent's.
 	Folder string
 	// Supervisor starts the session process (see delegation.StartOptions).
@@ -341,9 +356,18 @@ func (x *executor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) iter
 	}
 }
 
+// callChoice is the per-call model and effort a message carries in its
+// metadata, "" for each it does not.
+func callChoice(m *a2a.Message) (model, effort string) {
+	model, _ = m.Metadata[MetaModel].(string)
+	effort, _ = m.Metadata[MetaEffort].(string)
+	return model, effort
+}
+
 // begin starts the task: queued at a live interactive session of the delegate
 // when there is one that accepts tasks and the task does not ask for headless,
-// otherwise a session of its own.
+// otherwise a session of its own, opened with the model and effort the call,
+// the parent's entry or the delegate's default chose.
 func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string, error) {
 	onLive := x.o.OnLive
 	if v, ok := ec.Message.Metadata[MetaOnLive].(string); ok && v != "" {
@@ -372,8 +396,12 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 			})
 		}
 	}
+	callModel, callEffort := callChoice(ec.Message)
+	model := delegation.Resolve(callModel, x.o.Model, x.o.DefaultModel)
+	effort := delegation.Resolve(callEffort, x.o.Effort, x.o.DefaultEffort)
 	return delegation.Start(delegation.StartOptions{
 		Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
+		Model: model.Value, ModelFrom: model.From, Effort: effort.Value, EffortFrom: effort.From, Vendor: x.o.Vendor,
 		Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
 		AutoApprove: level, AutoApproveFrom: from,
 	})

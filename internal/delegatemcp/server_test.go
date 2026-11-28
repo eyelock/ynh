@@ -86,10 +86,21 @@ type session struct {
 
 func newSession(t *testing.T, folder, token string, mutate func(*Config)) *session {
 	t.Helper()
-	ep, err := a2aserve.Open(a2aserve.Options{
+	return newSessionWith(t, folder, token, mutate, nil)
+}
+
+// newSessionWith is newSession with the endpoint's options adjustable, for the
+// model and effort a delegate is given.
+func newSessionWith(t *testing.T, folder, token string, mutate func(*Config), opts func(*a2aserve.Options)) *session {
+	t.Helper()
+	o := a2aserve.Options{
 		Name: "reviewer", Label: "github.com/x/reviewer", Parent: parent, Delegate: "local/reviewer",
-		Folder: folder, Supervisor: []string{os.Args[0]},
-	})
+		Folder: folder, Supervisor: []string{os.Args[0]}, Vendor: "claude",
+	}
+	if opts != nil {
+		opts(&o)
+	}
+	ep, err := a2aserve.Open(o)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -724,6 +735,112 @@ func TestARefusedDelegationAlwaysCarriesItsReasonAndFixLine(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The delegate tool takes an optional model and effort, which win over the
+// parent's entry and the delegate's default; delegate_status and
+// delegate_result show what the delegation used and where each came from.
+func TestPerCallModelAndEffortWinAndAreReported(t *testing.T) {
+	s := newSessionWith(t, setup(t), "", nil, func(o *a2aserve.Options) {
+		o.Model, o.Effort = "entry-m", "medium"
+		o.DefaultModel, o.DefaultEffort = "def-m", "low"
+	})
+	started := s.call("delegate_to_reviewer", map[string]any{"task": "echo hi", "model": "call-m", "effort": "high", "wait": 5})
+	if started.IsError {
+		t.Fatalf("tool error: %s", started.Content[0].Text)
+	}
+	for _, r := range []Result{started.StructuredContent,
+		s.call("delegate_status", map[string]any{"task_id": started.StructuredContent.TaskID}).StructuredContent,
+		s.call("delegate_result", map[string]any{"task_id": started.StructuredContent.TaskID}).StructuredContent,
+		listed(t, s),
+	} {
+		if r.Model != "call-m" || r.ModelFrom != "call" || r.Effort != "high" || r.EffortFrom != "call" {
+			t.Errorf("reported %+v, want call-m/high from the call", r)
+		}
+	}
+}
+
+func TestWithNoCallChoiceTheEntryThenTheDelegateDefaultThenTheVendorApply(t *testing.T) {
+	tests := []struct {
+		name               string
+		entry, deflt       [2]string
+		model, modelFrom   string
+		effort, effortFrom string
+	}{
+		{"entry", [2]string{"entry-m", "medium"}, [2]string{"def-m", "low"}, "entry-m", "entry", "medium", "entry"},
+		{"delegate default", [2]string{}, [2]string{"def-m", "low"}, "def-m", "delegate_default", "low", "delegate_default"},
+		{"vendor default", [2]string{}, [2]string{}, "", "vendor_default", "", "vendor_default"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newSessionWith(t, setup(t), "", nil, func(o *a2aserve.Options) {
+				o.Model, o.Effort = tt.entry[0], tt.entry[1]
+				o.DefaultModel, o.DefaultEffort = tt.deflt[0], tt.deflt[1]
+			})
+			r := s.call("delegate_to_reviewer", map[string]any{"task": "echo hi", "wait": 5}).StructuredContent
+			if r.Model != tt.model || r.ModelFrom != tt.modelFrom || r.Effort != tt.effort || r.EffortFrom != tt.effortFrom {
+				t.Errorf("reported %+v", r)
+			}
+		})
+	}
+}
+
+func TestABadModelOrEffortIsAToolErrorAndStartsNothing(t *testing.T) {
+	folder := setup(t)
+	s := newSession(t, folder, "", nil)
+	for args, want := range map[string]map[string]any{
+		"effort": {"task": "echo hi", "effort": "max"},
+		"model":  {"task": "echo hi", "model": "--yolo"},
+	} {
+		r := s.call("delegate_to_reviewer", want)
+		if !r.IsError || !strings.Contains(r.Content[0].Text, args) {
+			t.Errorf("%s: got %+v", args, r)
+		}
+	}
+	if recs, _ := delegation.List(parent, folder); len(recs) != 0 {
+		t.Errorf("a refused call left a delegation: %v", recs)
+	}
+}
+
+func TestTheDelegateToolDeclaresModelAndEffort(t *testing.T) {
+	s := newSession(t, setup(t), "", nil)
+	var list struct {
+		Tools []struct {
+			Name        string
+			InputSchema struct {
+				Properties map[string]struct {
+					Type string
+					Enum []string
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal(s.rpc("tools/list", nil).Result, &list); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range list.Tools {
+		if tool.Name != "delegate_to_reviewer" {
+			continue
+		}
+		p := tool.InputSchema.Properties
+		if p["model"].Type != "string" || p["effort"].Type != "string" || strings.Join(p["effort"].Enum, ",") != "low,medium,high" {
+			t.Errorf("properties = %+v", p)
+		}
+		return
+	}
+	t.Fatal("no delegate_to_reviewer tool")
+}
+
+// listed is the one delegation delegate_list shows.
+func listed(t *testing.T, s *session) Result {
+	t.Helper()
+	var l struct {
+		StructuredContent ListResult `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(s.call("delegate_list", nil).Raw, &l); err != nil || len(l.StructuredContent.Delegations) != 1 {
+		t.Fatalf("delegate_list: %v %+v", err, l)
+	}
+	return l.StructuredContent.Delegations[0]
 }
 
 // delegate_status, delegate_result and delegate_list carry the level the

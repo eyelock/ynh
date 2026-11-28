@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -712,6 +713,21 @@ func claudeSubagentMCP(servers map[string]plugin.MCPServer) []map[string]claudeM
 	return out
 }
 
+// DelegateSettingsFrontmatter returns the frontmatter lines that give a
+// Claude Code subagent its model and reasoning effort: its "model" and
+// "effort" fields (code.claude.com/docs/en/sub-agents). An empty value
+// writes no line, leaving the session's own.
+func (c *Claude) DelegateSettingsFrontmatter(model, effort string) []string {
+	var lines []string
+	if model != "" {
+		lines = append(lines, "model: "+strconv.Quote(model))
+	}
+	if effort != "" {
+		lines = append(lines, "effort: "+strconv.Quote(effort))
+	}
+	return lines
+}
+
 // marshalFlat renders v as single-line JSON, which is also valid YAML, with
 // no HTML escaping so a URL or a command reads as written.
 func marshalFlat(v any) (string, error) {
@@ -737,6 +753,10 @@ type DelegateLaunchAgent struct {
 	Servers     map[string]plugin.MCPServer
 	EnvFile     string
 	Wrapped     map[string]bool
+	// Model and Effort are the model and reasoning effort the subagent runs
+	// with, "" for the session's own.
+	Model  string
+	Effort string
 }
 
 // ClaudeDelegateAgentsFile is the file in a run directory that holds the
@@ -757,11 +777,18 @@ const ClaudeDelegateAgentsFile = ".ynh-delegate-agents.json"
 func (c *Claude) DelegateLaunchFile(agents []DelegateLaunchAgent) (string, []byte, error) {
 	defs := make(map[string]map[string]any, len(agents))
 	for _, a := range agents {
-		defs[a.Name] = map[string]any{
+		def := map[string]any{
 			"description": a.Description,
 			"prompt":      a.Prompt,
 			"mcpServers":  claudeLaunchMCP(a),
 		}
+		if a.Model != "" {
+			def["model"] = a.Model
+		}
+		if a.Effort != "" {
+			def["effort"] = a.Effort
+		}
+		defs[a.Name] = def
 	}
 	data, err := marshalFlat(defs)
 	if err != nil {

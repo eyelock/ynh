@@ -101,3 +101,34 @@ func TestCheckDelegateTransports(t *testing.T) {
 		}
 	})
 }
+
+func TestLoadCarriesDelegateModelAndEffort(t *testing.T) {
+	h := loadTransportHarness(t, `{"name":"h","version":"0.1.0","default_model":"dm","default_effort":"low","delegates_to":[{"git":"github.com/o/a","model":"em","effort":"high"},{"git":"github.com/o/b"}]}`)
+	if h.DefaultModel != "dm" || h.DefaultEffort != "low" {
+		t.Errorf("defaults = %q %q", h.DefaultModel, h.DefaultEffort)
+	}
+	if d := h.DelegatesTo[0]; d.Model != "em" || d.Effort != "high" {
+		t.Errorf("entry 0 = %+v", d)
+	}
+	if d := h.DelegatesTo[1]; d.Model != "" || d.Effort != "" {
+		t.Errorf("entry 1 names none: %+v", d)
+	}
+	if err := h.CheckDelegateTransports("claude"); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestCheckDelegateSettingsRefusesWhatCannotBeOne(t *testing.T) {
+	for name, manifest := range map[string]string{
+		"entry effort":   `{"name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","effort":"max"}]}`,
+		"default effort": `{"name":"h","version":"0.1.0","default_effort":"max"}`,
+		"entry model":    `{"name":"h","version":"0.1.0","delegates_to":[{"git":"github.com/o/a","model":"-x"}]}`,
+		"default model":  `{"name":"h","version":"0.1.0","default_model":"a b"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := loadTransportHarness(t, manifest).CheckDelegateTransports("claude"); err == nil {
+				t.Error("want a refusal")
+			}
+		})
+	}
+}

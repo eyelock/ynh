@@ -86,6 +86,14 @@ Review and accept again with `ynh trust show <parent>` and `ynh trust accept <pa
 delegate that changed is re-gated: each keeps its own record, and the others stay accepted. (Accepting
 the delegate on its own, `ynh trust accept <id>`, works too.)
 
+## Choosing the delegate's model and effort
+
+Trust covers what a delegate runs, not which model runs it. From v0.18.1 (v0.18.0 has no model or effort settings), a parent picks the model and effort per call, per
+entry (`model` and `effort` on the `delegates_to` entry) or leaves them to the delegate's own `default_model`
+and `default_effort`; changing any of them moves no digest and needs no `ynh trust accept`. `ynh info <parent>`
+shows what each delegate opens with and where it came from. See
+[Model and effort](../delegates-reference.md#model-and-effort).
+
 ## Trust a `native` delegate
 
 A parent whose `native` delegate brings an MCP server is refused until you accept the parent, and the
