@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -271,4 +275,35 @@ func imageA2ATree(p *harness.Harness, ia imageArgs) (map[string]trustRecord, err
 		tree[d.ID] = store.Harnesses[d.ID]
 	}
 	return tree, nil
+}
+
+// bakeImageDelegates copies each accepted a2a delegate's install into the
+// image's home, at the same id the host installed it under, with its includes'
+// cache, so a delegate session inside the image resolves it by source and
+// finds its record. A delegate installed from a local folder has no source
+// the image could find again, so it refuses the build.
+func bakeImageDelegates(homeDir string, tree map[string]trustRecord, cfg *config.Config) error {
+	ids := make([]string, 0, len(tree))
+	for id := range tree {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		h, err := harness.LoadByID(id)
+		if err != nil {
+			return fmt.Errorf("baking delegate %s: %w", id, err)
+		}
+		if h.InstalledFrom == nil || h.InstalledFrom.SourceType == "local" {
+			return fmt.Errorf("delegate %s is installed from a local folder, which an image cannot find again: pin it to a git source", id)
+		}
+		fs := namespace.IDToFSName(id)
+		dst := filepath.Join(homeDir, "harnesses", fs)
+		if err := assembler.CopyTree(h.Dir, dst); err != nil {
+			return fmt.Errorf("baking delegate %s: %w", id, err)
+		}
+		if err := bakeIncludeCache(h, h.Includes, homeDir, path.Join(imageHome, "harnesses", fs)); err != nil {
+			return fmt.Errorf("baking delegate %s: %w", id, err)
+		}
+	}
+	return nil
 }

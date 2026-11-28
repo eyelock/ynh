@@ -453,7 +453,7 @@ func acceptIncludeChange(id string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return recordAcceptance(id, p, viaIncludeTrus, stdout)
+	return acceptWithTree(id, p, viaIncludeTrus, stdout)
 }
 
 // acceptAfterChange is the --trust of `ynh update` and `ynh include`
@@ -472,8 +472,13 @@ func acceptAfterChange(id, via string, stdout io.Writer) error {
 	if len(bad) > 0 {
 		return refuseUnpinned(id+" after this change", "--trust", bad)
 	}
-	// The parent's record and the whole a2a delegate tree's are written
-	// together, all or nothing, by the one acceptance function (ynh #1058, N1).
+	return acceptWithTree(id, p, via, stdout)
+}
+
+// acceptWithTree records the acceptance of the installed harness id and of its
+// whole a2a delegate tree together, all or nothing, by the one acceptance
+// function (ynh #1058, N1).
+func acceptWithTree(id string, p *harness.Harness, via string, stdout io.Writer) error {
 	set := harnessExecutables(p)
 	if len(set.Problems) > 0 {
 		return fmt.Errorf("%s", unavailableMessage(id, set.Problems))

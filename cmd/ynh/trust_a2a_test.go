@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -644,5 +645,32 @@ func TestImageFromTrustBakesTheWholeA2ATree(t *testing.T) {
 	}
 	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
 		t.Errorf("nothing may be recorded on the host: %v", store.Harnesses)
+	}
+}
+
+// ynh #1058, N1: the image carries each accepted delegate's install beside its
+// record, at the same id, so a delegate session inside the image resolves it;
+// a delegate installed from a local folder refuses the build.
+func TestBakeImageDelegatesCopiesTheInstallAtItsID(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	id := installGitHarness(t, "github.com/o/a", "", sha1, "a", mcpFields("echo"))
+	home := t.TempDir()
+	if err := bakeImageDelegates(home, map[string]trustRecord{id: {}}, &config.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, "harnesses", namespace.IDToFSName(id))
+	for _, f := range []string{filepath.Join(plugin.PluginDir, plugin.PluginFile), filepath.Join(plugin.PluginDir, plugin.InstalledFile)} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
+			t.Errorf("the image must carry %s of the delegate: %v", f, err)
+		}
+	}
+
+	local := t.TempDir()
+	if err := writePluginJSONFile(local, []byte(`{"name":"loc","version":"0.1.0"}`)); err != nil {
+		t.Fatal(err)
+	}
+	lid := installLocalHarness(t, local, "loc")
+	if err := bakeImageDelegates(t.TempDir(), map[string]trustRecord{lid: {}}, &config.Config{}); err == nil || !strings.Contains(err.Error(), lid) {
+		t.Errorf("a local-folder delegate must refuse the build naming it, got %v", err)
 	}
 }

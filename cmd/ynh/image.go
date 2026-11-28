@@ -588,6 +588,13 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// Bake the a2a delegates the build accepted (ynh #1058, N1): each runs
+	// inside the image at its accepted level, so its install is carried with
+	// its record, under the id the image resolves it by.
+	if err := bakeImageDelegates(homeDir, bakedTree, cfg); err != nil {
+		return err
+	}
+
 	// Bake the accepted trust record, so the gate the image's entrypoint goes
 	// through finds what the operator accepted at build time.
 	trustDigest := ""
