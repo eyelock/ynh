@@ -328,7 +328,13 @@ func warmFolderIncludes(p *harness.Harness) error {
 	if len(bad) > 0 {
 		return refuseUnpinnedWith(p.Name, "--trust", bad, uncachedUnpinnedClosing)
 	}
-	err := resolver.WarmPinnedIncludes(p)
+	// The allow-list is held before anything is fetched: --trust accepts what a run would reach, it
+	// does not widen what a run may reach (ynh #1058).
+	cfg, cerr := config.Load()
+	if cerr != nil {
+		return fmt.Errorf("--trust could not read the configuration: %w", cerr)
+	}
+	err := resolver.WarmPinnedIncludes(p, cfg)
 	var unpinned *resolver.UnpinnedUncachedError
 	if errors.As(err, &unpinned) {
 		return refuseUnpinnedWith(p.Name, "--trust", []string{fmt.Sprintf("%s: %s", unpinned.Git, notPinned(unpinned.Ref))}, uncachedUnpinnedClosing)
