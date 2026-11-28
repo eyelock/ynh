@@ -61,6 +61,14 @@ type relayReady struct {
 // is a failure, and the process is killed before StartRelay returns, so a
 // relay that cannot be used is never left running.
 func StartRelay(bin, spoolDir string, readyTimeout time.Duration) (*Relay, error) {
+	return StartRelayAfter(bin, spoolDir, readyTimeout, time.After)
+}
+
+// StartRelayAfter is StartRelay with the clock that decides "too late" passed
+// in: after(readyTimeout) is the channel that fires when the wait is over. A
+// test uses it to start the wait only once the relay has shown signs of life,
+// instead of racing a short wall-clock bound against a loaded machine.
+func StartRelayAfter(bin, spoolDir string, readyTimeout time.Duration, after func(time.Duration) <-chan time.Time) (*Relay, error) {
 	cmd := exec.Command(bin, "relay", "--spool", spoolDir, "--format", "json", "--exit-on-stdin-eof")
 	// The relay's stdin is a pipe only ynh holds, and never writes to. When
 	// ynh exits, by any means, kill -9 included, the kernel closes it, and
@@ -96,8 +104,7 @@ func StartRelay(bin, spoolDir string, readyTimeout time.Duration) (*Relay, error
 		close(r.done)
 	}()
 
-	timer := time.NewTimer(readyTimeout)
-	defer timer.Stop()
+	timedOut := after(readyTimeout)
 	select {
 	case line := <-lines:
 		endpoint, perr := parseRelayReady(line)
@@ -107,7 +114,7 @@ func StartRelay(bin, spoolDir string, readyTimeout time.Duration) (*Relay, error
 		}
 		r.Endpoint = endpoint
 		return r, nil
-	case <-timer.C:
+	case <-timedOut:
 		r.kill()
 		return nil, fmt.Errorf("relay printed no endpoint within %v%s", readyTimeout, r.stderrNote())
 	}
