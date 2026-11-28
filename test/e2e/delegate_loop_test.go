@@ -42,6 +42,9 @@ func TestDelegateLoopIsStoppedAtRuntime(t *testing.T) {
 	mustGit(t, root, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "loop")
 	for _, n := range []string{"loopa", "loopb"} {
 		s.mustRunYnh(t, "install", filepath.Join(root, n))
+		// A one-shot run needs the acceptance a person gives with `ynh trust
+		// accept` (ynh #1060); the loop under test is stopped after it.
+		s.mustRunYnh(t, "trust", "accept", "local/"+n)
 	}
 
 	work := t.TempDir()
