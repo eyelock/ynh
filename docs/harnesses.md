@@ -337,7 +337,7 @@ Other harnesses this one can invoke as subagents.
 | `model` | no | From v0.18.1. The model the delegate opens with unless the call names its own; wins over the delegate's `default_model`. See [Model and effort](delegates-reference.md#model-and-effort). |
 | `effort` | no | From v0.18.1. The reasoning effort (`low`, `medium` or `high`) the delegate opens with unless the call names its own; wins over the delegate's `default_effort`. |
 | `transport` | no | How the parent reaches this delegate: `a2a` (its own detached ynh session) or `native` (the vendor's subagents). Overrides the harness's `transport`; `a2a` when neither says. See [Transport](#transport). |
-| `auto_approve` | no | `none`, `edits` or `all`: the most this delegate's session may open at when this harness starts it. Narrows the delegate's own [`auto_approve`](#auto-approve-optional), never widens it. Part of this harness's trust review. `a2a` entries only: on a `native` entry it is refused when the harness is loaded, since a native delegate runs at its parent's level. See [Permission levels](permission-levels.md). |
+| `auto_approve` | no | `none`, `edits` or `all`: the most this delegate's session may open at when this harness starts it. Narrows the delegate's own [`auto_approve`](#auto-approve-optional), never widens it. Part of this harness's trust review. It takes effect on `a2a` entries only: on a `native` entry it is accepted but does nothing, since a native delegate runs at its parent's level. See [Permission levels](permission-levels.md). |
 
 #### Transport
 

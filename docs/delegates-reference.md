@@ -106,10 +106,9 @@ session starts. A level the delegate's vendor cannot hold exactly is refused at 
 [what each vendor is passed](permission-levels.md#what-each-vendor-is-passed).
 
 A `native` delegate runs inside the parent's session, so it works under that session's permissions. An
-`auto_approve` on a native entry is refused when the harness is loaded, with a message that says to
-narrow the parent or make the entry `a2a`.
-
-<!-- TODO(Weller's build, ynw-f9krl): quote the refusal for auto_approve on a native entry once it lands, and check this sentence. -->
+`auto_approve` on a native entry is accepted and listed by `ynh trust show`, but does not take effect:
+a one-shot run of the parent still opens at the parent's level (shown on develop with a stand-in
+Claude Code: a native entry at `none`, the run at `bypassPermissions`).
 
 `ynh info <parent>` prints an entry's level beside the delegate:
 `transport=a2a (default)  auto_approve=edits (entry)`. `ynh trust show <parent>` lists each a2a delegate

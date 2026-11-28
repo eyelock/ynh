@@ -30,7 +30,7 @@ The order is `all` > `edits` > `none`. Finer control, such as which commands, is
 | Field or flag | Where | Can it widen? |
 |---|---|---|
 | `auto_approve` | top level of the harness manifest (`.agents/harness/plugin.json`). A profile cannot change it | it sets the harness's ceiling |
-| `auto_approve` | on an `a2a` `delegates_to` entry of the parent | no: narrows the delegate only. On a `native` entry it is refused when the harness is loaded: a native delegate runs inside its parent's session, at the parent's level |
+| `auto_approve` | on an `a2a` `delegates_to` entry of the parent | no: narrows the delegate only. On a `native` entry it is accepted but does not take effect: a native delegate runs inside its parent's session, at the parent's level |
 | `auto_approve` | the per-call argument of `delegate_to_<name>` (A2A metadata `ynh.auto_approve`; the native bridge's `--auto-approve`) | no |
 | `--auto-approve none\|edits\|all` | `ynh run`, one-shot or interactive | no |
 | `--auto-approve none\|edits\|all` | `ynh agent run` | no, with `--harness`; without it, it is the grant |
