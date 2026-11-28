@@ -168,11 +168,13 @@ func remoteIncludeFolder(t *testing.T) (folder, src string) {
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"name":"folderh","version":"0.1.0","includes":[{"git":"file://` + src + `"}]}`
+	// Pinned at the commit: acceptance is refused for a floating include.
+	sha := gitRevParse(t, src)
+	manifest := `{"name":"folderh","version":"0.1.0","includes":[{"git":"file://` + src + `","ref":"` + sha + `"}]}`
 	if err := writePluginJSONFile(folder, []byte(manifest)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resolver.EnsureRepo("file://"+src, ""); err != nil {
+	if _, err := resolver.EnsureRepo("file://"+src, sha); err != nil {
 		t.Fatal(err)
 	}
 	return folder, src
@@ -232,8 +234,19 @@ func TestTrustGate_FolderRunRefusesAnUnacceptedRemoteInclude(t *testing.T) {
 	}
 	runGitInDir(t, src, "add", "-A")
 	runGitInDir(t, src, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "change")
-	if _, uerr := resolver.EnsureRepo("file://"+src, ""); uerr != nil {
+	// A pinned include cannot change under its ref, so the folder moves to
+	// the new commit, which has no record.
+	newSHA := gitRevParse(t, src)
+	moved := `{"name":"folderh","version":"0.1.0","includes":[{"git":"file://` + src + `","ref":"` + newSHA + `"}]}`
+	if werr := writePluginJSONFile(folder, []byte(moved)); werr != nil {
+		t.Fatal(werr)
+	}
+	if _, uerr := resolver.EnsureRepo("file://"+src, newSHA); uerr != nil {
 		t.Fatal(uerr)
+	}
+	p, err = harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if gerr = trustGate("", p, io.Discard); !isUntrusted(gerr) {
 		t.Fatalf("err = %v, want the changed include refused", gerr)
@@ -496,7 +509,7 @@ func TestTrustGate_FoldersSharingARemoteIncludeShareItsRecord(t *testing.T) {
 	}
 	// B includes the same remote and has a local include with a hook of its own.
 	writeIncludedHarness(t, b, "localinc", hookFields("echo local"))
-	manifest := `{"name":"folderb","version":"0.1.0","includes":[{"git":"file://` + src + `"},{"local":"localinc","hooks":true}]}`
+	manifest := `{"name":"folderb","version":"0.1.0","includes":[{"git":"file://` + src + `","ref":"` + gitRevParse(t, src) + `"},{"local":"localinc","hooks":true}]}`
 	if err := writePluginJSONFile(b, []byte(manifest)); err != nil {
 		t.Fatal(err)
 	}

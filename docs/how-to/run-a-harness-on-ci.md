@@ -57,12 +57,12 @@ The job then starts with no trust records, and accepts only what it pins itself.
    ```
 
    `<id>` is the harness's id, which `ynh ls` also prints. If the ref is not a full SHA, the install
-   stops with exit 1:
+   stops with exit 1, before anything is cloned:
 
    ```
    Error: --trust refuses to accept this install: it is not pinned to a full commit SHA, so what runs could change under the acceptance:
      the harness's own ref: "main" is a tag or branch, which can move
-   Pin it to a 40-character commit SHA, or review it and accept it by hand with 'ynh trust accept'
+   Pin it to a 40-character commit SHA and try again. Acceptance is a step for a person who has reviewed what runs, and it covers only a commit that cannot move
    ```
 
 2. Run it by its id:
