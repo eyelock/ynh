@@ -200,14 +200,14 @@ func TestImageFromTrust_BakedRecordReadsAcceptedInTheImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	ia := imageArgs{name: "hh", from: "file://" + src, ref: sha, trust: true, sha: sha}
-	rec, err := imageFromTrustRecord(p, cfg, ia, false, sha)
+	rec, _, err := imageFromTrustRecord(p, cfg, ia, false, sha)
 	if err != nil || rec == nil {
 		t.Fatalf("rec = %v, err = %v", rec, err)
 	}
 
 	// The image's home: the baked record, and the clone with no installed.json.
 	image := t.TempDir()
-	if err := writeImageTrust(image, "hh", *rec); err != nil {
+	if err := writeImageTrust(image, "hh", *rec, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := assembler.CopyTree(src, filepath.Join(image, "harnesses", "local--hh")); err != nil {
@@ -246,7 +246,7 @@ func TestImageFromTrust_ImageKeepsSourceAndSHA(t *testing.T) {
 	}
 	url := "file://" + src
 	ia := imageArgs{name: "hh", from: url, ref: sha, trust: true, sha: sha}
-	rec, err := imageFromTrustRecord(p, cfg, ia, false, sha)
+	rec, _, err := imageFromTrustRecord(p, cfg, ia, false, sha)
 	if err != nil || rec == nil {
 		t.Fatalf("rec = %v, err = %v", rec, err)
 	}
@@ -263,7 +263,7 @@ func TestImageFromTrust_ImageKeepsSourceAndSHA(t *testing.T) {
 	if rec.Source != url || rec.SHA != sha {
 		t.Errorf("record source = %q, sha = %q, want %q, %q", rec.Source, rec.SHA, url, sha)
 	}
-	if err := writeImageTrust(image, "hh", *rec); err != nil {
+	if err := writeImageTrust(image, "hh", *rec, nil); err != nil {
 		t.Fatal(err)
 	}
 

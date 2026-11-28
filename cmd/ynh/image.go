@@ -486,18 +486,27 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// An installed harness must be one the operator accepted, as at run time
 	// (design decision 9). The check comes before anything is copied or built.
 	var bakedTrust *trustRecord
+	var bakedTree *imageTree
+	defer func() { bakedTree.Close() }()
 	if trustID != "" {
 		rec, err := imageTrustRecord(trustID, p)
 		if err != nil {
 			return err
 		}
 		bakedTrust = rec
+		if rec != nil {
+			tree, err := installedImageTree(trustID, p)
+			if err != nil {
+				return err
+			}
+			bakedTree = tree
+		}
 	} else {
-		rec, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
+		rec, tree, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
 		if err != nil {
 			return err
 		}
-		bakedTrust = rec
+		bakedTrust, bakedTree = rec, tree
 		if rec != nil {
 			// The same verb every other way of accepting prints. It goes to
 			// stderr: with --dry-run stdout is the Dockerfile.
@@ -587,11 +596,18 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// Bake the a2a delegates the build accepted (ynh #1058, N1): each runs
+	// inside the image at its accepted level, so its install is carried with
+	// its record, under the id the image resolves it by.
+	if err := bakeImageDelegates(homeDir, bakedTree, cfg); err != nil {
+		return err
+	}
+
 	// Bake the accepted trust record, so the gate the image's entrypoint goes
 	// through finds what the operator accepted at build time.
 	trustDigest := ""
 	if bakedTrust != nil {
-		if err := writeImageTrust(homeDir, p.Name, *bakedTrust); err != nil {
+		if err := writeImageTrust(homeDir, p.Name, *bakedTrust, bakedTree.Records()); err != nil {
 			return err
 		}
 		trustDigest = bakedTrust.Digest

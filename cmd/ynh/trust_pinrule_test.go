@@ -257,7 +257,7 @@ func TestImageFromTrust_RefusesFloatingNativeDelegate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec, err := imageFromTrustRecord(p, &config.Config{}, imageArgs{name: "imgnd", from: dir, trust: true}, true, "")
+	rec, _, err := imageFromTrustRecord(p, &config.Config{}, imageArgs{name: "imgnd", from: dir, trust: true}, true, "")
 	if err == nil || !strings.Contains(err.Error(), "native delegate github.com/example/reviewer") {
 		t.Fatalf("err = %v, rec = %v, want the native delegate named", err, rec)
 	}

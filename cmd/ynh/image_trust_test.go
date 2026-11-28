@@ -146,7 +146,7 @@ func TestImageTrust_DigestHoldsInTheImageLayout(t *testing.T) {
 	if err := os.MkdirAll(image, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeImageTrust(image, "hooked", *rec); err != nil {
+	if err := writeImageTrust(image, "hooked", *rec, nil); err != nil {
 		t.Fatal(err)
 	}
 	baked := filepath.Join(image, "harnesses", "local--hooked")
@@ -179,7 +179,7 @@ func TestImageTrust_DigestHoldsInTheImageLayout(t *testing.T) {
 // id the harness was installed under on the host.
 func TestImageTrust_KeyedByTheImageID(t *testing.T) {
 	home := t.TempDir()
-	if err := writeImageTrust(home, "thing", trustRecord{Digest: "sha256:x", Via: viaImage}); err != nil {
+	if err := writeImageTrust(home, "thing", trustRecord{Digest: "sha256:x", Via: viaImage}, nil); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("YNH_HOME", home)
