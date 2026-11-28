@@ -327,8 +327,8 @@ writing these were:
 
 - [ ] Unit tests alongside every changed file (errcheck is strict).
 - [ ] `test/e2e/`: add the vendor to the end-to-end matrix once the adapter is
-  stable enough for real fixtures. This is the release gate, not a per-PR gate
-  (`.github/CONTRIBUTING.md` § E2E test suite).
+  stable enough for real fixtures. CI runs it on every pull request and as the release
+  gate (`.github/CONTRIBUTING.md` § E2E test suite).
 
 ## Order of operations
 
