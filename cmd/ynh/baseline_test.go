@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -106,5 +108,27 @@ func TestBaseline_ExplainResolvesFingerprintsToFindings(t *testing.T) {
 func TestBaseline_RequiresAHarness(t *testing.T) {
 	if err := cmdBaseline([]string{"--format", "json"}, io.Discard, io.Discard); err == nil {
 		t.Error("a harness name is required")
+	}
+}
+
+// `ynh baseline --explain` runs the harness's sensors, so it passes the trust gate first: a harness
+// whose sensor changed since it was accepted runs nothing (ynh #1058).
+func TestBaselineExplainRefusesAnUnacceptedHarness(t *testing.T) {
+	work := baselineFixture(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	changed := strings.Replace(baselineReadHarness, "printf 'a.go:1: unused x", "touch "+marker+"; printf 'a.go:1: unused x", 1)
+	installListTestHarness(t, os.Getenv("YNH_HOME"), "blr", changed)
+
+	// Without --explain nothing runs, so nothing is refused.
+	if err := cmdBaseline([]string{"local/blr", "--cwd", work, "--format", "json"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("reading the baseline needs no gate: %v", err)
+	}
+	var errb bytes.Buffer
+	err := cmdBaseline([]string{"local/blr", "--cwd", work, "--explain", "--format", "json"}, io.Discard, &errb)
+	if err == nil || !strings.Contains(errb.String(), "untrusted") {
+		t.Fatalf("--explain must be refused as untrusted, got %v\n%s", err, errb.String())
+	}
+	if _, serr := os.Stat(marker); serr == nil {
+		t.Error("the unaccepted harness's sensor ran")
 	}
 }
