@@ -371,3 +371,60 @@ func TestQueuedTaskShowsInteractiveNotALevelAndFallbackRestoresIt(t *testing.T) 
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// ynh #1074: a call that names a model or effort cannot be given them by a
+// live session, which keeps its own, so it is refused before it is queued,
+// naming the fix, for each of model and effort; a call naming neither is
+// queued as before, and on_live headless still honours them.
+func TestACallWithAModelOrEffortIsRefusedAtALiveSession(t *testing.T) {
+	for name, tt := range map[string]struct{ model, effort, want string }{
+		"a model":            {"opus-x", "", "model opus-x"},
+		"an effort":          {"", "high", "effort high"},
+		"a model and effort": {"opus-x", "high", "model opus-x and effort high"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			folder := setup(t)
+			liveSession(t, "eno-1", "eno")
+			e := openFor(t, folder, "eno", "local/parent", nil)
+			task := sendWith(t, e, tt.model, tt.effort)
+			msg := ""
+			if task.Status.Message != nil {
+				msg = messageText(task.Status.Message)
+			}
+			if task.Status.State != a2a.TaskStateFailed || !strings.Contains(msg, tt.want) || !strings.Contains(msg, "on_live headless") || !strings.Contains(msg, "eno-1") {
+				t.Fatalf("got %s %q, want failed naming %q, the live session and on_live headless", task.Status.State, msg, tt.want)
+			}
+			if len(records(t)) != 0 {
+				t.Errorf("a refused call must queue nothing: %v", records(t))
+			}
+			if inbox, _ := delegation.Inbox("local/eno"); len(inbox) != 0 {
+				t.Errorf("a refused call must leave the live session's inbox empty: %v", inbox)
+			}
+		})
+	}
+}
+
+func TestACallWithNoModelOrEffortIsStillQueuedAtALiveSession(t *testing.T) {
+	folder := setup(t)
+	liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", nil)
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hi", true)
+	if task.Metadata[MetaRoute] != "live" {
+		t.Fatalf("metadata = %v, want route live", task.Metadata)
+	}
+}
+
+func TestAModelWithOnLiveHeadlessIsHonouredBesideALiveSession(t *testing.T) {
+	folder := setup(t)
+	liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", func(o *Options) { o.OnLive = "headless"; o.Vendor = "claude" })
+	task := sendWith(t, e, "opus-x", "high")
+	if task.Status.State != a2a.TaskStateCompleted {
+		t.Fatalf("task %s: %v", task.Status.State, task.Status.Message)
+	}
+	rec := onlyRecord(t)
+	if rec.Model != "opus-x" || rec.ModelFrom != "call" || rec.Effort != "high" || rec.EffortFrom != "call" || rec.Route != delegation.RouteHeadless {
+		t.Errorf("record = %+v", rec)
+	}
+}
