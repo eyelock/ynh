@@ -465,8 +465,14 @@ See [Export](tutorial/export.md) for a guided walkthrough.
 
 Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with vendor manifests for Claude Code, Cursor, Codex, and Copilot, and indexed for all four. OpenCode has no manifest or marketplace format, so a merged entry carries no OpenCode manifest (only `.opencode/opencode.json` and the hooks plugin when the harness declares MCP servers or hooks) and no OpenCode index is written.
 
+#### From the registry index
+
+The registry index, `.agents/harness/marketplace.json`, is also the build input ([ynh #395](https://github.com/eyelock/ynh/issues/395)). With no argument, `ynd marketplace build` reads it when the current directory has one, and writes each vendor's marketplace index **in place**, at the repository root beside it: `.claude-plugin/`, `.cursor-plugin/`, `.github/plugin/` and `.agents/plugins/`. Nothing is built: no plugins are copied or exported, and each entry's source is written in the form that vendor's index takes. Both lists are written, `harnesses` and the optional `plugins` (`ynh search` and `ynh install` read `harnesses` only). `-o` writes the indexes elsewhere, and `-v` picks vendors.
+
+A source a vendor cannot carry is refused, naming the entry and the vendor, and nothing is written: Copilot CLI cannot install from a `git-subdir` source (nor a `github` source with a `path`), and Codex's index lists local plugins only, so a remote entry stops a build for Codex. A default build over every vendor refuses when any vendor cannot carry an entry, as it does here; pass `-v` for the vendors that can, and the error names the entry, the vendor and that fix. `metadata.harnessRoot` prefixes a harness's relative path only: a plugin's relative path is relative to the repository root. OpenCode has no marketplace index and writes none. A path to a registry index works too; a build config, `./marketplace.json` with typed entries, still builds as below.
+
 ```bash
-ynd marketplace build                             # uses ./marketplace.json
+ynd marketplace build                             # the registry index here, else ./marketplace.json
 ynd marketplace build config/marketplace.json     # custom config path
 ynd marketplace build -o ./marketplace-dist       # custom output directory
 ynd marketplace build -v claude,cursor            # specific vendors

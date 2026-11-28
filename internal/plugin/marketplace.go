@@ -18,6 +18,10 @@ type MarketplaceJSON struct {
 	Owner     *OwnerInfo       `json:"owner"`
 	Metadata  *MarketplaceMeta `json:"metadata,omitempty"`
 	Harnesses []HarnessEntry   `json:"harnesses"`
+	// Plugins are entries ynh does not install: `ynd marketplace build` writes
+	// them into each vendor's index beside the harnesses. ynh search and
+	// ynh install read Harnesses only (ynh #395, M2).
+	Plugins []HarnessEntry `json:"plugins,omitempty"`
 }
 
 // OwnerInfo describes the registry owner.

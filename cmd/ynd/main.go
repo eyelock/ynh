@@ -136,7 +136,7 @@ Commands:
   export <source>            Export harness as vendor-native plugin directories
   preview <source>           Show assembled vendor output without installing
   diff <source> [vendors]    Compare assembled output across vendors
-  marketplace build          Build a vendor-native marketplace from marketplace.json
+  marketplace build          Write vendor marketplace indexes from the registry index (or build a marketplace from a build config)
   migrate <path>             Convert legacy manifests to .agents/harness/ in place (asks first)
   validate-output --schema <name|path> [< file.json]
                              Validate JSON on stdin against the named CLI schema

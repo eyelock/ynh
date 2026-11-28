@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/marketplace"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/vendor"
 	"github.com/eyelock/ynh/internal/warn"
 )
@@ -79,6 +80,19 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 		i++
 	}
 
+	// The registry index is also the build input (ynh #395): with no argument
+	// the manifest directory's index is read when there is one, and an explicit
+	// path to a registry index works too. Either writes each vendor's index in
+	// place and builds no content. Anything else is the old build config.
+	if configFile == "" && plugin.IsRegistryDir(".") {
+		configFile = plugin.MarketplacePath(".")
+	}
+	if configFile != "" && plugin.InManifestDir(configFile) {
+		if clean || format != "" {
+			return fmt.Errorf("--clean and --format apply to a build that makes content; a registry index is written in place, beside its repository root's vendor directories")
+		}
+		return buildFromRegistryIndex(configFile, outputDir, vendors, stderr)
+	}
 	// Default config file
 	if configFile == "" {
 		configFile = "marketplace.json"
@@ -156,5 +170,40 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 
 	warn.Print(stderr, warnings...)
 	fmt.Printf("Marketplace built → %s (%d plugins)\n", outputDir, len(cfg.Harnesses))
+	return nil
+}
+
+// buildFromRegistryIndex writes each vendor's marketplace index from the
+// registry index at path, in place under the repository root (the folder that
+// holds the manifest directory) unless -o names another.
+func buildFromRegistryIndex(path, outputDir, vendors string, stderr io.Writer) error {
+	idx, err := marketplace.LoadRegistryIndex(path)
+	if err != nil {
+		return err
+	}
+	if outputDir == "" {
+		outputDir = plugin.HarnessRoot(path)
+	}
+	if vendors == "" {
+		vendors = resolveVendorEnv()
+	}
+	var vendorList []string
+	if vendors != "" {
+		for _, v := range strings.Split(vendors, ",") {
+			v = strings.TrimSpace(v)
+			if _, err := vendor.Get(v); err != nil {
+				return err
+			}
+			vendorList = append(vendorList, v)
+		}
+	}
+	written, err := marketplace.BuildFromRegistryIndex(idx, marketplace.RegistryBuildOptions{OutputDir: outputDir, Vendors: vendorList})
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stderr, "Wrote %d vendor index(es) from %s under %s:\n", len(written), path, outputDir)
+	for _, w := range written {
+		_, _ = fmt.Fprintf(stderr, "  %s\n", w)
+	}
 	return nil
 }

@@ -364,7 +364,7 @@ func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
 func (c *Cursor) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
 	type indexPlugin struct {
 		Name        string `json:"name"`
-		Source      string `json:"source"`
+		Source      any    `json:"source"`
 		Description string `json:"description,omitempty"`
 	}
 	type indexOwner struct {
@@ -387,9 +387,11 @@ func (c *Cursor) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 		Metadata: indexMetadata{Description: cfg.Description},
 	}
 	for _, p := range plugins {
+		src, srcType := indexSource(p.Name, p.Source)
+		_ = srcType
 		idx.Plugins = append(idx.Plugins, indexPlugin{
 			Name:        p.Name,
-			Source:      "./plugins/" + p.Name,
+			Source:      src,
 			Description: p.Description,
 		})
 	}

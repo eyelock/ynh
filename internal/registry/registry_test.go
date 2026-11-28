@@ -333,3 +333,38 @@ func TestLookupExactCaseInsensitive(t *testing.T) {
 		t.Fatalf("results = %d, want 1", len(results))
 	}
 }
+
+// A plugin listed in the registry index's plugins array is neither listed nor
+// installable by ynh: search and install read the harnesses only (ynh #395, M2).
+func TestPluginEntriesAreNeitherListedNorInstallable(t *testing.T) {
+	dir := t.TempDir()
+	idx := `{"$schema":"https://eyelock.github.io/ynh/schema/marketplace.schema.json","name":"acme","owner":{"name":"Acme"},
+	"harnesses":[{"name":"reviewer","source":"./reviewer","description":"Code reviewer"}],
+	"plugins":[{"name":"lint-tools","source":"./lint-tools","description":"Linters","keywords":["lint"]}]}`
+	if err := os.MkdirAll(filepath.Join(dir, ".agents", "harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".agents", "harness", "marketplace.json"), []byte(idx), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := LoadFromDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.Entries) != 1 || reg.Entries[0].Name != "reviewer" {
+		t.Fatalf("entries = %+v, want the harness only", reg.Entries)
+	}
+	regs := []Registry{reg}
+	if got := Search(regs, "lint"); len(got) != 0 {
+		t.Errorf("search found the plugin: %+v", got)
+	}
+	if got := Search(regs, "reviewer"); len(got) != 1 {
+		t.Errorf("search lost the harness: %+v", got)
+	}
+	if got := LookupExact(regs, "lint-tools", ""); len(got) != 0 {
+		t.Errorf("install can resolve the plugin: %+v", got)
+	}
+	if got := LookupExact(regs, "reviewer", ""); len(got) != 1 {
+		t.Errorf("install lost the harness: %+v", got)
+	}
+}

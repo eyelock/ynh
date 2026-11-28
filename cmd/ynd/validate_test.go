@@ -1026,6 +1026,18 @@ func TestSchemaPlugin_ValidFixtures(t *testing.T) {
 	}
 }
 
+// A registry index with harnesses and plugins validates against the schema
+// (ynh #395, M2); a plugin entry is held to the same entry shape.
+func TestSchemaMarketplace_PluginsList(t *testing.T) {
+	if issues := lintRegistryMarketplace(schemaFixture(t, "valid/marketplace-with-plugins.json")); len(issues) != 0 {
+		t.Errorf("a registry index with plugins is valid, got: %v", issues)
+	}
+	issues := lintRegistryMarketplace(schemaFixture(t, "invalid/marketplace-plugins-unknown-field.json"))
+	if len(issues) == 0 || !strings.Contains(issues[0].Message, "additional properties") {
+		t.Errorf("an unknown field on a plugin entry must be refused, got: %v", issues)
+	}
+}
+
 func TestSchemaPlugin_MissingName(t *testing.T) {
 	issues := lintHarnessJSON(schemaFixture(t, "invalid/plugin-missing-name.json"))
 	if len(issues) == 0 {

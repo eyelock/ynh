@@ -1,0 +1,14 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+  "name": "acme",
+  "owner": { "name": "Acme", "email": "dev@acme.test" },
+  "metadata": { "description": "Acme's tools", "harnessRoot": "./harnesses" },
+  "harnesses": [
+    { "name": "reviewer", "source": "./reviewer", "description": "Code reviewer", "version": "1.0.0" }
+  ],
+  "plugins": [
+    { "name": "lint-tools", "source": "./plugins/lint-tools", "description": "Linters", "version": "1.2.0" },
+    { "name": "formatter", "source": { "type": "github", "repo": "github.com/acme/formatter", "ref": "v1.0.0", "sha": "0123456789abcdef0123456789abcdef01234567" } },
+    { "name": "scanner", "source": { "type": "url", "url": "https://git.acme.test/scanner.git", "ref": "main" } }
+  ]
+}

@@ -476,11 +476,20 @@ func (c *Codex) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []M
 		Interface: iface{DisplayName: cfg.Name},
 	}
 	for _, p := range plugins {
+		path := "./plugins/" + p.Name
+		if p.Source != nil {
+			// Codex's marketplace lists local plugins only (docs/vendor-parity.md):
+			// an entry published elsewhere cannot be carried.
+			if p.Source.Type != "local" {
+				return nil, &UnsupportedSourceError{Vendor: "Codex", Entry: p.Name, Type: p.Source.Type}
+			}
+			path = p.Source.Path
+		}
 		idx.Plugins = append(idx.Plugins, indexPlugin{
 			Name: p.Name,
 			Source: source{
 				Source: "local",
-				Path:   "./plugins/" + p.Name,
+				Path:   path,
 			},
 			Policy: policy{
 				Installation: "AVAILABLE",

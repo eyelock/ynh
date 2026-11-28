@@ -1,0 +1,9 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+  "name": "my-registry",
+  "owner": { "name": "alice" },
+  "harnesses": [],
+  "plugins": [
+    { "name": "lint-tools", "source": "./plugins/lint-tools", "type": "plugin" }
+  ]
+}

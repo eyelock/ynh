@@ -1,0 +1,12 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+  "name": "my-registry",
+  "owner": { "name": "alice" },
+  "harnesses": [
+    { "name": "reviewer", "source": "./harnesses/reviewer", "description": "Code reviewer" }
+  ],
+  "plugins": [
+    { "name": "lint-tools", "source": "./plugins/lint-tools", "description": "Linters", "version": "1.2.0", "keywords": ["lint"] },
+    { "name": "formatter", "source": { "type": "github", "repo": "github.com/alice/formatter", "ref": "v1.0.0" } }
+  ]
+}

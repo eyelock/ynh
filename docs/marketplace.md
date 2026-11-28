@@ -34,20 +34,25 @@ indexes point at them in place:
 
 ### Committed, not generated
 
-`ynd marketplace build` produces a **standalone** marketplace: plugins copied
-into `./plugins/<name>/` with a generated README, ready to push as its own
-repository. That is the right tool for publishing a marketplace of harnesses you
-do not own.
+`ynd marketplace build` has two inputs. Given a build config (`./marketplace.json`
+with typed entries) it produces a **standalone** marketplace: plugins copied into
+`./plugins/<name>/` with a generated README, ready to push as its own repository.
+That is the right tool for publishing a marketplace of harnesses you do not own,
+and the wrong one here: it would duplicate every skill in the repository into
+`plugins/`, and CI would have to build and commit the result on every change.
 
-It is the wrong tool here. It would duplicate every skill in the repository into
-`plugins/`, and CI would have to build and commit the result on every change —
-about 60 generated files mirroring content one directory up. It would also mean
-ynh's own distribution depended on ynh being installed to produce it, which is
-the chicken-and-egg this exists to remove.
+Given a **registry index** (`.agents/harness/marketplace.json`, which it reads with
+no argument), it builds no content. It writes each vendor's index in place at the
+repository root, with each entry's source in the form that vendor takes
+([ynd marketplace build](ynd.md#marketplace-build)). That is the layout a
+repository that is already the plugin needs.
 
-So the four indexes are committed and hand-maintained, and
-`make check-marketplace` asserts they still agree with the plugin manifests.
-Hand-maintained means drift; a check is cheap and a commit is churn.
+ynh's own four indexes are still committed and hand-maintained, and
+`make check-marketplace` asserts they still agree with the plugin manifests: they
+list their plugins at `"."` and `"./.claude"`, and ynh has no registry index
+listing them (the registry index takes `./path`, github, url and git-subdir
+sources, not `"."`). They could come from the in-place build once ynh has one;
+that is not done here.
 
 ### Four indexes, three formats
 
@@ -58,6 +63,7 @@ The vendors do not share one file, and two of them do not share a shape:
 | description | top-level `description` | `metadata.description` | — |
 | display | `owner` | `owner` | `interface.displayName` |
 | plugin source | `"."` (relative) | `"."` (relative) | `{"source":"local","path":"."}` |
+| remote source (from the registry index build) | `github`, `url`, `git-subdir` objects; Copilot refuses `git-subdir` | the same objects as Claude | refused: local only |
 | per-plugin version | yes | no | no |
 | install policy | — | — | `policy.installation` |
 
@@ -70,9 +76,9 @@ them would then be wrong.
 
 `ynd marketplace build` produces each of these shapes correctly (ynh#301 fixed
 that for Cursor), so the committed files and the generator agree. They stay
-hand-written because the generator builds a *standalone* marketplace with
-plugins copied into `./plugins/`, which is the wrong layout for a repository
-that is already the plugin — not because it gets the shapes wrong.
+hand-written because ynh has no registry index to build them from (see
+[Committed, not generated](#committed-not-generated)) — not because the
+generator gets the shapes wrong.
 
 ### Installing it
 
