@@ -61,14 +61,14 @@ func entryKeyOf(h *harness.Harness) string { return entryKey(h.DelegatesTo[0]) }
 func TestTrustShowListsTheLevel(t *testing.T) {
 	p := harnessWithSensors(t, nil)
 	st := trustStatusFor("id", p, trustStore{Harnesses: map[string]trustRecord{}}, nil)
-	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
 	out := showText(t, st)
 	if !strings.Contains(out, "opens at all when run unattended") {
 		t.Errorf("a no-commands harness must list its level:\n%s", out)
 	}
 
 	p.AutoApprove = "edits"
-	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
 	st.DelegateLevels = []string{"github.com/o/reviewer: none"}
 	out = showText(t, st)
 	for _, want := range []string{"opens at edits when run unattended", "declared by the harness", "delegate github.com/o/reviewer: none"} {

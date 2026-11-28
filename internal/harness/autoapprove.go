@@ -6,13 +6,6 @@ import (
 	"github.com/eyelock/ynh/internal/permission"
 )
 
-// The places a harness's level can come from (AutoApproveOrigin).
-const (
-	AutoApproveFromHarness = "harness"
-	AutoApproveFromEntry   = "entry"
-	AutoApproveFromDefault = "default"
-)
-
 // AutoApproveDefault is the level an accepted harness that declares none
 // opens at when run unattended (ynh #1058, D3).
 const AutoApproveDefault = permission.All
@@ -28,11 +21,11 @@ func (h *Harness) AutoApproveOf() permission.Level {
 
 // AutoApproveOrigin says where AutoApproveOf got its value: the harness's own
 // declaration, or the default.
-func (h *Harness) AutoApproveOrigin() string {
+func (h *Harness) AutoApproveOrigin() permission.Source {
 	if h.AutoApprove != "" {
-		return AutoApproveFromHarness
+		return permission.SourceHarness
 	}
-	return AutoApproveFromDefault
+	return permission.SourceDefault
 }
 
 // CheckAutoApprove reports a level that is not none, edits or all, on the

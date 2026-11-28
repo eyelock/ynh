@@ -9,7 +9,7 @@ import (
 
 func TestAutoApproveLoadsFromManifest(t *testing.T) {
 	h := loadTransportHarness(t, `{"name":"h","version":"0.1.0","auto_approve":"edits","delegates_to":[{"git":"github.com/o/a","auto_approve":"none"},{"git":"github.com/o/b"}]}`)
-	if h.AutoApprove != "edits" || h.AutoApproveOf() != permission.Edits || h.AutoApproveOrigin() != AutoApproveFromHarness {
+	if h.AutoApprove != "edits" || h.AutoApproveOf() != permission.Edits || h.AutoApproveOrigin() != permission.SourceHarness {
 		t.Errorf("harness level = %q (%s)", h.AutoApproveOf(), h.AutoApproveOrigin())
 	}
 	if h.DelegatesTo[0].AutoApprove != "none" || h.DelegatesTo[1].AutoApprove != "" {
@@ -22,7 +22,7 @@ func TestAutoApproveLoadsFromManifest(t *testing.T) {
 
 func TestUndeclaredAutoApproveOpensAtAll(t *testing.T) {
 	h := loadTransportHarness(t, `{"name":"h","version":"0.1.0"}`)
-	if h.AutoApproveOf() != permission.All || h.AutoApproveOrigin() != AutoApproveFromDefault {
+	if h.AutoApproveOf() != permission.All || h.AutoApproveOrigin() != permission.SourceDefault {
 		t.Errorf("undeclared = %q (%s)", h.AutoApproveOf(), h.AutoApproveOrigin())
 	}
 }

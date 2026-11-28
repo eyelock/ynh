@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -527,7 +528,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 		Description:      p.Description,
 		DefaultVendor:    p.DefaultVendor,
 		AutoApprove:      string(p.AutoApproveOf()),
-		AutoApproveFrom:  p.AutoApproveOrigin(),
+		AutoApproveFrom:  string(p.AutoApproveOrigin()),
 		Path:             p.Dir,
 		Artifacts:        scanArtifactCounts(p.Dir),
 		Includes:         buildIncludes(p.Includes),
@@ -623,7 +624,7 @@ func buildDelegates(p *harness.Harness) []listDelegate {
 		}
 		entryLevel, entryFrom := del.AutoApprove, ""
 		if entryLevel != "" {
-			entryFrom = harness.AutoApproveFromEntry
+			entryFrom = string(permission.SourceEntry)
 		}
 		result = append(result, listDelegate{
 			AutoApprove:     entryLevel,

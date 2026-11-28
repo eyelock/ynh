@@ -21,6 +21,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -1459,7 +1460,7 @@ func printAutoApproveSection(w io.Writer, s trustStatus) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, "\nPermission level when run unattended (a delegate session, a one-shot 'ynh run' or 'ynh agent run'):\n\n")
-	if s.AutoApproveFrom == harness.AutoApproveFromDefault {
+	if s.AutoApproveFrom == string(permission.SourceDefault) {
 		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (not declared; the default for an accepted harness)\n", s.AutoApprove)
 	} else {
 		_, _ = fmt.Fprintf(w, "  opens at %s when run unattended (declared by the harness)\n", s.AutoApprove)
@@ -1473,7 +1474,7 @@ func printAutoApproveSection(w io.Writer, s trustStatus) {
 // opens at when run unattended, where it comes from, and the levels its
 // delegates_to entries declare. Used by `trust show` and `trust accept`.
 func fillAutoApprove(st *trustStatus, p *harness.Harness) {
-	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), p.AutoApproveOrigin()
+	st.AutoApprove, st.AutoApproveFrom = string(p.AutoApproveOf()), string(p.AutoApproveOrigin())
 	st.DelegateLevels = harnessExecutables(p).DelegateLevels
 }
 
