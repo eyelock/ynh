@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -79,7 +80,11 @@ func installArgsFor(parent *harness.Harness, d harness.Delegate, src delegateSou
 	if src.local != "" {
 		return []string{src.local}
 	}
-	args := []string{src.url}
+	source := src.git
+	if source == "" {
+		source = src.url
+	}
+	args := []string{source}
 	if src.path != "" {
 		args = append(args, "--path", src.path)
 	}
@@ -88,6 +93,9 @@ func installArgsFor(parent *harness.Harness, d harness.Delegate, src delegateSou
 		// An entry naming the parent's own repository follows the parent's
 		// commit.
 		ref = parent.InstalledFrom.SHA
+		if ref == "" {
+			ref = parent.InstalledFrom.Ref
+		}
 	}
 	if ref != "" {
 		args = append(args, "--ref", ref)
@@ -187,7 +195,20 @@ func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src dele
 	if src.local != "" {
 		return harness.LoadDir(src.local)
 	}
-	base, _, err := resolver.ResolveGitSourceFromCache(d.GitSource, parent.Dir)
+	gs := d.GitSource
+	if pr := parent.InstalledFrom; pr != nil && strings.HasPrefix(d.Git, ".") && cleanSubpath(d.Git) == "" && harnessHasRemoteSource(parent) {
+		// An entry naming the declaring harness's own repository is that
+		// repository at the commit the declaring harness is at, never the
+		// cache folder it was read from.
+		gs = harness.GitSource{Git: pr.Source, Path: cleanSubpath(filepath.Join(pr.Path, d.Path)), Ref: d.Ref}
+		if gs.Ref == "" {
+			gs.Ref = pr.SHA
+			if gs.Ref == "" {
+				gs.Ref = pr.Ref
+			}
+		}
+	}
+	base, _, err := resolver.ResolveGitSourceFromCache(gs, parent.Dir)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +225,11 @@ func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src dele
 // "./sub") resolves to that repository at the commit it was read at
 // (delegateEntrySource), not to the cache folder as if it were a local one.
 func cacheProvenance(src delegateSource) *harness.Provenance {
-	pr := &harness.Provenance{SourceType: "git", Source: src.url, Path: src.path, Ref: src.ref}
+	source := src.git
+	if source == "" {
+		source = src.url
+	}
+	pr := &harness.Provenance{SourceType: "git", Source: source, Path: src.path, Ref: src.ref}
 	if isFullSHA(src.ref) {
 		pr.SHA = src.ref
 	}
@@ -236,6 +261,14 @@ type acceptedDelegate struct {
 // this is, noted on each delegate's record (trust ls shows "with <rootID>").
 func acceptA2ATree(p *harness.Harness, rootID, via string, extra map[string]trustRecord, w io.Writer) ([]acceptedDelegate, error) {
 	nodes := planA2ATree(p)
+	// Every --trust route needs the whole tree pinned to full SHAs, and says
+	// so before anything is read further, installed or recorded; trust accept,
+	// which a person has reviewed, accepts at the commit it is at now.
+	if via != viaAccept {
+		if bad := unpinnedInTree(p, nodes); len(bad) > 0 {
+			return nil, refuseUnpinned(rootID, "--trust", bad)
+		}
+	}
 	for _, n := range nodes {
 		if n.Problem != "" {
 			return nil, fmt.Errorf("nothing was accepted: delegate %s of %s cannot be accepted: %s", n.Label, n.Parent, n.Problem)
@@ -326,6 +359,35 @@ func a2aDelegateReports(p *harness.Harness, store trustStore) []a2aDelegateRepor
 			r.State = trustStatusFor(n.ID, n.H, store, nil).State
 		}
 		out = append(out, r)
+	}
+	return out
+}
+
+// unpinnedInTree lists, one line each, every floating ref anywhere in the tree
+// below p, naming where it sits: each harness's a2a and native delegates_to
+// entries and its remote includes (ynh #1058, N1). Only a full commit SHA pins.
+func unpinnedInTree(p *harness.Harness, nodes []a2aNode) []string {
+	var out []string
+	seen := map[*harness.Harness]bool{}
+	check := func(h *harness.Harness, where string) {
+		if h == nil || seen[h] {
+			return
+		}
+		seen[h] = true
+		for _, l := range unpinnedDelegates(h) {
+			out = append(out, l+" (declared by "+where+")")
+		}
+		if h != p {
+			if remote, err := remoteIncludes(h, "accept"); err == nil {
+				for _, l := range unpinnedIncludes(remote) {
+					out = append(out, "include "+l+" (of delegate "+where+")")
+				}
+			}
+		}
+	}
+	check(p, p.Name)
+	for _, n := range nodes {
+		check(n.H, n.Label)
 	}
 	return out
 }

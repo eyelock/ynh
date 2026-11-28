@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/permission"
+	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/resolver"
 )
 
 const (
@@ -325,5 +328,110 @@ func TestNestedOwnRepoEntryInCacheLoadedDelegateResolvesToItsRepository(t *testi
 	bare := &harness.Harness{Name: "a", Dir: t.TempDir()}
 	if got, _ := delegateEntrySource(bare, entry); got.local == "" {
 		t.Errorf("control: a harness with no provenance reads . as local: %+v", got)
+	}
+}
+
+// Every --trust route refuses a floating ref anywhere in the tree, naming
+// where it sits, before anything is installed or recorded; trust accept keeps
+// accepting at the current commit (ynw-b7hb0).
+func TestTrustRoutesRefuseFloatingRefsAnywhereInTheTree(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	installGitHarness(t, "github.com/o/a", "", sha1, "a",
+		`,"delegates_to":[{"git":"github.com/o/nested","ref":"main"},{"git":"github.com/o/nat","transport":"native"}],"includes":[{"git":"github.com/o/inc","ref":"v1"}]`)
+	p := a2aParent(a2aEntry("github.com/o/a", sha1, ""))
+
+	for _, via := range []string{viaInstallTrus, viaRunTrust, viaUpdateTrust, viaIncludeTrus} {
+		installed := false
+		old := installDelegate
+		installDelegate = func(*harness.Harness, harness.Delegate, delegateSource) error { installed = true; return nil }
+		_, err := acceptA2ATree(p, "local/team", via, map[string]trustRecord{"local/team": {}}, io.Discard)
+		installDelegate = old
+		if err == nil {
+			t.Fatalf("%s must refuse a floating ref in the tree", via)
+		}
+		for _, want := range []string{"github.com/o/nested", `"main"`, "github.com/o/nat", "declared by github.com/o/a"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: the refusal should name %q:\n%v", via, want, err)
+			}
+		}
+		if installed {
+			t.Errorf("%s installed something before refusing", via)
+		}
+		if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
+			t.Errorf("%s recorded %v before refusing", via, store.Harnesses)
+		}
+	}
+
+	// trust accept is not the pin rule's route: it never refuses on a pin.
+	_, err := acceptA2ATree(p, "local/team", viaAccept, nil, io.Discard)
+	if err != nil && strings.Contains(err.Error(), "not pinned") {
+		t.Errorf("trust accept must not apply the pin rule: %v", err)
+	}
+}
+
+// Story 1 for harnesses kept in one repository (ynw-qphxk): a parent, a
+// same-repository delegate and a same-repository nested delegate, each named
+// by git "." and a path, go through plan, accept and resolution. Each is
+// installed from its repository at the pinned commit, as the git harness it
+// is, so the run finds it again, and none is installed from the cache folder.
+func TestSameRepositoryTreeInstallsAcceptsAndResolves(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", t.TempDir())
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string, hj *plugin.HarnessJSON) {
+		t.Helper()
+		hj.Name, hj.Version = name, "0.1.0"
+		if err := plugin.SavePluginJSON(filepath.Join(repo, "harnesses", name), hj); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := func(cmd string) map[string]plugin.MCPServer { return map[string]plugin.MCPServer{"s": {Command: cmd}} }
+	write("a", &plugin.HarnessJSON{MCPServers: srv("echo a"), DelegatesTo: []plugin.DelegateMeta{{Git: ".", Path: "../b"}}})
+	write("b", &plugin.HarnessJSON{MCPServers: srv("echo b")})
+	initGitRepo(t, repo)
+	runGitInDir(t, repo, "add", ".")
+	runGitInDir(t, repo, "commit", "-m", "init")
+	sha := gitRevParse(t, repo)
+	url := "file://" + repo
+	// The repository is in the cache, as `ynh install` of the parent leaves it.
+	if _, err := resolver.EnsureRepo(url, sha); err != nil {
+		t.Fatal(err)
+	}
+	teamID := installGitHarness(t, url, "harnesses/team", sha, "team", `,"delegates_to":[{"git":".","path":"../a"}]`)
+	team := mustLoad(t, teamID)
+
+	// The plan reads the delegate and its nested one from the repository.
+	nodes := planA2ATree(team)
+	if len(nodes) != 2 || nodes[0].Problem != "" || nodes[1].Problem != "" {
+		t.Fatalf("plan: %+v", nodes)
+	}
+	if nodes[1].Src.local != "" || nodes[1].Src.path != "harnesses/b" || nodes[1].H == nil || len(nodes[1].Set.MCPServers) != 1 {
+		t.Errorf("the nested delegate must resolve to its repository, not the cache folder: %+v", nodes[1].Src)
+	}
+
+	// A real install records the git source: stand in for it, and check the
+	// arguments it is given name the repository and the pinned commit.
+	var args []string
+	old := installDelegate
+	t.Cleanup(func() { installDelegate = old })
+	installDelegate = func(parent *harness.Harness, d harness.Delegate, src delegateSource) error {
+		a := installArgsFor(parent, d, src)
+		args = append(args, strings.Join(a, " "))
+		installGitHarness(t, url, src.path, sha, filepath.Base(src.path), mcpFields("echo "+filepath.Base(src.path)))
+		return nil
+	}
+	if _, err := acceptA2ATree(team, teamID, viaAccept, map[string]trustRecord{teamID: {Digest: "d"}}, io.Discard); err == nil {
+		t.Log("accepted") // the stand-in's harness differs from what was shown
+	} else if !strings.Contains(err.Error(), "other than what was shown") {
+		t.Fatalf("accept: %v", err)
+	}
+	if len(args) == 0 || strings.Contains(args[0], "/cache/") || !strings.HasPrefix(args[0], url+" --path harnesses/a --ref "+sha) {
+		t.Fatalf("install arguments %q must name the repository and its commit", args)
+	}
+	if len(args) > 1 && !strings.HasPrefix(args[1], url+" --path harnesses/b --ref "+sha) {
+		t.Errorf("the nested delegate's install arguments: %q", args[1])
 	}
 }

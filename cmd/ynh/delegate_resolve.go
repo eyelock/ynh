@@ -27,6 +27,7 @@ type resolvedDelegate struct {
 // delegateSource is where a delegates_to entry points, in a form comparable
 // with an install's recorded source: a remote URL and path, or a local folder.
 type delegateSource struct {
+	git   string // the remote source as spelled, to fetch and install it by
 	url   string // normalised remote URL, empty for a local folder
 	path  string // subdirectory within the remote
 	ref   string
@@ -83,6 +84,7 @@ func delegateEntrySource(parent *harness.Harness, d harness.Delegate) (delegateS
 	case d.Git != "" && strings.HasPrefix(d.Git, "."):
 		if harnessHasRemoteSource(parent) && cleanSubpath(d.Git) == "" {
 			pr := parent.InstalledFrom
+			src.git = pr.Source
 			src.url = normalizeSourceURL(pr.Source)
 			src.path = cleanSubpath(filepath.Join(pr.Path, d.Path))
 			return src, nil
@@ -94,6 +96,7 @@ func delegateEntrySource(parent *harness.Harness, d harness.Delegate) (delegateS
 		// as a remote URL.
 		src.local = realDir(filepath.Join(d.Git, d.Path))
 	case d.Git != "":
+		src.git = d.Git
 		src.url = normalizeSourceURL(d.Git)
 	case d.Local != "":
 		l := d.Local
