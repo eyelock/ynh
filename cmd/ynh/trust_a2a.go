@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -142,6 +144,21 @@ type a2aNode struct {
 // once, in declaration order, with what each runs. It installs and records
 // nothing: `trust show` shows it and `trust accept` accepts exactly it.
 func planA2ATree(p *harness.Harness) []a2aNode {
+	// Read-only commands (trust show) fetch only what is pinned to a full SHA.
+	return planA2ATreeWith(p, planOptions{fetch: true, pinnedOnly: true})
+}
+
+// planOptions says what planning may do beyond reading the cache.
+type planOptions struct {
+	// fetch lets planning fetch a delegate not in the cache, so a tree whose
+	// nested delegates live in other repositories can be read on a cold cache.
+	// pinnedOnly limits that to an entry pinned to a full commit SHA, so a
+	// --trust route never fetches what its pin rule is about to refuse.
+	fetch, pinnedOnly bool
+}
+
+// planA2ATreeWith is planA2ATree with options.
+func planA2ATreeWith(p *harness.Harness, opt planOptions) []a2aNode {
 	var out []a2aNode
 	seen := map[string]bool{}
 	var walk func(h *harness.Harness, depth int, parent string)
@@ -161,7 +178,7 @@ func planA2ATree(p *harness.Harness) []a2aNode {
 			seen[n.Label] = true
 			if ms, err := installedMatchesOf(src); err == nil && len(ms) > 0 {
 				n.ID, n.H, n.Installed = ms[0].ID, ms[0].H, true
-			} else if dh, lerr := loadDelegateFromCache(h, d, src); lerr == nil {
+			} else if dh, lerr := loadDelegateFromCache(h, d, src, opt); lerr == nil {
 				n.H = dh
 			} else {
 				n.Problem = fmt.Sprintf("it is not installed and cannot be read from the cache (%v), so what it runs cannot be shown", lerr)
@@ -191,7 +208,7 @@ func planA2ATree(p *harness.Harness) []a2aNode {
 
 // loadDelegateFromCache reads the harness an entry points at from the local
 // folder or the include cache, without fetching.
-func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src delegateSource) (*harness.Harness, error) {
+func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src delegateSource, opt planOptions) (*harness.Harness, error) {
 	if src.local != "" {
 		return harness.LoadDir(src.local)
 	}
@@ -202,13 +219,23 @@ func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src dele
 		// cache folder it was read from.
 		gs = harness.GitSource{Git: pr.Source, Path: cleanSubpath(filepath.Join(pr.Path, d.Path)), Ref: d.Ref}
 		if gs.Ref == "" {
-			gs.Ref = pr.SHA
-			if gs.Ref == "" {
-				gs.Ref = pr.Ref
-			}
+			// The same cache entry the declaring harness was read from.
+			gs.Ref = pr.Ref
 		}
 	}
-	base, _, err := resolver.ResolveGitSourceFromCache(gs, parent.Dir)
+	base, res, err := resolver.ResolveGitSourceCacheOnly(gs, parent.Dir)
+	if errors.Is(err, resolver.ErrNotCached) && opt.fetch && (!opt.pinnedOnly || isFullSHA(gs.Ref)) {
+		// Not cached: fetch the repository at its pinned commit, as install
+		// does for the parent's own delegates, held to the allow-list.
+		cfg, cerr := config.Load()
+		if cerr != nil {
+			return nil, cerr
+		}
+		if serr := cfg.CheckSource(gs.Git, parent.Dir); serr != nil {
+			return nil, serr
+		}
+		base, res, err = resolver.ResolveGitSource(gs, parent.Dir)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -217,6 +244,11 @@ func loadDelegateFromCache(parent *harness.Harness, d harness.Delegate, src dele
 		return nil, err
 	}
 	dh.InstalledFrom = cacheProvenance(src)
+	// The ref as read (the cache entry's key) and the commit it is at.
+	dh.InstalledFrom.Ref = gs.Ref
+	if res != nil {
+		dh.InstalledFrom.SHA = res.SHA
+	}
 	return dh, nil
 }
 
@@ -260,7 +292,11 @@ type acceptedDelegate struct {
 // error names the delegate and why. rootID is the harness whose acceptance
 // this is, noted on each delegate's record (trust ls shows "with <rootID>").
 func acceptA2ATree(p *harness.Harness, rootID, via string, extra map[string]trustRecord, w io.Writer) ([]acceptedDelegate, error) {
-	nodes := planA2ATree(p)
+	// A delegate that is not cached is fetched at its pinned commit, so a tree
+	// with a nested delegate in another repository is accepted on a cold cache
+	// in one command; only a pinned entry is fetched on a --trust route, since
+	// an unpinned one is refused below.
+	nodes := planA2ATreeWith(p, planOptions{fetch: true, pinnedOnly: via != viaAccept})
 	// Every --trust route needs the whole tree pinned to full SHAs, and says
 	// so before anything is read further, installed or recorded; trust accept,
 	// which a person has reviewed, accepts at the commit it is at now.

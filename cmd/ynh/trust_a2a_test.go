@@ -406,7 +406,7 @@ func TestSameRepositoryTreeInstallsAcceptsAndResolves(t *testing.T) {
 	// The plan reads the delegate and its nested one from the repository.
 	nodes := planA2ATree(team)
 	if len(nodes) != 2 || nodes[0].Problem != "" || nodes[1].Problem != "" {
-		t.Fatalf("plan: %+v", nodes)
+		t.Fatalf("plan: %d nodes, %q %q", len(nodes), nodes[0].Problem, nodes[len(nodes)-1].Problem)
 	}
 	if nodes[1].Src.local != "" || nodes[1].Src.path != "harnesses/b" || nodes[1].H == nil || len(nodes[1].Set.MCPServers) != 1 {
 		t.Errorf("the nested delegate must resolve to its repository, not the cache folder: %+v", nodes[1].Src)
@@ -433,5 +433,68 @@ func TestSameRepositoryTreeInstallsAcceptsAndResolves(t *testing.T) {
 	}
 	if len(args) > 1 && !strings.HasPrefix(args[1], url+" --path harnesses/b --ref "+sha) {
 		t.Errorf("the nested delegate's install arguments: %q", args[1])
+	}
+}
+
+// A tree whose nested delegate lives in another repository is accepted on a
+// cold cache in one command: planning fetches each delegate at its pinned
+// commit before showing and accepting (ynw-mw15b). An unpinned entry is never
+// fetched on a --trust route; it is refused.
+func TestAcceptA2ATreeFetchesACrossRepositoryNestedDelegateOnAColdCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", t.TempDir())
+	mk := func(name string, delegates ...plugin.DelegateMeta) (url, sha string) {
+		t.Helper()
+		dir, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0", DelegatesTo: delegates,
+			MCPServers: map[string]plugin.MCPServer{"s": {Command: "echo " + name}}}
+		if err := plugin.SavePluginJSON(dir, hj); err != nil {
+			t.Fatal(err)
+		}
+		initGitRepo(t, dir)
+		runGitInDir(t, dir, "add", ".")
+		runGitInDir(t, dir, "commit", "-m", "init")
+		return "file://" + dir, gitRevParse(t, dir)
+	}
+	urlB, shaB := mk("b")
+	urlA, shaA := mk("a", plugin.DelegateMeta{Git: urlB, Ref: shaB})
+	p := &harness.Harness{Name: "team", Dir: t.TempDir(), DelegatesTo: []harness.Delegate{a2aEntry(urlA, shaA, "")}}
+
+	// Cold cache: nothing fetched, nothing installed.
+	if got := planA2ATreeWith(p, planOptions{}); len(got) != 1 || got[0].Problem == "" {
+		t.Fatalf("a cache-only plan of a cold cache must have a problem: %+v", got)
+	}
+
+	var out bytes.Buffer
+	done, err := acceptA2ATree(p, "local/team", viaInstallTrus, map[string]trustRecord{"local/team": {Digest: "d"}}, &out)
+	if err != nil {
+		t.Fatalf("a cold-cache tree must be accepted in one command: %v\n%s", err, out.String())
+	}
+	if len(done) != 2 {
+		t.Fatalf("both delegates accepted, got %v", done)
+	}
+	for _, want := range []string{"echo a", "echo b"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("what each delegate runs must be shown, missing %q:\n%s", want, out.String())
+		}
+	}
+	store, _ := loadTrustStore()
+	if len(store.Harnesses) != 3 {
+		t.Errorf("parent and both delegates recorded together: %v", store.Harnesses)
+	}
+
+	// An unpinned nested entry is not fetched on a --trust route: refused.
+	t.Setenv("YNH_HOME", t.TempDir())
+	urlC, _ := mk("c")
+	urlD, shaD := mk("d", plugin.DelegateMeta{Git: urlC, Ref: "main"})
+	q := &harness.Harness{Name: "team", Dir: t.TempDir(), DelegatesTo: []harness.Delegate{a2aEntry(urlD, shaD, "")}}
+	if _, err := acceptA2ATree(q, "local/team", viaInstallTrus, nil, io.Discard); err == nil || !strings.Contains(err.Error(), "not pinned") {
+		t.Errorf("a floating nested entry must be refused before anything is fetched: %v", err)
+	}
+	if store, _ := loadTrustStore(); len(store.Harnesses) != 0 {
+		t.Errorf("nothing recorded: %v", store.Harnesses)
 	}
 }
