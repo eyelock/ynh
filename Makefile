@@ -197,7 +197,7 @@ docker-push: ## Push base Docker image to GHCR
 #   the container image build       Packaging Config job (Docker)
 #   vulncheck                       vulncheck.yml (network: live vuln database)
 #   check-eval-stand-ins            eval-stand-ins.yml (network: GitHub)
-#   e2e                             e2e.yml (release gate)
+#   e2e                             ci.yml E2E Suite job, e2e.yml (release gate)
 # `format` rewrites files where CI's Format Check only reports them, so commit
 # what it changes.
 check: deps format lint check-tidy check-go-pin check-spoolexporter-pin test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network

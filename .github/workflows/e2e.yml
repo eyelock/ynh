@@ -2,9 +2,10 @@ name: E2E
 
 # E2E gates release promotion, and reports on every merge to `develop`.
 #
-# Feature work targeting `develop` still stays fast: this does not run on
-# pull requests, so no PR waits on a 15-minute suite. See
-# .claude/plans/e2e-test-suite.md for the full trigger model.
+# Pull requests into `develop` run the same suite as the E2E Suite job in
+# ci.yml, which All Clear needs, so a PR that breaks E2E is red before merge
+# (ynh #1069). The suite takes about 40 seconds. See .claude/plans/e2e-test-suite.md
+# for the full trigger model.
 #
 # The post-merge trigger closes a real gap. Running only at release
 # boundaries meant the suite could go weeks without executing — on
