@@ -61,3 +61,57 @@ func TestFolderTrustHonoursTheAllowListBeforeFetching(t *testing.T) {
 		t.Errorf("the include was fetched before the allow-list refused it: %s", strconv.Quote(strings.Join(names, ",")))
 	}
 }
+
+// Every command that fetches a git source into the cache and writes the manifest that names it holds
+// the allow-list first: with allowed_remote_sources empty each is refused, nothing is cached and the
+// manifest is unchanged (ynh #1058).
+func TestEditCommandsHoldTheAllowListBeforeFetching(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", filepath.Join(home, ".ynh"))
+	if err := os.MkdirAll(os.Getenv("YNH_HOME"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	const sha2 = "89abcdef0123456789abcdef0123456789abcdef"
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "x"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, repo)
+	runGitInDir(t, repo, "add", ".")
+	runGitInDir(t, repo, "commit", "-m", "init")
+	inc := "file://" + repo
+	id := installGitHarness(t, "github.com/o/plain", "", sha, "plain",
+		`,"includes":[{"git":`+strconv.Quote(inc)+`,"ref":"`+sha+`"}],`+
+			`"delegates_to":[{"git":"github.com/o/dg","ref":"`+sha+`"}],`+
+			`"profiles":{"p":{"includes":[{"git":`+strconv.Quote(inc)+`,"ref":"`+sha+`"}]}}`)
+	if err := os.WriteFile(filepath.Join(os.Getenv("YNH_HOME"), "config.json"), []byte(`{"allowed_remote_sources":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := func() string {
+		b, _ := os.ReadFile(filepath.Join(harness.InstalledDirByID(id), ".agents", "harness", "plugin.json"))
+		return string(b)
+	}
+	before := manifest()
+	cases := map[string]func() error{
+		"include add":            func() error { return cmdInclude([]string{"add", id, inc + "x", "--ref", sha, "--git"}) },
+		"include update":         func() error { return cmdInclude([]string{"update", id, inc, "--ref", sha2}) },
+		"profile include add":    func() error { return cmdProfile([]string{"include", "add", id, "p", inc + "x", "--ref", sha, "--git"}) },
+		"profile include update": func() error { return cmdProfile([]string{"include", "update", id, "p", inc, "--ref", sha2}) },
+		"delegate add":           func() error { return cmdDelegate([]string{"add", id, "https://example.invalid/dg2", "--ref", sha}) },
+		"delegate update":        func() error { return cmdDelegate([]string{"update", id, "github.com/o/dg", "--ref", sha2}) },
+	}
+	for name, run := range cases {
+		err := run()
+		if err == nil || !strings.Contains(err.Error(), "allowed sources list") {
+			t.Errorf("%s: a source the allow-list does not name must be refused, got %v", name, err)
+		}
+		if entries, _ := os.ReadDir(filepath.Join(os.Getenv("YNH_HOME"), "cache")); len(entries) > 0 {
+			t.Errorf("%s: fetched into the cache before the allow-list refused it", name)
+		}
+	}
+	if after := manifest(); after != before {
+		t.Errorf("a refused command changed the manifest:\n%s\n---\n%s", before, after)
+	}
+}
