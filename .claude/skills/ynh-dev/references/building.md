@@ -37,7 +37,7 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 | `make scan-artifacts` | SkillSpector security scan (needs Docker; not part of `make check`) |
 | `make conformance` | `ynr conformance` against ynh's telemetry (needs `ynr` and `ynr-stub-vendor` on PATH; not part of `make check`; see `docs/telemetry.md`, Conformance) |
 | `make evals` | Run the tutorial evals headless through the `claude` CLI; exits 0 only on `EVALS: PASS` (costs model calls; not part of `make check`; CI: the Evals workflow, dispatched on a release branch) |
-| `make e2e` | E2E suite — release gate, not part of `make test` or `make check` |
+| `make e2e` | E2E suite — CI runs it on every pull request and as the release gate; not part of `make test` or `make check` |
 | `make clean` | Remove build artifacts and caches |
 | `make docs` | Serve docs locally (needs npx) |
 | `make docker-build` / `docker-push` | Base Docker image |
