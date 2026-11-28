@@ -314,20 +314,51 @@ func IsFullSHA(ref string) bool {
 // (`--trust` on a folder run); a check of the gate never calls it.
 func WarmPinnedIncludes(p *harness.Harness, cfg *config.Config) error {
 	_, _, err := resolveSelected(p, cfg, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
-		fetch := repoFunc(func(gitURL, ref string) (RepoResult, error) {
-			if res, ok := LookupCache(gitURL, ref); ok {
-				return res, nil
-			}
-			if !IsFullSHA(ref) {
-				return RepoResult{}, &UnpinnedUncachedError{Git: gitURL, Ref: ref}
-			}
-			return EnsureRepo(gitURL, ref)
-		})
-		if IsOwnRepoSource(gs, dir) {
-			fetch = EnsureRepo
-		}
-		return resolveGitSourceWith(gs, dir, fetch)
+		return resolveGitSourceWith(gs, dir, warmFetch(gs, dir))
 	}, harness.Selection{})
+	return err
+}
+
+// warmFetch is the fetch of the warm walks: a cached source is read, an own-repo source refreshed,
+// and any other is cloned only when it is pinned to a full SHA.
+func warmFetch(gs harness.GitSource, dir string) repoFunc {
+	if IsOwnRepoSource(gs, dir) {
+		return EnsureRepo
+	}
+	return func(gitURL, ref string) (RepoResult, error) {
+		if res, ok := LookupCache(gitURL, ref); ok {
+			return res, nil
+		}
+		if !IsFullSHA(ref) {
+			return RepoResult{}, &UnpinnedUncachedError{Git: gitURL, Ref: ref}
+		}
+		return EnsureRepo(gitURL, ref)
+	}
+}
+
+// WarmPinnedDelegates is WarmPinnedIncludes for the native delegates of p, and of every delegate
+// they reach, with each delegate's own includes: it fetches what is missing from the cache and
+// pinned to a full SHA, held to the allow-list before any fetch, so `--trust` on a folder run can
+// judge and accept them with the parent (ynh #1058). An a2a delegate is its own session and is
+// not walked.
+func WarmPinnedDelegates(p *harness.Harness, cfg *config.Config) error {
+	_, _, err := FlattenDelegatesBy(p.DelegatesTo, p.Dir, p.Name, p.Transport, true, func(gs harness.GitSource, dir string) (string, error) {
+		if cfg != nil && gs.Git != "" && !IsOwnRepoSource(gs, dir) {
+			if err := cfg.CheckSource(gs.Git, dir); err != nil {
+				return "", err
+			}
+		}
+		base, _, err := resolveGitSourceWith(gs, dir, warmFetch(gs, dir))
+		if err != nil {
+			return base, err
+		}
+		if l, lerr := harness.LoadDir(base); lerr == nil && len(l.Includes) > 0 {
+			if err := WarmPinnedIncludes(l, cfg); err != nil {
+				return base, err
+			}
+		}
+		return base, nil
+	})
 	return err
 }
 

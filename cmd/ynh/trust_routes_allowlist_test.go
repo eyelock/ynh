@@ -115,3 +115,55 @@ func TestEditCommandsHoldTheAllowListBeforeFetching(t *testing.T) {
 		t.Errorf("a refused command changed the manifest:\n%s\n---\n%s", before, after)
 	}
 }
+
+// Under --trust an uncached native delegate pinned to a full SHA is fetched, judged and accepted with
+// the parent, rather than refused with a direction to use --trust (ynw-lk7jv); one the allow-list does
+// not name is refused before any fetch.
+func TestFolderTrustFetchesAnUncachedNativeDelegate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", filepath.Join(home, ".ynh"))
+	if err := os.MkdirAll(os.Getenv("YNH_HOME"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	del, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := plugin.SavePluginJSON(del, &plugin.HarnessJSON{Name: "dg", Version: "0.1.0",
+		MCPServers: map[string]plugin.MCPServer{"s": {Command: "echo dg"}}}); err != nil {
+		t.Fatal(err)
+	}
+	initGitRepo(t, del)
+	runGitInDir(t, del, "add", ".")
+	runGitInDir(t, del, "commit", "-m", "init")
+	sha := gitRevParse(t, del)
+
+	folder := t.TempDir()
+	if err := plugin.SavePluginJSON(folder, &plugin.HarnessJSON{Name: "fold", Version: "0.1.0",
+		DelegatesTo: []plugin.DelegateMeta{{Git: "file://" + del, Ref: sha, Transport: "native"}}}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := harness.LoadDir(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfgPath := filepath.Join(os.Getenv("YNH_HOME"), "config.json")
+	if err := os.WriteFile(cfgPath, []byte(`{"allowed_remote_sources":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := acceptFolderRunOf(p, os.Stderr); err == nil || !strings.Contains(err.Error(), "allowed sources list") {
+		t.Fatalf("a delegate the allow-list does not name must be refused: %v", err)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(os.Getenv("YNH_HOME"), "cache")); len(entries) > 0 {
+		t.Error("the delegate was fetched before the allow-list refused it")
+	}
+
+	if err := os.Remove(cfgPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := acceptFolderRunOf(p, os.Stderr); err != nil {
+		t.Fatalf("under --trust an uncached, pinned native delegate is fetched and accepted: %v", err)
+	}
+}
