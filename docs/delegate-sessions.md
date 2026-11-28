@@ -151,7 +151,23 @@ The mailbox is a delegation record in state `queued` (A2A `submitted`) under `$Y
 | `inbox_done` | Report the result and complete the task. |
 | `inbox_decline` | Refuse it with a reason: state `rejected`, and the sender may resend it headless. |
 
-`ynh run` allows these tools at launch, so there is no approval prompt: Claude Code `--allowedTools=mcp__plugin_<harness>_ynh-inbox`, Codex `-c mcp_servers.ynh-inbox.default_tools_approval_mode="approve"`, Copilot CLI `--allow-tool=ynh-inbox`. A harness that sets `mcp_manual_approval` takes no tasks (its sessions have `accepts_tasks: false`), and neither does OpenCode, whose generated plugin drops hook output, nor Cursor, which has not been run this way: a delegation to those starts a headless session, as before. Telling a session a task is waiting (hooks, the terminal bell) is not part of this: a person asks the session to look at its inbox.
+`ynh run` allows these tools at launch, so there is no approval prompt: Claude Code `--allowedTools=mcp__plugin_<harness>_ynh-inbox`, Codex `-c mcp_servers.ynh-inbox.default_tools_approval_mode="approve"`, Copilot CLI `--allow-tool=ynh-inbox`. A harness that sets `mcp_manual_approval` takes no tasks (its sessions have `accepts_tasks: false`), and neither does OpenCode, whose generated plugin drops hook output, nor Cursor, which has not been run this way, nor a Codex session of a harness that is not accepted (Codex runs a harness's hooks only once it is accepted). A delegation to a harness whose live session takes no task starts a headless session, as before, and its result carries `route_reason`, the reason the session recorded (`no_tasks_reason` in `ynh ps --json`).
+
+#### Telling the session a task is waiting
+
+A session that takes tasks also gets two hooks of ynh's own, `before_prompt` and `on_stop`, added after the harness's own. Each runs `ynh inbox-hook`, which prints one line when the mailbox is not empty and nothing otherwise:
+
+> ynh inbox: 1 task waiting in your inbox from local/ynw. Finish what the person asked first, tell them a task is waiting and from whom, then call inbox_take.
+
+The model finishes the person's request first, says a task is waiting and from whom, then takes it. How the line reaches the model differs by vendor, and the hook prints the form each one passes on:
+
+| Vendor | `before_prompt` | `on_stop` |
+|--------|-----------------|-----------|
+| Claude Code | plain stdout | `{"decision":"block","reason":"..."}`, which makes the model continue into `inbox_take` |
+| Codex | plain stdout | the same block JSON |
+| Copilot CLI | `{"additionalContext":"..."}` | the same block JSON |
+
+An `on_stop` hook wakes the model for a task once per session, and not at all on the stop that a block itself caused (`stop_hook_active`), so a model that declines a task is not woken again in a loop. `before_prompt` repeats while the task waits: the person's next prompt is the cue. A session left idle at its prompt runs no hook, so a person presses Enter on any prompt; the terminal bell and the typed nudge are separate. Measured live on Claude Code 2.1.326, Codex 0.166.0 and Copilot CLI 1.0.113 ([ynh #907](https://github.com/eyelock/ynh/issues/907)).
 
 ### When it goes wrong
 

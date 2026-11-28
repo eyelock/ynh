@@ -57,14 +57,36 @@ const inboxSessionEnv = "YNH_SESSION_ID"
 // task is waiting, and Cursor has not been run, so both are routed headless.
 var inboxVendors = map[string]bool{"claude": true, "codex": true, "copilot": true}
 
-// inboxSession reports whether an interactive session of this vendor and
-// harness can take tasks: the harness is installed (a delegation names an
+// inboxRefusal is why an interactive session of this vendor and harness takes
+// no task, "" when it can: the harness is installed (a delegation names an
 // installed harness, so a run from a folder or an inline manifest has no
-// mailbox anything can address), the vendor is supported and the harness has
-// not asked for every MCP tool to be approved by hand (mcp_manual_approval),
-// which would put the allow rule out of reach.
-func inboxSession(vendorName string, interactive, installed, manualApproval bool) bool {
-	return interactive && installed && !manualApproval && inboxVendors[vendorName]
+// mailbox anything can address), the vendor is supported, the harness has not
+// asked for every MCP tool to be approved by hand (mcp_manual_approval), which
+// would put the allow rule out of reach, and, on Codex, its hooks are trusted
+// (they run only for an accepted harness), since the inbox hooks are how the
+// session is told a task is waiting. The reason is recorded on the session's
+// presence and shown in the result of a task that went headless instead.
+func inboxRefusal(vendorName string, installed, manualApproval, hooksTrusted bool) string {
+	switch {
+	case !installed:
+		return "this session runs from a folder, not an installed harness, so nothing can address its inbox"
+	case vendorName == "opencode":
+		return "opencode's generated plugin drops hook output, so a live session cannot be told a task is waiting"
+	case vendorName == "cursor":
+		return "cursor has not been run with the inbox hooks, so its live session takes no tasks"
+	case !inboxVendors[vendorName]:
+		return vendorName + " has no inbox hooks, so its live session takes no tasks"
+	case manualApproval:
+		return "the harness sets mcp_manual_approval, so the inbox tools cannot be allowed at launch"
+	case vendorName == "codex" && !hooksTrusted:
+		return "codex runs a harness's hooks only once it is accepted (ynh trust accept), and the inbox hooks are how it is told a task is waiting"
+	}
+	return ""
+}
+
+// inboxSession reports whether an interactive session can take tasks.
+func inboxSession(vendorName string, interactive, installed, manualApproval, hooksTrusted bool) bool {
+	return interactive && inboxRefusal(vendorName, installed, manualApproval, hooksTrusted) == ""
 }
 
 // inboxMCPEntry is the server `ynh run` adds to an interactive session's MCP

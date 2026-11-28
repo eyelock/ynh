@@ -137,9 +137,12 @@ type Record struct {
 	// the live interactive session it was queued at (and, once taken, the one
 	// that took it) and SessionCwd that session's working folder; all three
 	// are in every result so the sender knows which session it talks to.
-	Route      string `json:"route,omitempty"`
-	Session    string `json:"session,omitempty"`
-	SessionCwd string `json:"session_cwd,omitempty"`
+	Route string `json:"route,omitempty"`
+	// RouteReason says why a task went headless although a live session of
+	// the delegate was open: that session takes no tasks, and why.
+	RouteReason string `json:"route_reason,omitempty"`
+	Session     string `json:"session,omitempty"`
+	SessionCwd  string `json:"session_cwd,omitempty"`
 	// QueuedAt and TakeBy: when the task was queued, and the time after which
 	// the sender is told it is still waiting and may choose (cancel and resend
 	// with on_live headless). Nothing switches to headless by itself while the

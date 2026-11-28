@@ -1,6 +1,7 @@
 package a2aserve
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -126,7 +127,8 @@ func TestNoLiveSessionGoesHeadless(t *testing.T) {
 // run) is not a taker.
 func TestASessionThatDoesNotAcceptTasksIsNotLive(t *testing.T) {
 	folder := setup(t)
-	s, err := presence.Start(presence.Record{SessionID: "x", Harness: "local--eno", Vendor: "opencode", Cwd: "/w", Mode: presence.ModeInteractive})
+	s, err := presence.Start(presence.Record{SessionID: "x", Harness: "local--eno", Vendor: "opencode", Cwd: "/w", Mode: presence.ModeInteractive,
+		NoTasksReason: "opencode's generated plugin drops hook output, so a live session cannot be told a task is waiting"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,8 +136,14 @@ func TestASessionThatDoesNotAcceptTasksIsNotLive(t *testing.T) {
 	e := openFor(t, folder, "eno", "local/parent", nil)
 	c, ctx := client(t, e, e.Token)
 	task := send(t, c, ctx, "", "echo hi", false)
-	if rec, _ := recordOf(t, task); rec.Route != delegation.RouteHeadless {
+	rec, _ := recordOf(t, task)
+	if rec.Route != delegation.RouteHeadless {
 		t.Fatalf("route %q, want headless", rec.Route)
+	}
+	// The task went headless although a session of the harness was open, and
+	// the record, the task metadata and the result say why.
+	if !strings.Contains(rec.RouteReason, "drops hook output") || !strings.Contains(fmt.Sprint(RouteMeta(rec)[MetaRouteReason]), "drops hook output") {
+		t.Errorf("route reason = %q", rec.RouteReason)
 	}
 }
 

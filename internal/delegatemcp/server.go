@@ -280,6 +280,9 @@ type Result struct {
 	Route   string `json:"route,omitempty"`
 	Session string `json:"session,omitempty"`
 	Cwd     string `json:"cwd,omitempty"`
+	// RouteReason says why the task went headless although a live session of
+	// the delegate was open: that session takes no tasks, and why.
+	RouteReason string `json:"route_reason,omitempty"`
 	// Message says in a sentence what the state means and what to do next; for
 	// input-required it is the delegate's question.
 	Message string `json:"message"`
@@ -322,6 +325,7 @@ var resultSchema = map[string]any{
 		"route":             map[string]any{"type": "string", "enum": []string{"live", "headless"}, "description": "where the task went: a live interactive session of the delegate, or a headless session of its own"},
 		"session":           map[string]any{"type": "string", "description": "the live session the task is queued at or was taken by"},
 		"cwd":               map[string]any{"type": "string", "description": "that live session's working folder"},
+		"route_reason":      map[string]any{"type": "string", "description": "why the task went headless although a live session of the delegate was open: that session takes no tasks, and why"},
 		"message":           map[string]any{"type": "string", "description": "what the state means and what to do next; the delegate's question when input-required"},
 		"result":            map[string]any{"type": "string", "description": "the delegate's output, when completed"},
 		"log_tail":          map[string]any{"type": "string", "description": "the end of the run's log, when failed"},
@@ -380,7 +384,7 @@ func (s *Server) delegateName(rec *delegation.Record) string {
 }
 
 func (s *Server) resultOf(rec *delegation.Record) Result {
-	r := Result{TaskID: rec.Handle, State: stateOf(rec), Delegate: s.delegateName(rec), Route: rec.Route, Session: rec.Session, Cwd: rec.SessionCwd,
+	r := Result{TaskID: rec.Handle, State: stateOf(rec), Delegate: s.delegateName(rec), Route: rec.Route, Session: rec.Session, Cwd: rec.SessionCwd, RouteReason: rec.RouteReason,
 		Model: rec.Model, ModelFrom: rec.ModelFrom, Effort: rec.Effort, EffortFrom: rec.EffortFrom,
 		AutoApprove: rec.AutoApprove, AutoApproveFrom: rec.AutoApproveFrom}
 	s.mu.Lock()

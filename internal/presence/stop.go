@@ -111,6 +111,7 @@ func Remove(e Entry) error {
 	if !e.Ended && Alive(e.Record) {
 		return fmt.Errorf("%s is live: stop it first", e.Address)
 	}
+	removeSideFiles(e.SessionID)
 	if err := os.Remove(path(e.SessionID)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

@@ -10,6 +10,8 @@
       "started_at": "2026-11-17T09:00:00Z",
       "cwd": "/Users/example/projects/app",
       "mode": "interactive",
+      "accepts_tasks": false,
+      "no_tasks_reason": "opencode's generated plugin drops hook output, so a live session cannot be told a task is waiting",
       "address": "ynh:a1b2c3d4",
       "state": "alive",
       "last_beat": "2026-11-17T09:05:00Z",

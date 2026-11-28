@@ -53,6 +53,9 @@ type StartOptions struct {
 	// path is appended to it as its last argument. For ynh itself it is
 	// {<ynh>, "delegate-run", "supervise"}.
 	Supervisor []string
+	// RouteReason is why this headless task did not go to a live session of
+	// the delegate, when one was open and takes no task.
+	RouteReason string
 }
 
 // Start writes a new record and launches the session that runs the delegate,
@@ -91,7 +94,7 @@ func Start(o StartOptions) (*Record, string, error) {
 	path := RecordPath(o.Parent, folder, handle)
 	rec := &Record{
 		Handle: handle, Parent: o.Parent, Delegate: o.Delegate, Folder: folder,
-		Task: o.Task, Model: o.Model, ModelFrom: o.ModelFrom, Effort: o.Effort, EffortFrom: o.EffortFrom, Vendor: o.Vendor, Profile: o.Profile, Focus: o.Focus, Chain: anc, Route: RouteHeadless,
+		Task: o.Task, Model: o.Model, ModelFrom: o.ModelFrom, Effort: o.Effort, EffortFrom: o.EffortFrom, Vendor: o.Vendor, Profile: o.Profile, Focus: o.Focus, Chain: anc, Route: RouteHeadless, RouteReason: o.RouteReason,
 		AutoApprove: o.AutoApprove, AutoApproveFrom: o.AutoApproveFrom,
 		Log: strings.TrimSuffix(path, ".json") + ".log",
 	}
