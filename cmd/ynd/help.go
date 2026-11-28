@@ -178,21 +178,36 @@ Flags:
   --focus <name>         Apply a named focus
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 
-	"marketplace": `ynd marketplace build [flags]
+	"marketplace": `ynd marketplace build [<index-or-config>] [flags]
 
-Build a vendor-native marketplace from marketplace.json.
+Build vendor-native marketplace indexes. Two inputs:
+
+  The registry index (default). With no argument, and when
+  .agents/harness/marketplace.json is in the current directory (or given as the
+  argument), ynd writes each vendor's index in place at the repository root
+  (.claude-plugin/, .cursor-plugin/, .github/plugin/, .agents/plugins/), from
+  both its harnesses and its plugins. It builds no content: each entry's source
+  is written in the form that vendor takes. A source a vendor cannot carry
+  (Copilot CLI: git-subdir; Codex: anything not local) is refused, naming the
+  entry and the vendor, and nothing is written; pass -v for the vendors that can.
+
+  The build config (otherwise). A marketplace.json listing typed entries is
+  built into a marketplace of exported plugins.
 
 Flags:
-  -o, --output <dir>     Destination directory
+  -o, --output <dir>     Registry index: the root the indexes are written
+                         under (default: the repository root beside the
+                         index). Build config: the destination directory
   -v, --vendor <vendor>  Target vendor (falls back to $YNH_VENDOR)
-  --format <name>        vendor (default): each harness entry as a merged
-                         vendor tree; agent-plugin: each harness entry as one
-                         portable Agent Plugins package. Indexes are written
-                         for every selected vendor either way
-  --clean                Remove the output directory first
+  --format <name>        Build config only. vendor (default): each harness
+                         entry as a merged vendor tree; agent-plugin: each
+                         harness entry as one portable Agent Plugins package.
+                         Indexes are written for every selected vendor either way
+  --clean                Build config only: remove the output directory first
   -y, --yes              Skip the confirmation prompt (also $YNH_YES, or CI)
 
---clean carries the same hard refusals as ynd export --clean.`,
+--clean and --format are refused with a registry index. --clean carries the
+same hard refusals as ynd export --clean.`,
 
 	"migrate": `ynd migrate [--dry-run] [-y] <path>
 
