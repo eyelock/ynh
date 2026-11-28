@@ -498,3 +498,62 @@ func TestAcceptA2ATreeFetchesACrossRepositoryNestedDelegateOnAColdCache(t *testi
 		t.Errorf("nothing recorded: %v", store.Harnesses)
 	}
 }
+
+// ynh #1068: a real install of a single-repository harness whose delegate is
+// ".", with the parent installed under --path and the delegate itself having a
+// "." delegate, installs, is accepted with its whole tree and resolves for a
+// run, from a git source.
+func TestRealInstallOfSameRepositoryDelegatesUnderPathAndNested(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", t.TempDir())
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(dir string, hj *plugin.HarnessJSON, name string) {
+		t.Helper()
+		hj.Name, hj.Version = name, "0.1.0"
+		if hj.MCPServers == nil {
+			hj.MCPServers = map[string]plugin.MCPServer{"s": {Command: "echo " + name}}
+		}
+		if err := plugin.SavePluginJSON(filepath.Join(repo, dir), hj); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("harnesses/team", &plugin.HarnessJSON{DelegatesTo: []plugin.DelegateMeta{{Git: ".", Path: "agents/a"}}}, "team")
+	write("harnesses/team/agents/a", &plugin.HarnessJSON{DelegatesTo: []plugin.DelegateMeta{{Git: ".", Path: "agents/b"}}}, "a")
+	write("harnesses/team/agents/a/agents/b", &plugin.HarnessJSON{}, "b")
+	initGitRepo(t, repo)
+	runGitInDir(t, repo, "add", ".")
+	runGitInDir(t, repo, "commit", "-m", "init")
+	sha := gitRevParse(t, repo)
+	url := "file://" + repo
+
+	if err := cmdInstall([]string{url, "--path", "harnesses/team", "--ref", sha}); err != nil {
+		t.Fatalf("install of a parent under --path with a same-repository delegate: %v", err)
+	}
+	var teamID string
+	entries, _ := harness.ListAll()
+	for _, e := range entries {
+		if e.Name == "team" {
+			teamID = canonicalIDForEntry(e)
+		}
+	}
+	if teamID == "" {
+		t.Fatalf("team not installed: %+v", entries)
+	}
+
+	var out, errb bytes.Buffer
+	if err := cmdTrustAccept([]string{teamID}, &out, &errb); err != nil {
+		t.Fatalf("accept of the tree: %v\n%s", err, errb.String())
+	}
+	store, _ := loadTrustStore()
+	team := mustLoad(t, teamID)
+	rd, err := resolveDelegate(team, harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "agents/a"}}, store)
+	if err != nil {
+		t.Fatalf("the run cannot resolve the same-repository delegate: %v\n%s", err, out.String())
+	}
+	if _, err := resolveDelegate(rd.Harness, harness.Delegate{GitSource: harness.GitSource{Git: ".", Path: "agents/b"}}, store); err != nil {
+		t.Fatalf("the run cannot resolve the nested same-repository delegate: %v", err)
+	}
+}

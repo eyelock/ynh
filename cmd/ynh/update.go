@@ -187,7 +187,7 @@ func updateHarness(args []string, quiet bool) error {
 			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
 		fmt.Printf("Checking delegate %s...\n", del.Git)
-		result, err := resolver.EnsureRepo(resolver.GitSourceURL(del.Git, p.Dir), del.Ref)
+		result, err := resolver.EnsureRepo(delegateRepoURL(del, p.Dir), del.Ref)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			continue
