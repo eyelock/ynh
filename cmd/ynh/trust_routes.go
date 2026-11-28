@@ -96,7 +96,7 @@ func unpinnedNativeDelegates(p *harness.Harness) []string {
 // refuseUnpinnedDelegates is the delegate half of the pin rule, which reads
 // only the manifest and so runs first, before an include is fetched or read.
 func refuseUnpinnedDelegates(what, flag string, p *harness.Harness) error {
-	if bad := unpinnedNativeDelegates(p); len(bad) > 0 {
+	if bad := unpinnedDelegates(p); len(bad) > 0 {
 		return refuseUnpinned(what, flag, bad)
 	}
 	return nil
@@ -107,7 +107,15 @@ func refuseUnpinnedDelegates(what, flag string, p *harness.Harness) error {
 // must be pinned to a full commit SHA (ynh #1002). Routes add their own ref
 // (a git or registry install's) on top.
 func unpinnedForAcceptance(p *harness.Harness, remote []remoteInclude) []string {
-	return append(unpinnedIncludes(remote), unpinnedNativeDelegates(p)...)
+	return append(unpinnedIncludes(remote), unpinnedDelegates(p)...)
+}
+
+// unpinnedDelegates is every delegates_to entry the --trust routes judge: the
+// native ones, whose commands the parent's digest covers, and the a2a ones,
+// whose acceptance the parent's covers (ynh #1058, N1). Each must be pinned
+// to a full SHA.
+func unpinnedDelegates(p *harness.Harness) []string {
+	return append(unpinnedNativeDelegates(p), unpinnedA2ADelegates(p)...)
 }
 
 // refuseUnpinned is the refusal of --trust when something that runs is not
@@ -168,6 +176,22 @@ func checkInstallRefTrust(isLocal bool, ref string) error {
 	return nil
 }
 
+// newAcceptance is the record of the operator accepting h, whose set of
+// executables is set, at now, with how it was accepted.
+func newAcceptance(h *harness.Harness, set trustSet, via, now string) trustRecord {
+	rec := trustRecord{
+		Digest:     executablesDigest(set),
+		Commands:   set.count(),
+		Scheme:     trustScheme,
+		Via:        via,
+		AcceptedAt: now,
+	}
+	if pr := h.InstalledFrom; pr != nil {
+		rec.Source, rec.Ref, rec.SHA = pr.Source, pr.Ref, pr.SHA
+	}
+	return rec
+}
+
 // recordAcceptance records that the operator accepted p, as `ynh trust
 // accept` does, with how it was accepted, and prints what was accepted.
 func recordAcceptance(id string, p *harness.Harness, via string, stdout io.Writer) error {
@@ -179,33 +203,39 @@ func recordAcceptance(id string, p *harness.Harness, via string, stdout io.Write
 	if len(set.Problems) > 0 {
 		return fmt.Errorf("%s", unavailableMessage(id, set.Problems))
 	}
-	rec := trustRecord{
-		Digest:     executablesDigest(set),
-		Commands:   set.count(),
-		Scheme:     trustScheme,
-		Via:        via,
-		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	if pr := p.InstalledFrom; pr != nil {
-		rec.Source, rec.Ref, rec.SHA = pr.Source, pr.Ref, pr.SHA
-	}
+	rec := newAcceptance(p, set, via, time.Now().UTC().Format(time.RFC3339))
 	store.Harnesses[id] = rec
 	if err := saveTrustStore(store); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s), %s\n", id, via, rec.Commands, rec.Digest)
-	_, _ = fmt.Fprint(stdout, listExecutables(set.Sensors, set.Hooks, set.MCPServers))
+	printAccepted(stdout, id, p, set, rec)
 	return nil
 }
 
+// printAccepted says what an acceptance recorded, level included.
+func printAccepted(w io.Writer, id string, p *harness.Harness, set trustSet, rec trustRecord) {
+	_, _ = fmt.Fprintf(w, "Accepted %s (%s): %d command(s), %s, opens at %s when run unattended\n", id, rec.Via, rec.Commands, rec.Digest, p.AutoApproveOf())
+	_, _ = fmt.Fprint(w, listExecutables(set.Sensors, set.Hooks, set.MCPServers))
+}
+
 // acceptInstalled records the acceptance of the harness just installed under
-// id, by `ynh install --trust`.
+// id, by `ynh install --trust`, together with its whole a2a delegate tree,
+// all or nothing.
 func acceptInstalled(id string, stdout io.Writer) error {
 	p, err := harness.LoadByID(id)
 	if err != nil {
 		return err
 	}
-	return recordAcceptance(id, p, viaInstallTrus, stdout)
+	set := harnessExecutables(p)
+	if len(set.Problems) > 0 {
+		return fmt.Errorf("%s", unavailableMessage(id, set.Problems))
+	}
+	rec := newAcceptance(p, set, viaInstallTrus, time.Now().UTC().Format(time.RFC3339))
+	if _, err := acceptA2ATree(p, id, viaInstallTrus, map[string]trustRecord{id: rec}, stdout); err != nil {
+		return err
+	}
+	printAccepted(stdout, id, p, set, rec)
+	return nil
 }
 
 // acceptFolderRun is `ynh run <dir> --trust` and `ynh agent run --harness
@@ -237,16 +267,12 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 	if bad := unpinnedForAcceptance(p, remote); len(bad) > 0 {
 		return refuseUnpinned(p.Name, "--trust", bad)
 	}
-	if len(remote) == 0 {
-		return nil
-	}
-	store, err := loadTrustStore()
-	if err != nil {
-		return err
-	}
+	// The includes' records and the a2a delegate tree are written together,
+	// all or nothing.
+	extra := map[string]trustRecord{}
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, r := range remote {
-		store.Harnesses[includeRecordPrefix+r.Key] = trustRecord{
+		extra[includeRecordPrefix+r.Key] = trustRecord{
 			Digest:     executablesDigest(r.Set),
 			Commands:   r.Set.count(),
 			Scheme:     trustScheme,
@@ -256,7 +282,13 @@ func acceptFolderRunOf(p *harness.Harness, stdout io.Writer) error {
 		_, _ = fmt.Fprintf(stdout, "Accepted %s (%s): %d command(s)\n", r.Key, viaRunTrust, r.Set.count())
 		_, _ = fmt.Fprint(stdout, listExecutables(r.Set.Sensors, r.Set.Hooks, r.Set.MCPServers))
 	}
-	return saveTrustStore(store)
+	if len(extra) == 0 && len(a2aEntries(p)) == 0 {
+		return nil
+	}
+	// The a2a delegates of a folder run start as harnesses of their own
+	// (ynh #1058, S8).
+	_, err = acceptA2ATree(p, parentIDOf(p, ""), viaRunTrust, extra, stdout)
+	return err
 }
 
 // warmFolderIncludes fetches the remote includes of a folder run that are

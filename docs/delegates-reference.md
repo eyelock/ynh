@@ -56,7 +56,10 @@ delegate <source> of <parent> is installed as <id> but cannot be read in full: <
   Run: ynh update <id>
 ```
 
-A delegate that executes nothing (no sensors, hooks or MCP servers) is matched without a `ynh trust accept`,
+Accepting the parent (`ynh trust accept <parent>`, `ynh install --trust`, `ynh run <folder> --trust`)
+accepts the whole tree of its a2a delegates, nested ones included, each with its own record and level,
+all or nothing, after showing what each runs; a refusal above also names the parent's command. A delegate
+that executes nothing (no sensors, hooks or MCP servers) is matched without a `ynh trust accept`,
 but its session is a one-shot run, which is refused until the delegate is accepted: acceptance covers the
 level (`auto_approve`) it opens at. When several installs match one entry, the trusted match with the smallest id wins.
 
