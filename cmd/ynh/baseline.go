@@ -78,12 +78,11 @@ func cmdBaseline(args []string, stdout, stderr io.Writer) error {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
 	// --explain runs the harness's sensors, so it passes the one trust decision before any starts, as
-	// ynh check and ynh sensors run do, on the harness as loaded (ynh #1006).
+	// ynh check and ynh sensors run do, on the one harness loaded above that the sensors then run
+	// from, with no second load (ynh #1006, #1058).
 	if explain {
-		if loaded, lerr := harness.LoadIDOrPath(harnessName); lerr == nil {
-			if gerr := decideTrust(gateRef(harnessName), loaded, purposeSensors, stderr).err(); gerr != nil {
-				return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
-			}
+		if gerr := decideTrust(gateRef(harnessName), p, purposeSensors, stderr).err(); gerr != nil {
+			return cliError(stderr, structured, errCodeUntrusted, gerr.Error())
 		}
 	}
 	if cwd == "" {

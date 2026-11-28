@@ -19,7 +19,7 @@ project changes to show it.
 
 So ynh keeps a record of what you agreed to. `ynh trust show` lists every command the harness can get
 run, and `ynh trust accept` records a fingerprint of that list, the **digest**. Before `ynh run`,
-`ynh agent run`, `ynh check`, `ynh sensors run` or `ynh image` starts anything, ynh works out the digest again and
+`ynh agent run`, `ynh check`, `ynh sensors run`, `ynh baseline --explain` or `ynh image` starts anything, ynh works out the digest again and
 compares. If you never accepted the harness, or what it runs has changed since you did, nothing starts,
 and ynh tells you what it would have run and how to review it.
 

@@ -86,6 +86,7 @@ func TestEveryLaunchingCommandRefusesAnUnacceptedHarness(t *testing.T) {
 		"image":    {{"image", id, "--dry-run"}, {"image", "fxfrom", "--from", folder, "--dry-run"}},
 	}
 	for name, cl := range commandClasses {
+		// delegate-run has its own test below, which needs a parent and a delegate installed.
 		if cl.Launches && name != "delegate-run" && cases[name] == nil {
 			t.Errorf("%q is classified as launching, but this test has no case that runs it against an unaccepted harness", name)
 		}
@@ -133,6 +134,11 @@ func TestAnUnacceptedDelegateIsRefusedBeforeItRuns(t *testing.T) {
 	code, out := ynhRun(t, "run", pid, "--", "hi")
 	if code != 1 || !strings.Contains(out, "trust accept") {
 		t.Errorf("exit %d, want 1 naming the acceptance:\n%s", code, out)
+	}
+	// The path a live parent's delegate-mcp takes: delegate-run start resolves the entry itself.
+	code, out = ynhRun(t, "delegate-run", "start", "--parent", pid, "--entry", "0", "--task", "hi")
+	if code != 1 || !strings.Contains(out, "trust accept") {
+		t.Errorf("delegate-run start: exit %d, want 1 naming the acceptance:\n%s", code, out)
 	}
 	if entries, _ := os.ReadDir(markers); len(entries) > 0 {
 		t.Error("the unaccepted delegate ran something")
