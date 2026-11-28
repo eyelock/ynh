@@ -312,11 +312,11 @@ func cmdRun(args []string) (runErr error) {
 		// Claude Code reports the mode it opened in; a mismatch with the
 		// resolved level stops the session (ynw-c5hme). Other vendors report
 		// none to check.
-		if hook, herr := openedModeSettings(adapter.Name(), rp.OpenedMode, vendorArgs); herr != nil {
+		checked, herr := openedModeSettings(adapter.Name(), rp.OpenedMode, vendorArgs)
+		if herr != nil {
 			return herr
-		} else if hook != nil {
-			vendorArgs = append(hook, vendorArgs...)
 		}
+		vendorArgs = checked
 	} else if action == "" && ra.AutoApprove != "" {
 		if err := capInteractive(ra.AutoApprove); err != nil {
 			return err

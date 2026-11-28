@@ -233,15 +233,53 @@ func TestResolveRunPermission_CodexProjectModeIsExplicit(t *testing.T) {
 // The opened-mode check (ynw-c5hme): a one-shot Claude Code session carries a
 // SessionStart hook, on ynh run and on a delegate session alike.
 func TestOpenedModeSettings(t *testing.T) {
-	if got, err := openedModeSettings("codex", "", nil); got != nil || err != nil {
-		t.Errorf("only Claude reports a mode: %v %v", got, err)
+	if got, err := openedModeSettings("codex", "", []string{"x"}); err != nil || !slices.Equal(got, []string{"x"}) {
+		t.Errorf("only Claude reports a mode: %q %v", got, err)
 	}
-	got, err := openedModeSettings("claude", "acceptEdits", nil)
-	if err != nil || len(got) != 2 || got[0] != "--settings" || !strings.Contains(got[1], "permission-check --expect") || !strings.Contains(got[1], "acceptEdits") || !strings.Contains(got[1], "SessionStart") {
+	got, err := openedModeSettings("claude", "acceptEdits", []string{"--model", "m"})
+	if err != nil || len(got) != 4 || got[0] != "--settings" || !strings.Contains(got[1], "permission-check --expect") || !strings.Contains(got[1], "acceptEdits") || !strings.Contains(got[1], "SessionStart") || got[2] != "--model" {
 		t.Fatalf("%q %v", got, err)
 	}
-	if got, _ := openedModeSettings("claude", "acceptEdits", []string{"--settings", "{}"}); got != nil {
-		t.Errorf("a run with its own --settings is left alone")
+}
+
+// A run's own --settings is merged into, never skipped: its keys and its own
+// SessionStart hooks stay, as a JSON value, a --settings= value and a file.
+func TestOpenedModeSettings_MergesTheCallersSettings(t *testing.T) {
+	own := `{"model":"opus","hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo own"}]}],"Stop":[]}}`
+	file := filepath.Join(t.TempDir(), "s.json")
+	if err := os.WriteFile(file, []byte(own), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, args := range map[string][]string{
+		"json value": {"--settings", own, "--model", "m"},
+		"equals":     {"--settings=" + own},
+		"file":       {"--settings", file},
+	} {
+		got, err := openedModeSettings("claude", "plan", args)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		joined := strings.Join(got, " ")
+		for _, want := range []string{`"model":"opus"`, "echo own", "permission-check --expect", `"Stop"`} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("%s: %q lost from %s", name, want, joined)
+			}
+		}
+		if strings.Count(joined, "--settings") != 1 {
+			t.Errorf("%s: want one --settings in %s", name, joined)
+		}
+	}
+	// What cannot be merged exactly is refused, never run unchecked.
+	for name, args := range map[string][]string{
+		"two":         {"--settings", "{}", "--settings", "{}"},
+		"no value":    {"--settings"},
+		"bad json":    {"--settings", "{nope"},
+		"missing":     {"--settings", filepath.Join(t.TempDir(), "absent.json")},
+		"hooks array": {"--settings", `{"hooks":[]}`},
+	} {
+		if got, err := openedModeSettings("claude", "plan", args); err == nil || !strings.Contains(err.Error(), "refusing to run") {
+			t.Errorf("%s: want a refusal, got %q %v", name, got, err)
+		}
 	}
 }
 

@@ -141,34 +141,81 @@ func delegateStep(delegate *harness.Harness, entry harness.Delegate, getenv func
 	return cur.Narrowed(permission.Step{Level: limit, From: permission.SourceCallerCap}), nil
 }
 
-// openedModeSettings returns the arguments that make a Claude Code session
-// check the mode it opened in (the opened-mode check, on every one-shot path:
-// ynh run and both delegate transports, which end in a one-shot ynh run). A
-// SessionStart hook runs `ynh permission-check`, which compares the
-// permission_mode Claude reports in the hook input with the one ynh chose and
-// stops the session on a mismatch, with the message agent run gives. It is nil
-// for other vendors, and for a run that already carries its own --settings,
-// which ynh will not override: that run says so on stderr.
+// openedModeSettings returns vendorArgs with the opened-mode check added for a
+// Claude Code session (the check runs on every path: ynh run and both delegate
+// transports, which end in a one-shot ynh run). A SessionStart hook runs
+// `ynh permission-check`, which compares the permission_mode Claude reports in
+// the hook input with the one ynh chose and stops the session on a mismatch,
+// with the message agent run gives. A run that passes its own --settings has
+// the hook merged into it (a JSON value, or a file's JSON passed inline); one
+// whose --settings cannot be merged exactly is refused, never run unchecked.
+// Other vendors report no mode, so their args are returned unchanged.
 func openedModeSettings(vendorName, expected string, vendorArgs []string) ([]string, error) {
 	if vendorName != permission.Claude || expected == "" {
-		return nil, nil
-	}
-	for _, a := range vendorArgs {
-		if a == "--settings" || strings.HasPrefix(a, "--settings=") {
-			fmt.Fprintln(os.Stderr, "ynh: this run passes its own --settings, so the mode Claude opens in is not checked")
-			return nil, nil
-		}
+		return vendorArgs, nil
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("finding the ynh binary for the opened-mode check: %w", err)
 	}
-	settings, err := json.Marshal(map[string]any{"hooks": map[string]any{"SessionStart": []any{map[string]any{
-		"hooks": []any{map[string]any{"type": "command", "command": shellQuote(exe) + " permission-check --expect " + shellQuote(expected)}}}}}})
+	group := map[string]any{"hooks": []any{map[string]any{
+		"type": "command", "command": shellQuote(exe) + " permission-check --expect " + shellQuote(expected)}}}
+
+	idx, inline := -1, false
+	for i, a := range vendorArgs {
+		if a == "--settings" || strings.HasPrefix(a, "--settings=") {
+			if idx >= 0 {
+				return nil, fmt.Errorf("refusing to run: more than one --settings is passed, so the opened-mode check cannot be added exactly; pass one --settings or none")
+			}
+			idx, inline = i, strings.HasPrefix(a, "--settings=")
+		}
+	}
+	doc := map[string]any{}
+	value := ""
+	if idx >= 0 {
+		if inline {
+			value = strings.TrimPrefix(vendorArgs[idx], "--settings=")
+		} else if idx+1 < len(vendorArgs) {
+			value = vendorArgs[idx+1]
+		} else {
+			return nil, fmt.Errorf("refusing to run: --settings has no value, so the opened-mode check cannot be added")
+		}
+		raw := []byte(value)
+		if !strings.HasPrefix(strings.TrimSpace(value), "{") {
+			if raw, err = os.ReadFile(value); err != nil {
+				return nil, fmt.Errorf("refusing to run: the --settings file %q cannot be read, so the opened-mode check cannot be added to it: %w", value, err)
+			}
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("refusing to run: --settings is not a JSON object, so the opened-mode check cannot be added to it: %w", err)
+		}
+	}
+	hooks, _ := doc["hooks"].(map[string]any)
+	if hooks == nil {
+		if doc["hooks"] != nil {
+			return nil, fmt.Errorf("refusing to run: --settings has a hooks value that is not an object, so the opened-mode check cannot be added to it")
+		}
+		hooks = map[string]any{}
+	}
+	start, _ := hooks["SessionStart"].([]any)
+	hooks["SessionStart"] = append(start, group)
+	doc["hooks"] = hooks
+	merged, err := json.Marshal(doc)
 	if err != nil {
 		return nil, err
 	}
-	return []string{"--settings", string(settings)}, nil
+	switch {
+	case idx < 0:
+		return append([]string{"--settings", string(merged)}, vendorArgs...), nil
+	case inline:
+		out := append([]string{}, vendorArgs...)
+		out[idx] = "--settings=" + string(merged)
+		return out, nil
+	default:
+		out := append([]string{}, vendorArgs...)
+		out[idx+1] = string(merged)
+		return out, nil
+	}
 }
 
 // cmdPermissionCheck is the SessionStart hook of the opened-mode check. It
