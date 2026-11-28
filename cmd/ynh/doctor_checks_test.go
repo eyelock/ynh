@@ -467,7 +467,7 @@ func TestDoctor_OwnRepoVerdictAgreesWithRun(t *testing.T) {
 	}{
 		{"root, committed", false, true, false},
 		{"root, on disk but not committed", false, false, true},
-		{"subfolder, committed", true, true, true},
+		{"subfolder, committed", true, true, false},
 		{"subfolder, not committed", true, false, true},
 	}
 	for _, tc := range cases {

@@ -391,7 +391,7 @@ func cmdInstall(args []string) error {
 		}
 		// A relative source resolves against the harness, as the check
 		// above did, not against wherever ynh install was run from.
-		gitURL := resolver.GitSourceURL(inc.Git, p.Dir)
+		gitURL, _ := resolver.GitSourceRoot(inc.GitSource, p.Dir)
 		res, err := resolver.EnsureRepo(gitURL, inc.Ref)
 		if err != nil {
 			return fmt.Errorf("fetching include %s: %w", inc.Git, err)

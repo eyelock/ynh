@@ -240,13 +240,11 @@ harnesses that each name `./inc` get their own repos. The same applies to
 An include or delegate whose source is the harness's own repo (`"git": "."`)
 is refreshed from that repo on every run, so one committed after the first run
 is found without `ynh update`. Uncommitted work is not picked up: a `path` that
-is on disk but not committed fails the run, and `ynh doctor` says so. This works
-only when the harness sits at the root of its repository. A run clones the
-source, and git clones only a repository's root, so a harness in a subfolder of
-its repo, with `"git": "."` (or `"./sub"`), fails every run; the same holds for
-includes and delegates alike. Give such a source a Git URL, or keep the harness
-at the repo's root. `ynh doctor` reports the delegate case; it does not check
-includes yet. Every other source, including another repo on disk, is served from
+is on disk but not committed fails the run, and `ynh doctor` says so. A harness in a
+subfolder of its repository works too: a `"."` source means the repository the
+harness came from, fetched at its root, and the entry's `path` is taken
+relative to the harness's own folder. `ynh doctor` reports the delegate case
+(a `path` that is not committed); it does not check includes yet. Every other source, including another repo on disk, is served from
 the cache until `ynh update`; if a delegate or include `path` is missing from
 it, the error says the cached copy may be out of date and suggests `ynh update`.
 

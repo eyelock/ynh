@@ -428,9 +428,9 @@ func unpinnedInTree(p *harness.Harness, nodes []a2aNode) []string {
 	return out
 }
 
-// delegateRepoURL is the repository to fetch for a delegates_to entry: its
+// delegateRepoURL is the repository to fetch for a delegates_to or include entry: its
 // own repository's root for a relative entry of a harness below a root.
-func delegateRepoURL(d harness.Delegate, dir string) string {
-	url, _ := resolver.GitSourceRoot(d.GitSource, dir)
+func delegateRepoURL(gs harness.GitSource, dir string) string {
+	url, _ := resolver.GitSourceRoot(gs, dir)
 	return url
 }
