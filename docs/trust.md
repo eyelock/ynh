@@ -276,6 +276,21 @@ ynh image acme --from github.com/org/acme --ref 0123456789abcdef0123456789abcdef
 
 `--trust` is only valid with `--from`; an installed harness is accepted with `ynh trust accept`. `--ref` is likewise `--from` only, and not valid for a local folder. A baked record is the host's acceptance carried to where the harness runs; it is not a fresh review.
 
+### Inspecting an image
+
+An image's baked record is the acceptance of the host that built it. The host that runs the image is never asked, and need not be: an image runs without any step on the running host. The running host can look first:
+
+```bash
+ynh trust show --image acme/reviewer:1.0           # the labels, nothing starts
+ynh trust show --image acme/reviewer:1.0 --full    # and what the image executes
+```
+
+`ynh trust show --image <ref>` reads the image's labels with `docker image inspect`: the harness, its trust digest, how it was accepted (`trust-via`), its source and its commit. It never pulls the image (it must be present) and starts no container. A label the image does not carry, such as one on an image built before the label existed, reads `not set`. With `--format json` the output has [its own schema](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/trust-show-image.schema.json), and a missing label is `null`.
+
+`--full` also runs the image's own `ynh trust show local/<name>` in a container started with `--network none`, no mounts and the entrypoint replaced, and prints what the image executes: its commands, hooks and MCP servers, with the record it carries (how it was accepted and when) and the level it opens at; a harness with a2a delegates lists each delegate's record and level too. It needs ynh and Docker on the inspecting host.
+
+The labels are the build host's, and the image's own gate never reads them. They tell you what the image says it carries, not what it will run; `--full` shows what it will run.
+
 ## Related
 
 - [What invalidates trust](what-invalidates-trust.md): each event that makes ynh ask again, and what restores trust.

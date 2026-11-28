@@ -563,6 +563,9 @@ are shown and covered by what you accept.
   ynh trust show <dir>           A folder's remote includes that bring commands,
                                  with each one's state, to review before
                                  'ynh trust accept <dir>'
+  ynh trust show --image <ref>   An image's trust labels, read without starting
+                                 it; --full runs the image's own ynh (no
+                                 network, no mounts) to list what it executes
   ynh trust accept <harness>     Record that you have read them. A step for a
                                  person who has reviewed them: a remote include
                                  or native delegate entry with no full SHA ref
