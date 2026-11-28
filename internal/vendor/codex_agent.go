@@ -26,6 +26,18 @@ func (c *Codex) DelegateAgentFile(name, description, prompt string) (string, []b
 	return name + ".toml", codexAgentTOML(codexAgentFields{name: name, description: description, instructions: prompt}), nil
 }
 
+// DelegateAgentFileWith is DelegateAgentFile with the model and reasoning
+// effort the delegate runs with: a custom agent file's "model" and
+// "model_reasoning_effort". An empty value is left out, so the session's own
+// applies.
+func (c *Codex) DelegateAgentFileWith(name, description, prompt, model, effort string) (string, []byte, error) {
+	file, _, err := c.DelegateAgentFile(name, description, prompt)
+	if err != nil {
+		return "", nil, err
+	}
+	return file, codexAgentTOML(codexAgentFields{name: name, description: description, instructions: prompt, model: model, effort: effort}), nil
+}
+
 // TransformArtifact writes a harness's own agents (agents/<name>.md) as Codex
 // custom agents. Codex reads only TOML files in .codex/agents/
 // (learn.chatgpt.com/docs/agent-configuration/subagents), so a Markdown agent linked there
@@ -69,6 +81,7 @@ func (c *Codex) ArtifactWarnings(artifactType, name string, data []byte) []warn.
 // codexAgentFields are what a Codex custom agent file carries.
 type codexAgentFields struct {
 	name, description, instructions string
+	model                           string // model; empty for none
 	effort                          string // model_reasoning_effort; empty for none
 	shellOff                        bool   // features.shell_tool = false
 	hasTools, hasDisallowed         bool   // the source declared these lists
@@ -185,6 +198,9 @@ func codexAgentTOML(a codexAgentFields) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "name = %s\n", tomlString(a.name))
 	fmt.Fprintf(&b, "description = %s\n", tomlString(a.description))
+	if a.model != "" {
+		fmt.Fprintf(&b, "model = %s\n", tomlString(a.model))
+	}
 	if a.effort != "" {
 		fmt.Fprintf(&b, "model_reasoning_effort = %s\n", tomlString(a.effort))
 	}

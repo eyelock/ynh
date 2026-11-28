@@ -284,6 +284,14 @@ type Result struct {
 	WaitingSeconds int    `json:"waiting_seconds,omitempty"`
 	// LogTail is the end of the run's log, when it failed.
 	LogTail string `json:"log_tail,omitempty"`
+	// Model and Effort are what the delegate was started with, ModelFrom and
+	// EffortFrom where each came from: call, entry, delegate_default, or
+	// vendor_default (none was named, so the vendor's own applies, and the
+	// value is absent).
+	Model      string `json:"model,omitempty"`
+	ModelFrom  string `json:"model_from,omitempty"`
+	Effort     string `json:"effort,omitempty"`
+	EffortFrom string `json:"effort_from,omitempty"`
 }
 
 // ListResult is delegate_list's structured result.
@@ -303,6 +311,10 @@ var resultSchema = map[string]any{
 		"log_tail":        map[string]any{"type": "string", "description": "the end of the run's log, when failed"},
 		"asked_at":        map[string]any{"type": "string", "description": "when the open question was asked (RFC 3339), when input-required"},
 		"waiting_seconds": map[string]any{"type": "integer", "description": "how long the open question has waited, when input-required"},
+		"model":           map[string]any{"type": "string", "description": "the model the delegate was started with; absent when none was named and the vendor's default applies"},
+		"model_from":      map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "vendor_default"}, "description": "where the model came from: this call, the parent's delegates_to entry, the delegate harness's default_model, or the vendor's own default"},
+		"effort":          map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate was started with; absent when none was named"},
+		"effort_from":     map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "vendor_default"}, "description": "where the effort came from: this call, the parent's delegates_to entry, the delegate harness's default_effort, or the vendor's own default"},
 	},
 	"required": []string{"task_id", "state", "message"},
 }
@@ -346,7 +358,8 @@ func (s *Server) delegateName(rec *delegation.Record) string {
 }
 
 func (s *Server) resultOf(rec *delegation.Record) Result {
-	r := Result{TaskID: rec.Handle, State: stateOf(rec), Delegate: s.delegateName(rec)}
+	r := Result{TaskID: rec.Handle, State: stateOf(rec), Delegate: s.delegateName(rec),
+		Model: rec.Model, ModelFrom: rec.ModelFrom, Effort: rec.Effort, EffortFrom: rec.EffortFrom}
 	s.mu.Lock()
 	if t, ok := s.a2a[rec.Handle]; ok {
 		r.ContextID = t.contextID
@@ -414,7 +427,9 @@ func (s *Server) tools() []any {
 	for _, d := range names {
 		out = append(out, tool(ToolName(d.Name),
 			fmt.Sprintf("Start the delegate %q as its own session on a task. With no wait it returns at once with a task_id (state working); with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
-			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp},
+			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp,
+				"model":  map[string]any{"type": "string", "description": "the model the delegate opens with, for this call only: it wins over the parent's delegates_to entry, the delegate's own default and the vendor's default. Choose it from the task's size, cost or urgency. Omit it to take the next layer down."},
+				"effort": map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate opens with, for this call only, chosen the same way as model. Refused where the delegate's vendor has no effort setting."}},
 			[]string{"task"}))
 	}
 	list := tool("delegate_list", "List this session's delegations with their state.", map[string]any{}, nil)
@@ -441,6 +456,8 @@ type callParams struct {
 
 type toolArgs struct {
 	Task    string `json:"task"`
+	Model   string `json:"model"`
+	Effort  string `json:"effort"`
 	TaskID  string `json:"task_id"`
 	Message string `json:"message"`
 	Wait    *int   `json:"wait"`
@@ -619,13 +636,19 @@ func sendError(d Delegate, err error) error {
 
 // start sends the task through the delegate's A2A endpoint and returns the
 // delegation's record path and the result as it stands.
-func (s *Server) start(ctx context.Context, d Delegate, task string) (string, Result, error) {
+func (s *Server) start(ctx context.Context, d Delegate, task, model, effort string) (string, Result, error) {
 	c, err := s.client(ctx, d)
 	if err != nil {
 		return "", Result{}, err
 	}
 	ctx = authCtx(ctx)
 	m := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(task))
+	if model != "" {
+		m.SetMeta(a2aserve.MetaModel, model)
+	}
+	if effort != "" {
+		m.SetMeta(a2aserve.MetaEffort, effort)
+	}
 	resp, err := c.SendMessage(ctx, &a2a.SendMessageRequest{Message: m, Config: &a2a.SendMessageConfig{ReturnImmediately: true}})
 	if err != nil {
 		return "", Result{}, sendError(d, err)
@@ -666,7 +689,15 @@ func (s *Server) startTool(ctx context.Context, req rpc, d Delegate, a toolArgs,
 		s.reply(req.ID, toolError("task is required: say what the delegate is to do"))
 		return
 	}
-	path, failed, err := s.start(ctx, d, a.Task)
+	if err := delegation.CheckModel(a.Model); err != nil {
+		s.reply(req.ID, toolError("model: "+err.Error()))
+		return
+	}
+	if err := delegation.CheckEffort(a.Effort); err != nil {
+		s.reply(req.ID, toolError("effort: "+err.Error()))
+		return
+	}
+	path, failed, err := s.start(ctx, d, a.Task, a.Model, a.Effort)
 	if err != nil {
 		s.reply(req.ID, toolError(err.Error()))
 		return

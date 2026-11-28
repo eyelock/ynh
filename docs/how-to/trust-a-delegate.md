@@ -79,6 +79,14 @@ Error: delegate <source> of lead is installed as local/reviewer but its commands
 
 Review and accept the delegate again, as in steps 2 and 3. The parent's own record is untouched.
 
+## Choosing the delegate's model and effort
+
+Trust covers what a delegate runs, not which model runs it. A parent picks the model and effort per call, per
+entry (`model` and `effort` on the `delegates_to` entry) or leaves them to the delegate's own `default_model`
+and `default_effort`; changing any of them moves no digest and needs no `ynh trust accept`. `ynh info <parent>`
+shows what each delegate opens with and where it came from. See
+[Model and effort](../delegates-reference.md#model-and-effort).
+
 ## Trust a `native` delegate
 
 A parent whose `native` delegate brings an MCP server is refused until you accept the parent, and the
