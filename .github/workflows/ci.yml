@@ -409,10 +409,27 @@ jobs:
       - name: ynr conformance
         run: make conformance CONFORMANCE_FORMAT=text
 
+  e2e:
+    # The full E2E suite (make e2e) on every pull request, among All Clear's needs so a PR that
+    # breaks it is red before merge. It runs in about 40 seconds, so no subset is needed. It
+    # was a post-merge-only check until ynh #1018 passed review and broke develop's E2E on merge
+    # (ynh #1069). e2e.yml still reports on develop pushes and gates releases.
+    name: E2E Suite
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5  # v7
+        with:
+          go-version-file: go.mod
+      - run: make e2e
+
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, srt, lint, format, artifacts, skill-security, packaging, registry, conformance]
+    needs: [changes, build, test, srt, lint, format, artifacts, skill-security, packaging, registry, conformance, e2e]
     if: always()
     steps:
       - name: Check results
@@ -429,6 +446,7 @@ jobs:
           echo "  packaging: ${{ needs.packaging.result }}"
           echo "  registry: ${{ needs.registry.result }}"
           echo "  conformance: ${{ needs.conformance.result }}"
+          echo "  e2e: ${{ needs.e2e.result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"
