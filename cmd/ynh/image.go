@@ -486,13 +486,21 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// An installed harness must be one the operator accepted, as at run time
 	// (design decision 9). The check comes before anything is copied or built.
 	var bakedTrust *trustRecord
-	var bakedTree map[string]trustRecord
+	var bakedTree *imageTree
+	defer func() { bakedTree.Close() }()
 	if trustID != "" {
 		rec, err := imageTrustRecord(trustID, p)
 		if err != nil {
 			return err
 		}
 		bakedTrust = rec
+		if rec != nil {
+			tree, err := installedImageTree(trustID, p)
+			if err != nil {
+				return err
+			}
+			bakedTree = tree
+		}
 	} else {
 		rec, tree, err := imageFromTrustRecord(p, cfg, ia, fromLocal, fromRef)
 		if err != nil {
@@ -599,7 +607,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	// through finds what the operator accepted at build time.
 	trustDigest := ""
 	if bakedTrust != nil {
-		if err := writeImageTrust(homeDir, p.Name, *bakedTrust, bakedTree); err != nil {
+		if err := writeImageTrust(homeDir, p.Name, *bakedTrust, bakedTree.Records()); err != nil {
 			return err
 		}
 		trustDigest = bakedTrust.Digest

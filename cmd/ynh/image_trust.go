@@ -103,7 +103,7 @@ func writeImageTrust(homeDir, name string, rec trustRecord, tree map[string]trus
 //
 // It returns the record to bake (via: image), or nil when the harness has
 // nothing to accept, which builds as before.
-func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, isLocal bool, ref string) (*trustRecord, map[string]trustRecord, error) {
+func imageFromTrustRecord(p *harness.Harness, cfg *config.Config, ia imageArgs, isLocal bool, ref string) (*trustRecord, *imageTree, error) {
 	id := "local/" + p.Name
 	empty := trustStore{Version: 1, Harnesses: map[string]trustRecord{}}
 	// --trust judges what the includes execute, so they are fetched before
@@ -234,7 +234,7 @@ func fromUnavailableFix(ia imageArgs, isLocal bool) string {
 // bakeNoCommandsRecord is the record --trust bakes for a harness that executes
 // nothing: the level it opens at is part of what --trust accepted, and the
 // image's one-shot run is refused without one (N2).
-func bakeNoCommandsRecord(p *harness.Harness, st trustStatus, ia imageArgs) (*trustRecord, map[string]trustRecord, error) {
+func bakeNoCommandsRecord(p *harness.Harness, st trustStatus, ia imageArgs) (*trustRecord, *imageTree, error) {
 	tree, err := imageA2ATree(p, ia)
 	if err != nil {
 		return nil, nil, err
@@ -243,14 +243,56 @@ func bakeNoCommandsRecord(p *harness.Harness, st trustStatus, ia imageArgs) (*tr
 	return &rec, tree, nil
 }
 
+// imageTree is the a2a delegate tree an image built with --trust carries: each
+// delegate's record, keyed by its install id, and the scratch home the tree was
+// accepted and installed in. The host's own installs and trust.json are not
+// touched by a build (ynw-tqeq5). A nil *imageTree is an empty tree.
+type imageTree struct {
+	records map[string]trustRecord
+	home    string
+	shared  bool // home is the host's own, which Close leaves alone
+}
+
+// Records returns the delegates' records to bake beside the parent's.
+func (t *imageTree) Records() map[string]trustRecord {
+	if t == nil {
+		return nil
+	}
+	return t.records
+}
+
+// Close removes the scratch home.
+func (t *imageTree) Close() {
+	if t != nil && t.home != "" && !t.shared {
+		_ = os.RemoveAll(t.home)
+	}
+}
+
+// withYnhHome runs fn with YNH_HOME set to home, then puts it back.
+func withYnhHome(home string, fn func() error) error {
+	old, had := os.LookupEnv("YNH_HOME")
+	if err := os.Setenv("YNH_HOME", home); err != nil {
+		return err
+	}
+	defer func() {
+		if had {
+			_ = os.Setenv("YNH_HOME", old)
+		} else {
+			_ = os.Unsetenv("YNH_HOME")
+		}
+	}()
+	return fn()
+}
+
 // imageA2ATree accepts the parent's whole a2a delegate tree for an image built
-// with --trust (ynh #1058, N1) and returns each delegate's record, keyed by
-// its install id, to bake beside the parent's, each at its pinned commit and
-// level. It is the one acceptance function, so it is all or nothing: if any
-// delegate cannot be accepted nothing is recorded or baked and the error names
-// the delegate. A dry run writes nothing to the host's trust store: it only
-// checks that every delegate could be accepted, and bakes no delegate records.
-func imageA2ATree(p *harness.Harness, ia imageArgs) (map[string]trustRecord, error) {
+// with --trust (ynh #1058, N1), in a scratch home seeded with the host's
+// config and include cache, so the host's installs and trust.json are left as
+// they were: the tree is baked into the image, not accepted on the host. It is
+// the one acceptance function, so it is all or nothing: if any delegate cannot
+// be accepted nothing is baked and the error names the delegate. A dry run
+// installs and records nothing: it only checks that every delegate could be
+// accepted, and bakes no delegate records.
+func imageA2ATree(p *harness.Harness, ia imageArgs) (*imageTree, error) {
 	if len(a2aEntries(p)) == 0 {
 		return nil, nil
 	}
@@ -262,48 +304,119 @@ func imageA2ATree(p *harness.Harness, ia imageArgs) (map[string]trustRecord, err
 		}
 		return nil, nil
 	}
-	done, err := acceptA2ATree(p, "local/"+p.Name, viaImage, nil, os.Stderr)
+	scratch, err := os.MkdirTemp("", "ynh-image-tree-*")
 	if err != nil {
 		return nil, err
 	}
-	store, err := loadTrustStore()
-	if err != nil {
-		return nil, err
+	tree := &imageTree{records: map[string]trustRecord{}, home: scratch}
+	fail := func(err error) (*imageTree, error) { tree.Close(); return nil, err }
+	// The cache the delegates are read from and the config's source allow-list.
+	if err := copyIfExists(config.CacheDir(), filepath.Join(scratch, filepath.Base(config.CacheDir()))); err != nil {
+		return fail(err)
 	}
-	tree := map[string]trustRecord{}
-	for _, d := range done {
-		tree[d.ID] = store.Harnesses[d.ID]
+	if err := copyIfExists(config.ConfigPath(), filepath.Join(scratch, filepath.Base(config.ConfigPath()))); err != nil {
+		return fail(err)
+	}
+	err = withYnhHome(scratch, func() error {
+		done, err := acceptA2ATree(p, "local/"+p.Name, viaImage, nil, os.Stderr)
+		if err != nil {
+			return err
+		}
+		store, err := loadTrustStore()
+		if err != nil {
+			return err
+		}
+		for _, d := range done {
+			tree.records[d.ID] = store.Harnesses[d.ID]
+		}
+		return nil
+	})
+	if err != nil {
+		return fail(err)
 	}
 	return tree, nil
 }
 
-// bakeImageDelegates copies each accepted a2a delegate's install into the
-// image's home, at the same id the host installed it under, with its includes'
-// cache, so a delegate session inside the image resolves it by source and
-// finds its record. A delegate installed from a local folder has no source
-// the image could find again, so it refuses the build.
-func bakeImageDelegates(homeDir string, tree map[string]trustRecord, cfg *config.Config) error {
-	ids := make([]string, 0, len(tree))
-	for id := range tree {
+// copyIfExists copies a file or folder, and does nothing when src is absent.
+func copyIfExists(src, dst string) error {
+	fi, err := os.Stat(src)
+	if err != nil {
+		return nil
+	}
+	if fi.IsDir() {
+		return assembler.CopyTree(src, dst)
+	}
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
+}
+
+// bakeImageDelegates copies each accepted a2a delegate's install from the
+// scratch home it was accepted in into the image's home, at the same id, with
+// its includes' cache, so a delegate session inside the image resolves it by
+// source and finds its record. A delegate installed from a local folder has no
+// source the image could find again, so it refuses the build.
+func bakeImageDelegates(homeDir string, tree *imageTree, cfg *config.Config) error {
+	if tree == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(tree.records))
+	for id := range tree.records {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	for _, id := range ids {
-		h, err := harness.LoadByID(id)
-		if err != nil {
-			return fmt.Errorf("baking delegate %s: %w", id, err)
+	return withYnhHome(tree.home, func() error {
+		for _, id := range ids {
+			h, err := harness.LoadByID(id)
+			if err != nil {
+				return fmt.Errorf("baking delegate %s: %w", id, err)
+			}
+			if h.InstalledFrom == nil || h.InstalledFrom.SourceType == "local" {
+				return fmt.Errorf("delegate %s is installed from a local folder, which an image cannot find again: pin it to a git source", id)
+			}
+			fs := namespace.IDToFSName(id)
+			dst := filepath.Join(homeDir, "harnesses", fs)
+			if err := assembler.CopyTree(h.Dir, dst); err != nil {
+				return fmt.Errorf("baking delegate %s: %w", id, err)
+			}
+			if err := bakeIncludeCache(h, h.Includes, homeDir, path.Join(imageHome, "harnesses", fs)); err != nil {
+				return fmt.Errorf("baking delegate %s: %w", id, err)
+			}
 		}
-		if h.InstalledFrom == nil || h.InstalledFrom.SourceType == "local" {
-			return fmt.Errorf("delegate %s is installed from a local folder, which an image cannot find again: pin it to a git source", id)
-		}
-		fs := namespace.IDToFSName(id)
-		dst := filepath.Join(homeDir, "harnesses", fs)
-		if err := assembler.CopyTree(h.Dir, dst); err != nil {
-			return fmt.Errorf("baking delegate %s: %w", id, err)
-		}
-		if err := bakeIncludeCache(h, h.Includes, homeDir, path.Join(imageHome, "harnesses", fs)); err != nil {
-			return fmt.Errorf("baking delegate %s: %w", id, err)
-		}
+		return nil
+	})
+}
+
+// installedImageTree is the a2a delegate tree an image of an installed parent
+// carries (ynw-s8nke): the tree the host already accepted. Every delegate must
+// be installed and accepted on the host, or the build is refused naming it;
+// each one's record is taken from the host's trust.json as it stands, and its
+// install and includes cache are baked from the host's own home, which is read
+// and never changed.
+func installedImageTree(id string, p *harness.Harness) (*imageTree, error) {
+	if len(a2aEntries(p)) == 0 {
+		return nil, nil
 	}
-	return nil
+	store, err := loadTrustStore()
+	if err != nil {
+		return nil, untrustedf("refusing to build an image of %s: the trust record could not be read: %v", id, err)
+	}
+	tree := &imageTree{records: map[string]trustRecord{}, home: config.HomeDir(), shared: true}
+	for _, n := range planA2ATree(p) {
+		if n.Problem != "" {
+			return nil, untrustedf("refusing to build an image of %s: delegate %s of %s cannot be read: %s", id, n.Label, n.Parent, n.Problem)
+		}
+		if !n.Installed {
+			return nil, untrustedf("refusing to build an image of %s: delegate %s of %s is not installed and accepted on this machine.\n"+
+				"  Fix: 'ynh trust accept %s' installs and accepts the whole tree, then build the image again", id, n.Label, n.Parent, id)
+		}
+		if st := trustStatusFor(n.ID, n.H, store, nil); st.State != trustAccepted {
+			return nil, untrustedf("refusing to build an image of %s: delegate %s of %s (%s) is %s, not accepted.\n"+
+				"  Fix: review it with 'ynh trust show %s', accept it with 'ynh trust accept %s', then build the image again", id, n.Label, n.Parent, n.ID, st.State, id, id)
+		}
+		tree.records[n.ID] = store.Harnesses[n.ID]
+	}
+	return tree, nil
 }
