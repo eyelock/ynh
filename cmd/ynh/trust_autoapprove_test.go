@@ -222,29 +222,30 @@ func TestTrustSaysAllAsRootNeedsASandboxVariable(t *testing.T) {
 	}
 }
 
-// ynw-906th: only Claude Code refuses all as root, so a harness whose default
-// vendor is another one is told nothing about a refusal it never gets.
-func TestRootNoteIsForClaudeCodeOnly(t *testing.T) {
-	for _, v := range []string{"", "claude"} {
-		if permission.RootNote(v, permission.All) == "" {
-			t.Errorf("vendor %q at all must carry the note", v)
-		}
+// ynw-xngvy: the vendor is chosen per run, so the note is shown for every
+// harness at all whatever its default vendor, and it is worded for Claude Code
+// alone.
+func TestRootNoteIsShownAtAllWhateverTheDefaultVendor(t *testing.T) {
+	if permission.RootNote(permission.All) == "" {
+		t.Fatal("level all must carry the note")
 	}
-	for _, v := range []string{"codex", "cursor", "opencode", "copilot"} {
-		if got := permission.RootNote(v, permission.All); got != "" {
-			t.Errorf("vendor %q must carry no root note, got %q", v, got)
-		}
-	}
-	if permission.RootNote("claude", permission.Edits) != "" {
+	if permission.RootNote(permission.Edits) != "" || permission.RootNote(permission.None) != "" {
 		t.Error("a level other than all carries no note")
 	}
-	codex := harnessWithSensors(t, nil)
-	codex.DefaultVendor = "codex"
-	var st trustStatus
-	fillAutoApprove(&st, codex)
-	var b bytes.Buffer
-	printAcceptedLevel(&b, codex, trustSet{})
-	if st.AutoApproveAsRoot != "" || strings.Contains(b.String(), "IS_SANDBOX") || strings.Contains(showText(t, st), "IS_SANDBOX") {
-		t.Errorf("a codex harness gets no root note in JSON or text: %+v / %s", st, b.String())
+	for _, v := range []string{"", "claude", "codex", "cursor", "opencode", "copilot"} {
+		h := harnessWithSensors(t, nil)
+		h.DefaultVendor = v
+		var st trustStatus
+		fillAutoApprove(&st, h)
+		var b bytes.Buffer
+		printAcceptedLevel(&b, h, trustSet{})
+		if st.AutoApproveAsRoot != permission.RootAllNote || !strings.Contains(b.String(), "IS_SANDBOX") || !strings.Contains(showText(t, st), "IS_SANDBOX") {
+			t.Errorf("default_vendor %q: the note must show in JSON and text: %+v", v, st)
+		}
+	}
+	for _, want := range []string{"Claude Code", "Other vendors are unaffected"} {
+		if !strings.Contains(permission.RootAllNote, want) {
+			t.Errorf("the note must say %q", want)
+		}
 	}
 }

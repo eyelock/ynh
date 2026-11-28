@@ -8,11 +8,12 @@ import "fmt"
 // otherwise ynh refuses a Claude Code run. No other vendor is refused.
 const RootAllNote = "As root, Claude Code opens 'all' only when IS_SANDBOX=1 or CLAUDE_CODE_BUBBLEWRAP is set; otherwise ynh refuses a Claude Code run at 'all' as root. Other vendors are unaffected."
 
-// RootNote is RootAllNote for a harness opening at level that runs on Claude
-// Code (vendor "claude", or "" for the default, which is Claude Code), and ""
-// for any other level or vendor: only Claude Code refuses all as root.
-func RootNote(vendor string, level Level) string {
-	if level == All && (vendor == "" || vendor == Claude) {
+// RootNote is RootAllNote for a harness opening at level all, and "" for any
+// other. It does not look at the harness's default_vendor: the vendor is chosen
+// per run (ynh run -v, the user's config), and the note names Claude Code alone
+// and says other vendors are unaffected, so it is true of every harness at all.
+func RootNote(level Level) string {
+	if level == All {
 		return RootAllNote
 	}
 	return ""
