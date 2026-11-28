@@ -52,10 +52,16 @@ type QueueOptions struct {
 	Profile, Focus   string
 	AutoApprove      string
 	AutoApproveFrom  string
-	Folder           string
-	Supervisor       []string
-	Session          presence.Entry
-	TakeBy           time.Duration
+	// FallbackModel and FallbackEffort are what the task opens with if it
+	// falls back to a headless session (the entry's, else the delegate's
+	// default, else the vendor's). Vendor is the delegate's vendor, which the
+	// effort is mapped onto.
+	FallbackModel, FallbackEffort Setting
+	Vendor                        string
+	Folder                        string
+	Supervisor                    []string
+	Session                       presence.Entry
+	TakeBy                        time.Duration
 }
 
 // LiveSessionsOf lists the live interactive sessions of the installed harness id
@@ -78,6 +84,18 @@ func LiveSessionsOf(delegate string) []presence.Entry {
 // Queue writes the task as a queued delegation addressed to a live session of
 // the delegate and puts it in the harness's mailbox. It starts nothing.
 func Queue(o QueueOptions) (*Record, string, error) {
+	// What the task would open with if it falls back is checked now, as a
+	// headless start checks it, so a fallback can never fail later for a
+	// model or effort that was never valid.
+	if err := CheckModel(o.FallbackModel.Value); err != nil {
+		return nil, "", fmt.Errorf("queueing a task: %w", err)
+	}
+	if err := CheckEffort(o.FallbackEffort.Value); err != nil {
+		return nil, "", fmt.Errorf("queueing a task: %w", err)
+	}
+	if _, err := VendorEffortArgs(o.Vendor, o.FallbackEffort.Value); err != nil {
+		return nil, "", fmt.Errorf("queueing a task: %w", err)
+	}
 	anc, err := Guard(o.Parent, o.Delegate, Chain(os.Getenv), os.Getenv)
 	if err != nil {
 		return nil, "", err
@@ -101,6 +119,11 @@ func Queue(o QueueOptions) (*Record, string, error) {
 		Task: o.Task, Model: o.Model, Profile: o.Profile, Focus: o.Focus, Chain: anc,
 		AutoApproveFrom:     AutoApproveInteractive,
 		FallbackAutoApprove: o.AutoApprove, FallbackAutoApproveFrom: o.AutoApproveFrom,
+		// A live session runs with its own model and effort: the record says so
+		// and names no value (ynh #1074).
+		ModelFrom: FromLiveSession, EffortFrom: FromLiveSession, Vendor: o.Vendor,
+		FallbackModel: o.FallbackModel.Value, FallbackModelFrom: o.FallbackModel.From,
+		FallbackEffort: o.FallbackEffort.Value, FallbackEffortFrom: o.FallbackEffort.From,
 		Log:   strings.TrimSuffix(path, ".json") + ".log",
 		Route: RouteLive, Session: o.Session.SessionID, SessionCwd: o.Session.Cwd,
 		QueuedAt: &now, TakeBy: &by, Supervisor: o.Supervisor,
@@ -247,6 +270,10 @@ func settleLive(path string, rec *Record) (*Record, error) {
 			// A headless session opens at the level the task resolved to.
 			r.AutoApprove, r.AutoApproveFrom = r.FallbackAutoApprove, r.FallbackAutoApproveFrom
 			r.FallbackAutoApprove, r.FallbackAutoApproveFrom = "", ""
+			// No live session's own model and effort apply to a headless one.
+			r.Model, r.ModelFrom = r.FallbackModel, r.FallbackModelFrom
+			r.Effort, r.EffortFrom = r.FallbackEffort, r.FallbackEffortFrom
+			r.FallbackModel, r.FallbackModelFrom, r.FallbackEffort, r.FallbackEffortFrom = "", "", "", ""
 			r.Error = "the live session ended before it took the task: started headless with the same task"
 		})
 		if err != nil || !started {

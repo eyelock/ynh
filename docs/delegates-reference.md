@@ -46,9 +46,11 @@ size, cost or urgency. Model and effort each resolve on their own, from the high
 | Layer | Where it is set | Applies to |
 |---|---|---|
 | 1. The call | optional `model` and `effort` arguments of the `delegate_to_<name>` tool | that delegation only |
-| 2. The parent's entry | `model` and `effort` on the `delegates_to` entry in the parent's manifest | every call that names none |
-| 3. The delegate's own default | `default_model` and `default_effort` in the delegate harness's manifest | a delegate session, when layers 1 and 2 name none |
+| 2. The parent's entry | `model` and `effort` on the `delegates_to` entry in the parent's manifest | every call that names none, except a task queued at a live session, which runs with its own |
+| 3. The delegate's own default | `default_model` and `default_effort` in the delegate harness's manifest | a delegate session of its own (not a task queued at a live session), when layers 1 and 2 name none |
 | 4. The vendor's default | nothing is passed | the vendor's own model and effort |
+
+A live interactive session of the delegate is the exception. It keeps its own model and effort, so layers 2 and 3 are not applied to a task queued at it, and a call that names a `model` or `effort` while one is live is refused before it is queued (resend with `on_live: headless`, which runs a session of its own with them, or without them). A task queued at a live session reports `model_from` and `effort_from` as `live_session`, with no value, since ynh does not know the session's own. If that session ends before it takes the task, the task falls back to a headless session of its own, which opens with what layers 2 to 4 resolve to (the entry's, else the delegate's default, else the vendor's, which is no value), and the record then reports that layer in `model_from` and `effort_from`, never blank. Those values are checked when the task is queued, as a headless start checks them, so a fallback cannot fail later for a model or effort that was never valid.
 
 `effort` is `low`, `medium` or `high`, the same three levels as `ynh agent run --effort`. A `model` is a
 vendor's model name, passed as `--model=<name>`; one that is empty, starts with `-` or holds white space is
@@ -69,8 +71,8 @@ session's own ([the parity record](vendor-parity.md#l42-a-delegate-s-model-and-e
 What a delegation used is recorded, and shown:
 
 - `delegate_to_<name>`, `delegate_status`, `delegate_result` and `delegate_list` carry `model`, `model_from`,
-  `effort` and `effort_from`. A `_from` is `call`, `entry`, `delegate_default` or `vendor_default`; with
-  `vendor_default` the value is absent, as nothing was passed.
+  `effort` and `effort_from`. A `_from` is `call`, `entry`, `delegate_default`, `vendor_default` or `live_session`; with
+  `vendor_default` the value is absent, as nothing was passed, and with `live_session` it is absent too: the task was queued at a live session, which runs with its own.
 - `ynh info` shows what each delegate opens with when a call names none: `model=haiku (entry)`,
   `effort=low (delegate default)` or `model=(vendor default)` in text, and `model`, `model_from`, `effort` and
   `effort_from` in JSON. It reads the delegate harness's own default; for a delegate it cannot read it shows
@@ -185,7 +187,7 @@ delegation's fields: `task_id`, `context_id`, `delegate`, `state` (`submitted`, 
 
 | Tool | Does |
 |---|---|
-| `delegate_to_<name>` (`task`, optional `wait`, optional `on_live`, and from v0.18.1 `model`, `effort`) | Sends the task through the delegate's A2A endpoint, with its token. When a live interactive session of the delegate accepts tasks it is queued there (state `submitted`, `route: live`) and nothing starts; otherwise a headless session starts, opened with the model and effort the call, the parent's entry or the delegate's default chose (state `working`, `route: headless`). `on_live` is `queue` (the default) or `headless`, and `headless` always starts a session of its own. It returns the handle: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
+| `delegate_to_<name>` (`task`, optional `wait`, optional `on_live`, and from v0.18.1 `model`, `effort`) | Sends the task through the delegate's A2A endpoint, with its token. When a live interactive session of the delegate accepts tasks it is queued there (state `submitted`, `route: live`) and nothing starts; otherwise a headless session starts, opened with the model and effort the call, the parent's entry or the delegate's default chose (state `working`, `route: headless`). A live session keeps its own model and effort, so a call that names a `model` or `effort` while one is live is refused before it is queued (the task fails, naming what was asked for and the live session, and the fix: resend with `on_live: headless` to run it in a session of its own with them, or without them to queue it); a call that names neither is queued as before. The parent's entry and the delegate's default model and effort are not applied to a queued task: the live session runs with its own, and ynh does not know them, so the task still queues and its record, `delegate_status` and `delegate_result` report `model_from` and `effort_from` as `live_session` with no `model` or `effort` value. `on_live` is `queue` (the default) or `headless`, and `headless` always starts a session of its own. It returns the handle: at once with no `wait`, or after up to `wait` seconds (at most the wait limit) when the delegate finishes or asks something first. A client that offers MCP Tasks (Claude Code interactive) is the exception: it gets a task at once and `wait` is not used, so a parent there holds with `delegate_status` and a `wait` ([MCP Tasks, below](#tools), [ynh #902](https://github.com/eyelock/ynh/issues/902)). A wrong or missing token's 401 comes back as a tool error. |
 | `delegate_list` | Every delegation of this parent harness in this working folder, with its state, including those from earlier sessions and the `a2a` CLI. |
 | `ynh_ps` (optional `all`) | The sessions ynh has launched that are live or orphaned, the same listing as `ynh ps --json` ([presence](presence.md)); `all: true` adds ended and dead sessions, as `--all` does. |
 | `delegate_status` (`task_id`, optional `wait`) | The state. When `input-required`, `message` is `<delegate> asks: <question>`. |

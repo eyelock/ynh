@@ -371,3 +371,135 @@ func TestQueuedTaskShowsInteractiveNotALevelAndFallbackRestoresIt(t *testing.T) 
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// ynh #1074: a call that names a model or effort cannot be given them by a
+// live session, which keeps its own, so it is refused before it is queued,
+// naming the fix, for each of model and effort; a call naming neither is
+// queued as before, and on_live headless still honours them.
+func TestACallWithAModelOrEffortIsRefusedAtALiveSession(t *testing.T) {
+	for name, tt := range map[string]struct{ model, effort, want string }{
+		"a model":            {"opus-x", "", "model opus-x"},
+		"an effort":          {"", "high", "effort high"},
+		"a model and effort": {"opus-x", "high", "model opus-x and effort high"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			folder := setup(t)
+			liveSession(t, "eno-1", "eno")
+			e := openFor(t, folder, "eno", "local/parent", nil)
+			task := sendWith(t, e, tt.model, tt.effort)
+			msg := ""
+			if task.Status.Message != nil {
+				msg = messageText(task.Status.Message)
+			}
+			if task.Status.State != a2a.TaskStateFailed || !strings.Contains(msg, tt.want) || !strings.Contains(msg, "on_live headless") || !strings.Contains(msg, "eno-1") {
+				t.Fatalf("got %s %q, want failed naming %q, the live session and on_live headless", task.Status.State, msg, tt.want)
+			}
+			if len(records(t)) != 0 {
+				t.Errorf("a refused call must queue nothing: %v", records(t))
+			}
+			if inbox, _ := delegation.Inbox("local/eno"); len(inbox) != 0 {
+				t.Errorf("a refused call must leave the live session's inbox empty: %v", inbox)
+			}
+		})
+	}
+}
+
+func TestACallWithNoModelOrEffortIsStillQueuedAtALiveSession(t *testing.T) {
+	folder := setup(t)
+	liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", nil)
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hi", true)
+	if task.Metadata[MetaRoute] != "live" {
+		t.Fatalf("metadata = %v, want route live", task.Metadata)
+	}
+}
+
+func TestAModelWithOnLiveHeadlessIsHonouredBesideALiveSession(t *testing.T) {
+	folder := setup(t)
+	liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", func(o *Options) { o.OnLive = "headless"; o.Vendor = "claude" })
+	task := sendWith(t, e, "opus-x", "high")
+	if task.Status.State != a2a.TaskStateCompleted {
+		t.Fatalf("task %s: %v", task.Status.State, task.Status.Message)
+	}
+	rec := onlyRecord(t)
+	if rec.Model != "opus-x" || rec.ModelFrom != "call" || rec.Effort != "high" || rec.EffortFrom != "call" || rec.Route != delegation.RouteHeadless {
+		t.Errorf("record = %+v", rec)
+	}
+}
+
+// ynh #1074: a task queued at a live session, with an entry-level or default
+// model and effort configured, still queues; its record says both came from the
+// live session and claims no value, since the session's own are not known.
+func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.T) {
+	folder := setup(t)
+	end, _ := liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", func(o *Options) {
+		o.Model, o.Effort = "entry-m", "medium"
+		o.DefaultModel, o.DefaultEffort = "def-m", "low"
+		o.Vendor = "claude"
+	})
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hi", true)
+	if task.Metadata[MetaRoute] != "live" {
+		t.Fatalf("metadata = %v, want route live", task.Metadata)
+	}
+	rec, path := recordOf(t, task)
+	if rec.Status != delegation.StatusQueued || rec.Model != "" || rec.Effort != "" ||
+		rec.ModelFrom != delegation.FromLiveSession || rec.EffortFrom != delegation.FromLiveSession {
+		t.Errorf("record = status %s model %q from %q, effort %q from %q; want queued, no value, from live_session",
+			rec.Status, rec.Model, rec.ModelFrom, rec.Effort, rec.EffortFrom)
+	}
+	// If the session ends and the task falls back to headless, it opens with
+	// what the entry resolved to (not the vendor's default, and not blank), and
+	// the record names that layer (ynw-6q56o).
+	end()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		cur, err := delegation.Reconcile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cur.Route == delegation.RouteHeadless {
+			if cur.Model != "entry-m" || cur.ModelFrom != delegation.FromEntry || cur.Effort != "medium" || cur.EffortFrom != delegation.FromEntry || cur.Vendor != "claude" {
+				t.Errorf("after the fallback the record has model %q (%s), effort %q (%s), vendor %q; want entry-m, medium (both from entry) on claude",
+					cur.Model, cur.ModelFrom, cur.Effort, cur.EffortFrom, cur.Vendor)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("route stayed %s", cur.Route)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// With no entry or default model and effort, a fallen-back task opens with the
+// vendor's own, and its record says so rather than leaving the source blank.
+func TestAFallenBackTaskWithNoModelOrEffortNamesTheVendorDefault(t *testing.T) {
+	folder := setup(t)
+	end, _ := liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", nil)
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hi", true)
+	_, path := recordOf(t, task)
+	end()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		cur, err := delegation.Reconcile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cur.Route == delegation.RouteHeadless {
+			if cur.Model != "" || cur.Effort != "" || cur.ModelFrom != delegation.FromVendorDefault || cur.EffortFrom != delegation.FromVendorDefault {
+				t.Errorf("record = model %q (%s), effort %q (%s); want vendor_default, no value", cur.Model, cur.ModelFrom, cur.Effort, cur.EffortFrom)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("route stayed %s", cur.Route)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}

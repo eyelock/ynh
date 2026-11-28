@@ -292,9 +292,10 @@ type Result struct {
 	// LogTail is the end of the run's log, when it failed.
 	LogTail string `json:"log_tail,omitempty"`
 	// Model and Effort are what the delegate was started with, ModelFrom and
-	// EffortFrom where each came from: call, entry, delegate_default, or
+	// EffortFrom where each came from: call, entry, delegate_default,
 	// vendor_default (none was named, so the vendor's own applies, and the
-	// value is absent).
+	// value is absent) or live_session (the task was queued at a live session,
+	// which runs with its own, so the value is absent).
 	Model      string `json:"model,omitempty"`
 	ModelFrom  string `json:"model_from,omitempty"`
 	Effort     string `json:"effort,omitempty"`
@@ -330,9 +331,9 @@ var resultSchema = map[string]any{
 		"asked_at":          map[string]any{"type": "string", "description": "when the open question was asked (RFC 3339), when input-required"},
 		"waiting_seconds":   map[string]any{"type": "integer", "description": "how long the open question has waited, when input-required"},
 		"model":             map[string]any{"type": "string", "description": "the model the delegate was started with; absent when none was named and the vendor's default applies"},
-		"model_from":        map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "vendor_default"}, "description": "where the model came from: this call, the parent's delegates_to entry, the delegate harness's default_model, or the vendor's own default"},
+		"model_from":        map[string]any{"type": "string", "enum": delegation.Froms, "description": "where the model came from: this call, the parent's delegates_to entry, the delegate harness's default_model, the vendor's own default, or live_session (a task queued at a live session runs with that session's own model, which is not known, so no model is given)"},
 		"effort":            map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate was started with; absent when none was named"},
-		"effort_from":       map[string]any{"type": "string", "enum": []string{"call", "entry", "delegate_default", "vendor_default"}, "description": "where the effort came from: this call, the parent's delegates_to entry, the delegate harness's default_effort, or the vendor's own default"},
+		"effort_from":       map[string]any{"type": "string", "enum": delegation.Froms, "description": "where the effort came from: this call, the parent's delegates_to entry, the delegate harness's default_effort, the vendor's own default, or live_session (a task queued at a live session runs with that session's own effort, which is not known, so no effort is given)"},
 	},
 	"required": []string{"task_id", "state", "message"},
 }
@@ -456,8 +457,8 @@ func (s *Server) tools() []any {
 			fmt.Sprintf("Give the delegate %q a task. If a live interactive session of it is open and accepts tasks, the task is queued in front of that session (state submitted, route live) and nothing starts; otherwise a session of its own starts (state working, route headless); on_live chooses. With no wait it returns at once with a task_id; with a wait it holds the call for that long, at most the server's limit. A client that offers MCP Tasks (Claude Code interactive) is given a task at once and wait is not used: hold with delegate_status and a wait instead. Poll with delegate_status or delegate_result, answer a question with delegate_reply.", d.Name),
 			map[string]any{"task": map[string]any{"type": "string", "description": "what the delegate is to do"}, "wait": waitProp,
 				"on_live":      map[string]any{"type": "string", "enum": []string{"queue", "headless"}, "description": "when a live interactive session of the delegate is open and accepts tasks: queue (the default) puts the task in front of that session and starts nothing, headless starts a session of its own. The result's route, session and cwd say which one got it"},
-				"model":        map[string]any{"type": "string", "description": "the model the delegate opens with, for this call only: it wins over the parent's delegates_to entry, the delegate's own default and the vendor's default. Choose it from the task's size, cost or urgency. Omit it to take the next layer down. Used when a session of its own starts."},
-				"effort":       map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate opens with, for this call only, chosen the same way as model. Refused where the delegate's vendor has no effort setting."},
+				"model":        map[string]any{"type": "string", "description": "the model the delegate opens with, for this call only: it wins over the parent's delegates_to entry, the delegate's own default and the vendor's default. Choose it from the task's size, cost or urgency. Omit it to take the next layer down. Used when a session of its own starts: a live interactive session of the delegate keeps its own model, so a call that names one while a live session is open is refused unless on_live is headless."},
+				"effort":       map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}, "description": "the reasoning effort the delegate opens with, for this call only, chosen the same way as model. Refused where the delegate's vendor has no effort setting, and refused while a live interactive session of the delegate is open unless on_live is headless, because that session keeps its own effort."},
 				"auto_approve": map[string]any{"type": "string", "enum": []string{"none", "edits", "all"}, "description": "narrow, for this call, the permission level the delegate opens at when it runs unattended. It may only narrow: a level wider than the delegate's own ceiling (its harness, the delegates_to entry, and this session's own level) is refused before the session starts. The result's auto_approve and auto_approve_from say what it opened at"}},
 			[]string{"task"}))
 	}
