@@ -408,10 +408,16 @@ func (x *executor) begin(ec *a2asrv.ExecutorContext) (*delegation.Record, string
 					"Resend with on_live headless to run it in a session of its own with %s, or without model and effort to queue it at the live session",
 					x.o.Delegate, askedFor(m, e), live[0].SessionID, askedFor(m, e))
 			}
+			// The live session runs with its own model and effort; if it ends
+			// and the task falls back to headless, the task opens with what the
+			// entry and the delegate's defaults resolve to, kept on the record.
+			model := delegation.Resolve("", x.o.Model, x.o.DefaultModel)
+			effort := delegation.Resolve("", x.o.Effort, x.o.DefaultEffort)
 			return delegation.Queue(delegation.QueueOptions{
 				Parent: x.o.Parent, Delegate: x.o.Delegate, Task: messageText(ec.Message),
 				Profile: x.o.Profile, Focus: x.o.Focus, Folder: x.o.Folder, Supervisor: x.o.Supervisor,
 				AutoApprove: level, AutoApproveFrom: from,
+				FallbackModel: model, FallbackEffort: effort, Vendor: x.o.Vendor,
 				Session: live[0], TakeBy: x.o.TakeBy,
 			})
 		}

@@ -124,6 +124,14 @@ type Record struct {
 	// queued to a live interactive session would open at if it fell back to a
 	// headless session; until then the record shows AutoApproveFrom
 	// "interactive" and no level, because a person approves there.
+	// FallbackModel, FallbackEffort and their _from words are what such a task
+	// opens with if it falls back to headless: the entry's, else the
+	// delegate's default, else the vendor's (the value empty). Until then the
+	// record's ModelFrom and EffortFrom are live_session.
+	FallbackModel           string `json:"fallback_model,omitempty"`
+	FallbackModelFrom       string `json:"fallback_model_from,omitempty"`
+	FallbackEffort          string `json:"fallback_effort,omitempty"`
+	FallbackEffortFrom      string `json:"fallback_effort_from,omitempty"`
 	FallbackAutoApprove     string `json:"fallback_auto_approve,omitempty"`
 	FallbackAutoApproveFrom string `json:"fallback_auto_approve_from,omitempty"`
 	AutoApproveFrom         string `json:"auto_approve_from,omitempty"`

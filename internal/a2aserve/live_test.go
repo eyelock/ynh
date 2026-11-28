@@ -438,6 +438,7 @@ func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.
 	e := openFor(t, folder, "eno", "local/parent", func(o *Options) {
 		o.Model, o.Effort = "entry-m", "medium"
 		o.DefaultModel, o.DefaultEffort = "def-m", "low"
+		o.Vendor = "claude"
 	})
 	c, ctx := client(t, e, e.Token)
 	task := send(t, c, ctx, "", "echo hi", true)
@@ -450,8 +451,9 @@ func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.
 		t.Errorf("record = status %s model %q from %q, effort %q from %q; want queued, no value, from live_session",
 			rec.Status, rec.Model, rec.ModelFrom, rec.Effort, rec.EffortFrom)
 	}
-	// If the session ends and the task falls back to headless, the record no
-	// longer claims the live session as the source.
+	// If the session ends and the task falls back to headless, it opens with
+	// what the entry resolved to (not the vendor's default, and not blank), and
+	// the record names that layer (ynw-6q56o).
 	end()
 	deadline := time.Now().Add(15 * time.Second)
 	for {
@@ -460,8 +462,38 @@ func TestAQueuedTaskReportsTheLiveSessionAsTheSourceOfModelAndEffort(t *testing.
 			t.Fatal(err)
 		}
 		if cur.Route == delegation.RouteHeadless {
-			if cur.ModelFrom == delegation.FromLiveSession || cur.EffortFrom == delegation.FromLiveSession {
-				t.Errorf("after the fallback the record still names the live session: %q %q", cur.ModelFrom, cur.EffortFrom)
+			if cur.Model != "entry-m" || cur.ModelFrom != delegation.FromEntry || cur.Effort != "medium" || cur.EffortFrom != delegation.FromEntry || cur.Vendor != "claude" {
+				t.Errorf("after the fallback the record has model %q (%s), effort %q (%s), vendor %q; want entry-m, medium (both from entry) on claude",
+					cur.Model, cur.ModelFrom, cur.Effort, cur.EffortFrom, cur.Vendor)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("route stayed %s", cur.Route)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// With no entry or default model and effort, a fallen-back task opens with the
+// vendor's own, and its record says so rather than leaving the source blank.
+func TestAFallenBackTaskWithNoModelOrEffortNamesTheVendorDefault(t *testing.T) {
+	folder := setup(t)
+	end, _ := liveSession(t, "eno-1", "eno")
+	e := openFor(t, folder, "eno", "local/parent", nil)
+	c, ctx := client(t, e, e.Token)
+	task := send(t, c, ctx, "", "echo hi", true)
+	_, path := recordOf(t, task)
+	end()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		cur, err := delegation.Reconcile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cur.Route == delegation.RouteHeadless {
+			if cur.Model != "" || cur.Effort != "" || cur.ModelFrom != delegation.FromVendorDefault || cur.EffortFrom != delegation.FromVendorDefault {
+				t.Errorf("record = model %q (%s), effort %q (%s); want vendor_default, no value", cur.Model, cur.ModelFrom, cur.Effort, cur.EffortFrom)
 			}
 			return
 		}
