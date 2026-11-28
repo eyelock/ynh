@@ -46,20 +46,25 @@ func validateAutoApprove(level, backend string) error {
 	return nil
 }
 
-// permissionArgs returns the vendor arguments for level, or nil for no level
-// or a level the project's mode already governs (the vendor is passed nothing
-// and the project's own setting applies). Arguments already present in args
+// permissionArgs returns the vendor arguments for the run's level, or the
+// project's own mode when it narrowed the level (D5): either way the vendor is
+// passed an explicit mode, so a user-level setting cannot widen the run. It is
+// nil when no level was asked for. Arguments already present in args
 // (OpenCode's --standalone) are not repeated.
 func permissionArgs(backend string, opts StartOptions, args []string) []string {
-	if opts.AutoApprove == "" || opts.PermissionFromProject {
+	if opts.AutoApprove == "" {
 		return nil
 	}
-	m, err := permission.For(backend, permission.Level(opts.AutoApprove))
-	if err != nil {
-		return nil
+	margs := opts.ProjectArgs
+	if margs == nil {
+		m, err := permission.For(backend, permission.Level(opts.AutoApprove))
+		if err != nil {
+			return nil
+		}
+		margs = m.Args
 	}
 	var out []string
-	for _, a := range m.Args {
+	for _, a := range margs {
 		if a == "--standalone" && containsArg(args, a) {
 			continue
 		}
@@ -68,9 +73,10 @@ func permissionArgs(backend string, opts StartOptions, args []string) []string {
 	return out
 }
 
-// permissionEnv returns the vendor environment for level, as permissionArgs.
+// permissionEnv returns the vendor environment for the run's level. A
+// project-narrowed run passes arguments only.
 func permissionEnv(backend string, opts StartOptions) []string {
-	if opts.AutoApprove == "" || opts.PermissionFromProject {
+	if opts.AutoApprove == "" || opts.ProjectArgs != nil {
 		return nil
 	}
 	m, err := permission.For(backend, permission.Level(opts.AutoApprove))
@@ -89,31 +95,34 @@ func containsArg(args []string, a string) bool {
 	return false
 }
 
-// claudePermissionMode is the --permission-mode a level maps to, or "" for
-// none given or a level the project's mode governs.
+// claudePermissionMode is the --permission-mode the session is expected to
+// open in, which the opened-mode check compares against: the project's when it
+// narrowed the level, else the level's. "" when no level was asked for.
 func claudePermissionMode(opts StartOptions) string {
-	if opts.AutoApprove == "" || opts.PermissionFromProject {
+	if opts.AutoApprove == "" {
 		return ""
+	}
+	if opts.ProjectMode != "" {
+		return opts.ProjectMode
 	}
 	return permission.ClaudeMode(permission.Level(opts.AutoApprove))
 }
 
 // resolveProjectPermissions weighs the level against the project's own mode
 // (D5). A narrower project mode wins: the level becomes the project's, the
-// vendor is passed nothing, and the line is printed. It returns the level to
-// run at and whether the project governs it.
-func resolveProjectPermissions(level, backend, dir string, stderr interface{ Write([]byte) (int, error) }) (string, bool, error) {
+// vendor is passed that mode explicitly, and the line is printed.
+func resolveProjectPermissions(level, backend, dir string, stderr interface{ Write([]byte) (int, error) }) (permission.Resolution, error) {
 	if level == "" {
-		return "", false, nil
+		return permission.Resolution{}, nil
 	}
 	res, err := permission.Resolve(dir, backend, permission.Level(level))
 	if err != nil {
-		return "", false, fmt.Errorf("--auto-approve: %w", err)
+		return res, fmt.Errorf("--auto-approve: %w", err)
 	}
 	if res.FromProject() && stderr != nil {
 		_, _ = fmt.Fprintln(stderr, res.Line)
 	}
-	return string(res.Level), res.FromProject(), nil
+	return res, nil
 }
 
 // checkRoot is the root refusal for Claude Code, before it starts.

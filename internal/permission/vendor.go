@@ -100,9 +100,9 @@ func For(vendor string, level Level) (Mapping, error) {
 		case None:
 			return Mapping{Args: []string{"--no-ask-user", "--deny-tool", "shell", "--deny-tool", "write"}}, nil
 		case Edits:
-			return Mapping{Args: []string{"--allow-tool", "write", "--deny-tool", "shell"}}, nil
+			return Mapping{Args: []string{"--no-ask-user", "--allow-tool", "write", "--deny-tool", "shell"}}, nil
 		}
-		return Mapping{Args: []string{"--allow-all-tools"}}, nil
+		return Mapping{Args: []string{"--no-ask-user", "--allow-all-tools"}}, nil
 	}
 	return Mapping{}, fmt.Errorf("auto-approve is not supported by the %s vendor (supported: %s)",
 		vendor, strings.Join([]string{Claude, Codex, Cursor, OpenCode, Copilot}, ", "))

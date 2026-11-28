@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -61,8 +62,8 @@ func TestFor_Golden(t *testing.T) {
 		},
 		Copilot: {
 			None:  {args: []string{"--no-ask-user", "--deny-tool", "shell", "--deny-tool", "write"}},
-			Edits: {args: []string{"--allow-tool", "write", "--deny-tool", "shell"}},
-			All:   {args: []string{"--allow-all-tools"}},
+			Edits: {args: []string{"--no-ask-user", "--allow-tool", "write", "--deny-tool", "shell"}},
+			All:   {args: []string{"--no-ask-user", "--allow-all-tools"}},
 		},
 	}
 	for v, levels := range want {
@@ -161,6 +162,7 @@ func TestProject(t *testing.T) {
 		{"local acceptEdits", Claude, map[string]string{".claude/settings.local.json": `{"permissions":{"defaultMode":"acceptEdits"}}`}, Edits, "settings.local.json", false},
 		{"bypass", Claude, map[string]string{".claude/settings.json": `{"permissions":{"defaultMode":"bypassPermissions"}}`}, All, "", false},
 		{"unplaced mode is none", Claude, map[string]string{".claude/settings.json": `{"permissions":{"defaultMode":"mystery"}}`}, None, "", false},
+		{"auto is not placed at edits", Claude, map[string]string{".claude/settings.json": `{"permissions":{"defaultMode":"auto"}}`}, None, "", false},
 		{name: "no mode set", vendor: Claude, files: map[string]string{".claude/settings.json": `{"permissions":{"allow":["x"]}}`}},
 		{"unparsable", Claude, map[string]string{".claude/settings.json": `{`}, "", "", true},
 		{"codex read-only", Codex, map[string]string{".codex/config.toml": "sandbox_mode = \"read-only\"\n"}, None, `sandbox_mode = "read-only"`, false},
@@ -221,5 +223,111 @@ func TestResolve(t *testing.T) {
 	r, _ = Resolve(t.TempDir(), Claude, All)
 	if r.Level != All || r.FromProject() {
 		t.Errorf("no project mode: %+v", r)
+	}
+}
+
+func TestProject_OpensExplicitly(t *testing.T) {
+	tests := []struct {
+		name, vendor, file, content string
+		wantArgs                    []string
+		wantOpened                  string
+	}{
+		{"claude plan", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"plan"}}`, []string{"--permission-mode", "plan"}, "plan"},
+		{"claude acceptEdits", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"acceptEdits"}}`, []string{"--permission-mode", "acceptEdits"}, "acceptEdits"},
+		{"claude unplaced opens default", Claude, ".claude/settings.json", `{"permissions":{"defaultMode":"auto"}}`, []string{"--permission-mode", "default"}, "default"},
+		{"codex sandbox", Codex, ".codex/config.toml", "sandbox_mode = \"read-only\"\n", []string{"--sandbox", "read-only"}, ""},
+		{"codex approval", Codex, ".codex/config.toml", "approval_policy = \"untrusted\"\n", []string{"-c", `approval_policy="untrusted"`}, ""},
+		{"codex both keys", Codex, ".codex/config.toml", "sandbox_mode = \"workspace-write\"\napproval_policy = \"untrusted\"\n", []string{"--sandbox", "workspace-write", "-c", `approval_policy="untrusted"`}, ""},
+		{"codex unplaced opens read-only", Codex, ".codex/config.toml", "sandbox_mode = \"strange\"\n", []string{"--sandbox", "read-only"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, filepath.Join(dir, tt.file), tt.content)
+			pm, err := Project(dir, tt.vendor)
+			if err != nil || pm == nil {
+				t.Fatalf("%v %v", pm, err)
+			}
+			if !slices.Equal(pm.Args, tt.wantArgs) || pm.Opened != tt.wantOpened {
+				t.Errorf("args %q opened %q, want %q %q", pm.Args, pm.Opened, tt.wantArgs, tt.wantOpened)
+			}
+		})
+	}
+}
+
+// A project-narrowed run is passed the project's mode explicitly, and Claude's
+// opened-mode check compares against it, so a wider user-level setting cannot
+// widen the run unseen.
+func TestResolve_ProjectModeIsPassedExplicitly(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, ".codex/config.toml"), "sandbox_mode = \"read-only\"\n")
+	r, err := Resolve(dir, Codex, All)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := r.Mapping(Codex)
+	if err != nil || !slices.Equal(m.Args, []string{"--sandbox", "read-only"}) {
+		t.Errorf("mapping = %+v %v", m, err)
+	}
+	cdir := t.TempDir()
+	write(t, filepath.Join(cdir, ".claude/settings.json"), `{"permissions":{"defaultMode":"plan"}}`)
+	r, _ = Resolve(cdir, Claude, All)
+	if got := r.OpenedMode(Claude); got != "plan" {
+		t.Errorf("opened mode = %q, want plan", got)
+	}
+	if err := OpenedMismatch(r.OpenedMode(Claude), "bypassPermissions"); err == nil {
+		t.Error("a session that opened wider than the project's mode must be stopped")
+	}
+	// No project mode: the level's own mapping.
+	r, _ = Resolve(t.TempDir(), Claude, Edits)
+	if m, _ := r.Mapping(Claude); m.Args[1] != "acceptEdits" || r.OpenedMode(Claude) != "acceptEdits" {
+		t.Errorf("%+v", m)
+	}
+}
+
+func TestMergeEnv_KeepsIsolationAndTheCallersContent(t *testing.T) {
+	isolation := `{"mcp":{"servers":{"off":{"enabled":false}}},"theme":"dark"}`
+	env := []string{"A=1", ConfigContentEnv + "=" + `{"theme":"light"}`, ConfigContentEnv + "=" + isolation}
+	m, err := For(OpenCode, Edits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := MergeEnv(env, m.Env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	var content string
+	for _, kv := range out {
+		if v, ok := strings.CutPrefix(kv, ConfigContentEnv+"="); ok {
+			n++
+			content = v
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d copies of %s, want exactly one: %q", n, ConfigContentEnv, out)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(content), &doc); err != nil {
+		t.Fatal(err)
+	}
+	servers := doc["mcp"].(map[string]any)["servers"].(map[string]any)
+	if off, _ := servers["off"].(map[string]any); off == nil || off["enabled"] != false {
+		t.Errorf("a server isolation turned off came back: %s", content)
+	}
+	perm := doc["permission"].(map[string]any)
+	if perm["edit"] != "allow" || perm["bash"] != "deny" || doc["theme"] != "dark" {
+		t.Errorf("permission or content lost: %s", content)
+	}
+	if !slices.Contains(out, "A=1") {
+		t.Error("other variables are kept")
+	}
+	// Permission wins on its own keys.
+	out, _ = MergeEnv([]string{ConfigContentEnv + `={"permission":{"bash":"allow","x":"y"}}`}, m.Env)
+	if !strings.Contains(out[0], `"bash":"deny"`) || !strings.Contains(out[0], `"x":"y"`) {
+		t.Errorf("%s", out[0])
+	}
+	if _, err := MergeEnv([]string{ConfigContentEnv + "=["}, m.Env); err == nil {
+		t.Error("a non-object must fail")
 	}
 }

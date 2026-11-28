@@ -111,9 +111,12 @@ type StartOptions struct {
 	// AutoApprove is "", "edits" or "all": the --auto-approve level, already
 	// validated for this backend. Empty passes no permission flag at all.
 	AutoApprove string
-	// PermissionFromProject is true when the project's own permission mode
-	// narrowed AutoApprove (D5): the vendor is passed no permission argument.
-	PermissionFromProject bool
+	// ProjectArgs, when set, are the arguments that open the worker in the
+	// project's own narrower permission mode (D5), passed in place of the
+	// level's; ProjectMode is the --permission-mode Claude Code is expected to
+	// report for it.
+	ProjectArgs []string
+	ProjectMode string
 	// Model overrides the default model. Empty means backend default.
 	Model string
 	// Effort is "", "low", "medium" or "high": the reasoning effort to ask

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/permission"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -100,12 +101,11 @@ func (s *openCodeSession) Next() (Turn, error) {
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
 	}
-	cmd.Env = workerEnvFor(s.opts.Env)
-	if dir := openCodeConfigDir(s.opts.ConfigPath); dir != "" {
-		cmd.Env = append(cmd.Env, "OPENCODE_CONFIG_DIR="+dir)
+	env, err := openCodeEnv(s.opts, s.isolationEnv)
+	if err != nil {
+		return Turn{}, err
 	}
-	cmd.Env = append(cmd.Env, s.isolationEnv...)
-	cmd.Env = append(cmd.Env, permissionEnv(vendorOpenCode, s.opts)...)
+	cmd.Env = env
 	tail := &stderrTail{}
 	cmd.Stderr = stderrSink(s.opts.Stderr, tail)
 
@@ -289,4 +289,17 @@ func parseOpenCodeOutput(r io.Reader) (openCodeRun, error) {
 	}
 	run.turn.Content = strings.Join(texts, "\n\n")
 	return run, nil
+}
+
+// openCodeEnv is the environment of one OpenCode turn: the worker's, the
+// harness's config dir, MCP isolation's OPENCODE_CONFIG_CONTENT, and the
+// permission block merged into that one variable (never beside it, where the
+// last duplicate would win and turn the isolated servers back on).
+func openCodeEnv(opts StartOptions, isolationEnv []string) ([]string, error) {
+	env := workerEnvFor(opts.Env)
+	if dir := openCodeConfigDir(opts.ConfigPath); dir != "" {
+		env = append(env, "OPENCODE_CONFIG_DIR="+dir)
+	}
+	env = append(env, isolationEnv...)
+	return permission.MergeEnv(env, permissionEnv(vendorOpenCode, opts))
 }

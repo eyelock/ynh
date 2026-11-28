@@ -20,6 +20,13 @@ type ProjectMode struct {
 	Level   Level
 	File    string // the settings file
 	Setting string // the setting and its value, as written
+	// Args are the arguments that open the run in this mode, explicitly, so a
+	// wider user-level setting cannot widen it (D5): the project's own words
+	// where ynh can place them, else the narrowest level's arguments.
+	Args []string
+	// Opened is the --permission-mode Claude Code is passed, which the
+	// opened-mode check compares its session against ("" for other vendors).
+	Opened string
 }
 
 // Describe names the file and the setting, for the line a run prints.
@@ -33,7 +40,6 @@ var (
 	claudeModeLevel = map[string]Level{
 		"default": None, "plan": None, "dontAsk": None,
 		"acceptEdits":       Edits,
-		"auto":              Edits,
 		"bypassPermissions": All,
 	}
 	codexSandboxLevel = map[string]Level{
@@ -86,11 +92,15 @@ func claudeProject(path string) (*ProjectMode, error) {
 	if m == "" {
 		return nil, nil
 	}
+	// A mode ynh cannot place (such as auto, which may approve commands) is
+	// opened as default, the narrowest, and reported as none.
 	lvl, ok := claudeModeLevel[m]
+	word := m
 	if !ok {
-		lvl = None
+		lvl, word = None, "default"
 	}
-	return &ProjectMode{Level: lvl, File: path, Setting: fmt.Sprintf("permissions.defaultMode %q", m)}, nil
+	return &ProjectMode{Level: lvl, File: path, Setting: fmt.Sprintf("permissions.defaultMode %q", m),
+		Args: []string{"--permission-mode", word}, Opened: word}, nil
 }
 
 // codexProject reads a top-level sandbox_mode or approval_policy. Only
@@ -120,23 +130,34 @@ func codexProject(path string) (*ProjectMode, error) {
 		value = strings.TrimSpace(value)
 		word := strings.Trim(value, `"'`)
 		var lvl Level
+		var args []string
 		switch key {
 		case "sandbox_mode":
 			lvl = codexSandboxLevel[word]
+			args = []string{"--sandbox", word}
 		case "approval_policy":
 			if word == "never" {
 				continue
 			}
 			lvl = codexApprovalLevel[word]
+			args = []string{"-c", fmt.Sprintf("approval_policy=%q", word)}
 		default:
 			continue
 		}
 		if lvl == "" {
-			lvl = None
+			// A value ynh cannot place opens at none, explicitly.
+			lvl, args = None, []string{"--sandbox", "read-only"}
 		}
-		pm := &ProjectMode{Level: lvl, File: path, Setting: key + " = " + value}
-		if found == nil || pm.Level.Narrower(found.Level) {
+		pm := &ProjectMode{Level: lvl, File: path, Setting: key + " = " + value, Args: args}
+		if found == nil {
 			found = pm
+			continue
+		}
+		// Both keys are passed, so the session opens at the narrower of them.
+		found.Args = append(found.Args, pm.Args...)
+		found.Setting += "; " + pm.Setting
+		if pm.Level.Narrower(found.Level) {
+			found.Level = pm.Level
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -156,12 +177,33 @@ type Resolution struct {
 }
 
 // FromProject reports whether the project's mode set the level, so ynh passes
-// the vendor no permission argument and the project's own setting governs.
+// the vendor the project's mode explicitly (Args) in place of the level's.
 func (r Resolution) FromProject() bool { return r.Project != nil }
 
+// Mapping is what the vendor is passed for this resolution: the project's
+// mode, explicitly, when it narrowed the level, else the level's own mapping.
+func (r Resolution) Mapping(vendor string) (Mapping, error) {
+	if r.FromProject() {
+		return Mapping{Args: r.Project.Args}, nil
+	}
+	return For(vendor, r.Level)
+}
+
+// OpenedMode is the --permission-mode a Claude Code session is expected to
+// report: the project's, when it narrowed the level, else the level's.
+func (r Resolution) OpenedMode(vendor string) string {
+	if vendor != Claude {
+		return ""
+	}
+	if r.FromProject() {
+		return r.Project.Opened
+	}
+	return ClaudeMode(r.Level)
+}
+
 // Resolve weighs level against the project's mode in dir (D5). A project mode
-// narrower than level wins: the run opens at the project's mode, passes the
-// vendor nothing, and Line names the file and setting. A wider project mode
+// narrower than level wins: the run opens at the project's mode, passed to the
+// vendor explicitly (so a user-level setting cannot widen it), and Line names the file and setting. A wider project mode
 // loses to ynh's explicit level. A project mode never refuses a run.
 func Resolve(dir, vendorName string, level Level) (Resolution, error) {
 	pm, err := Project(dir, vendorName)

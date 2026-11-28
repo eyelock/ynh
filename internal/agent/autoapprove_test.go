@@ -218,8 +218,8 @@ func TestRunLoop_ProjectModeNarrowsAndNeverRefuses(t *testing.T) {
 				t.Fatalf("worker starts = %d, want 1", len(mb.startOpts))
 			}
 			got := mb.startOpts[0]
-			if got.AutoApprove != tt.wantLevel || got.PermissionFromProject != tt.wantFromProject {
-				t.Errorf("opened at %q (from project %v), want %q (%v)", got.AutoApprove, got.PermissionFromProject, tt.wantLevel, tt.wantFromProject)
+			if got.AutoApprove != tt.wantLevel || (got.ProjectArgs != nil) != tt.wantFromProject {
+				t.Errorf("opened at %q (from project %v), want %q (%v)", got.AutoApprove, got.ProjectArgs != nil, tt.wantLevel, tt.wantFromProject)
 			}
 			if has := strings.Contains(stderr.String(), "opening at the project's mode"); has != tt.wantLine {
 				t.Errorf("line printed = %v, want %v (stderr %q)", has, tt.wantLine, stderr.String())
@@ -453,5 +453,46 @@ func TestStderrTail_KeepsTheEnd(t *testing.T) {
 	}
 	if strings.HasPrefix(got, "oise") || !strings.HasPrefix(got, "noise") {
 		t.Errorf("tail should start on a line boundary, starts %q", got[:10])
+	}
+}
+
+// A project-narrowed worker is passed the project's own mode explicitly, so a
+// wider user-level setting (Codex danger-full-access, say) cannot widen it; and
+// Claude's opened-mode check compares against that mode.
+func TestBackendArgs_ProjectModeIsExplicit(t *testing.T) {
+	codex := backendArgs("codex", StartOptions{AutoApprove: "none", ProjectArgs: []string{"--sandbox", "read-only"}, Model: "m"})
+	if !slices.Contains(codex, "--sandbox") || slices.Contains(codex, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Errorf("codex args = %q", codex)
+	}
+	claude := backendArgs("claude", StartOptions{AutoApprove: "none", ProjectArgs: []string{"--permission-mode", "plan"}, ProjectMode: "plan"})
+	i := slices.Index(claude, "--permission-mode")
+	if i < 0 || claude[i+1] != "plan" {
+		t.Errorf("claude args = %q", claude)
+	}
+	opts := StartOptions{AutoApprove: "none", ProjectMode: "plan"}
+	if got := claudePermissionMode(opts); got != "plan" {
+		t.Errorf("expected opened mode = %q, want plan", got)
+	}
+	if err := claudeModeMismatch(claudeOutputEvent{Subtype: "init", PermissionMode: "bypassPermissions"}, claudePermissionMode(opts)); err == nil {
+		t.Error("a session that opened wider than the project's mode must be stopped")
+	}
+}
+
+// OpenCode's permission block is merged into the MCP isolation's one
+// OPENCODE_CONFIG_CONTENT: the servers it turned off stay off.
+func TestOpenCodeEnv_PermissionKeepsMCPIsolation(t *testing.T) {
+	isolation := []string{"OPENCODE_CONFIG_CONTENT=" + `{"mcp":{"servers":{"web":{"enabled":false}}}}`}
+	env, err := openCodeEnv(StartOptions{AutoApprove: "none"}, isolation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var copies []string
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "OPENCODE_CONFIG_CONTENT="); ok {
+			copies = append(copies, v)
+		}
+	}
+	if len(copies) != 1 || !strings.Contains(copies[0], `"web":{"enabled":false}`) || !strings.Contains(copies[0], `"edit":"deny"`) {
+		t.Errorf("config content = %q", copies)
 	}
 }

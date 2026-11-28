@@ -78,8 +78,10 @@ type RunOptions struct {
 	// the worker. Set per run only: it is not read from the harness manifest
 	// and not restored on resume, so the operator re-grants it every time.
 	AutoApprove string
-	// PermissionFromProject is set by RunLoop when the project's own mode narrowed AutoApprove.
-	PermissionFromProject bool
+	// ProjectArgs and ProjectMode are set by RunLoop when the project's own
+	// mode narrowed AutoApprove (see StartOptions).
+	ProjectArgs []string
+	ProjectMode string
 	// Model overrides the worker's default model. Empty means backend default.
 	Model string
 	// Effort is the reasoning effort to ask the worker for: "low", "medium"
@@ -335,11 +337,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	// A narrower project permission mode wins over the run's level (D5),
 	// with a line saying so; a wider one never refuses the run.
-	level, fromProject, err := resolveProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir, opts.Stderr)
+	res, err := resolveProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir, opts.Stderr)
 	if err != nil {
 		return result, err
 	}
-	opts.AutoApprove, opts.PermissionFromProject = level, fromProject
+	opts.AutoApprove = string(res.Level)
+	opts.ProjectArgs, opts.ProjectMode = nil, ""
+	if res.FromProject() {
+		opts.ProjectArgs, opts.ProjectMode = res.Project.Args, res.Project.Opened
+	}
 	if err := checkRoot(opts.AutoApprove, opts.Backend); err != nil {
 		return result, &ExitError{Code: ExitRefused, Message: err.Error()}
 	}
@@ -809,19 +815,20 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		result.SandboxDenyRead = srtDenyRead
 	}
 	sess, err := wb.Start(ctx, StartOptions{
-		TrustedHooks:          trustedHooks,
-		TrustedHarness:        harnessTrusted,
-		WorktreeDir:           opts.WorktreeDir,
-		Workspace:             workspaceDirs,
-		ConfigPath:            configPath,
-		Sandbox:               opts.Sandbox,
-		SrtDenyRead:           srtDenyRead,
-		SessionDir:            sessionDir,
-		AutoApprove:           opts.AutoApprove,
-		PermissionFromProject: opts.PermissionFromProject,
-		Model:                 opts.Model,
-		Effort:                opts.Effort,
-		IsolatedMCP:           isolatedMCP,
+		TrustedHooks:   trustedHooks,
+		TrustedHarness: harnessTrusted,
+		WorktreeDir:    opts.WorktreeDir,
+		Workspace:      workspaceDirs,
+		ConfigPath:     configPath,
+		Sandbox:        opts.Sandbox,
+		SrtDenyRead:    srtDenyRead,
+		SessionDir:     sessionDir,
+		AutoApprove:    opts.AutoApprove,
+		ProjectArgs:    opts.ProjectArgs,
+		ProjectMode:    opts.ProjectMode,
+		Model:          opts.Model,
+		Effort:         opts.Effort,
+		IsolatedMCP:    isolatedMCP,
 		// The profile's mcp_manual_approval is already resolved into harnessObj.
 		MCPManualApproval: harnessObj != nil && harnessObj.MCPManualApproval,
 		ResumeToken:       resumeToken,
