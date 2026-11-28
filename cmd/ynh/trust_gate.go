@@ -350,7 +350,7 @@ func remoteIncludes(p *harness.Harness, verb string) ([]remoteInclude, error) {
 // --trust, which fetches an include pinned to a full SHA (ynh #993).
 const (
 	updateFetchFix = "Fetch them with 'ynh update', then run it again."
-	folderFetchFix = "Fetch them by running it with --trust, once each remote include is pinned to a full 40-character commit SHA " +
+	folderFetchFix = "Fetch them by running it with --trust, once each remote include and native delegate is pinned to a full 40-character commit SHA " +
 		"(ynh run <folder> --trust, ynh check <folder> --trust, or ynh agent run --harness <folder> --trust). ynh update takes installed harnesses only."
 )
 
